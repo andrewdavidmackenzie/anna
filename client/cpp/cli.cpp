@@ -97,7 +97,10 @@ void handle_request(KvsClientInterface *client, string input) {
     LWWPairLattice<string> val(
         TimestampValuePair<string>(generate_timestamp(0), v[2]));
 
+    // Put async
     string rid = client->put_async(key, serialize(val), LatticeType::LWW);
+
+    // Receive
     vector<KeyResponse> responses = client->receive_async();
     while (responses.size() == 0) {
       responses = client->receive_async();
@@ -131,9 +134,10 @@ void handle_request(KvsClientInterface *client, string input) {
 
     MultiKeyCausalLattice<SetLattice<string>> mkcl(mkcp);
 
-    string rid =
-        client->put_async(key, serialize(mkcl), LatticeType::MULTI_CAUSAL);
+    // Put async
+    string rid = client->put_async(key, serialize(mkcl), LatticeType::MULTI_CAUSAL);
 
+    // Receive
     vector<KeyResponse> responses = client->receive_async();
     while (responses.size() == 0) {
       responses = client->receive_async();
@@ -156,9 +160,11 @@ void handle_request(KvsClientInterface *client, string input) {
       set.insert(v[i]);
     }
 
+    // Put async
     string rid = client->put_async(v[1], serialize(SetLattice<string>(set)),
                                    LatticeType::SET);
 
+    // Receive
     vector<KeyResponse> responses = client->receive_async();
     while (responses.size() == 0) {
       responses = client->receive_async();
@@ -176,9 +182,11 @@ void handle_request(KvsClientInterface *client, string input) {
       std::cout << "Failure!" << std::endl;
     }
   } else if (v[0] == "GET_SET") {
+    // Get Async
     client->get_async(v[1]);
     string serialized;
 
+    // Receive
     vector<KeyResponse> responses = client->receive_async();
     while (responses.size() == 0) {
       responses = client->receive_async();
@@ -194,6 +202,7 @@ void handle_request(KvsClientInterface *client, string input) {
   }
 }
 
+// Read commands interactively from the terminal
 void run(KvsClientInterface *client) {
   string input;
   while (true) {
@@ -204,6 +213,7 @@ void run(KvsClientInterface *client) {
   }
 }
 
+// Read commands from `filename` until EOF
 void run(KvsClientInterface *client, string filename) {
   string input;
   std::ifstream infile(filename);
@@ -214,6 +224,10 @@ void run(KvsClientInterface *client, string filename) {
 }
 
 int main(int argc, char *argv[]) {
+  // There can be two or three options
+  // #0 - binary name
+  // #1 - config filename
+  // #2 - input file with commands
   if (argc < 2 || argc > 3) {
     std::cerr << "Usage: " << argv[0] << " conf-file <input-file>" << std::endl;
     std::cerr

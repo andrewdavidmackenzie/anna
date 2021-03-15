@@ -16,7 +16,7 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 
 SET(KV_LIBRARY_DEPENDENCIES
     protobuf::libprotobuf
-    anna-proto
+    anna-lib.proto
     pthread
     zmq
     hydro-zmq
