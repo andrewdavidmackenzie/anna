@@ -6,7 +6,7 @@ use serde_derive::Deserialize;
 use crate::errors::*;
 use crate::kvs_client::Address;
 
-/// `Config` contains the configuration read from the yaml config file
+/// `Config` structure containing the configuration read from the yaml config file
 #[derive(Deserialize)]
 struct Config {
     monitoring: Monitoring,
@@ -22,37 +22,21 @@ struct Config {
     replication: Replication,
 }
 
-/*
-monitoring:
-  mgmt_ip: 127.0.0.1
-  ip: 127.0.0.1
-  */
+/// Monitoring configuration section
 #[derive(Deserialize)]
 struct Monitoring {
     mgmt_ip: Address,
     ip: Address,
 }
 
-/*
-routing:
-  monitoring:
-      - 127.0.0.1
-  ip: 127.0.0.1
-  */
+/// Routing configuration section
 #[derive(Deserialize)]
 struct Routing {
     monitoring: Vec<Address>,
     ip: Address
 }
 
-/*
-user:
-  monitoring:
-      - 127.0.0.1
-  routing:
-      - 127.0.0.1
-  ip: 127.0.0.1
-  */
+/// User configuration section
 #[derive(Deserialize)]
 struct User {
     monitoring: Vec<Address>,
@@ -60,17 +44,7 @@ struct User {
     ip: Address
 }
 
-/*
-server:
-  monitoring:
-      - 127.0.0.1
-  routing:
-      - 127.0.0.1
-  seed_ip: 127.0.0.1
-  public_ip: 127.0.0.1
-  private_ip: 127.0.0.1
-  mgmt_ip: "NULL"
-  */
+/// Server configuration section
 #[derive(Deserialize)]
 struct Server {
     monitoring: Vec<Address>,
@@ -81,12 +55,7 @@ struct Server {
     mgmt_ip: Address,
 }
 
-/*
-policy:
-  elasticity: false
-  selective-rep: false
-  tiering: false
- */
+/// Policy configuration section
 #[derive(Deserialize)]
 struct Policy {
     elasticity: bool,
@@ -95,17 +64,12 @@ struct Policy {
     tiering: bool,
 }
 
-/*
-ebs: ./
-*/
+/// EBS configuration section
 #[derive(Deserialize)]
+/// EBS configuration consists of a File Path String
 struct Ebs(String);
 
-/*
-capacities: # in GB
-  memory-cap: 1
-  ebs-cap: 0
-*/
+/// Capacities configuration section
 #[derive(Deserialize)]
 struct Capacities {
     #[serde(rename = "memory-cap")]
@@ -114,13 +78,7 @@ struct Capacities {
     ebs_cap: usize
 }
 
-/*
-threads:
-  memory: 1
-  ebs: 1
-  routing: 1
-  benchmark: 1
-*/
+/// Threads configuration section
 #[derive(Deserialize)]
 struct Threads {
     memory: usize,
@@ -129,13 +87,7 @@ struct Threads {
     benchmark: usize,
 }
 
-/*
-replication:
-  memory: 1
-  ebs: 0
-  minimum: 1
-  local: 1
-*/
+/// Replication configuration section
 #[derive(Deserialize)]
 struct Replication {
     memory: usize,
@@ -146,9 +98,9 @@ struct Replication {
 
 /// `Config` Contains the Anna configuration deserialized form Yaml config file
 impl Config {
-    // Get chain_err() working with Foreign error types from lib,.rs
-    // read the YAML config from a file into a Config structure
+    /// Read the `Config` from a yaml config file and return it or Error
     pub fn read(filename: &str) -> Result<Config> {
+        // TODO Get chain_err() working with Foreign error types from lib,.rs
         let mut file = File::open(filename)
             .map_err(|_| format!("Could not open file '{:?}'", filename))?;
         let mut content = String::new();
@@ -156,17 +108,9 @@ impl Config {
             .map_err(|_| format!("Could not read content from '{:?}'", filename))?;
         serde_yaml::from_str(&content)
             .chain_err(|| format!("Error deserializing Yaml config from: '{}'", filename))
-
     }
 
-    //   if (YAML::Node elb = user["routing-elb"]) {
-    //     routing_ips.push_back(elb.as<string>());
-    //   } else {
-    //     YAML::Node routing = user["routing"];
-    //     for (const YAML::Node &node : routing) {
-    //       routing_ips.push_back(node.as<Address>());
-    //     }
-    //   }
+    /// Return a vector of `Address` used for routing
     pub fn get_routing_ips(&self) -> &Vec<Address> {
         match &self.routing_elb {
             Some(elb_ip) => &elb_ip,
@@ -174,10 +118,12 @@ impl Config {
         }
     }
 
+    /// Return the `Address` for this `User`
     pub fn get_user_ip(&self) -> &Address {
         &self.user.ip
     }
 
+    /// Return the number of threads used for routing
     pub fn get_routing_thread_count(&self) -> usize {
         self.threads.routing
     }
