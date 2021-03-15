@@ -65,5 +65,5 @@ after_success:
   - ./scripts/travis/docker-build.sh
 
 after_failure:
-  - cat $HOME/anna/build/CMakeFiles/CMakeOutput.log
+  - cat $HOME/build/andrewdavidmackenzie/anna/build/CMakeFiles/CMakeOutput.log
 
