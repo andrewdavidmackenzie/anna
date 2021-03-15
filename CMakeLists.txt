@@ -70,17 +70,17 @@ INCLUDE(FindProtobuf)
 FIND_PACKAGE(Protobuf REQUIRED)
 INCLUDE_DIRECTORIES(${PROTOBUF_INCLUDE_DIR})
 PROTOBUF_GENERATE_CPP(PROTO_SRC PROTO_HEADER
-  ./common/lib.proto/anna.lib.proto
-  ./common/lib.proto/shared.lib.proto
-  ./include/lib.proto/metadata.lib.proto
+  ./common/proto/anna.proto
+  ./common/proto/shared.proto
+  ./include/proto/metadata.proto
 )
 
 PROTOBUF_GENERATE_CPP(BPROTO_SRC BPROTO_HEADER
-  ./include/lib.proto/benchmark.lib.proto
+  ./include/proto/benchmark.proto
 )
 
-ADD_LIBRARY(anna-lib.proto ${PROTO_HEADER} ${PROTO_SRC})
-ADD_LIBRARY(anna-bench-lib.proto ${BPROTO_HEADER} ${BPROTO_SRC})
+ADD_LIBRARY(anna-proto ${PROTO_HEADER} ${PROTO_SRC})
+ADD_LIBRARY(anna-bench-proto ${BPROTO_HEADER} ${BPROTO_SRC})
 
 FILE(GLOB_RECURSE ZMQ_UTIL_SRC common/include/zmq/*.cpp)
 FILE(GLOB_RECURSE ZMQ_UTIL_HEADER common/include/zmq/*.hpp)

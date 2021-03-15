@@ -18,7 +18,7 @@ SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/cli)
 
 SET(LIBRARY_DEPENDENCIES
     protobuf::libprotobuf
-    anna-lib.proto
+    anna-proto
     zmq
     hydro-zmq
     yaml-cpp

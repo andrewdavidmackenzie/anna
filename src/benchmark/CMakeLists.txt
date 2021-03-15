@@ -18,10 +18,10 @@ SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/target/benchmark)
 
 ADD_EXECUTABLE(anna-bench benchmark.cpp)
 TARGET_LINK_LIBRARIES(anna-bench anna-hash-ring ${KV_LIBRARY_DEPENDENCIES}
-  anna-bench-lib.proto)
+  anna-bench-proto)
 ADD_DEPENDENCIES(anna-bench zeromq zeromqcpp)
 
 ADD_EXECUTABLE(anna-bench-trigger trigger.cpp)
 TARGET_LINK_LIBRARIES(anna-bench-trigger anna-hash-ring ${KV_LIBRARY_DEPENDENCIES}
-  anna-bench-lib.proto)
+  anna-bench-proto)
 ADD_DEPENDENCIES(anna-bench-trigger anna-hash-ring zeromq zeromqcpp)

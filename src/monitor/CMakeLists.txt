@@ -28,5 +28,5 @@ SET(MONITORING_SOURCE
 
 ADD_EXECUTABLE(anna-monitor ${MONITORING_SOURCE})
 TARGET_LINK_LIBRARIES(anna-monitor anna-hash-ring ${KV_LIBRARY_DEPENDENCIES}
-  anna-bench-lib.proto)
+  anna-bench-proto)
 ADD_DEPENDENCIES(anna-monitor zeromq zeromqcpp)

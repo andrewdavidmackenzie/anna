@@ -14,14 +14,16 @@
 
 language: rust
 sudo: required
-
-rust:
-  - stable
-
-os: 
-  - linux
-
 dist: trusty
+
+# request macOS 10.15.7
+matrix:
+  include:
+    - os: linux
+      rust: stable
+    - os: osx
+      osx_image: xcode12.2
+      rust: stable
 
 compiler:
   - clang
