@@ -37,6 +37,12 @@ env:
     - PROTOBUF_VERSION=3.9.1
     - LCOV_VERSION=1.13
 
+
+addons:
+  apt:
+    packages:
+      - libzmq3-dev
+
 cache:
   directories:
     - $PROTOBUF_DIR
