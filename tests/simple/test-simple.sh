@@ -46,6 +46,5 @@ else
 fi
 
 rm tmp.out
-echo "Stopping local server..."
-./scripts/stop-anna-local.sh y
+cargo run -- stop
 exit $CODE
