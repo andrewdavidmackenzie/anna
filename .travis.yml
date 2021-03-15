@@ -42,6 +42,9 @@ addons:
   apt:
     packages:
       - libzmq3-dev
+  homebrew:
+    packages:
+      - zmq
 
 cache:
   directories:
