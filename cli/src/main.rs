@@ -14,7 +14,6 @@ use clap::{App, Arg, SubCommand, ArgMatches};
 use log::{debug, warn};
 use simplog::simplog::SimpleLogger;
 use annalib::info;
-use annalib;
 
 // We'll put our errors in an `errors` module, and other modules in this crate will
 // `use crate::errors::*;` to get access to everything `error_chain!` creates.
@@ -77,7 +76,7 @@ fn run() -> Result<String> {
     debug!("'anna' library version {}", info::version());
 
     match matches.subcommand() {
-        ("help", arg_matches) => return help(app_clone, arg_matches),
+        ("help", arg_matches) => help(app_clone, arg_matches),
         ("stop", _) => Ok(format!("{} anna processes were terminated", annalib::stop()
             .map_err(|e| e.to_string())?)),
         (_, _) => Ok("No command executed".into())
