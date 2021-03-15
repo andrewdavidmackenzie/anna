@@ -63,3 +63,7 @@ script:
 after_success:
   - ./scripts/travis/upload-codecov.sh
   - ./scripts/travis/docker-build.sh
+
+after_failure:
+  - cat $HOME/anna/build/CMakeFiles/CMakeOutput.log
+
