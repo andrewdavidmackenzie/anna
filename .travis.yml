@@ -26,7 +26,7 @@ addons:
   apt:
     update: true
     packages:
-      - libzmq3-dev
+#      - libzmq3-dev
 #      - build-essential
 #      - autoconf
 #      - automake
@@ -42,7 +42,7 @@ addons:
 #      - python3-pip
   homebrew:
     packages:
-      - zmq
+#      - zmq
 #      - autoconf
 #      - automake
 #      - libtool
