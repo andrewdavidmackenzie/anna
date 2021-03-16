@@ -24,10 +24,31 @@ env:
 
 addons:
   apt:
+    update: true
     packages:
+      - build-essential
+      - autoconf
+      - automake
+      - libtool
+      - curl
+      - make
+      - unzip
+      - pkg-config
+      - wget
+      - libc++-dev
+      - libc++abi-dev
+      - jq
+      - python3-pip
       - libzmq3-dev
   homebrew:
     packages:
+      - autoconf
+      - automake
+      - libtool
+      - build-essential
+      - unzip
+      - pkg-config
+      - wget
       - zmq
 
 cache:
