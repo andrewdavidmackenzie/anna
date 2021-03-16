@@ -34,6 +34,7 @@ cache:
   directories:
     - $PROTOBUF_DIR
 
+# Avoid the double-build in travis. With this option it will perform a rebase on master of your PR then build that only
 branches:
   only:
     - "master"
