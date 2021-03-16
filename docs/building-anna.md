@@ -5,13 +5,6 @@ You can find instructions for running a Hydro cluster
 [here](https://github.com/hydro-project/cluster/blob/master/docs/getting-started-aws.md).
 
 ## Prerequisites
-
-Anna has the Hydro `common` directory as a git submodule. 
-After cloning Anna, init and update the submodules to install the `commmon` subdirectory:
-```bash
-git submodule init; git submodule update
-```
-
 In order to build Anna, there are a variety of C++ and other dependencies that are required. 
 Most can be installed with standard package managers like `brew` on macOS and `apt` on Debian. 
 Prepackaged scripts to install dependencies on Fedora, Debian, and macOS can be found in 

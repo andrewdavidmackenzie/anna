@@ -89,7 +89,7 @@ class BaseAnnaClient():
     def response_address(self):
         raise NotImplementedError
 
-    # Takes a KeyTuple (defined in hydro-project/common/proto/anna.proto) as an
+    # Takes a KeyTuple (defined in hydro-project/common/lib.proto/anna.lib.proto) as an
     # input and returns either a lattice data structure corresponding to the
     # type of the KeyTuple.
     def _deserialize(self, tup):
@@ -212,7 +212,7 @@ class BaseAnnaClient():
         return pb.SerializeToString(), typ
 
     # Helper function to create a KeyRequest (see
-    # hydro-project/common/proto/anna.proto). Takes in a key name and returns a
+    # hydro-project/common/lib.proto/anna.lib.proto). Takes in a key name and returns a
     # tuple containing a KeyRequest and a KeyTuple contained in that KeyRequest
     # with response_address, request_id, and address_cache_size automatically
     # populated.

@@ -11,6 +11,9 @@ use sysinfo::{ProcessExt, System, SystemExt};
 use nix::sys::signal::{kill, Signal};
 
 pub mod info;
+mod proto;
+mod kvs_client;
+mod config;
 
 // Pending them being defined elsewhere in a build script or similar
 const ANNA_MONITOR_PROCESS_NAME: &str = "anna-monitor";

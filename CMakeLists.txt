@@ -88,8 +88,7 @@ ADD_LIBRARY(hydro-zmq STATIC ${ZMQ_UTIL_HEADER} ${ZMQ_UTIL_SRC})
 ADD_DEPENDENCIES(hydro-zmq zeromq zeromqcpp spdlog) 
 
 IF(${CMAKE_BUILD_TYPE} STREQUAL "Debug") 
-  INCLUDE(common/cmake/clang-format.cmake)
-  INCLUDE(common/cmake/CodeCoverage.cmake) 
+  INCLUDE(common/cmake/CodeCoverage.cmake)
 ENDIF()
 
 LINK_DIRECTORIES(${ZEROMQ_LINK_DIRS} ${YAMLCPP_LINK_DIRS})

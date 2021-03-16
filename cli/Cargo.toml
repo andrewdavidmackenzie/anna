@@ -27,5 +27,11 @@ simplog = "~1.2"
 error-chain = "0.12.2"
 sysinfo = "0.16.4"
 nix = "0.20.0"
+#zmq = "0.9.2"
+#libzmq = "0.2"
+serde_derive = "~1.0.27"
+serde = "~1.0.27"
+serde_yaml = "~0.8"
+
 
 [dev-dependencies]
