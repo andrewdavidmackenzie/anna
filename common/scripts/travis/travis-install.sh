@@ -15,7 +15,6 @@
 #  limitations under the License.
 
 install_protobuf() {
-
   # If the protobuf directory is nonexistent or is empty, then we will
   # redownload and recompile. Otherwise, we will skip this step and simply
   # reinstall the already compiled version.

@@ -8,8 +8,7 @@ This repository will not change frequently and should only contain code that is 
 
 * `cmake`: This directory has three helpers that are useful for any CMake-based project: `CodeCoverage.cmake` 
   uses `lcov` and `gcov` to automatically generate coverage information; `DownloadProject.cmake` automatically 
-  downloads and configured external C++ dependencies; and `clang-format.cmake` automatically runs the `clang-format` 
-  tool on all C++ files in a project.
+  downloads and configured external C++ dependencies.
 * `include`: A variety of Hydro C++ header files, including shared lattice definitions, a Anna KVS client, 
   shared `typedef`s and other utilities.
 * `proto`: Project API-level protobuf definitions.

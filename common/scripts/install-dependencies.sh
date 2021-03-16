@@ -54,10 +54,9 @@ if [ "$COMPILER" = "clang++" ] && [ -z "$(command -v clang++)" ]; then
   echo "Installing clang..."
 
   sudo apt-add-repository "deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-5.0 main" > /dev/null
-  sudo apt-get install -y --force-yes clang-5.0 lldb-5.0 clang-format-5.0 > /dev/null
+  sudo apt-get install -y --force-yes clang-5.0 lldb-5.0 > /dev/null
   sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-5.0 1 > /dev/null
   sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-5.0 1 > /dev/null
-  sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-5.0 1 > /dev/null
 fi
 
 if [ "$COMPILER" = "g++" ] && [ -z "$(command -v g++)" ]; then
