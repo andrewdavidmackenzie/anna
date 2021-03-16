@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 # Welcome!
- `anna` is a Command Line Utility for interacting with the `anna` key-value store.
+ `anna` is a Command Line Utility and Library for interacting with the `anna` key-value store.
 
 # Installing
 `anna` is published to [crates.io](http://crates.io/crates/anna) so the binary can be installed using:
@@ -18,6 +18,12 @@
 You can get the available commands and usage options by running:
 ```bash
 > anna --help
+```
+
+# Using the library
+Add `annalib` as a dependency to your project's `Cargo.toml` as usual:
+```toml
+annalib = "0.1.0"
 ```
 
 # Building Yourself
