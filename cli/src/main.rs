@@ -32,7 +32,7 @@ error_chain! {
     foreign_links {
         Io(std::io::Error);
         Clap(clap::Error);
-        Anna(annalib::errors::Error);
+        Anna(annalib::Error);
     }
 }
 
