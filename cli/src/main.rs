@@ -32,7 +32,7 @@ error_chain! {
     foreign_links {
         Io(std::io::Error);
         Clap(clap::Error);
-        Anna(annalib::errors::Error);
+        Anna(annalib::Error);
     }
 }
 
@@ -49,7 +49,6 @@ fn main() {
             if let Some(backtrace) = e.backtrace() {
                 println!("backtrace: {:?}", backtrace);
             }
-
             exit(1);
         }
         Ok(msg) => {
@@ -77,13 +76,11 @@ fn run() -> Result<String> {
 
     match matches.subcommand() {
         ("help", arg_matches) => help(app_clone, arg_matches),
-        ("stop", _) => Ok(format!("{} anna processes were terminated", annalib::stop()
-            .map_err(|e| e.to_string())?)),
+        ("start", _) => Ok(format!("{} anna processes were started", annalib::start()?)),
+        ("stop", _) => Ok(format!("{} anna processes were terminated", annalib::stop()?)),
         (_, _) => Ok("No command executed".into())
     }
 }
-
-// Tests of the cli
 
 /*
     The 'help' command
@@ -105,6 +102,8 @@ fn get_app() -> App<'static, 'static> {
             .takes_value(true)
             .value_name("VERBOSITY_LEVEL")
             .help("Set verbosity level for output (trace, debug, info, warn, error (default))"))
+        .subcommand(SubCommand::with_name("start")
+            .about("Start anna processes (monitor, route and kvs) in background"))
         .subcommand(SubCommand::with_name("stop")
             .about("Stop running instances of anna (monitor, route and kvs)"))
 }
