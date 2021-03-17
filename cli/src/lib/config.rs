@@ -8,7 +8,7 @@ use crate::kvs_client::Address;
 
 /// `Config` structure containing the configuration read from the yaml config file
 #[derive(Deserialize)]
-struct Config {
+pub struct Config {
     monitoring: Monitoring,
     routing: Routing,
     user: User,
@@ -100,12 +100,11 @@ struct Replication {
 impl Config {
     /// Read the `Config` from a yaml config file and return it or Error
     pub fn read(filename: &str) -> Result<Config> {
-        // TODO Get chain_err() working with Foreign error types from lib,.rs
         let mut file = File::open(filename)
-            .map_err(|_| format!("Could not open file '{:?}'", filename))?;
+            .chain_err(|| format!("Could not open file '{:?}'", filename))?;
         let mut content = String::new();
         file.read_to_string(&mut content)
-            .map_err(|_| format!("Could not read content from '{:?}'", filename))?;
+            .chain_err(|| format!("Could not read content from '{:?}'", filename))?;
         serde_yaml::from_str(&content)
             .chain_err(|| format!("Error deserializing Yaml config from: '{}'", filename))
     }
