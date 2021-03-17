@@ -30,11 +30,10 @@ can be found in our [VLDB 2019 paper](http://www.vikrams.io/papers/anna-vldb19.p
 
 To run the Anna KVS locally, you need to first need to install its dependencies (which you can do with the
 `install-dependencies*.sh` scripts in the `hydro-project/common` folder) then
-build the project (with `scripts/build.sh`) then you can use `scripts/start-anna-local.sh` and 
-`scripts/stop-anna-local.sh` scripts to start and stop the KVS respectively.
+build the project (with `scripts/build.sh`).
 
-You may also use the 'anna' control CLI to start and stop anna services:
-* Start with `anna start` or `cargo run -- start` (pending)
+Then you can use the 'anna' control CLI to start and stop anna services:
+* Start with `anna start` or `cargo run -- start`
 * Stop with `anna stop` or `cargo run -- stop`
 
 ## CLI
