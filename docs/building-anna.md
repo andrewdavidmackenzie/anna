@@ -7,8 +7,9 @@ You can find instructions for running a Hydro cluster
 ## Prerequisites
 In order to build Anna, there are a variety of C++ and other dependencies that are required. 
 Most can be installed with standard package managers like `brew` on macOS and `apt` on Debian. 
-Prepackaged scripts to install dependencies on Fedora, Debian, and macOS can be found in 
-`common/scripts/install-dependencies(-osx).sh`. 
+
+First install the dependencies (which you can do with the `install-dependencies*.sh` scripts in 
+the `hydro-project/common` folder)
 
 If you would like to customize the installed packages, everything except for CMake and Protobuf can be 
 installed via standard package managers. Any version of Protobuf 3 should be supported, and we require CMake 
@@ -28,6 +29,4 @@ By default, the script will run as `bash scripts/build.sh -bRelease -j1`.
 
 This will generate a variety of executables, primarily in `build/target`, 
 which houses all of the KVS server executables, and in `build/client`, 
-which has the CPP-based interactive CLI for Anna. 
-
-Once Anna is built, you can run it in [local mode](local-mode.md).
+which has the CPP-based interactive CLI for Anna.

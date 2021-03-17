@@ -26,17 +26,52 @@ its extremely low latencies while also being orders of magnitude more cost effic
 [AWS DynamoDB](https://aws.amazon.com/dynamodb). A more detailed description of the cloud-native design of the system 
 can be found in our [VLDB 2019 paper](http://www.vikrams.io/papers/anna-vldb19.pdf).
 
-## Using Anna
+## Building
 
-To run the Anna KVS locally, you need to first need to install its dependencies (which you can do with the
-`install-dependencies*.sh` scripts in the `hydro-project/common` folder) then
-build the project (with `scripts/build.sh`).
+See more detailed instructions on building in [building-anna](docs/building-anna.md)
 
-Then you can use the 'anna' control CLI to start and stop anna services:
-* Start with `anna start` or `cargo run -- start`
-* Stop with `anna stop` or `cargo run -- stop`
+## Using Anna in Local Mode
+
+### Starting Anna
+You can start anna background processes by using the `anna` CLI `start` command
+
+If you have the `anna` crate installed, just use
+```bash
+> anna start
+```
+
+If you have not installed it, then you can build and run the development version using
+```bash
+> cargo run -- start
+```
+
+By default, the `conf/anna-config.yml` config file is used, which only specifies one routing thread and one storage 
+thread.
+
+You are welcome to modify this file if you would like, but we generally do not recommend running more than one
+thread per process in local mode.
+
+### Stopping Anna
+
+You can stop the running background processes by using the `anna` CLI `stop` command
+
+If you have the `anna` crate installed, just use
+```bash
+> anna stop
+```
+
+If you have not installed it, then you can build and run the development version using
+```bash
+> cargo run -- stop
+```
+
+## Running Anna in cluster mode
+
+For instructions on how to run Anna in cluster mode, please see the `hydro-project/cluster`
+[repository](https://github.com/hydro-project/cluster).
 
 ## CLI
+
 This repository has an interactive CLI ([source](client/cpp/cli.cpp), executable compiles to `build/cli/anna-cli`).
 
 ## Clients
@@ -44,16 +79,10 @@ It also includes:
 * a Python client ([source](client/python/anna/client.py)).
 * `common` repository has an importable C++ client that can embed into other applications.
 
-## Building
-More detailed instructions on [building](docs/building-anna.md) and [running](docs/local-mode.md) can be found in the
-[docs](docs) directory. 
-
-This repository only explains how to run Anna on a single machine. 
-For instructions on how to run Anna in cluster mode, please see the `hydro-project/cluster` 
-[repository](https://github.com/hydro-project/cluster).
-
 ## More Information on Anna
+
 * [video of talk](https://www.youtube.com/watch?v=9qU1zO9wCNs&t=2036s)
+
 ## License
 
 The Project is licensed under the [Apache v2 License](LICENSE).
