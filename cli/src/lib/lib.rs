@@ -10,8 +10,8 @@ use nix::unistd::Pid;
 use sysinfo::{ProcessExt, System, SystemExt};
 use nix::sys::signal::{kill, Signal};
 use std::path::PathBuf;
-use nix::sys::socket::bind;
-use std::process::{Command, Child};
+// use nix::sys::socket::bind;
+use std::process::Command;
 
 pub mod info;
 mod proto;
