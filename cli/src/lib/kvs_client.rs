@@ -1,38 +1,49 @@
 // #include "anna.pb.h"
 // #include "common.hpp"
 // #include "requests.hpp"
-// #include "threads.hpp"
 
-use log::info;
-use std::iter::Map;
+use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use zmq::Context;
+use log::{info, debug};
+
+use crate::config::Config;
 
 pub type Address = String;
 pub type Key = String;
-// let now = SystemTime::now();
 pub type TimePoint = std::time::SystemTime;
 
+use crate::threads::{UserRoutingThread, UserThread};
+use crate::proto::anna::KeyTuple;
+use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
+use std::collections::hash_map::DefaultHasher;
+use rand::{Rng, SeedableRng};
+use rand_pcg::Pcg64;
+
 struct PendingRequest {
-    tp        : TimePoint,
-    worker_addr:Address,
+    tp: TimePoint,
+    worker_addr: Address,
     // request:    KeyRequest
 }
 
-// struct KVSClient {
-//     // the set of routing addresses outside the cluster
-//     routing_threads: Vec<UserRoutingThread>,
-//
-//     // the current request id
-//     rid: usize,
-//
-//     // the random seed for this client
-//     seed: usize,
-//
-//     // the IP and port functions for this thread
-//     ut: UserThread,
-//
-//     // the ZMQ context we use to create sockets
-//     context: zmq::context_t,
-//
+pub struct KVSClient {
+    // the set of routing addresses outside the cluster
+    routing_threads: Vec<UserRoutingThread>,
+    // the current request id
+    rid: usize,
+    // the IP and port functions for this thread
+    ut: UserThread,
+    seed: u64,
+    // A Random Number Generator
+    rng: Pcg64,
+    // the ZMQ context we use to create sockets
+    context: Context,
+    // cache for retrieved worker addresses organized by key
+    key_address_cache: HashMap<Key, HashSet<Address>>,
+    // GC timeout
+    timeout: usize,
+}
+
 //     // cache for opened sockets
 //     socket_cache: SocketCache,
 //
@@ -42,12 +53,6 @@ struct PendingRequest {
 //
 //     pollitems: Vec<zmq::pollitem_t>,
 //
-//     // cache for retrieved worker addresses organized by key
-//     key_address_cache: Map<Key, Set<Address>>,
-//
-//     // GC timeout
-//     timeout: unsigned,
-//
 //     // keeps track of pending requests due to missing worker address
 //     pending_request_map: Map<Key, (TimePoint, Vec<KeyRequest>)>,
 //
@@ -56,9 +61,8 @@ struct PendingRequest {
 //
 //     // keeps track of pending put responses
 //     pending_put_response_map: Map<Key, Map<string, PendingRequest>>
-// }
-//
-// impl KVSClient {
+
+
 //     /*
 //         addrs A vector of routing addresses.
 //         routing_thread_count The number of thread sone ach routing node
@@ -73,7 +77,6 @@ struct PendingRequest {
 //             tid: Option<usize>,
 //             timeout: Option<usize>) -> Self {
 //
-//         let context = zmq::context_t(1);
 //         let key_address_puller = zmq::socket_t(context, ZMQ_PULL);
 //         let response_puller = zmq::socket_t(context, ZMQ_PULL);
 //
@@ -82,15 +85,7 @@ struct PendingRequest {
 // //         {static_cast<void*>(response_puller_), 0, ZMQ_POLLIN, 0},
 //         };
 //
-//         let tid = tid.some_or(0);
-//
-// //     std::hash<string> hasher;
-// //     seed_ = time(NULL);
-// //     seed_ += hasher(ip);
-// //     seed_ += tid;
-//         info!("Random seed is {}.", seed);
-//
-//         let ut = UserThread(ip, tid);
+
 //
 //         let client = KVSClient {
 //             ut,
@@ -115,6 +110,286 @@ struct PendingRequest {
 //
 //         client
 //     }
+
+impl KVSClient {
+    pub fn new(config: &Config, tid: Option<usize>) -> Self {
+        let tid = tid.unwrap_or(0);
+        let thread_count = config.get_routing_thread_count();
+        let routing_ips = config.get_routing_ips();
+        let mut routing_threads = Vec::with_capacity(routing_ips.len() * thread_count);
+        for address in routing_ips {
+            for i in 0..thread_count {
+                routing_threads.push(UserRoutingThread::new(address, i));
+            }
+        }
+
+        let seed = Self::generate_seed(config.get_user_ip(), tid);
+        info!("Random seed is {}.", seed);
+        let rng = rand_pcg::Pcg64::seed_from_u64(seed);
+
+        // socket_cache_(SocketCache(&context_, ZMQ_PUSH)),
+        // key_address_puller_(zmq::socket_t(context_, ZMQ_PULL)),
+        // response_puller_(zmq::socket_t(context_, ZMQ_PULL)),
+        //
+        // // bind the two sockets we listen on
+        // key_address_puller_.bind(ut_.key_address_bind_address());
+        // response_puller_.bind(ut_.response_bind_address());
+        //
+        // pollitems_ = {
+        // {static_cast<void*>(key_address_puller_), 0, ZMQ_POLLIN, 0},
+        // {static_cast<void*>(response_puller_), 0, ZMQ_POLLIN, 0},
+        // };
+
+        KVSClient {
+            routing_threads,
+            rid: 0,
+            ut: UserThread::new(config.get_user_ip(), tid),
+            seed,
+            rng,
+            context: zmq::Context::new(),
+            key_address_cache: HashMap::new(),
+            timeout: 10000,
+        }
+    }
+
+    /*
+        Generate a random u64 seed from the time, ip address and thread id
+     */
+    fn generate_seed(ip: &Address, tid: usize) -> u64 {
+        // Get the system time in ms since epoch as a u64 and initialize the seed with that
+        let start = SystemTime::now();
+        let since_the_epoch = start
+            .duration_since(UNIX_EPOCH).unwrap_or(Duration::from_micros(42));
+        let mut seed = since_the_epoch.as_secs() * 1000 +
+            since_the_epoch.subsec_nanos() as u64 / 1_000_000;
+
+        // Hash the string IP Address down to a u64
+        let mut hasher = DefaultHasher::new();
+        ip.hash(&mut hasher);
+        // And add it to the seed
+        seed += hasher.finish();
+        // Add the thread id also
+        seed += tid as u64;
+
+        seed
+    }
+
+    /*
+        Clears the key address cache held by this client.
+     */
+    pub fn clear_cache(&mut self) {
+        self.key_address_cache.clear()
+    }
+
+    /*
+        Return the ZMQ context used by this client.
+    */
+    pub fn get_context(&self) -> &Context {
+        &self.context
+    }
+
+    /*
+        Return the random seed used by this client.
+    */
+    pub fn get_seed(&self) -> u64 {
+        self.seed
+    }
+
+    /*
+      Generates a unique request ID. usize will overflow and start counting from
+      zero again when MAX_INT is reached.
+    */
+    fn get_request_id(&mut self) -> String {
+        self.rid += 1;
+        format!("{}:{}_{}", self.ut.ip(), self.ut.tid(), self.rid)
+    }
+
+    /*
+      Returns one random routing thread's key address connection address. If the
+      client is running outside of the cluster (ie, it is querying the ELB),
+      there's only one address to choose from.
+    */
+    fn get_routing_thread(&mut self) -> Address {
+        // random index into threads array - from 0 upto but not including routing_threads.len()
+        self.routing_threads[self.rng.gen_range(0..self.routing_threads.len())]
+            .key_address_connect_address()
+    }
+
+    pub fn get(&self, tokens: &[&str]) {
+        debug!("GET: {:?}", tokens);
+//     vector<KeyResponse> responses = client->receive_async();
+//     while (responses.size() == 0) {
+//       responses = client->receive_async();
+//     }
+//
+//     if (responses.size() > 1) {
+//       std::cout << "Error: received more than one response" << std::endl;
+//     }
+//
+//     assert(responses[0].tuples(0).lattice_type() == LatticeType::LWW);
+//
+//     LWWPairLattice<string> lww_lattice =
+//         deserialize_lww(responses[0].tuples(0).payload());
+//     std::cout << lww_lattice.reveal().value << std::endl;
+    }
+
+    pub fn get_causal(&self, tokens: &[&str]) {
+        debug!("GET_CAUSAL: {:?}", tokens);
+    }
+//     vector<KeyResponse> responses = client->receive_async();
+//     while (responses.size() == 0) {
+//       responses = client->receive_async();
+//     }
+//
+//     if (responses.size() > 1) {
+//       std::cout << "Error: received more than one response" << std::endl;
+//     }
+//
+//     assert(responses[0].tuples(0).lattice_type() == LatticeType::MULTI_CAUSAL);
+//
+//     MultiKeyCausalLattice<SetLattice<string>> mkcl =
+//         MultiKeyCausalLattice<SetLattice<string>>(to_multi_key_causal_payload(
+//             deserialize_multi_key_causal(responses[0].tuples(0).payload())));
+//
+//     for (const auto &pair : mkcl.reveal().vector_clock.reveal()) {
+//       std::cout << "{" << pair.first << " : "
+//                 << std::to_string(pair.second.reveal()) << "}" << std::endl;
+//     }
+//
+//     for (const auto &dep_key_vc_pair : mkcl.reveal().dependencies.reveal()) {
+//       std::cout << dep_key_vc_pair.first << " : ";
+//       for (const auto &vc_pair : dep_key_vc_pair.second.reveal()) {
+//         std::cout << "{" << vc_pair.first << " : "
+//                   << std::to_string(vc_pair.second.reveal()) << "}"
+//                   << std::endl;
+//       }
+//     }
+//
+//     std::cout << *(mkcl.reveal().value.reveal().begin()) << std::endl;
+
+    pub fn put(&self, tokens: &[&str]) {
+        debug!("PUT: {:?}", tokens);
+        //     Key key = v[1];
+//     LWWPairLattice<string> val(
+//         TimestampValuePair<string>(generate_timestamp(0), v[2]));
+//
+//     // Put async
+//     string rid = client->put_async(key, serialize(val), LatticeType::LWW);
+//
+//     // Receive
+//     vector<KeyResponse> responses = client->receive_async();
+//     while (responses.size() == 0) {
+//       responses = client->receive_async();
+//     }
+//
+//     KeyResponse response = responses[0];
+//
+//     if (response.response_id() != rid) {
+//       std::cout << "Invalid response: ID did not match request ID!"
+//                 << std::endl;
+//     }
+//     if (response.error() == AnnaError::NO_ERROR) {
+//       std::cout << "Success!" << std::endl;
+//     } else {
+//       std::cout << "Failure!" << std::endl;
+//     }
+    }
+
+    pub fn put_causal(&self, tokens: &[&str]) {
+        debug!("PUT_CAUSAL: {:?}", tokens);
+//     Key key = v[1];
+//
+//     MultiKeyCausalPayload<SetLattice<string>> mkcp;
+//     // construct a test client id - version pair
+//     mkcp.vector_clock.insert("test", 1);
+//
+//     // construct one test dependencies
+//     mkcp.dependencies.insert(
+//         "dep1", VectorClock(map<string, MaxLattice<unsigned>>({{"test1", 1}})));
+//
+//     // populate the value
+//     mkcp.value.insert(v[2]);
+//
+//     MultiKeyCausalLattice<SetLattice<string>> mkcl(mkcp);
+//
+//     // Put async
+//     string rid = client->put_async(key, serialize(mkcl), LatticeType::MULTI_CAUSAL);
+//
+//     // Receive
+//     vector<KeyResponse> responses = client->receive_async();
+//     while (responses.size() == 0) {
+//       responses = client->receive_async();
+//     }
+//
+//     KeyResponse response = responses[0];
+//
+//     if (response.response_id() != rid) {
+//       std::cout << "Invalid response: ID did not match request ID!"
+//                 << std::endl;
+//     }
+//     if (response.error() == AnnaError::NO_ERROR) {
+//       std::cout << "Success!" << std::endl;
+//     } else {
+//       std::cout << "Failure!" << std::endl;
+//     }
+    }
+
+    pub fn put_set(&self, tokens: &[&str]) {
+        debug!("PUT SET: {:?}", tokens);
+        //     set<string> set;
+//     for (int i = 2; i < v.size(); i++) {
+//       set.insert(v[i]);
+//     }
+//
+//     // Put async
+//     string rid = client->put_async(v[1], serialize(SetLattice<string>(set)),
+//                                    LatticeType::SET);
+//
+//     // Receive
+//     vector<KeyResponse> responses = client->receive_async();
+//     while (responses.size() == 0) {
+//       responses = client->receive_async();
+//     }
+//
+//     KeyResponse response = responses[0];
+//
+//     if (response.response_id() != rid) {
+//       std::cout << "Invalid response: ID did not match request ID!"
+//                 << std::endl;
+//     }
+//     if (response.error() == AnnaError::NO_ERROR) {
+//       std::cout << "Success!" << std::endl;
+//     } else {
+//       std::cout << "Failure!" << std::endl;
+//     }
+    }
+
+    pub fn get_set(&self, tokens: &[&str]) {
+        debug!("GET SET: {:?}", tokens);
+        //     // Get Async
+//     string serialized;
+//
+//     // Receive
+//     vector<KeyResponse> responses = client->receive_async();
+//     while (responses.size() == 0) {
+//       responses = client->receive_async();
+//     }
+//
+//     SetLattice<string> latt = deserialize_set(responses[0].tuples(0).payload());
+//     print_set(latt.reveal());
+    }
+
+    /*
+     * When a server thread tells us to invalidate the cache for a key it's
+     * because we likely have out of date information for that key; it sends us
+     * the updated information for that key, and update our cache with that
+     * information.
+     */
+    fn invalidate_cache_for_key(&mut self, key: &Key, _tuple: &KeyTuple) {
+        self.key_address_cache.remove(key);
+    }
+}
+
 // //
 // //   /**
 // //    * Issue an async PUT request to the KVS for a certain lattice typed value.
@@ -288,26 +563,8 @@ struct PendingRequest {
 // //     return result;
 // //   }
 // //
-//     /*
-//         Clears the key address cache held by this client.
-//      */
-//     pub fn clear_cache(&mut self) {
-//         self.key_address_cache.clear()
-//     }
-//
-//     /*
-//         Return the ZMQ context used by this client.
-//     */
-//     pub fn get_context(&self) -> &zmq::context_t {
-//         &self.context
-//     }
-//
-//     /*
-//         Return the random seed used by this client.
-//     */
-//     pub fn get_seed(&self) -> usize {
-//         self.seed
-//     }
+
+
 //
 // //   /**
 // //    * A recursive helper method for the get and put implementations that tries
@@ -385,15 +642,7 @@ struct PendingRequest {
 // //     return false;
 // //   }
 // //
-//       /*
-//        * When a server thread tells us to invalidate the cache for a key it's
-//        * because we likely have out of date information for that key; it sends us
-//        * the updated information for that key, and update our cache with that
-//        * information.
-//        */
-//       fn invalidate_cache_for_key(&mut self, key: &Key, _tuple: &KeyTuple) {
-//         self.key_address_cache.remove(key);
-//       }
+
 //
 // //
 // //   /**
@@ -472,15 +721,6 @@ struct PendingRequest {
 // //     return *(next(begin(local_cache), rand_r(&seed_) % local_cache.size()));
 // //   }
 // //
-// //   /**
-// //    * Returns one random routing thread's key address connection address. If the
-// //    * client is running outside of the cluster (ie, it is querying the ELB),
-// //    * there's only one address to choose from but 4 threads.
-// //    */
-// //   Address get_routing_thread() {
-// //     return routing_threads_[rand_r(&seed_) % routing_threads_.size()]
-// //         .key_address_connect_address();
-// //   }
 // //
 // //   /**
 // //    * Send a query to the routing tier asynchronously.
@@ -498,14 +738,6 @@ struct PendingRequest {
 // //     send_request<KeyAddressRequest>(request, socket_cache_[rt_thread]);
 // //   }
 // //
-//       /*
-//             Generates a unique request ID. usize will overflow and start counting from
-//             zero again when MAX_INT is reached.
-//       */
-//       fn get_request_id(&mut self) -> String {
-//         self.rid += 1;
-//         format!("{}:{}_{}", self.ut.ip(), self.ut.tid(), self.rid)
-//       }
 //
 // //
 // //   KeyResponse generate_bad_response(const KeyRequest& req) {

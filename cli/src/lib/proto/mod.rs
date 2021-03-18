@@ -1,2 +1,2 @@
-mod anna;
+pub mod anna;
 pub mod shared;
