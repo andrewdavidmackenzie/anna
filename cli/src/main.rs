@@ -14,7 +14,7 @@ use clap::{App, Arg, SubCommand, ArgMatches};
 use rustyline::Editor;
 use log::{debug, warn};
 use simplog::simplog::SimpleLogger;
-use annalib::{info, start, stop, put, get, put_causal, get_causal, put_set, get_set, config::Config};
+use annalib::{info, start, stop, kvs_client::KVSClient, config::Config};
 use std::fs::File;
 use std::io::{BufReader, BufRead};
 
@@ -81,37 +81,30 @@ fn run() -> Result<String> {
 
     let config_file = matches.value_of("config").unwrap_or(DEFAULT_CONFIG_FILENAME);
 
-//   vector<UserRoutingThread> threads;
-//   for (Address addr : config.routing_ips()) {
-//     for (unsigned i = 0; i < kRoutingThreadCount; i++) {
-//       threads.push_back(UserRoutingThread(addr, i));
-//     }
-//   }
-//
-//   KvsClient client(threads, ip, 0, 10000);
-
     let config = Config::read(&config_file)
         .chain_err(|| format!("Could not read config file: {}", config_file))?;
+
+    let kvs_client = KVSClient::new(&config, None);
 
     match matches.subcommand() {
         ("help", _) => help(app_clone),
         ("start", _) => Ok(format!("{} anna processes were started", start(&config)?)),
         ("stop", _) => Ok(format!("{} anna processes were terminated", stop()?)),
-        ("cli", None) => Ok(cli_loop_interactive(&config)?.into()),
-        ("cli", Some(args)) => Ok(cli_loop(&config, args)?.into()),
+        ("cli", None) => Ok(cli_loop_interactive(kvs_client)?.into()),
+        ("cli", Some(args)) => Ok(cli_loop(kvs_client, args)?.into()),
         (_, _) => Ok("No command executed".into())
     }
 }
 
-fn execute_command(line: &str) {
+fn execute_command(line: &str, client: &KVSClient) {
     let split = line.split(' ').collect::<Vec<&str>>();
     match (split[0].to_ascii_uppercase().as_str(), &split[1..]) {
-        ("GET", tokens) => get(tokens),
-        ("GET_CAUSAL", tokens) => get_causal(tokens),
-        ("PUT", tokens) => put(tokens),
-        ("PUT_CAUSAL", tokens) => put_causal(tokens),
-        ("PUT_SET", tokens) => put_set(tokens),
-        ("GET_SET", tokens) => get_set(tokens),
+        ("GET", tokens) => client.get(tokens),
+        ("GET_CAUSAL", tokens) => client.get_causal(tokens),
+        ("PUT", tokens) => client.put(tokens),
+        ("PUT_CAUSAL", tokens) => client.put_causal(tokens),
+        ("PUT_SET", tokens) => client.put_set(tokens),
+        ("GET_SET", tokens) => client.get_set(tokens),
         (command, _) => eprintln!("Unrecognized anna command: {}. Was ignored.", command),
     }
 }
@@ -119,7 +112,7 @@ fn execute_command(line: &str) {
 /*
     Enter a loop of command/response for the CLI and interact with the server processes for each
 */
-fn cli_loop_interactive(_config: &Config) -> Result<&'static str> {
+fn cli_loop_interactive(client: KVSClient) -> Result<&'static str> {
     let mut rl = Editor::<()>::new(); // `()` can be used when no completer is required
     if rl.load_history(ANNA_HISTORY_FILENAME).is_err() {
         println!("No previous history. Saving new history in {}", ANNA_HISTORY_FILENAME);
@@ -129,7 +122,7 @@ fn cli_loop_interactive(_config: &Config) -> Result<&'static str> {
         match rl.readline("anna> ") {
             Ok(line) => {
                 rl.add_history_entry(&line);
-                execute_command(&line);
+                execute_command(&line, &client);
             },
             Err(_) => break, // Includes CONTROL-C and CONTROL-D exits
         }
@@ -143,13 +136,13 @@ fn cli_loop_interactive(_config: &Config) -> Result<&'static str> {
 /*
     Enter a loop of command/response for the CLI and interact with the server processes for each
 */
-fn cli_loop_file(_config: &Config, filename: &str) -> Result<&'static str>{
+fn cli_loop_file(client: KVSClient, filename: &str) -> Result<&'static str>{
     let file = File::open(filename).chain_err(|| format!("Could not open the command_file: {}", filename))?;
     let reader = BufReader::new(file);
 
     for line in reader.lines() {
         if let Ok(ref string) = line {
-            execute_command(&string);
+            execute_command(&string, &client);
         }
     }
 
@@ -159,10 +152,10 @@ fn cli_loop_file(_config: &Config, filename: &str) -> Result<&'static str>{
 /*
     Try to parse and then open a command_file of anna commands
  */
-fn cli_loop(_config: &Config, args: &ArgMatches) -> Result<&'static str> {
+fn cli_loop(client: KVSClient, args: &ArgMatches) -> Result<&'static str> {
     match args.value_of("command_file") {
-        None => cli_loop_interactive(&_config),
-        Some(filename) => cli_loop_file(&_config, filename)
+        None => cli_loop_interactive(client),
+        Some(filename) => cli_loop_file(client, filename)
     }
 }
 
