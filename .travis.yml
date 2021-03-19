@@ -10,7 +10,7 @@ matrix:
       osx_image: xcode12.2 # request macOS 10.15.7
       rust: stable
   allow_failures:
-    - os: osx
+    - os: linux
 
 compiler:
   - clang
