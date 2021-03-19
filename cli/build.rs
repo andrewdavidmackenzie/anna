@@ -8,7 +8,6 @@ const PROTO_FILES: &[&str] = &[
     ];
 
 fn main() -> io::Result<()> {
-    prost_build::compile_protos(PROTO_FILES, &["src/lib/proto/"])?;
-
-    Ok(())
+    // Rust code generation for protobuf definitions
+    prost_build::compile_protos(PROTO_FILES, &["src/lib/proto/"])
 }
