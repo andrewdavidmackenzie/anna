@@ -14,12 +14,17 @@
 
 syntax = "proto3";
 
+package causal;
+
+import "shared.proto";
 import "anna.proto";
 import "cloudburst.proto";
-import "shared.proto";
 
-// A message representing an individual tuple when the system is operating in
-// causal mode.
+//import "shared.proto";
+//import "anna.proto";
+//import "cloudburst.proto";
+
+// A message representing an individual tuple when the system is operating in causal mode.
 message CausalTuple {
   // The name of the key-value pair this tuple represents.
   string key = 1;
@@ -28,7 +33,7 @@ message CausalTuple {
   bytes payload = 2;
 
   // Any errors generated while retrieving this tuple (see CausalError).
-  AnnaError error = 3;
+  anna.AnnaError error = 3;
 }
 
 // A request for one or more causal tuples, made from an executor and answered
@@ -36,7 +41,7 @@ message CausalTuple {
 message CausalRequest {
   // The consistency mode that the request is being run in -- this should only
   // be SINGLE or MULTI.
-  ConsistencyType consistency = 1;
+  cloudburst.ConsistencyType consistency = 1;
 
   // The unique ID of the client that is making this request -- this may be
   // independent from the physical node on which the request is running.
@@ -50,7 +55,7 @@ message CausalRequest {
 
   // The locations of upstream caches at which particular key versions are
   // stored -- this is used to optimize version retrieval.
-  map<string, KeyVersionList> key_version_locations = 5;
+  map<string, shared.KeyVersionList> key_version_locations = 5;
 
   // The address at which the client will be waiting for a response for this
   // particular request.
@@ -69,7 +74,7 @@ message CausalResponse {
 
   // The set of keys relevant to this DAG that are being cached at the above
   // address to service queries by downstream caches.
-  repeated KeyVersion key_versions = 3;
+  repeated shared.KeyVersion key_versions = 3;
 }
 
 // A request that is passed from one cache to another to retrieve a specific
@@ -86,9 +91,9 @@ message KeyVersionRequest {
   repeated string keys = 3;
 }
 
-// A response to a partticular KeyVersionRequest.
+// A response to a particular KeyVersionRequest.
 message KeyVersionResponse {
-  // The ID of the request for which this response is inteded.
+  // The ID of the request for which this response is intended.
   string id = 1;
 
   // The list of CausalTuples that was requested. This is a 1-to-1 mapping with

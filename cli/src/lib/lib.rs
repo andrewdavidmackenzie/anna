@@ -15,10 +15,11 @@ use std::process::Command;
 use crate::config::Config;
 
 pub mod info;
-mod proto;
+// mod proto;
 pub mod kvs_client;
 pub mod config;
 mod threads;
+pub mod proto;
 
 // Pending them being defined elsewhere in a build script or similar
 const ANNA_MONITOR_PROCESS_NAME: &str = "anna-monitor";

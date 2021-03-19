@@ -14,15 +14,15 @@
 
 syntax = "proto3";
 
-// An arbitrary set of strings; used for a variety of purposes across the
-// system.
+package shared;
+
+// An arbitrary set of strings; used for a variety of purposes across the system.
 message StringSet {
   // An unordered set of keys.
   repeated string keys = 1;
 }
 
-// A message representing a pointer to a particular version of a particular
-// key.
+// A message representing a pointer to a particular version of a particular key.
 message KeyVersion {
   // The name of the key we are referencing.
   string key = 1;
