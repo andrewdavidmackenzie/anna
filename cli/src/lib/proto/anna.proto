@@ -14,6 +14,8 @@
 
 syntax = "proto3";
 
+package anna;
+
 import "shared.proto";
 
 // An enum to differentiate between different KVS requests.
@@ -58,19 +60,16 @@ enum AnnaError {
   // The requested key does not exist.
   KEY_DNE = 1;
 
-  // The request was sent to the wrong thread, which is not responsible for the
-  // key.
+  // The request was sent to the wrong thread, which is not responsible for the key.
   WRONG_THREAD = 2;
 
   // The request timed out.
   TIMEOUT = 3;
 
-  // The lattice type was not correctly specified or conflicted with an
-  // existing key.
+  // The lattice type was not correctly specified or conflicted with an existing key.
   LATTICE = 4;
 
-  // This error is returned by the routing tier if no servers are in the
-  // cluster.
+  // This error is returned by the routing tier if no servers are in the cluster.
   NO_SERVERS = 5;
 }
 
@@ -81,8 +80,7 @@ message KeyTuple {
   // The key name for this request/response.
   string key = 1;
 
-  // The lattice type for this key. Only required for server responses and PUT
-  // requests.
+  // The lattice type for this key. Only required for server responses and PUT requests.
   LatticeType lattice_type = 2;
 
   // The error type specified by the server (see AnnaError).
@@ -121,12 +119,10 @@ message KeyResponse {
   RequestType type = 1;
 
   // The individual response pairs associated with this request. There is a
-  // 1-to-1 mapping between these and the KeyTuples in the corresponding
-  // KeyRequest.
+  // 1-to-1 mapping between these and the KeyTuples in the corresponding KeyRequest.
   repeated KeyTuple tuples = 2;
 
-  // The request_id specified in the corresponding KeyRequest. Used to
-  // associate asynchornous requests and responses.
+  // The request_id specified in the corresponding KeyRequest. Used to associate asynchronous requests and responses.
   string response_id = 3;
 
   // Any errors associated with the whole request. Individual tuple errors are
@@ -144,15 +140,13 @@ message KeyAddressRequest {
   // The names of the requested keys.
   repeated string keys = 2;
 
-  // A unique ID used by the client to match asynchornous requests with
-  // responses.
+  // A unique ID used by the client to match asynchronous requests with responses.
   string request_id = 3;
 }
 
 // A 1-to-1 response from the routing tier for individual KeyAddressRequests.
 message KeyAddressResponse {
-  // A mapping from individual keys to the set of servers responsible for that
-  // key.
+  // A mapping from individual keys to the set of servers responsible for that key.
   message KeyAddress {
     // The specified key.
     string key = 1;
@@ -167,8 +161,7 @@ message KeyAddressResponse {
   // An error reported by the routing tier. This should only ever be a timeout.
   AnnaError error = 2;
 
-  // A unique ID used by the client to match asynchronous requests with
-  // responses.
+  // A unique ID used by the client to match asynchronous requests with responses.
   string response_id = 3;
 }
 
@@ -191,8 +184,7 @@ message SetValue {
 
 // Serialization of a single-key causal lattice.
 message SingleKeyCausalValue {
-  // The vector clock for this key, which maps from unique client IDs to
-  // monotonically increasing integers.
+  // The vector clock for this key, which maps from unique client IDs to monotonically increasing integers.
   map<string, uint32> vector_clock = 1;
 
   // The set of values associated with this causal value. There will only be
@@ -206,9 +198,8 @@ message MultiKeyCausalValue {
   // The vector clock associated with this particular key.
   map<string, uint32> vector_clock = 1;
 
-  // The mapping from keys to vector clocks for each of the direct causal
-  // dependencies this key has.
-  repeated KeyVersion dependencies = 2;
+  // The mapping from keys to vector clocks for each of the direct causal dependencies this key has.
+  repeated shared.KeyVersion dependencies = 2;
   
   // The set of potentially causally concurrent values for this key.
   repeated bytes values = 3;
