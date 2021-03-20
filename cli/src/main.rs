@@ -12,7 +12,7 @@ use std::process::exit;
 
 use clap::{App, Arg, SubCommand, ArgMatches};
 use rustyline::Editor;
-use log::{debug, warn};
+use log::{debug, warn, info};
 use simplog::simplog::SimpleLogger;
 use annalib::{info, start, stop, put, get, put_causal, get_causal, put_set, get_set, config::Config};
 use std::fs::File;
@@ -80,6 +80,7 @@ fn run() -> Result<String> {
     SimpleLogger::init_prefix(matches.value_of("verbosity"), false);
 
     let config_file = matches.value_of("config").unwrap_or(DEFAULT_CONFIG_FILENAME);
+    info!("Using config file: {}", config_file);
 
 //   vector<UserRoutingThread> threads;
 //   for (Address addr : config.routing_ips()) {
