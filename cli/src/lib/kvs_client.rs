@@ -4,7 +4,7 @@
 
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
 use zmq::Context;
-use log::{info, debug, error};
+use log::{info, debug};
 
 use crate::config::Config;
 
@@ -211,7 +211,7 @@ impl KVSClient {
             .key_address_connect_address()
     }
 
-    pub fn get(&self, tokens: &[&str]) {
+    pub fn get(&self, _tokens: &[&str]) {
         // debug!("GET: {:?}", tokens);
         // let responses = self.receive_async();
         // while responses.size() == 0 {
