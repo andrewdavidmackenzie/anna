@@ -274,6 +274,6 @@ mod test {
     fn sub_max_u64_lattice() {
         let low_lattice = MaxLattice::<u64>(100);
         let high_lattice = MaxLattice::<u64>(142);
-        assert_eq!(high_lattice - low_lattice, MaxLattice::<u64>(41))
+        assert_eq!(high_lattice - low_lattice, MaxLattice::<u64>(42))
     }
 }
