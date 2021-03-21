@@ -2,9 +2,9 @@
 // #include "common.hpp"
 // #include "requests.hpp"
 
-use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use log::{debug, info};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use zmq::Context;
-use log::{info, debug};
 
 use crate::config::Config;
 
@@ -12,13 +12,13 @@ pub type Address = String;
 pub type Key = String;
 pub type TimePoint = std::time::SystemTime;
 
-use crate::threads::{UserRoutingThread, UserThread};
 use crate::proto::anna::KeyTuple;
-use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, Hasher};
-use std::collections::hash_map::DefaultHasher;
+use crate::threads::{UserRoutingThread, UserThread};
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64;
+use std::collections::hash_map::DefaultHasher;
+use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 
 struct PendingRequest {
     tp: TimePoint,
@@ -61,7 +61,6 @@ pub struct KVSClient {
 //
 //     // keeps track of pending put responses
 //     pending_put_response_map: Map<Key, Map<string, PendingRequest>>
-
 
 //     /*
 //         addrs A vector of routing addresses.
@@ -149,15 +148,16 @@ impl KVSClient {
     }
 
     /*
-        Generate a random u64 seed from the time, ip address and thread id
-     */
+       Generate a random u64 seed from the time, ip address and thread id
+    */
     fn generate_seed(ip: &Address, tid: usize) -> u64 {
         // Get the system time in ms since epoch as a u64 and initialize the seed with that
         let start = SystemTime::now();
         let since_the_epoch = start
-            .duration_since(UNIX_EPOCH).unwrap_or(Duration::from_micros(42));
-        let mut seed = since_the_epoch.as_secs() * 1000 +
-            since_the_epoch.subsec_nanos() as u64 / 1_000_000;
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or(Duration::from_micros(42));
+        let mut seed =
+            since_the_epoch.as_secs() * 1000 + since_the_epoch.subsec_nanos() as u64 / 1_000_000;
 
         // Hash the string IP Address down to a u64
         let mut hasher = DefaultHasher::new();
@@ -171,8 +171,8 @@ impl KVSClient {
     }
 
     /*
-        Clears the key address cache held by this client.
-     */
+       Clears the key address cache held by this client.
+    */
     pub fn clear_cache(&mut self) {
         self.key_address_cache.clear()
     }
@@ -232,147 +232,147 @@ impl KVSClient {
     pub fn get_causal(&self, tokens: &[&str]) {
         debug!("GET_CAUSAL: {:?}", tokens);
     }
-//     vector<KeyResponse> responses = client->receive_async();
-//     while (responses.size() == 0) {
-//       responses = client->receive_async();
-//     }
-//
-//     if (responses.size() > 1) {
-//       std::cout << "Error: received more than one response" << std::endl;
-//     }
-//
-//     assert(responses[0].tuples(0).lattice_type() == LatticeType::MULTI_CAUSAL);
-//
-//     MultiKeyCausalLattice<SetLattice<string>> mkcl =
-//         MultiKeyCausalLattice<SetLattice<string>>(to_multi_key_causal_payload(
-//             deserialize_multi_key_causal(responses[0].tuples(0).payload())));
-//
-//     for (const auto &pair : mkcl.reveal().vector_clock.reveal()) {
-//       std::cout << "{" << pair.first << " : "
-//                 << std::to_string(pair.second.reveal()) << "}" << std::endl;
-//     }
-//
-//     for (const auto &dep_key_vc_pair : mkcl.reveal().dependencies.reveal()) {
-//       std::cout << dep_key_vc_pair.first << " : ";
-//       for (const auto &vc_pair : dep_key_vc_pair.second.reveal()) {
-//         std::cout << "{" << vc_pair.first << " : "
-//                   << std::to_string(vc_pair.second.reveal()) << "}"
-//                   << std::endl;
-//       }
-//     }
-//
-//     std::cout << *(mkcl.reveal().value.reveal().begin()) << std::endl;
+    //     vector<KeyResponse> responses = client->receive_async();
+    //     while (responses.size() == 0) {
+    //       responses = client->receive_async();
+    //     }
+    //
+    //     if (responses.size() > 1) {
+    //       std::cout << "Error: received more than one response" << std::endl;
+    //     }
+    //
+    //     assert(responses[0].tuples(0).lattice_type() == LatticeType::MULTI_CAUSAL);
+    //
+    //     MultiKeyCausalLattice<SetLattice<string>> mkcl =
+    //         MultiKeyCausalLattice<SetLattice<string>>(to_multi_key_causal_payload(
+    //             deserialize_multi_key_causal(responses[0].tuples(0).payload())));
+    //
+    //     for (const auto &pair : mkcl.reveal().vector_clock.reveal()) {
+    //       std::cout << "{" << pair.first << " : "
+    //                 << std::to_string(pair.second.reveal()) << "}" << std::endl;
+    //     }
+    //
+    //     for (const auto &dep_key_vc_pair : mkcl.reveal().dependencies.reveal()) {
+    //       std::cout << dep_key_vc_pair.first << " : ";
+    //       for (const auto &vc_pair : dep_key_vc_pair.second.reveal()) {
+    //         std::cout << "{" << vc_pair.first << " : "
+    //                   << std::to_string(vc_pair.second.reveal()) << "}"
+    //                   << std::endl;
+    //       }
+    //     }
+    //
+    //     std::cout << *(mkcl.reveal().value.reveal().begin()) << std::endl;
 
     pub fn put(&self, tokens: &[&str]) {
         debug!("PUT: {:?}", tokens);
         //     Key key = v[1];
-//     LWWPairLattice<string> val(
-//         TimestampValuePair<string>(generate_timestamp(0), v[2]));
-//
-//     // Put async
-//     string rid = client->put_async(key, serialize(val), LatticeType::LWW);
-//
-//     // Receive
-//     vector<KeyResponse> responses = client->receive_async();
-//     while (responses.size() == 0) {
-//       responses = client->receive_async();
-//     }
-//
-//     KeyResponse response = responses[0];
-//
-//     if (response.response_id() != rid) {
-//       std::cout << "Invalid response: ID did not match request ID!"
-//                 << std::endl;
-//     }
-//     if (response.error() == AnnaError::NO_ERROR) {
-//       std::cout << "Success!" << std::endl;
-//     } else {
-//       std::cout << "Failure!" << std::endl;
-//     }
+        //     LWWPairLattice<string> val(
+        //         TimestampValuePair<string>(generate_timestamp(0), v[2]));
+        //
+        //     // Put async
+        //     string rid = client->put_async(key, serialize(val), LatticeType::LWW);
+        //
+        //     // Receive
+        //     vector<KeyResponse> responses = client->receive_async();
+        //     while (responses.size() == 0) {
+        //       responses = client->receive_async();
+        //     }
+        //
+        //     KeyResponse response = responses[0];
+        //
+        //     if (response.response_id() != rid) {
+        //       std::cout << "Invalid response: ID did not match request ID!"
+        //                 << std::endl;
+        //     }
+        //     if (response.error() == AnnaError::NO_ERROR) {
+        //       std::cout << "Success!" << std::endl;
+        //     } else {
+        //       std::cout << "Failure!" << std::endl;
+        //     }
     }
 
     pub fn put_causal(&self, tokens: &[&str]) {
         debug!("PUT_CAUSAL: {:?}", tokens);
-//     Key key = v[1];
-//
-//     MultiKeyCausalPayload<SetLattice<string>> mkcp;
-//     // construct a test client id - version pair
-//     mkcp.vector_clock.insert("test", 1);
-//
-//     // construct one test dependencies
-//     mkcp.dependencies.insert(
-//         "dep1", VectorClock(map<string, MaxLattice<unsigned>>({{"test1", 1}})));
-//
-//     // populate the value
-//     mkcp.value.insert(v[2]);
-//
-//     MultiKeyCausalLattice<SetLattice<string>> mkcl(mkcp);
-//
-//     // Put async
-//     string rid = client->put_async(key, serialize(mkcl), LatticeType::MULTI_CAUSAL);
-//
-//     // Receive
-//     vector<KeyResponse> responses = client->receive_async();
-//     while (responses.size() == 0) {
-//       responses = client->receive_async();
-//     }
-//
-//     KeyResponse response = responses[0];
-//
-//     if (response.response_id() != rid) {
-//       std::cout << "Invalid response: ID did not match request ID!"
-//                 << std::endl;
-//     }
-//     if (response.error() == AnnaError::NO_ERROR) {
-//       std::cout << "Success!" << std::endl;
-//     } else {
-//       std::cout << "Failure!" << std::endl;
-//     }
+        //     Key key = v[1];
+        //
+        //     MultiKeyCausalPayload<SetLattice<string>> mkcp;
+        //     // construct a test client id - version pair
+        //     mkcp.vector_clock.insert("test", 1);
+        //
+        //     // construct one test dependencies
+        //     mkcp.dependencies.insert(
+        //         "dep1", VectorClock(map<string, MaxLattice<unsigned>>({{"test1", 1}})));
+        //
+        //     // populate the value
+        //     mkcp.value.insert(v[2]);
+        //
+        //     MultiKeyCausalLattice<SetLattice<string>> mkcl(mkcp);
+        //
+        //     // Put async
+        //     string rid = client->put_async(key, serialize(mkcl), LatticeType::MULTI_CAUSAL);
+        //
+        //     // Receive
+        //     vector<KeyResponse> responses = client->receive_async();
+        //     while (responses.size() == 0) {
+        //       responses = client->receive_async();
+        //     }
+        //
+        //     KeyResponse response = responses[0];
+        //
+        //     if (response.response_id() != rid) {
+        //       std::cout << "Invalid response: ID did not match request ID!"
+        //                 << std::endl;
+        //     }
+        //     if (response.error() == AnnaError::NO_ERROR) {
+        //       std::cout << "Success!" << std::endl;
+        //     } else {
+        //       std::cout << "Failure!" << std::endl;
+        //     }
     }
 
     pub fn put_set(&self, tokens: &[&str]) {
         debug!("PUT SET: {:?}", tokens);
         //     set<string> set;
-//     for (int i = 2; i < v.size(); i++) {
-//       set.insert(v[i]);
-//     }
-//
-//     // Put async
-//     string rid = client->put_async(v[1], serialize(SetLattice<string>(set)),
-//                                    LatticeType::SET);
-//
-//     // Receive
-//     vector<KeyResponse> responses = client->receive_async();
-//     while (responses.size() == 0) {
-//       responses = client->receive_async();
-//     }
-//
-//     KeyResponse response = responses[0];
-//
-//     if (response.response_id() != rid) {
-//       std::cout << "Invalid response: ID did not match request ID!"
-//                 << std::endl;
-//     }
-//     if (response.error() == AnnaError::NO_ERROR) {
-//       std::cout << "Success!" << std::endl;
-//     } else {
-//       std::cout << "Failure!" << std::endl;
-//     }
+        //     for (int i = 2; i < v.size(); i++) {
+        //       set.insert(v[i]);
+        //     }
+        //
+        //     // Put async
+        //     string rid = client->put_async(v[1], serialize(SetLattice<string>(set)),
+        //                                    LatticeType::SET);
+        //
+        //     // Receive
+        //     vector<KeyResponse> responses = client->receive_async();
+        //     while (responses.size() == 0) {
+        //       responses = client->receive_async();
+        //     }
+        //
+        //     KeyResponse response = responses[0];
+        //
+        //     if (response.response_id() != rid) {
+        //       std::cout << "Invalid response: ID did not match request ID!"
+        //                 << std::endl;
+        //     }
+        //     if (response.error() == AnnaError::NO_ERROR) {
+        //       std::cout << "Success!" << std::endl;
+        //     } else {
+        //       std::cout << "Failure!" << std::endl;
+        //     }
     }
 
     pub fn get_set(&self, tokens: &[&str]) {
         debug!("GET SET: {:?}", tokens);
         //     // Get Async
-//     string serialized;
-//
-//     // Receive
-//     vector<KeyResponse> responses = client->receive_async();
-//     while (responses.size() == 0) {
-//       responses = client->receive_async();
-//     }
-//
-//     SetLattice<string> latt = deserialize_set(responses[0].tuples(0).payload());
-//     print_set(latt.reveal());
+        //     string serialized;
+        //
+        //     // Receive
+        //     vector<KeyResponse> responses = client->receive_async();
+        //     while (responses.size() == 0) {
+        //       responses = client->receive_async();
+        //     }
+        //
+        //     SetLattice<string> latt = deserialize_set(responses[0].tuples(0).payload());
+        //     print_set(latt.reveal());
     }
 
     /*
@@ -559,7 +559,6 @@ impl KVSClient {
 // //     return result;
 // //   }
 // //
-
 
 //
 // //   /**

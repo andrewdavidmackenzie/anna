@@ -18,11 +18,14 @@ impl Lattice for BoolLattice {
 }
 
 #[derive(Default, Clone, PartialEq, Debug)]
-struct MaxLattice<T>(T) where
+struct MaxLattice<T>(T)
+where
     T: PartialOrd + PartialEq + Clone;
 
-impl<T: Add<Output=T>> Add for MaxLattice<T> where
-    T: PartialOrd + PartialEq + Clone {
+impl<T: Add<Output = T>> Add for MaxLattice<T>
+where
+    T: PartialOrd + PartialEq + Clone,
+{
     type Output = Self;
 
     fn add(self, other: Self) -> Self::Output {
@@ -30,8 +33,10 @@ impl<T: Add<Output=T>> Add for MaxLattice<T> where
     }
 }
 
-impl<T: Sub<Output=T>> Sub for MaxLattice<T> where
-    T: PartialOrd + PartialEq + Clone {
+impl<T: Sub<Output = T>> Sub for MaxLattice<T>
+where
+    T: PartialOrd + PartialEq + Clone,
+{
     type Output = Self;
 
     fn sub(self, other: Self) -> Self::Output {
@@ -39,8 +44,10 @@ impl<T: Sub<Output=T>> Sub for MaxLattice<T> where
     }
 }
 
-impl<T> Lattice for MaxLattice<T> where
-    T: PartialOrd + PartialEq + Clone {
+impl<T> Lattice for MaxLattice<T>
+where
+    T: PartialOrd + PartialEq + Clone,
+{
     type A = T;
 
     fn do_merge(&mut self, l: &MaxLattice<T>) {
@@ -49,7 +56,6 @@ impl<T> Lattice for MaxLattice<T> where
         }
     }
 }
-
 
 //
 // template <typename T>

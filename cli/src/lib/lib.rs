@@ -6,26 +6,30 @@
 #[macro_use]
 extern crate error_chain;
 
-use nix::unistd::Pid;
-use sysinfo::{ProcessExt, System, SystemExt};
 use nix::sys::signal::{kill, Signal};
+use nix::unistd::Pid;
 use std::path::PathBuf;
+use sysinfo::{ProcessExt, System, SystemExt};
 // use nix::sys::socket::bind;
-use std::process::Command;
 use crate::config::Config;
+use std::process::Command;
 
-pub mod info;
-pub mod proto;
-pub mod kvs_client;
 pub mod config;
-mod threads;
+pub mod info;
+pub mod kvs_client;
 mod lattices;
+pub mod proto;
+mod threads;
 
 // Pending them being defined elsewhere in a build script or similar
 const ANNA_MONITOR_PROCESS_NAME: &str = "anna-monitor";
 const ANNA_ROUTE_PROCESS_NAME: &str = "anna-route";
 const ANNA_KVS_PROCESS_NAME: &str = "anna-kvs";
-const PROCESS_LIST: [&str;3] = [ ANNA_MONITOR_PROCESS_NAME, ANNA_ROUTE_PROCESS_NAME, ANNA_KVS_PROCESS_NAME];
+const PROCESS_LIST: [&str; 3] = [
+    ANNA_MONITOR_PROCESS_NAME,
+    ANNA_ROUTE_PROCESS_NAME,
+    ANNA_KVS_PROCESS_NAME,
+];
 const BINARY_FOLDER: &str = "build/target/kvs";
 
 // We'll put our errors in an `errors` module, and other modules in this crate will
@@ -47,11 +51,14 @@ error_chain! {
 }
 
 /*
-    Gather a list of pids that are running for a process using the process name
- */
+   Gather a list of pids that are running for a process using the process name
+*/
 fn pids_from_name(name: &str) -> Vec<i32> {
     let s = System::new_all();
-    s.get_process_by_name(name).iter().map(|p| p.pid()).collect()
+    s.get_process_by_name(name)
+        .iter()
+        .map(|p| p.pid())
+        .collect()
 }
 
 fn project_root() -> Result<PathBuf> {

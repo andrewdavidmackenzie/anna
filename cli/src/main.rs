@@ -10,13 +10,13 @@ extern crate error_chain;
 use std::env;
 use std::process::exit;
 
-use clap::{App, Arg, SubCommand, ArgMatches};
+use annalib::{config::Config, info, kvs_client::KVSClient, start, stop};
+use clap::{App, Arg, ArgMatches, SubCommand};
+use log::{debug, info, warn};
 use rustyline::Editor;
-use log::{debug, warn, info};
 use simplog::simplog::SimpleLogger;
-use annalib::{info, start, stop, kvs_client::KVSClient, config::Config};
 use std::fs::File;
-use std::io::{BufReader, BufRead};
+use std::io::{BufRead, BufReader};
 
 const ANNA_HISTORY_FILENAME: &str = ".anna_history";
 const DEFAULT_CONFIG_FILENAME: &str = "conf/anna-config.yml";
@@ -69,17 +69,23 @@ fn main() {
     run the cli using clap to interpret commands and options
 */
 fn run() -> Result<String> {
-    debug!("'{}' CLI version {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+    debug!(
+        "'{}' CLI version {}",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION")
+    );
     debug!("'anna' library version {}", info::version());
 
     let app = get_app();
-    let app_clone= app.clone();
+    let app_clone = app.clone();
     let matches = app.get_matches();
 
     // Initialize the logger with the level of verbosity requested via option (or the default)
     SimpleLogger::init_prefix(matches.value_of("verbosity"), false);
 
-    let config_file = matches.value_of("config").unwrap_or(DEFAULT_CONFIG_FILENAME);
+    let config_file = matches
+        .value_of("config")
+        .unwrap_or(DEFAULT_CONFIG_FILENAME);
     info!("Using config file: {}", config_file);
 
     let config = Config::read(&config_file)
@@ -93,7 +99,7 @@ fn run() -> Result<String> {
         ("stop", _) => Ok(format!("{} anna processes were terminated", stop()?)),
         ("cli", None) => Ok(cli_loop_interactive(kvs_client)?.into()),
         ("cli", Some(args)) => Ok(cli_loop(kvs_client, args)?.into()),
-        (_, _) => Ok("No command executed".into())
+        (_, _) => Ok("No command executed".into()),
     }
 }
 
@@ -117,7 +123,10 @@ fn execute_command(line: &str, client: &KVSClient) {
 fn cli_loop_interactive(client: KVSClient) -> Result<&'static str> {
     let mut rl = Editor::<()>::new(); // `()` can be used when no completer is required
     if rl.load_history(ANNA_HISTORY_FILENAME).is_err() {
-        println!("No previous history. Saving new history in {}", ANNA_HISTORY_FILENAME);
+        println!(
+            "No previous history. Saving new history in {}",
+            ANNA_HISTORY_FILENAME
+        );
     }
 
     loop {
@@ -125,7 +134,7 @@ fn cli_loop_interactive(client: KVSClient) -> Result<&'static str> {
             Ok(line) => {
                 rl.add_history_entry(&line);
                 execute_command(&line, &client);
-            },
+            }
             Err(_) => break, // Includes CONTROL-C and CONTROL-D exits
         }
     }
@@ -138,8 +147,9 @@ fn cli_loop_interactive(client: KVSClient) -> Result<&'static str> {
 /*
     Enter a loop of command/response for the CLI and interact with the server processes for each
 */
-fn cli_loop_file(client: KVSClient, filename: &str) -> Result<&'static str>{
-    let file = File::open(filename).chain_err(|| format!("Could not open the command_file: {}", filename))?;
+fn cli_loop_file(client: KVSClient, filename: &str) -> Result<&'static str> {
+    let file = File::open(filename)
+        .chain_err(|| format!("Could not open the command_file: {}", filename))?;
     let reader = BufReader::new(file);
 
     for line in reader.lines() {
@@ -152,12 +162,12 @@ fn cli_loop_file(client: KVSClient, filename: &str) -> Result<&'static str>{
 }
 
 /*
-    Try to parse and then open a command_file of anna commands
- */
+   Try to parse and then open a command_file of anna commands
+*/
 fn cli_loop(client: KVSClient, args: &ArgMatches) -> Result<&'static str> {
     match args.value_of("command_file") {
         None => cli_loop_interactive(client),
-        Some(filename) => cli_loop_file(client, filename)
+        Some(filename) => cli_loop_file(client, filename),
     }
 }
 
@@ -175,25 +185,37 @@ fn help(mut app: App) -> Result<String> {
 fn get_app() -> App<'static, 'static> {
     App::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
-        .arg(Arg::with_name("verbosity")
-            .short("v")
-            .long("verbosity")
-            .takes_value(true)
-            .value_name("VERBOSITY_LEVEL")
-            .help("Set verbosity level for output (trace, debug, info, warn, error (default))"))
-        .arg(Arg::with_name("config")
-            .short("c")
-            .long("config")
-            .takes_value(true)
-            .value_name("CONFIG_FILE")
-            .help("Specify the config file to be used"))
-        .subcommand(SubCommand::with_name("cli")
-            .about("Start an interactive anna CLI session")
-            .arg(Arg::with_name("command_file")
-                .index(1)
-                .help("A file where anna commands are read from")))
-        .subcommand(SubCommand::with_name("start")
-            .about("Start anna processes (monitor, route and kvs) in background"))
-        .subcommand(SubCommand::with_name("stop")
-            .about("Stop running instances of anna (monitor, route and kvs)"))
+        .arg(
+            Arg::with_name("verbosity")
+                .short("v")
+                .long("verbosity")
+                .takes_value(true)
+                .value_name("VERBOSITY_LEVEL")
+                .help("Set verbosity level for output (trace, debug, info, warn, error (default))"),
+        )
+        .arg(
+            Arg::with_name("config")
+                .short("c")
+                .long("config")
+                .takes_value(true)
+                .value_name("CONFIG_FILE")
+                .help("Specify the config file to be used"),
+        )
+        .subcommand(
+            SubCommand::with_name("cli")
+                .about("Start an interactive anna CLI session")
+                .arg(
+                    Arg::with_name("command_file")
+                        .index(1)
+                        .help("A file where anna commands are read from"),
+                ),
+        )
+        .subcommand(
+            SubCommand::with_name("start")
+                .about("Start anna processes (monitor, route and kvs) in background"),
+        )
+        .subcommand(
+            SubCommand::with_name("stop")
+                .about("Stop running instances of anna (monitor, route and kvs)"),
+        )
 }

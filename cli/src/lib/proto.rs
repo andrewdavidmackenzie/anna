@@ -17,4 +17,3 @@ pub mod cloudburst {
 pub mod causal {
     include!(concat!(env!("OUT_DIR"), "/causal.rs"));
 }
-
