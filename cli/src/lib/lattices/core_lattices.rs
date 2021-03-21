@@ -18,17 +18,13 @@ impl Lattice for BoolLattice {
 }
 
 #[derive(Default, Clone, PartialEq, Debug)]
-struct MaxLattice<T: PartialOrd + PartialEq + Clone> {
-    value: T
-}
+struct MaxLattice<T: PartialOrd + PartialEq + Clone>(T);
 
 impl<T: Add<Output=T>> Add for MaxLattice<T> where T: PartialOrd + PartialEq + Clone {
     type Output = Self;
 
     fn add(self, other: Self) -> Self::Output {
-        Self {
-            value: self.value + other.value
-        }
+        Self(self.0 + other.0)
     }
 }
 
@@ -36,9 +32,7 @@ impl<T: Sub<Output=T>> Sub for MaxLattice<T> where T: PartialOrd + PartialEq + C
     type Output = Self;
 
     fn sub(self, other: Self) -> Self::Output {
-        Self {
-            value: self.value - other.value
-        }
+        Self(self.0 - other.0)
     }
 }
 
@@ -46,11 +40,12 @@ impl<T> Lattice for MaxLattice<T> where T: PartialOrd + PartialEq+ Clone {
     type A = T;
 
     fn do_merge(&mut self, l: &MaxLattice<T>) {
-        if self.value < l.value {
-            self.value = l.value.clone()
+        if self.0 < l.0 {
+            self.0 = l.0.clone()
         }
     }
 }
+
 
 //
 // template <typename T>
@@ -240,28 +235,28 @@ mod test {
     #[test]
     fn default_max_int_lattice() {
         let lattice = MaxLattice::<u32>::default();
-        assert_eq!(lattice.value, 0);
+        assert_eq!(lattice.0, 0);
     }
 
     #[test]
     fn merge_max_lattice() {
-        let mut low_lattice = MaxLattice::<u32> { value: 1 };
-        let high_lattice = MaxLattice::<u32> { value: 42 };
+        let mut low_lattice = MaxLattice::<u32>(1);
+        let high_lattice = MaxLattice::<u32>(42);
         low_lattice.do_merge(&high_lattice);
-        assert_eq!(low_lattice.value, 42)
+        assert_eq!(low_lattice.0, 42)
     }
 
     #[test]
     fn add_max_lattice() {
-        let low_lattice = MaxLattice::<u32> { value: 1 };
-        let high_lattice = MaxLattice::<u32> { value: 42 };
-        assert_eq!(low_lattice + high_lattice, MaxLattice::<u32> { value: 43 })
+        let low_lattice = MaxLattice::<u32>(1);
+        let high_lattice = MaxLattice::<u32>(42);
+        assert_eq!(low_lattice + high_lattice, MaxLattice::<u32>(43))
     }
 
     #[test]
     fn sub_max_lattice() {
-        let low_lattice = MaxLattice::<u32> { value: 1 };
-        let high_lattice = MaxLattice::<u32> { value: 42 };
-        assert_eq!(high_lattice - low_lattice, MaxLattice::<u32> { value: 41 })
+        let low_lattice = MaxLattice::<u32>(1);
+        let high_lattice = MaxLattice::<u32>(42);
+        assert_eq!(high_lattice - low_lattice, MaxLattice::<u32>(41))
     }
 }
