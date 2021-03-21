@@ -237,13 +237,13 @@ mod test {
     }
 
     #[test]
-    fn default_max_int_lattice() {
+    fn default_max_u32_lattice() {
         let lattice = MaxLattice::<u32>::default();
         assert_eq!(lattice.0, 0);
     }
 
     #[test]
-    fn merge_max_lattice() {
+    fn merge_max_u32_lattice() {
         let mut low_lattice = MaxLattice::<u32>(1);
         let high_lattice = MaxLattice::<u32>(42);
         low_lattice.do_merge(&high_lattice);
@@ -251,16 +251,23 @@ mod test {
     }
 
     #[test]
-    fn add_max_lattice() {
+    fn add_max_u32_lattice() {
         let low_lattice = MaxLattice::<u32>(1);
         let high_lattice = MaxLattice::<u32>(42);
         assert_eq!(low_lattice + high_lattice, MaxLattice::<u32>(43))
     }
 
     #[test]
-    fn sub_max_lattice() {
+    fn sub_max_u32_lattice() {
         let low_lattice = MaxLattice::<u32>(1);
         let high_lattice = MaxLattice::<u32>(42);
         assert_eq!(high_lattice - low_lattice, MaxLattice::<u32>(41))
+    }
+
+    #[test]
+    fn sub_max_u64_lattice() {
+        let low_lattice = MaxLattice::<u64>(100);
+        let high_lattice = MaxLattice::<u64>(142);
+        assert_eq!(high_lattice - low_lattice, MaxLattice::<u64>(41))
     }
 }
