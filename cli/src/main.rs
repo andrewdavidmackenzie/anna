@@ -85,7 +85,7 @@ fn run() -> Result<String> {
     let config = Config::read(&config_file)
         .chain_err(|| format!("Could not read config file: {}", config_file))?;
 
-    let kvs_client = KVSClient::new(&config, None);
+    let kvs_client = KVSClient::new(&config, None, None);
 
     match matches.subcommand() {
         ("help", _) => help(app_clone),
@@ -100,6 +100,7 @@ fn run() -> Result<String> {
 fn execute_command(line: &str, client: &KVSClient) {
     let split = line.split(' ').collect::<Vec<&str>>();
     match (split[0].to_ascii_uppercase().as_str(), &split[1..]) {
+        // ("GET", tokens) => println!("{}", client.get(tokens)), // TODO
         ("GET", tokens) => client.get(tokens),
         ("GET_CAUSAL", tokens) => client.get_causal(tokens),
         ("PUT", tokens) => client.put(tokens),

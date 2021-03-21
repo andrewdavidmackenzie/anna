@@ -4,7 +4,7 @@
 
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
 use zmq::Context;
-use log::{info, debug};
+use log::{info, debug, error};
 
 use crate::config::Config;
 
@@ -70,7 +70,6 @@ pub struct KVSClient {
 //         tid My client's thread ID
 //         timeout Length of request timeouts in ms
 //     */
-// //       log_(spdlog::basic_logger_mt("client_log", "client_log.txt", true)),
 //     pub fn new(
 //             routing_threads: Vec<UserRoutingThread>,
 //             ip: String,
@@ -85,8 +84,6 @@ pub struct KVSClient {
 // //         {static_cast<void*>(response_puller_), 0, ZMQ_POLLIN, 0},
 //         };
 //
-
-//
 //         let client = KVSClient {
 //             ut,
 //             context,
@@ -95,7 +92,6 @@ pub struct KVSClient {
 //             response_puller,
 //             routing_threads,
 //             rid: 0,
-//             timeout: timeout.some_or(10000),
 //             pending_request_map: (),
 //             pending_get_response_map: (),
 //             pollitems,
@@ -112,7 +108,7 @@ pub struct KVSClient {
 //     }
 
 impl KVSClient {
-    pub fn new(config: &Config, tid: Option<usize>) -> Self {
+    pub fn new(config: &Config, tid: Option<usize>, timeout: Option<usize>) -> Self {
         let tid = tid.unwrap_or(0);
         let thread_count = config.get_routing_thread_count();
         let routing_ips = config.get_routing_ips();
@@ -148,7 +144,7 @@ impl KVSClient {
             rng,
             context: zmq::Context::new(),
             key_address_cache: HashMap::new(),
-            timeout: 10000,
+            timeout: timeout.unwrap_or(10_000),
         }
     }
 
@@ -216,21 +212,21 @@ impl KVSClient {
     }
 
     pub fn get(&self, tokens: &[&str]) {
-        debug!("GET: {:?}", tokens);
-//     vector<KeyResponse> responses = client->receive_async();
-//     while (responses.size() == 0) {
-//       responses = client->receive_async();
-//     }
-//
-//     if (responses.size() > 1) {
-//       std::cout << "Error: received more than one response" << std::endl;
-//     }
-//
-//     assert(responses[0].tuples(0).lattice_type() == LatticeType::LWW);
-//
-//     LWWPairLattice<string> lww_lattice =
-//         deserialize_lww(responses[0].tuples(0).payload());
-//     std::cout << lww_lattice.reveal().value << std::endl;
+        // debug!("GET: {:?}", tokens);
+        // let responses = self.receive_async();
+        // while responses.size() == 0 {
+        //   responses = self.receive_async();
+        // }
+        //
+        // if responses.size() > 1 {
+        //     error!("Error: received more than one response");
+        // }
+        //
+        // assert(responses[0].tuples(0).lattice_type() == LatticeType::LWW);
+        //
+        // let lww_lattice: LWWPairLattice<String>  =
+        //     deserialize_lww(responses[0].tuples(0).payload());
+        // lww_lattice.reveal().value
     }
 
     pub fn get_causal(&self, tokens: &[&str]) {
