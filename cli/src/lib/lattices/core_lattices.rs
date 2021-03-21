@@ -15,51 +15,21 @@ impl Lattice for BoolLattice {
     }
 }
 
-#[cfg(test)]
-mod test {
-    use crate::lattices::core_lattices::{BoolLattice, Lattice};
+#[derive(Default, Clone)]
+struct MaxLattice<T: PartialEq> {
+    value: T
+}
 
-    #[test]
-    fn default_bool_lattice() {
-        let bool_lattice = BoolLattice::default();
-        assert_eq!(bool_lattice.0, false);
-    }
+impl<T> Lattice for MaxLattice<T> where T : PartialOrd + Clone {
+    type A = T;
 
-    #[test]
-    fn create_false_bool_lattice() {
-        let bool_lattice = BoolLattice(false);
-        assert_eq!(bool_lattice.0, false);
-    }
-
-    #[test]
-    fn create_true_bool_lattice() {
-        let bool_lattice = BoolLattice(true);
-        assert_eq!(bool_lattice.0, true);
-    }
-
-    #[test]
-    fn merge_true_false_bool_lattice() {
-        let mut bool_lattice = BoolLattice(false);
-        bool_lattice.do_merge(&BoolLattice(true));
-        assert_eq!(bool_lattice.0, true)
+    fn do_merge(&mut self, l: &MaxLattice<T>) {
+        if self.value < l.value {
+            self.value = l.value.clone()
+        }
     }
 }
 
-// template <typename T>
-// class MaxLattice : public Lattice<T> {
-//  protected:
-//   void do_merge(const T &e) {
-//     int current = this->element;
-//
-//     if (current < e) {
-//       this->element = e;
-//     }
-//   }
-//
-//  public:
-//   MaxLattice() : Lattice<T>(T()) {}
-//   MaxLattice(const T &e) : Lattice<T>(e) {}
-//
 //   // for now, all non-merge methods are non-destructive
 //   MaxLattice<T> add(T n) const { return MaxLattice<T>(this->element + n); }
 //
@@ -220,3 +190,47 @@ mod test {
 //
 //   void insert(const K &k, const V &v) { this->insert_pair(k, v); }
 // };
+
+#[cfg(test)]
+mod test {
+    use crate::lattices::core_lattices::{BoolLattice, Lattice, MaxLattice};
+
+    #[test]
+    fn default_bool_lattice() {
+        let bool_lattice = BoolLattice::default();
+        assert_eq!(bool_lattice.0, false);
+    }
+
+    #[test]
+    fn create_false_bool_lattice() {
+        let bool_lattice = BoolLattice(false);
+        assert_eq!(bool_lattice.0, false);
+    }
+
+    #[test]
+    fn create_true_bool_lattice() {
+        let bool_lattice = BoolLattice(true);
+        assert_eq!(bool_lattice.0, true);
+    }
+
+    #[test]
+    fn merge_true_false_bool_lattice() {
+        let mut bool_lattice = BoolLattice(false);
+        bool_lattice.do_merge(&BoolLattice(true));
+        assert_eq!(bool_lattice.0, true)
+    }
+
+    #[test]
+    fn default_max_int_lattice() {
+        let lattice = MaxLattice::<u32>::default();
+        assert_eq!(lattice.value, 0);
+    }
+
+    #[test]
+    fn merge_max_lattice() {
+        let mut low_lattice = MaxLattice::<u32>{value: 1};
+        let mut high_lattice = MaxLattice::<u32>{value: 42};
+        low_lattice.do_merge(&high_lattice);
+        assert_eq!(low_lattice.value, 42)
+    }
+}
