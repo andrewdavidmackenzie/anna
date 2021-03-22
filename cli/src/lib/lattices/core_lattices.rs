@@ -77,10 +77,24 @@ where
     }
 }
 
+impl<T> PartialEq for SetLattice<T>
+where
+    T: Eq + Hash,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
 impl<T> SetLattice<T>
 where
     T: Eq + Hash + Clone,
 {
+    /// Create a new, empty, `SetLattice`
+    pub fn new() -> Self {
+        SetLattice(HashSet::new())
+    }
+
     /// Return the number of elements in the `SetLattice` as a `MaxLattice<usize>`
     pub fn size(&self) -> MaxLattice<usize> {
         MaxLattice(self.0.len())
@@ -295,8 +309,8 @@ mod test {
 
     #[test]
     fn size_of_empty_set() {
-        let set: HashSet<usize> = HashSet::new();
-        let set_lattice = SetLattice(set);
+        // let set: HashSet<usize> = HashSet::new();
+        let set_lattice: SetLattice<usize> = SetLattice::new();
         assert_eq!(set_lattice.size(), MaxLattice(0));
     }
 
@@ -311,8 +325,8 @@ mod test {
 
     #[test]
     fn insert_to_set() {
-        let set: HashSet<usize> = HashSet::new();
-        let mut set_lattice = SetLattice(set);
+        // let set: HashSet<usize> = HashSet::new();
+        let mut set_lattice: SetLattice<usize> = SetLattice::new();
         set_lattice.insert(1);
         set_lattice.insert(42);
         assert_eq!(set_lattice.size(), MaxLattice(2));
@@ -320,8 +334,9 @@ mod test {
 
     #[test]
     fn merge_two_sets() {
-        let set1: HashSet<usize> = HashSet::new();
-        let mut set_lattice1 = SetLattice(set1);
+        // let set1: HashSet<usize> = HashSet::new();
+        let mut set_lattice1: SetLattice<usize> = SetLattice::new();
+        // let mut set_lattice1 = SetLattice(set1);
         set_lattice1.insert(1);
         set_lattice1.insert(42);
 
@@ -337,13 +352,15 @@ mod test {
 
     #[test]
     fn merge_two_intersecting_sets() {
-        let set1: HashSet<usize> = HashSet::new();
-        let mut set_lattice1 = SetLattice(set1);
+        // let set1: HashSet<usize> = HashSet::new();
+        // let mut set_lattice1 = SetLattice(set1);
+        let mut set_lattice1: SetLattice<usize> = SetLattice::new();
         set_lattice1.insert(1);
         set_lattice1.insert(42);
 
-        let set2: HashSet<usize> = HashSet::new();
-        let mut set_lattice2 = SetLattice(set2);
+        // let set2: HashSet<usize> = HashSet::new();
+        // let mut set_lattice2 = SetLattice(set2);
+        let mut set_lattice2: SetLattice<usize> = SetLattice::new();
         set_lattice2.insert(1);
         set_lattice2.insert(100);
 
@@ -354,16 +371,35 @@ mod test {
 
     #[test]
     fn intersection_of_two_sets() {
-        let set1: HashSet<usize> = HashSet::new();
-        let mut set_lattice1 = SetLattice(set1);
+        // let set1: HashSet<usize> = HashSet::new();
+        // let mut set_lattice1 = SetLattice(set1);
+        let mut set_lattice1: SetLattice<usize> = SetLattice::new();
         set_lattice1.insert(1);
         set_lattice1.insert(42);
 
-        let set2: HashSet<usize> = HashSet::new();
-        let mut set_lattice2 = SetLattice(set2);
+        // let set2: HashSet<usize> = HashSet::new();
+        // let mut set_lattice2 = SetLattice(set2);
+        let mut set_lattice2: SetLattice<usize> = SetLattice::new();
         set_lattice2.insert(1);
         set_lattice2.insert(100);
 
         assert_eq!(set_lattice1.intersect(&set_lattice2).size(), MaxLattice(1));
+    }
+
+    #[test]
+    fn equality_of_two_sets() {
+        // let set1: HashSet<usize> = HashSet::new();
+        // let mut set_lattice1 = SetLattice(set1);
+        let mut set_lattice1: SetLattice<usize> = SetLattice::new();
+        set_lattice1.insert(1);
+        set_lattice1.insert(42);
+
+        // let set2: HashSet<usize> = HashSet::new();
+        // let mut set_lattice2 = SetLattice(set2);
+        let mut set_lattice2: SetLattice<usize> = SetLattice::new();
+        set_lattice2.insert(1);
+        set_lattice2.insert(42);
+
+        assert_eq!(set_lattice1, set_lattice2);
     }
 }
