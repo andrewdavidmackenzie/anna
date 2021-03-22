@@ -154,7 +154,7 @@ where
     T: Eq + Hash,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+        self.0.len() == other.0.len() && self.0.iter().eq(&other.0)
     }
 }
 
@@ -515,7 +515,6 @@ mod test {
         }
 
         #[test]
-        #[ignore]
         fn inequality_of_two_ordered_sets() {
             let mut set_lattice1: OrderedSetLattice<usize> = OrderedSetLattice::new();
             set_lattice1.insert(1);
