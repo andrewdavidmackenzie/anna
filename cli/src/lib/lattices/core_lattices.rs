@@ -1,3 +1,6 @@
+use std::collections::HashSet;
+use std::hash::Hash;
+use std::iter::Extend;
 use std::ops::{Add, Sub};
 
 trait Lattice {
@@ -57,48 +60,60 @@ where
     }
 }
 
-//
-// template <typename T>
-// class SetLattice : public Lattice<set<T>> {
-//  protected:
-//   void do_merge(const set<T> &e) {
-//     for (const T &elem : e) {
-//       this->element.insert(elem);
-//     }
-//   }
-//
-//  public:
-//   SetLattice() : Lattice<set<T>>(set<T>()) {}
-//
-//   SetLattice(const set<T> &e) : Lattice<set<T>>(e) {}
-//
-//   MaxLattice<unsigned> size() const { return this->element.size(); }
-//
-//   void insert(T e) { this->element.insert(std::move(e)); }
-//
-//   SetLattice<T> intersect(set<T> s) const {
-//     set<T> res;
-//
-//     for (const T &that_elem : s) {
-//       for (const T &this_elem : this->element) {
-//         if (this_elem == that_elem) res.insert(this_elem);
-//       }
-//     }
-//
-//     return SetLattice<T>(res);
-//   }
-//
-//   SetLattice<T> project(bool (*f)(T)) const {
-//     set<T> res;
-//
-//     for (const T &elem : this->element) {
-//       if (f(elem)) res.insert(elem);
-//     }
-//
-//     return SetLattice<T>(res);
-//   }
-// };
-//
+/// A `SetLattice` containing a set of elements of type `T`
+#[derive(Default, Debug)]
+struct SetLattice<T>(HashSet<T>);
+
+impl<T> Lattice for SetLattice<T>
+where
+    T: Eq + Hash + Clone,
+{
+    type A = T;
+
+    fn do_merge(&mut self, l: &SetLattice<T>) {
+        let set = &mut self.0;
+        let other_set = &l.0;
+        set.extend(other_set.into_iter().map(Clone::clone));
+    }
+}
+
+impl<T> SetLattice<T>
+where
+    T: Eq + Hash + Clone,
+{
+    /// Return the number of elements in the `SetLattice` as a `MaxLattice<usize>`
+    pub fn size(&self) -> MaxLattice<usize> {
+        MaxLattice(self.0.len())
+    }
+
+    /// Insert a new element into the `SetLattice`
+    pub fn insert(&mut self, l: T) {
+        let set = &mut self.0;
+        set.insert(l);
+    }
+
+    /// Calculate a new `SetLattice` that is the intersection of `Self` with another `SetLattice`
+    pub fn intersect(&self, l: &SetLattice<T>) -> SetLattice<T> {
+        let other_set = &l.0;
+        let intersection = self.0.intersection(other_set);
+        let mut new_set: HashSet<T> = HashSet::new();
+        for element in intersection {
+            new_set.insert(element.clone());
+        }
+        Self(new_set)
+    }
+
+    // pub fn project(&self, function: FnOnce(&E) -> bool) -> Self {
+    //     let sub_set = self.0.map(|e| {
+    //         if function(e) {
+    //             e
+    //         }
+    //     });
+    //
+    //     Set
+    // }
+}
+
 // template <typename T>
 // class OrderedSetLattice : public Lattice<ordered_set<T>> {
 //  protected:
@@ -215,7 +230,8 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::lattices::core_lattices::{BoolLattice, Lattice, MaxLattice};
+    use crate::lattices::core_lattices::{BoolLattice, Lattice, MaxLattice, SetLattice};
+    use std::collections::HashSet;
 
     #[test]
     fn default_bool_lattice() {
@@ -275,5 +291,79 @@ mod test {
         let low_lattice = MaxLattice::<u64>(100);
         let high_lattice = MaxLattice::<u64>(142);
         assert_eq!(high_lattice - low_lattice, MaxLattice::<u64>(42))
+    }
+
+    #[test]
+    fn size_of_empty_set() {
+        let set: HashSet<usize> = HashSet::new();
+        let set_lattice = SetLattice(set);
+        assert_eq!(set_lattice.size(), MaxLattice(0));
+    }
+
+    #[test]
+    fn size_of_set() {
+        let mut set: HashSet<usize> = HashSet::new();
+        set.insert(1);
+        set.insert(42);
+        let set_lattice = SetLattice(set);
+        assert_eq!(set_lattice.size(), MaxLattice(2));
+    }
+
+    #[test]
+    fn insert_to_set() {
+        let set: HashSet<usize> = HashSet::new();
+        let mut set_lattice = SetLattice(set);
+        set_lattice.insert(1);
+        set_lattice.insert(42);
+        assert_eq!(set_lattice.size(), MaxLattice(2));
+    }
+
+    #[test]
+    fn merge_two_sets() {
+        let set1: HashSet<usize> = HashSet::new();
+        let mut set_lattice1 = SetLattice(set1);
+        set_lattice1.insert(1);
+        set_lattice1.insert(42);
+
+        let set2: HashSet<usize> = HashSet::new();
+        let mut set_lattice2 = SetLattice(set2);
+        set_lattice2.insert(3);
+        set_lattice2.insert(100);
+
+        set_lattice1.do_merge(&set_lattice2);
+
+        assert_eq!(set_lattice1.size(), MaxLattice(4));
+    }
+
+    #[test]
+    fn merge_two_intersecting_sets() {
+        let set1: HashSet<usize> = HashSet::new();
+        let mut set_lattice1 = SetLattice(set1);
+        set_lattice1.insert(1);
+        set_lattice1.insert(42);
+
+        let set2: HashSet<usize> = HashSet::new();
+        let mut set_lattice2 = SetLattice(set2);
+        set_lattice2.insert(1);
+        set_lattice2.insert(100);
+
+        set_lattice1.do_merge(&set_lattice2);
+
+        assert_eq!(set_lattice1.size(), MaxLattice(3));
+    }
+
+    #[test]
+    fn intersection_of_two_sets() {
+        let set1: HashSet<usize> = HashSet::new();
+        let mut set_lattice1 = SetLattice(set1);
+        set_lattice1.insert(1);
+        set_lattice1.insert(42);
+
+        let set2: HashSet<usize> = HashSet::new();
+        let mut set_lattice2 = SetLattice(set2);
+        set_lattice2.insert(1);
+        set_lattice2.insert(100);
+
+        assert_eq!(set_lattice1.intersect(&set_lattice2).size(), MaxLattice(1));
     }
 }
