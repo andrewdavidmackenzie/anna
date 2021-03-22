@@ -36,6 +36,7 @@ rand = "0.8.3"
 rand_pcg = "0.3.0"
 prost = "0.7"
 #prost-types = "0.7"
+linked_hash_set = "0.1.4"
 
 [build-dependencies]
 prost-build = "0.7"
