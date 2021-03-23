@@ -1,10 +1,11 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::iter::Extend;
 use std::ops::{Add, Sub};
 
 extern crate linked_hash_set;
 use linked_hash_set::LinkedHashSet;
+use std::fmt::Debug;
 
 trait Lattice {
     type A;
@@ -12,7 +13,7 @@ trait Lattice {
     fn do_merge(&mut self, _: &Self);
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct BoolLattice(bool);
 
 impl Lattice for BoolLattice {
@@ -23,10 +24,31 @@ impl Lattice for BoolLattice {
     }
 }
 
+impl PartialEq for BoolLattice {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl From<bool> for BoolLattice {
+    fn from(v: bool) -> Self {
+        BoolLattice(v)
+    }
+}
+
 #[derive(Default, Clone, PartialEq, Debug)]
 struct MaxLattice<T>(T)
 where
     T: PartialOrd + PartialEq + Clone;
+
+impl<T> From<T> for MaxLattice<T>
+where
+    T: PartialOrd + PartialEq + Clone,
+{
+    fn from(v: T) -> Self {
+        MaxLattice(v)
+    }
+}
 
 impl<T: Add<Output = T>> Add for MaxLattice<T>
 where
@@ -149,6 +171,15 @@ where
     }
 }
 
+impl<T> From<LinkedHashSet<T>> for OrderedSetLattice<T>
+where
+    T: Eq + Hash + Clone,
+{
+    fn from(set: LinkedHashSet<T>) -> Self {
+        OrderedSetLattice(set)
+    }
+}
+
 impl<T> PartialEq for OrderedSetLattice<T>
 where
     T: Eq + Hash,
@@ -200,46 +231,122 @@ where
     // };
 }
 
-//
-// template <typename K, typename V>
-// class MapLattice : public Lattice<map<K, V>> {
-//  protected:
-//   void insert_pair(const K &k, const V &v) {
-//     auto search = this->element.find(k);
-//     if (search != this->element.end()) {
-//       static_cast<V *>(&(search->second))->merge(v);
-//     } else {
-//       // need to copy v since we will be "growing" it within the lattice
-//       V new_v = v;
-//       this->element.emplace(k, new_v);
-//     }
-//   }
-//
-//   void do_merge(const map<K, V> &m) {
-//     for (const auto &pair : m) {
-//       this->insert_pair(pair.first, pair.second);
-//     }
-//   }
-//
-//  public:
-//   MapLattice() : Lattice<map<K, V>>(map<K, V>()) {}
-//   MapLattice(const map<K, V> &m) : Lattice<map<K, V>>(m) {}
-//   MaxLattice<unsigned> size() const { return this->element.size(); }
-//
-//   MapLattice<K, V> intersect(MapLattice<K, V> other) const {
-//     MapLattice<K, V> res;
-//     map<K, V> m = other.reveal();
-//
-//     for (const auto &pair : m) {
-//       if (this->contains(pair.first).reveal()) {
-//         res.insert_pair(pair.first, this->at(pair.first));
-//         res.insert_pair(pair.first, pair.second);
-//       }
-//     }
-//
-//     return res;
-//   }
-//
+/// A `MapLattice` containing an Map of elements of with value type `V` and key type `K`
+#[derive(Default, Debug)]
+struct MapLattice<K, V>(HashMap<K, V>);
+
+impl<K, V> Lattice for MapLattice<K, V>
+where
+    K: Eq + Hash + Clone,
+    V: Clone,
+{
+    type A = HashMap<K, V>;
+
+    fn do_merge(&mut self, l: &Self) {
+        for (k, v) in &l.0 {
+            self.0.insert(k.clone(), v.clone());
+        }
+    }
+}
+
+impl<K, V> From<HashMap<K, V>> for MapLattice<K, V> {
+    fn from(map: HashMap<K, V>) -> Self {
+        MapLattice(map)
+    }
+}
+
+impl<K, V> PartialEq for MapLattice<K, V>
+where
+    K: Eq + Hash,
+    V: Eq + Hash,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<K, V> MapLattice<K, V>
+where
+    K: Eq + Hash + Clone + Debug,
+    V: Clone + Debug,
+{
+    /// Create a new, empty, `MapLattice`
+    pub fn new() -> Self {
+        MapLattice(HashMap::new())
+    }
+
+    /// Return the number of elements in the `MapLattice` as a `MaxLattice<usize>`
+    pub fn size(&self) -> MaxLattice<usize> {
+        MaxLattice(self.0.len())
+    }
+
+    /// Insert a key-value pair into the MapLattice<K, V>
+    //   void insert_pair(const K &k, const V &v) {
+    //     auto search = this->element.find(k);
+    //     if (search != this->element.end()) {
+    //       static_cast<V *>(&(search->second))->merge(v);
+    //     } else {
+    //       // need to copy v since we will be "growing" it within the lattice
+    //       V new_v = v;
+    //       this->element.emplace(k, new_v);
+    //     }
+    //   }
+    pub fn insert(&mut self, k: &K, v: &V) {
+        self.0.insert(k.clone(), v.clone());
+    }
+
+    /// Calculate a new `MapLattice` that is the intersection of `Self` with another `MapLattice`
+    //   MapLattice<K, V> intersect(MapLattice<K, V> other) const {
+    //     MapLattice<K, V> res;
+    //     map<K, V> m = other.reveal();
+    //
+    //     for (const auto &pair : m) {
+    //       if (this->contains(pair.first).reveal()) {
+    //         res.insert_pair(pair.first, this->at(pair.first));
+    //         res.insert_pair(pair.first, pair.second);
+    //       }
+    //     }
+    //
+    //     return res;
+    //   }
+    pub fn intersect(&self, l: &MapLattice<K, V>) -> MapLattice<K, V> {
+        let mut new_map_lattice = MapLattice::new();
+        let other_map = &l.0;
+        for (k, v) in &self.0 {
+            // TODO what if other Map has the key but a different value?
+            if other_map.contains_key(k) {
+                new_map_lattice.insert(k, v);
+            }
+        }
+        new_map_lattice
+    }
+
+    /// Return the set of Keys in the `MapLattice` as a `SetLattice`
+    pub fn key_set(&self) -> SetLattice<K> {
+        let mut set_lattice: SetLattice<K> = SetLattice::new();
+        for (key, _) in self.0.iter() {
+            set_lattice.insert(key.clone());
+        }
+        set_lattice
+    }
+
+    /// Determine if a MapLattice contains an entry with Key = `key` as a `BoolLattice`
+    pub fn contains(&self, key: &K) -> BoolLattice {
+        self.0.contains_key(key).into()
+    }
+
+    /// Try to get a `Value` using the `Key`, returns an `Option<&K>`
+    pub fn get(&self, key: &K) -> Option<&V> {
+        self.0.get(key)
+    }
+
+    /// Remove an entry from the `MapLattice` with the specified `Key`
+    /// This returns an `Option<V`. `None` if the entry was not present.
+    pub fn remove(&mut self, key: &K) -> Option<V> {
+        self.0.remove(key)
+    }
+}
+
 //   MapLattice<K, V> project(bool (*f)(V)) const {
 //     map<K, V> res;
 //     for (const auto &pair : this->element) {
@@ -247,32 +354,6 @@ where
 //     }
 //     return MapLattice<K, V>(res);
 //   }
-//
-//   BoolLattice contains(K k) const {
-//     auto it = this->element.find(k);
-//     if (it == this->element.end())
-//       return BoolLattice(false);
-//     else
-//       return BoolLattice(true);
-//   }
-//
-//   SetLattice<K> key_set() const {
-//     set<K> res;
-//     for (const auto &pair : this->element) {
-//       res.insert(pair.first);
-//     }
-//     return SetLattice<K>(res);
-//   }
-//
-//   V &at(K k) { return this->element[k]; }
-//
-//   void remove(K k) {
-//     auto it = this->element.find(k);
-//     if (it != this->element.end()) this->element.erase(k);
-//   }
-//
-//   void insert(const K &k, const V &v) { this->insert_pair(k, v); }
-// };
 
 #[cfg(test)]
 mod test {
@@ -449,6 +530,15 @@ mod test {
         }
 
         #[test]
+        fn from_ordered_set() {
+            let mut set: LinkedHashSet<usize> = LinkedHashSet::new();
+            set.insert(1);
+            set.insert(42);
+            let set_lattice: OrderedSetLattice<_> = set.into();
+            assert_eq!(set_lattice.size(), MaxLattice(2));
+        }
+
+        #[test]
         fn insert_to_ordered_set() {
             let mut set_lattice: OrderedSetLattice<usize> = OrderedSetLattice::new();
             set_lattice.insert(1);
@@ -525,6 +615,172 @@ mod test {
             set_lattice2.insert(1);
 
             assert_ne!(set_lattice1, set_lattice2);
+        }
+    }
+
+    mod map_lattice {
+        use crate::lattices::core_lattices::{Lattice, MapLattice, MaxLattice};
+        use std::collections::HashMap;
+
+        #[test]
+        fn size_of_empty_map() {
+            let map_lattice: MapLattice<usize, usize> = MapLattice::new();
+            assert_eq!(map_lattice.size(), MaxLattice(0));
+        }
+
+        #[test]
+        fn size_of_map() {
+            let mut map: HashMap<usize, usize> = HashMap::new();
+            map.insert(1, 10);
+            map.insert(42, 12);
+            let map_lattice = MapLattice(map);
+            assert_eq!(map_lattice.size(), MaxLattice(2));
+        }
+
+        #[test]
+        fn from_hashmap() {
+            let mut map: HashMap<usize, usize> = HashMap::new();
+            map.insert(1, 10);
+            map.insert(42, 12);
+            let set_lattice: MapLattice<_, _> = map.into();
+            assert_eq!(set_lattice.size(), MaxLattice(2));
+        }
+
+        #[test]
+        fn insert_to_map_lattice() {
+            let mut map_lattice: MapLattice<usize, usize> = MapLattice::new();
+            map_lattice.insert(&1, &9);
+            map_lattice.insert(&42, &8);
+            assert_eq!(map_lattice.size(), MaxLattice(2));
+        }
+
+        #[test]
+        fn merge_two_map_lattices() {
+            let mut map_lattice1: MapLattice<usize, usize> = MapLattice::new();
+            map_lattice1.insert(&1, &9);
+            map_lattice1.insert(&42, &8);
+
+            let mut map_lattice2: MapLattice<usize, usize> = MapLattice::new();
+            map_lattice2.insert(&3, &30);
+            map_lattice2.insert(&100, &10);
+
+            map_lattice1.do_merge(&map_lattice2);
+
+            assert_eq!(map_lattice1.size(), MaxLattice(4));
+        }
+
+        #[test]
+        fn merge_two_intersecting_maps() {
+            let mut map_lattice1: MapLattice<usize, usize> = MapLattice::new();
+            map_lattice1.insert(&1, &9);
+            map_lattice1.insert(&42, &8);
+
+            let mut map_lattice2: MapLattice<usize, usize> = MapLattice::new();
+            map_lattice1.insert(&1, &9);
+            map_lattice2.insert(&100, &10);
+
+            map_lattice1.do_merge(&map_lattice2);
+
+            assert_eq!(map_lattice1.size(), MaxLattice(3));
+        }
+
+        #[test]
+        fn intersection_of_two_maps() {
+            let mut map_lattice1: MapLattice<usize, usize> = MapLattice::new();
+            map_lattice1.insert(&1, &9);
+            map_lattice1.insert(&42, &8);
+
+            let mut map_lattice2: MapLattice<usize, usize> = MapLattice::new();
+            map_lattice2.insert(&1, &9);
+            map_lattice2.insert(&100, &10);
+
+            assert_eq!(map_lattice1.intersect(&map_lattice2).size(), MaxLattice(1));
+        }
+
+        #[test]
+        fn equality_of_two_maps() {
+            let mut map_lattice1: MapLattice<usize, usize> = MapLattice::new();
+            map_lattice1.insert(&1, &9);
+            map_lattice1.insert(&42, &8);
+
+            let mut map_lattice2: MapLattice<usize, usize> = MapLattice::new();
+            map_lattice2.insert(&1, &9);
+            map_lattice2.insert(&42, &8);
+
+            assert_eq!(map_lattice1, map_lattice2);
+        }
+
+        #[test]
+        fn inequality_of_two_maps() {
+            let mut map_lattice1: MapLattice<usize, usize> = MapLattice::new();
+            map_lattice1.insert(&1, &9);
+            map_lattice1.insert(&42, &8);
+
+            let mut map_lattice2: MapLattice<usize, usize> = MapLattice::new();
+            map_lattice2.insert(&1, &9);
+
+            assert_ne!(map_lattice1, map_lattice2);
+        }
+
+        #[test]
+        fn contains_true() {
+            let mut map_lattice1: MapLattice<usize, usize> = MapLattice::new();
+            map_lattice1.insert(&1, &9);
+            map_lattice1.insert(&42, &8);
+
+            assert_eq!(map_lattice1.contains(&42), true.into());
+        }
+
+        #[test]
+        fn contains_false() {
+            let mut map_lattice1: MapLattice<usize, usize> = MapLattice::new();
+            map_lattice1.insert(&1, &9);
+            map_lattice1.insert(&42, &8);
+
+            assert_eq!(map_lattice1.contains(&200), false.into());
+        }
+
+        #[test]
+        fn get_by_key() {
+            let mut map_lattice1: MapLattice<usize, usize> = MapLattice::new();
+            map_lattice1.insert(&1, &9);
+            map_lattice1.insert(&42, &8);
+
+            assert!(map_lattice1.get(&42).is_some());
+        }
+
+        #[test]
+        fn not_get_by_key() {
+            let mut map_lattice1: MapLattice<usize, usize> = MapLattice::new();
+            map_lattice1.insert(&1, &9);
+            map_lattice1.insert(&42, &8);
+
+            assert!(map_lattice1.get(&242).is_none());
+        }
+
+        #[test]
+        fn remove() {
+            let mut map_lattice1: MapLattice<usize, usize> = MapLattice::new();
+            map_lattice1.insert(&1, &9);
+            map_lattice1.insert(&42, &8);
+            assert_eq!(map_lattice1.size(), 2.into());
+
+            map_lattice1.remove(&42).is_some();
+
+            assert_eq!(map_lattice1.size(), 1.into());
+            assert!(map_lattice1.get(&42).is_none());
+        }
+
+        #[test]
+        fn not_remove() {
+            let mut map_lattice1: MapLattice<usize, usize> = MapLattice::new();
+            map_lattice1.insert(&1, &9);
+            map_lattice1.insert(&42, &8);
+            assert_eq!(map_lattice1.size(), 2.into());
+
+            map_lattice1.remove(&242).is_none();
+
+            assert_eq!(map_lattice1.size(), 2.into());
         }
     }
 }
