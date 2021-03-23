@@ -145,4 +145,10 @@ mod test {
 
         assert_eq!(newer.0.value(), "Newer");
     }
+
+    #[test]
+    fn LWW_Lattice_size() {
+        let lww: LWWPairLattice<_> = TimestampValuePair::new(123u64, 123u64).into();
+        assert_eq!(lww.size(), 8 + 8);
+    }
 }
