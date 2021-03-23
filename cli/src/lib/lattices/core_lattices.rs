@@ -7,7 +7,7 @@ extern crate linked_hash_set;
 use linked_hash_set::LinkedHashSet;
 use std::fmt::Debug;
 
-trait Lattice {
+pub trait Lattice {
     type A;
 
     fn do_merge(&mut self, _: &Self);
