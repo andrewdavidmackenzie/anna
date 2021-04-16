@@ -69,17 +69,17 @@ install_mac() {
   brew install zmq
 }
 
+if [ "$(uname)" == "Darwin" ]; then
+  install_mac
+else
+  install_linux
+fi
+
 # if the protobuf directory doesn't exist or is empty
 if [ ! -z "$PROTOC_ONLY" ]; then
   install_protoc
 else
   install_protobuf
-fi
-
-if [ "$(uname)" == "Darwin" ]; then
-  install_mac
-else
-  install_linux
 fi
 
 cd $HOME
