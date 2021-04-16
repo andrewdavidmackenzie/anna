@@ -56,19 +56,30 @@ install_lcov() {
   lcov -v
 }
 
-sudo apt-get update
-sudo apt-get install -y build-essential autoconf automake libtool curl make unzip pkg-config wget
-sudo apt-get install -y libc++-dev libc++abi-dev awscli jq python3-pip
+install_linux() {
+  sudo apt-get update
+  sudo apt-get install -y build-essential autoconf automake libtool curl make unzip pkg-config wget
+  sudo apt-get install -y libc++-dev libc++abi-dev awscli jq python3-pip
 
-sudo ln -s $(which clang) /usr/bin/clang
-sudo ln -s $(which clang++) /usr/bin/clang++
+  sudo ln -s $(which clang) /usr/bin/clang
+  sudo ln -s $(which clang++) /usr/bin/clang++
+}
+
+install_mac() {
+  brew install zmq
+}
 
 # if the protobuf directory doesn't exist or is empty
-
 if [ ! -z "$PROTOC_ONLY" ]; then
   install_protoc
 else
   install_protobuf
+fi
+
+if [ "$(uname)" == "Darwin" ]; then
+  install_mac
+else
+  install_linux
 fi
 
 cd $HOME
