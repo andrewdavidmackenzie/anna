@@ -60,7 +60,7 @@ while getopts ":j:b:tg" opt; do
   esac
 done
 
-if [[ -z "$MAKE_THREADS" ]]; then MAKE_THREADS=2; fi
+if [[ -z "$MAKE_THREADS" ]]; then MAKE_THREADS=8; fi
 if [[ -z "$TYPE" ]]; then TYPE=Release; fi
 if [[ -z "$TEST" ]]; then TEST=""; fi
 if [[ -z "$COMPILER" ]]; then

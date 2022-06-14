@@ -29,6 +29,7 @@ else
 fi
 
 echo "Starting local server..."
+# "Usage: start-anna-local build start-user"
 ./scripts/start-anna-local.sh $BUILD n
 
 echo "Running tests..."
