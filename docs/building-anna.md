@@ -1,32 +1,15 @@
 # Building Anna
 
-**NOTE**: If you are trying to start an Anna cluster, that does not require you to build Anna on your local machine. 
-You can find instructions for running a Hydro cluster 
-[here](https://github.com/hydro-project/cluster/blob/master/docs/getting-started-aws.md).
-
 ## Prerequisites
 In order to build Anna, there are a variety of C++ and other dependencies that are required. 
-Most can be installed with standard package managers like `brew` on macOS and `apt` on Debian. 
+Most can be installed with standard package managers like `brew` on macOS and `apt` on Linux. 
 
-First install the dependencies (which you can do with the `install-dependencies*.sh` scripts in 
-the `hydro-project/common` folder)
+You can use the top-level Makefile to install them using `make dependencies`
 
-If you would like to customize the installed packages, everything except for CMake and Protobuf can be 
-installed via standard package managers. Any version of Protobuf 3 should be supported, and we require CMake 
-to be at least version 3.6.
+## Building with `make`
+You can run the standard build using the tope-level `Makefile` with just `make`
 
-## Running the Build Script
+This will build, lint, run tests, generate docs etc.
 
-Anna can be built with Clang (version 5 or newer) or gcc (version 7 or newer). 
-`scripts/build.sh` automatically configures and runs the standard CMake build for you, with 3 clangs.
-
-* `-b` specifies the build type, either `Release` or `Debug`.
-* `-j` specifies the parallelism to be used by `make`. The default value is `-j1`.
-* `-t` enables testing; note that testing requires the build to be run in `Debug` mode. 
-* `-g` builds the project using `g++` instead of `clang++`. 
-
-By default, the script will run as `bash scripts/build.sh -bRelease -j1`. 
-
-This will generate a variety of executables, primarily in `build/target`, 
-which houses all of the KVS server executables, and in `build/client`, 
-which has the CPP-based interactive CLI for Anna.
+KVS server executables will be in `build/target`, the CPP-based interactive CLI for Anna in 
+`build/client` and the rust cli `anna` in `cli/target`.

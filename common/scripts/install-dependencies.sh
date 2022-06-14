@@ -50,16 +50,6 @@ if [ "$DIST" = "fedora" ] && [ "$COMPILER" = "clang++" ]; then
   exit 1
 fi
 
-if [ "$COMPILER" = "clang++" ] && [ -z "$(command -v clang++)" ]; then
-  echo "Installing clang..."
-
-  sudo apt-add-repository "deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-5.0 main" > /dev/null
-  sudo apt-get install -y --force-yes clang-5.0 lldb-5.0 clang-format-5.0 > /dev/null
-  sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-5.0 1 > /dev/null
-  sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-5.0 1 > /dev/null
-  sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-5.0 1 > /dev/null
-fi
-
 if [ "$COMPILER" = "g++" ] && [ -z "$(command -v g++)" ]; then
   echo "Installing g++..."
   sudo $PKG_MGR install -y gcc g++ > /dev/null
@@ -92,21 +82,6 @@ if [ -z "$(command -v cmake)" ]; then
   sudo ln -s /usr/cmake/bin/cmake /usr/bin/cmake
 
   rm -rf cmake-3.11.4-Linux-x86_64*
-fi
-
-if [ -z "$(command -v lcov)" ]; then
-  echo "Installing lcov..."
-  echo "You might be asked for your password to install lcov..."
-
-  wget http://downloads.sourceforge.net/ltp/lcov-${LCOV_VERSION}.tar.gz
-  tar xvzf lcov-${LCOV_VERSION}.tar.gz > /dev/null 2>&1
-  rm -rf lcov-${LCOV_VERSION}.tar.gz
-
-  LCOV_DIR="lcov-${LCOV_VERSION}"
-
-  cd $LCOV_DIR
-  sudo make install > /dev/null
-  cd .. && rm -rf $LCOV_DIR
 fi
 
 if [ -z "$(command -v protoc)" ]; then

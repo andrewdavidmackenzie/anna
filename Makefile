@@ -1,13 +1,31 @@
+APTGET := $(shell command -v apt-get 2> /dev/null)
+BREW := $(shell command -v brew 2> /dev/null)
+
 all: clippy build test docs
 
-.PHONY: linux_dependencies
-linux_dependencies:
-	sudo apt-get -y install libzmq3-dev
-	sudo apt-get -y install graphviz
-
-.PHONY: mac_dependencies
-mac_dependencies:
-	brew install zmq graphviz
+.PHONY: dependencies
+dependencies:
+ifneq ($(BREW),)
+	@echo "Installing Mac OS X specific dependencies using $(BREW)"
+	brew install zmq graphviz autoconf automake libtool make unzip pkg-config wget cmake
+endif
+ifneq ($(APTGET),)
+	@echo "Installing Linux specific dependencies using $(APTGET)"
+	sudo apt-get -y install libzmq3-dev graphviz
+endif
+	@echo "You might be prompted for your password to install the protobuf headers and set ldconfig."
+	wget https://github.com/google/protobuf/releases/download/v3.9.1/protobuf-all-3.9.1.zip > /dev/null
+	unzip protobuf-all-3.9.1 > /dev/null
+	cd protobuf-3.9.1 && ./autogen.sh && ./configure CXX=clang++ CXXFLAGS='-std=c++11 -stdlib=libc++ -O3 -g' && make -j4 && sudo make install && sudo update_dyld_shared_cache
+	rm -rf protobuf-*
+	@echo "You might be asked for your password to install lcov..."
+	wget http://downloads.sourceforge.net/ltp/lcov-1.13.tar.gz
+	tar xvzf lcov-1.13.tar.gz > /dev/null 2>&1
+	rm -rf lcov-1.13.tar.gz
+	cd lcov-1.13 && sudo make install
+	which lcov
+	lcov -v
+	rm -rf lcov-1.13
 
 .PHONY: clippy
 clippy:
