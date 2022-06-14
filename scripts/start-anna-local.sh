@@ -38,4 +38,5 @@ echo $SPID >> pids
 
 if [ "$2" = "y" ] || [ "$2" = "yes" ]; then
   ./build/cli/anna-cli conf/anna-local.yml
+  # cargo run -- --config conf/anna-local.yml start
 fi

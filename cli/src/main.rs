@@ -87,7 +87,7 @@ fn run() -> Result<String> {
         .unwrap_or(DEFAULT_CONFIG_FILENAME);
     info!("Using config file: {}", config_file);
 
-    let config = Config::read(&config_file)
+    let config = Config::read(config_file)
         .chain_err(|| format!("Could not read config file: {}", config_file))?;
 
     let kvs_client = KVSClient::new(&config, None);
@@ -127,14 +127,9 @@ fn cli_loop_interactive(client: KVSClient) -> Result<&'static str> {
         );
     }
 
-    loop {
-        match rl.readline("anna> ") {
-            Ok(line) => {
-                rl.add_history_entry(&line);
-                execute_command(&line, &client);
-            }
-            Err(_) => break, // Includes CONTROL-C and CONTROL-D exits
-        }
+    while let Ok(line) = rl.readline("anna> ") {
+        rl.add_history_entry(&line);
+        execute_command(&line, &client);
     }
 
     rl.save_history(ANNA_HISTORY_FILENAME)?;
@@ -150,10 +145,8 @@ fn cli_loop_file(client: KVSClient, filename: &str) -> Result<&'static str> {
         .chain_err(|| format!("Could not open the command_file: {}", filename))?;
     let reader = BufReader::new(file);
 
-    for line in reader.lines() {
-        if let Ok(ref string) = line {
-            execute_command(&string, &client);
-        }
+    for line in reader.lines().flatten() {
+        execute_command(&line, &client);
     }
 
     Ok("")

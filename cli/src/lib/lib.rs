@@ -74,10 +74,10 @@ pub fn start(_config: &Config) -> Result<usize> {
 
     let mut process_count = 0;
     for process_name in PROCESS_LIST.iter() {
-        if pids_from_name(process_name).is_empty() {
-            if Command::new(bin_dir.join(process_name)).spawn().is_ok() {
-                process_count += 1;
-            }
+        if pids_from_name(process_name).is_empty()
+            && Command::new(bin_dir.join(process_name)).spawn().is_ok()
+        {
+            process_count += 1;
         }
     }
 

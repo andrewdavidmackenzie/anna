@@ -39,12 +39,14 @@ DIFF=`diff tmp.out tests/simple/expected`
 if [ "$DIFF" != "" ]; then
   echo "Output did not match expected output (tests/simple/expected.out). Observed output was: "
   echo $DIFF
-  CODE=1
+  exit 1
 else
   echo "Test succeeded!"
-  CODE=0
 fi
 
+# Cleanup
 rm tmp.out
 cargo run -- stop
-exit $CODE
+
+#Pass test results exit code as this script's exit code
+exit 0
