@@ -1,0 +1,78 @@
+name: Rust
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  schedule: # Build every day at 5PM UTC
+    - cron: '0 17 * * *'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+          os: [ macos-latest, ubuntu-latest ]
+          rust: [ stable ]
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: InstallLinuxDependencies
+      if: matrix.os == 'ubuntu-latest'
+      run: sudo apt-get -y install libzmq3-dev
+
+    - name: InstallMacDependencies
+      if: matrix.os == 'macos-latest'
+      run: brew install zmq
+
+    - name: ConfigureCoverage
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        echo RUSTC_BOOTSTRAP=1 >> "$GITHUB_ENV" # Enables -Z in stable
+        cargo install grcov
+        rustup component add llvm-tools-preview
+        echo RUSTFLAGS="-C instrument-coverage" >> "$GITHUB_ENV"
+        echo LLVM_PROFILE_FILE="flow-%p-%m.profraw" >> "$GITHUB_ENV"
+
+    - name: clippy
+      run: cargo clippy --tests -- -D warnings
+
+    - name: build
+      run: |
+        ./scripts/build.sh -bDebug -t -j2
+        cargo build
+
+    - name: test
+      run: |
+        ./tests/simple/test-simple.sh
+        cargo test
+        rm -f log.txt log_0.txt pids client_log.txt
+
+    - name: docs
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get -y install graphviz
+        cargo install mdbook
+        cargo install mdbook-linkcheck
+        cargo doc --no-deps --target-dir=target/html/code
+        mdbook build
+        make trim-docs
+
+    - name: UploadCoverage
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o lcov.info
+        bash <(curl -s https://codecov.io/bash) -f lcov.info
+        rm -f lcov.info
+
+    - name: DeployDocsToGHPages
+      uses: JamesIves/github-pages-deploy-action@4.1.4
+      if: matrix.os == 'ubuntu-latest' && github.ref == 'refs/heads/master'
+      with:
+        branch: gh-pages
+        folder: target/html
