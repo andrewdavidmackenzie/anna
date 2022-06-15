@@ -9,7 +9,7 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.6)
 
 INCLUDE(ExternalProject)
 
-SET(CXX "clang++ -stdlib=c++")
+SET(CXX "clang++")
 
 if(APPLE)
   set(PREFIX /usr/local)
@@ -23,7 +23,7 @@ EXTERNALPROJECT_ADD(zeromq
     BUILD_IN_SOURCE 1
     UPDATE_COMMAND ""
     CONFIGURE_COMMAND ./configure
-    BUILD_COMMAND make
+    BUILD_COMMAND ""
     INSTALL_COMMAND ""
 )
 
