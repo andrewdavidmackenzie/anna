@@ -58,7 +58,7 @@ ifeq ($(CMAKE),)
 ifneq ($(BREW),)
 	brew install cmake
 else
-    sudo apt-get install -y cmake
+	sudo apt-get install -y cmake
 endif
 endif
 
