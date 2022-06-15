@@ -7,7 +7,8 @@ WGET := $(shell command -v wget 2> /dev/null)
 LCOV := $(shell command -v lcov 2> /dev/null)
 CLANG := $(shell command -v clang++ 2> /dev/null)
 PROTOBUF := $(shell command -v protoc 2> /dev/null)
-mdbook := $(shell command -v mdbook 2> /dev/null)
+MDBOOK := $(shell command -v mdbook 2> /dev/null)
+GRCOV := $(shell command -v grcov 2> /dev/null)
 
 all: clippy build test docs
 
@@ -28,12 +29,11 @@ endif
 
 .PHONY: build-tools
 build-tools: clang cmake
+	@echo "Installing build-tools"
 ifneq ($(BREW),)
-	@echo "Installing Mac OS X specific dependencies using $(BREW)"
 	brew install autoconf automake libtool unzip pkg-config
 endif
 ifneq ($(APTGET),)
-	@echo "Installing Linux specific dependencies using $(APTGET)"
 	sudo apt-get -y install build-essential autoconf automake libtool unzip pkg-config libc++-dev libc++abi-dev
 endif
 ifneq ($(YUM),)
@@ -43,6 +43,7 @@ endif
 .PHONY: protobuf
 protobuf: wget build-tools
 ifeq ($(PROTOBUF),)
+	@echo "Installing protobuf headers"
 	@echo "You might be prompted for your password to install the protobuf headers and set ldconfig."
 	wget https://github.com/google/protobuf/releases/download/v3.9.1/protobuf-all-3.9.1.zip > /dev/null
 	unzip protobuf-all-3.9.1 > /dev/null
@@ -62,12 +63,13 @@ endif
 .PHONY: clang
 clang:
 ifeq ($(CLANG),)
+	@echo "Installing clang"
 ifneq ($(BREW),)
 	# Leave mac Xcode clang install to the user
 endif
 ifneq ($(APTGET),)
 	echo "Installing clang..."
-	sudo apt-add-repository "deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-5.0 main"
+	#sudo apt-add-repository "deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-5.0 main"
 	sudo apt-get install -y --force-yes --allow-unauthenticated clang clang++ lldb clang-format
 endif
 endif
@@ -75,6 +77,7 @@ endif
 .PHONY: cmake
 cmake:
 ifeq ($(CMAKE),)
+	@echo "Installing cmake"
 ifneq ($(BREW),)
 	brew install cmake
 else
@@ -85,6 +88,7 @@ endif
 .PHONY: wget
 wget:
 ifeq ($(WGET),)
+	@echo "Installing wget"
 ifneq ($(BREW),)
 	brew install wget
 else
@@ -95,6 +99,7 @@ endif
 .PHONY: lcov
 lcov: wget cmake
 ifeq ($(LCOV),)
+	@echo "Installing lcov"
 	@echo "You might be asked for your password to install lcov..."
 	wget http://downloads.sourceforge.net/ltp/lcov-1.13.tar.gz
 	tar xvzf lcov-1.13.tar.gz > /dev/null 2>&1
@@ -129,6 +134,7 @@ test-simple: build
 .PHONY: mdbook
 mdbook:
 ifeq ($(MDBOOK),)
+	@echo "Installing mdbook"
 	cargo install mdbook
 	cargo install mdbook-linkcheck
 endif
@@ -138,10 +144,17 @@ docs: mdbook
 	cargo doc --no-deps --target-dir=target/html/code
 	mdbook build
 
-.PHONY: configure_coverage
-configure_coverage:
+.PHONY: grcov
+grcov:
+ifeq ($(GRCOV),)
+	@echo "Installing grcov"
 	cargo install grcov
 	rustup component add llvm-tools-preview
+endif
+
+.PHONY: configure_coverage
+configure_coverage: grcov
+	# This is probably useless in a Makefile
 	export RUSTFLAGS="-C instrument-coverage"
 	export LLVM_PROFILE_FILE="flow-%p-%m.profraw"
 
