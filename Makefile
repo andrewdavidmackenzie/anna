@@ -2,6 +2,8 @@ APTGET := $(shell command -v apt-get 2> /dev/null)
 BREW := $(shell command -v brew 2> /dev/null)
 DNF := $(shell command -v dnf 2> /dev/null)
 YUM := $(shell command -v yum 2> /dev/null)
+CMAKE := $(shell command -v cmake 2> /dev/null)
+WGET := $(shell command -v wget 2> /dev/null)
 
 all: clippy build test docs
 
@@ -45,9 +47,9 @@ endif
 
 .PHONY: cmake
 cmake: wget
+ifeq ($(CMAKE),)
 ifneq ($(BREW),)
 	brew install cmake
-else
 	echo "Installing cmake..."
 	echo "You might be prompted for your password to add CMake to /usr/bin."
 	wget https://cmake.org/files/v3.11/cmake-3.11.4-Linux-x86_64.tar.gz
@@ -57,13 +59,16 @@ else
 	sudo ln -s /usr/cmake/bin/cmake /usr/bin/cmake
 	rm -rf cmake-3.11.4-Linux-x86_64*
 endif
+endif
 
 .PHONY: wget
 wget:
+ifeq ($(WGET),)
 ifneq ($(BREW),)
 	brew install wget
 else
 	sudo apt-get install wget
+endif
 endif
 
 .PHONY: lcov
