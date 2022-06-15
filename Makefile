@@ -6,11 +6,12 @@ CMAKE := $(shell command -v cmake 2> /dev/null)
 WGET := $(shell command -v wget 2> /dev/null)
 LCOV := $(shell command -v lcov 2> /dev/null)
 CLANG := $(shell command -v clang++ 2> /dev/null)
+PROTOBUF := $(shell command -v protoc 2> /dev/null)
 
 all: clippy build test docs
 
 .PHONY: dependencies
-dependencies: cmake clang lcov
+dependencies: cmake clang lcov protobuf
 ifneq ($(BREW),)
 	@echo "Installing Mac OS X specific dependencies using $(BREW)"
 	brew install zmq graphviz autoconf automake libtool unzip pkg-config
@@ -22,6 +23,10 @@ endif
 ifneq ($(YUM),)
 	sudo yum install -y zeromq zeromq-devel graphviz build-essential autoconf automake libtool
 endif
+
+.PHONY: protobuf
+protobuf: wget
+ifeq ($(PROTOBUF),)
 	@echo "You might be prompted for your password to install the protobuf headers and set ldconfig."
 	wget https://github.com/google/protobuf/releases/download/v3.9.1/protobuf-all-3.9.1.zip > /dev/null
 	unzip protobuf-all-3.9.1 > /dev/null
@@ -35,6 +40,7 @@ ifneq ($(YUM),)
 	source ~/.bashrc
 endif
 	rm -rf protobuf-*
+endif
 
 .PHONY: clang
 clang:
@@ -42,10 +48,7 @@ ifeq ($(CLANG),)
 ifneq ($(APTGET),)
 	echo "Installing clang..."
 	sudo apt-add-repository "deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-5.0 main"
-	sudo apt-get install -y --force-yes --allow-unauthenticated clang-5.0 lldb-5.0 clang-format-5.0
-	sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-5.0 1
-	sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-5.0 1
-	sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-5.0 1
+	sudo apt-get install -y --force-yes --allow-unauthenticated clang clang++ lldb clang-format
 endif
 endif
 
@@ -54,14 +57,8 @@ cmake: wget
 ifeq ($(CMAKE),)
 ifneq ($(BREW),)
 	brew install cmake
-	echo "Installing cmake..."
-	echo "You might be prompted for your password to add CMake to /usr/bin."
-	wget https://cmake.org/files/v3.11/cmake-3.11.4-Linux-x86_64.tar.gz
-	tar xvzf cmake-3.11.4-Linux-x86_64.tar.gz > /dev/null 2>&1
-	sudo mkdir /usr/cmake
-	sudo mv cmake-3.11.4-Linux-x86_64/* /usr/cmake/
-	sudo ln -s /usr/cmake/bin/cmake /usr/bin/cmake
-	rm -rf cmake-3.11.4-Linux-x86_64*
+else
+    sudo apt-get install -y cmake
 endif
 endif
 
