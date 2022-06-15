@@ -30,16 +30,16 @@ fi
 
 echo "Starting local server..."
 # "Usage: start-anna-local build start-user"
-./scripts/start-anna-local.sh $BUILD n
+./scripts/start-anna-local.sh "$BUILD" n
 
 echo "Running tests..."
 ./build/cli/anna-cli conf/anna-local.yml tests/simple/input > tmp.out
 
-DIFF=`diff tmp.out tests/simple/expected`
+DIFF=$(diff tmp.out tests/simple/expected)
 
 if [ "$DIFF" != "" ]; then
   echo "Output did not match expected output (tests/simple/expected.out). Observed output was: "
-  echo $DIFF
+  echo "$DIFF"
   exit 1
 else
   echo "Test succeeded!"
@@ -49,5 +49,4 @@ fi
 rm tmp.out
 cargo run -- stop
 
-#Pass test results exit code as this script's exit code
 exit 0
