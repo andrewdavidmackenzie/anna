@@ -7,6 +7,7 @@ WGET := $(shell command -v wget 2> /dev/null)
 LCOV := $(shell command -v lcov 2> /dev/null)
 CLANG := $(shell command -v clang++ 2> /dev/null)
 PROTOBUF := $(shell command -v protoc 2> /dev/null)
+mdbook := $(shell command -v mdbook 2> /dev/null)
 
 all: clippy build test docs
 
@@ -105,10 +106,15 @@ test: test-simple
 test-simple:
 	./tests/simple/test-simple.sh y
 
-.PHONY: docs
-docs:
+.PHONY: mdbook
+mdbook:
+ifeq ($(MDBOOK),)
 	cargo install mdbook
 	cargo install mdbook-linkcheck
+endif
+
+.PHONY: docs
+docs: mdbook
 	cargo doc --no-deps --target-dir=target/html/code
 	mdbook build
 
