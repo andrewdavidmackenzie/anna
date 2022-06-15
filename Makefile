@@ -15,18 +15,33 @@ all: clippy build test docs
 dependencies: cmake clang lcov protobuf
 ifneq ($(BREW),)
 	@echo "Installing Mac OS X specific dependencies using $(BREW)"
-	brew install zmq graphviz autoconf automake libtool unzip pkg-config
+	brew install zmq graphviz
 endif
 ifneq ($(APTGET),)
 	@echo "Installing Linux specific dependencies using $(APTGET)"
-	sudo apt-get -y install libzmq3-dev graphviz build-essential autoconf automake libtool unzip pkg-config libc++-dev libc++abi-dev
+	sudo apt-get -y install libzmq3-dev graphviz
 endif
 ifneq ($(YUM),)
-	sudo yum install -y zeromq zeromq-devel graphviz build-essential autoconf automake libtool
+	@echo "Installing Linux specific dependencies using $(YUM)"
+	sudo yum install -y zeromq zeromq-devel graphviz
+endif
+
+.PHONY: build-tools
+build-tools: clang cmake
+ifneq ($(BREW),)
+	@echo "Installing Mac OS X specific dependencies using $(BREW)"
+	brew install autoconf automake libtool unzip pkg-config
+endif
+ifneq ($(APTGET),)
+	@echo "Installing Linux specific dependencies using $(APTGET)"
+	sudo apt-get -y install build-essential autoconf automake libtool unzip pkg-config libc++-dev libc++abi-dev
+endif
+ifneq ($(YUM),)
+	sudo yum install -y build-essential autoconf automake libtool
 endif
 
 .PHONY: protobuf
-protobuf: wget
+protobuf: wget build-tools
 ifeq ($(PROTOBUF),)
 	@echo "You might be prompted for your password to install the protobuf headers and set ldconfig."
 	wget https://github.com/google/protobuf/releases/download/v3.9.1/protobuf-all-3.9.1.zip > /dev/null
@@ -36,6 +51,7 @@ ifneq ($(YUM),)
 	sudo ldconfig
 endif
 ifneq ($(YUM),)
+	# this is probably useless inside a Makefile
 	export LD_LIBRARY_PATH=/usr/local/lib
 	echo "export LD_LIBRARY_PATH=/usr/local/lib" >> ~/.bashrc
 	source ~/.bashrc
@@ -46,6 +62,9 @@ endif
 .PHONY: clang
 clang:
 ifeq ($(CLANG),)
+ifneq ($(BREW),)
+	# Leave mac Xcode clang install to the user
+endif
 ifneq ($(APTGET),)
 	echo "Installing clang..."
 	sudo apt-add-repository "deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-5.0 main"
@@ -91,7 +110,7 @@ clippy:
 	cargo clippy --tests # -- -D warnings # for now, don't fail on warnings
 
 .PHONY: build
-build: cmake
+build: build-tools
 	./scripts/build.sh -bDebug   # Debug build
 	# ./scripts/build.sh -bRelease   # Release build
 	cargo build
@@ -104,7 +123,7 @@ test: test-simple
 # This target replaces the ./tests/simple/test-simple.sh script with Makefile steps
 # "Usage: $0 <build>"
 .PHONY: test-simple
-test-simple:
+test-simple: build
 	./tests/simple/test-simple.sh y
 
 .PHONY: mdbook
