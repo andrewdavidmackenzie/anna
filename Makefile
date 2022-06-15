@@ -12,7 +12,7 @@ mdbook := $(shell command -v mdbook 2> /dev/null)
 all: clippy build test docs
 
 .PHONY: dependencies
-dependencies: cmake clang lcov protobuf
+dependencies: build-tools lcov protobuf
 ifneq ($(BREW),)
 	@echo "Installing Mac OS X specific dependencies using $(BREW)"
 	brew install zmq graphviz
