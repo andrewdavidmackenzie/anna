@@ -54,7 +54,7 @@ endif
 endif
 
 .PHONY: cmake
-cmake: wget
+cmake:
 ifeq ($(CMAKE),)
 ifneq ($(BREW),)
 	brew install cmake
@@ -91,8 +91,9 @@ clippy:
 	cargo clippy --tests # -- -D warnings # for now, don't fail on warnings
 
 .PHONY: build
-build:
-	./scripts/build.sh -bDebug -t   # Debug build, build tests, default number of build threads
+build: cmake
+	./scripts/build.sh -bDebug   # Debug build
+	# ./scripts/build.sh -bRelease   # Release build
 	cargo build
 
 .PHONY: test
