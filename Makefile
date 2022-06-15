@@ -146,7 +146,7 @@ configure_coverage:
 	export LLVM_PROFILE_FILE="flow-%p-%m.profraw"
 
 .PHONY: upload_coverage
-upload_coverage:
+upload_coverage: configure_coverage
 	grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o lcov.info
 	bash <(curl -s https://codecov.io/bash) -f lcov.info
 	rm -f lcov.info
