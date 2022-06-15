@@ -42,7 +42,7 @@ ifeq ($(CLANG),)
 ifneq ($(APTGET),)
 	echo "Installing clang..."
 	sudo apt-add-repository "deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-5.0 main"
-	sudo apt-get install -y --force-yes clang-5.0 lldb-5.0 clang-format-5.0
+	sudo apt-get install -y --force-yes --allow-unauthenticated clang-5.0 lldb-5.0 clang-format-5.0
 	sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-5.0 1
 	sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-5.0 1
 	sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-5.0 1
