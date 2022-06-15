@@ -4,6 +4,8 @@ DNF := $(shell command -v dnf 2> /dev/null)
 YUM := $(shell command -v yum 2> /dev/null)
 CMAKE := $(shell command -v cmake 2> /dev/null)
 WGET := $(shell command -v wget 2> /dev/null)
+LCOV := $(shell command -v lcov 2> /dev/null)
+CLANG := $(shell command -v clang++ 2> /dev/null)
 
 all: clippy build test docs
 
@@ -36,6 +38,7 @@ endif
 
 .PHONY: clang
 clang:
+ifeq ($(CLANG),)
 ifneq ($(APTGET),)
 	echo "Installing clang..."
 	sudo apt-add-repository "deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-5.0 main"
@@ -43,6 +46,7 @@ ifneq ($(APTGET),)
 	sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-5.0 1
 	sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-5.0 1
 	sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-5.0 1
+endif
 endif
 
 .PHONY: cmake
@@ -67,12 +71,13 @@ ifeq ($(WGET),)
 ifneq ($(BREW),)
 	brew install wget
 else
-	sudo apt-get install wget
+	sudo apt-get install -y wget
 endif
 endif
 
 .PHONY: lcov
 lcov: wget cmake
+ifeq ($(LCOV),)
 	@echo "You might be asked for your password to install lcov..."
 	wget http://downloads.sourceforge.net/ltp/lcov-1.13.tar.gz
 	tar xvzf lcov-1.13.tar.gz > /dev/null 2>&1
@@ -81,6 +86,7 @@ lcov: wget cmake
 	which lcov
 	lcov -v
 	rm -rf lcov-1.13
+endif
 
 .PHONY: clippy
 clippy:
