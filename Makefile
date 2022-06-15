@@ -1,26 +1,62 @@
 APTGET := $(shell command -v apt-get 2> /dev/null)
 BREW := $(shell command -v brew 2> /dev/null)
+DNF := $(shell command -v dnf 2> /dev/null)
+YUM := $(shell command -v yum 2> /dev/null)
 
 all: clippy build test docs
 
 .PHONY: dependencies
-dependencies:
+dependencies: cmake lcov
 ifneq ($(BREW),)
 	@echo "Installing Mac OS X specific dependencies using $(BREW)"
-	brew install zmq graphviz autoconf automake libtool make unzip pkg-config wget cmake
+	brew install zmq graphviz autoconf automake libtool unzip pkg-config
 endif
 ifneq ($(APTGET),)
 	@echo "Installing Linux specific dependencies using $(APTGET)"
-	sudo apt-get -y install libzmq3-dev graphviz
+	sudo apt-get -y install libzmq3-dev graphviz build-essential autoconf automake libtool unzip pkg-config libc++-dev libc++abi-dev
+endif
+ifneq ($(YUM),)
+	sudo yum install -y zeromq zeromq-devel graphviz build-essential autoconf automake libtool
 endif
 	@echo "You might be prompted for your password to install the protobuf headers and set ldconfig."
 	wget https://github.com/google/protobuf/releases/download/v3.9.1/protobuf-all-3.9.1.zip > /dev/null
 	unzip protobuf-all-3.9.1 > /dev/null
 	cd protobuf-3.9.1 && ./autogen.sh && ./configure CXX=clang++ CXXFLAGS='-std=c++11 -stdlib=libc++ -O3 -g' && make -j4 && sudo make install
-ifneq ($(BREW),)
-	sudo update_dyld_shared_cache
+ifneq ($(YUM),)
+	sudo ldconfig
+endif
+ifneq ($(YUM),)
+	export LD_LIBRARY_PATH=/usr/local/lib
+	echo "export LD_LIBRARY_PATH=/usr/local/lib" >> ~/.bashrc
+	source ~/.bashrc
 endif
 	rm -rf protobuf-*
+
+.PHONY: cmake
+cmake: wget
+ifneq ($(BREW),)
+	brew install cmake
+else
+	echo "Installing cmake..."
+	echo "You might be prompted for your password to add CMake to /usr/bin."
+	wget https://cmake.org/files/v3.11/cmake-3.11.4-Linux-x86_64.tar.gz
+	tar xvzf cmake-3.11.4-Linux-x86_64.tar.gz > /dev/null 2>&1
+	sudo mkdir /usr/cmake
+	sudo mv cmake-3.11.4-Linux-x86_64/* /usr/cmake/
+	sudo ln -s /usr/cmake/bin/cmake /usr/bin/cmake
+	rm -rf cmake-3.11.4-Linux-x86_64*
+endif
+
+.PHONY: wget
+wget:
+ifneq ($(BREW),)
+	brew install wget
+else
+	sudo apt-get install wget
+endif
+
+.PHONY: lcov
+lcov: wget cmake
 	@echo "You might be asked for your password to install lcov..."
 	wget http://downloads.sourceforge.net/ltp/lcov-1.13.tar.gz
 	tar xvzf lcov-1.13.tar.gz > /dev/null 2>&1
