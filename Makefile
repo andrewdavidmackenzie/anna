@@ -47,7 +47,7 @@ ifeq ($(PROTOBUF),)
 	@echo "You might be prompted for your password to install the protobuf headers and set ldconfig."
 	wget https://github.com/google/protobuf/releases/download/v3.9.1/protobuf-all-3.9.1.zip > /dev/null
 	unzip protobuf-all-3.9.1 > /dev/null
-	cd protobuf-3.9.1 && ./autogen.sh && ./configure CXX=clang++ CXXFLAGS='-stdlib=libc++ -O3 -g' && make -j4 && sudo make install
+	cd protobuf-3.9.1 && ./autogen.sh && ./configure CXX=clang++ CXXFLAGS='-O3 -g' && make -j4 && sudo make install
 ifneq ($(YUM),)
 	sudo ldconfig
 endif
