@@ -70,7 +70,7 @@ endif
 ifneq ($(APTGET),)
 	echo "Installing clang..."
 	#sudo apt-add-repository "deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-5.0 main"
-	sudo apt-get install -y --allow-unauthenticated clang clang++ lldb clang-format
+	#sudo apt-get install -y --allow-unauthenticated clang clang++ lldb clang-format
 endif
 endif
 
