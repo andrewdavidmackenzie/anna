@@ -6,7 +6,7 @@ YUM := $(shell command -v yum 2> /dev/null)
 all: clippy build test docs
 
 .PHONY: dependencies
-dependencies: cmake lcov
+dependencies: cmake clang lcov
 ifneq ($(BREW),)
 	@echo "Installing Mac OS X specific dependencies using $(BREW)"
 	brew install zmq graphviz autoconf automake libtool unzip pkg-config
@@ -31,6 +31,17 @@ ifneq ($(YUM),)
 	source ~/.bashrc
 endif
 	rm -rf protobuf-*
+
+.PHONY: clang
+clang:
+ifneq ($(APTGET),)
+	echo "Installing clang..."
+	sudo apt-add-repository "deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-5.0 main"
+	sudo apt-get install -y --force-yes clang-5.0 lldb-5.0 clang-format-5.0
+	sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-5.0 1
+	sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-5.0 1
+	sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-5.0 1
+endif
 
 .PHONY: cmake
 cmake: wget
