@@ -16,7 +16,10 @@ endif
 	@echo "You might be prompted for your password to install the protobuf headers and set ldconfig."
 	wget https://github.com/google/protobuf/releases/download/v3.9.1/protobuf-all-3.9.1.zip > /dev/null
 	unzip protobuf-all-3.9.1 > /dev/null
-	cd protobuf-3.9.1 && ./autogen.sh && ./configure CXX=clang++ CXXFLAGS='-std=c++11 -stdlib=libc++ -O3 -g' && make -j4 && sudo make install && sudo update_dyld_shared_cache
+	cd protobuf-3.9.1 && ./autogen.sh && ./configure CXX=clang++ CXXFLAGS='-std=c++11 -stdlib=libc++ -O3 -g' && make -j4 && sudo make install
+ifneq ($(BREW),)
+	sudo update_dyld_shared_cache
+endif
 	rm -rf protobuf-*
 	@echo "You might be asked for your password to install lcov..."
 	wget http://downloads.sourceforge.net/ltp/lcov-1.13.tar.gz
