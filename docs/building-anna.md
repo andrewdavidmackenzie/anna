@@ -5,8 +5,7 @@ There are a few pre-requisites that we don't install and that we leave to the us
 * rust toolchain (cargo, rustc etc). We suggest using [rustup](https://rustup.rs/)
 * clang `C` and `C++` compiler on macos. The most normal way of getting this 
   would be installing [XCode from the Mac App Store](https://apps.apple.
-  com/us/app/xcode/id497799835?mt=12), and [Xcode command line tools]
-  (https://www.freecodecamp.org/news/install-xcode-command-line-tools/) and 
+  com/us/app/xcode/id497799835?mt=12), and [Xcode command line tools](https://www.freecodecamp.org/news/install-xcode-command-line-tools/) and 
   [accept the license](https://developer.apple.com/forums/thread/91443) from the command line.
 
 ## Prerequisites
