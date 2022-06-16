@@ -44,12 +44,12 @@ protobuf: wget build-tools
 	@echo "Installing protobuf headers"
 	@echo "You might be prompted for your password to install the protobuf headers and set ldconfig."
 	wget https://github.com/google/protobuf/releases/download/v3.9.1/protobuf-all-3.9.1.zip
-	unzip protobuf-all-3.9.1
+	unzip -o protobuf-all-3.9.1
 	cd protobuf-3.9.1 && ./autogen.sh && ./configure CXX=clang++ CXXFLAGS='-O3 -g' && make -j8 && sudo make install
 ifneq ($(YUM),)
 	sudo ldconfig
 endif
-ifneq ($(YUM),)
+ifneq ($(YUM),) # Fedora
 	# this is probably useless inside a Makefile, and also it assumes you are using Bash
 	export LD_LIBRARY_PATH=/usr/local/lib
 	echo "export LD_LIBRARY_PATH=/usr/local/lib" >> ~/.bashrc
