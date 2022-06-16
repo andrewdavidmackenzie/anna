@@ -44,8 +44,8 @@ protobuf: wget build-tools
 ifeq ($(PROTOBUF),)
 	@echo "Installing protobuf headers"
 	@echo "You might be prompted for your password to install the protobuf headers and set ldconfig."
-	wget https://github.com/google/protobuf/releases/download/v3.9.1/protobuf-all-3.9.1.zip > /dev/null
-	unzip protobuf-all-3.9.1 > /dev/null
+	wget https://github.com/google/protobuf/releases/download/v3.9.1/protobuf-all-3.9.1.zip
+	unzip protobuf-all-3.9.1
 	cd protobuf-3.9.1 && ./autogen.sh && ./configure CXX=clang++ CXXFLAGS='-O3 -g' && make -j8 && sudo make install
 ifneq ($(YUM),)
 	sudo ldconfig
@@ -90,7 +90,7 @@ ifeq ($(LCOV),)
 	@echo "Installing lcov"
 	@echo "You might be asked for your password to install lcov..."
 	wget http://downloads.sourceforge.net/ltp/lcov-1.13.tar.gz
-	tar xvzf lcov-1.13.tar.gz > /dev/null 2>&1
+	tar xvzf lcov-1.13.tar.gz
 	rm -rf lcov-1.13.tar.gz
 	cd lcov-1.13 && sudo make install
 	which lcov
@@ -104,8 +104,7 @@ clippy:
 
 .PHONY: build
 build: build-tools
-	./scripts/build.sh -bDebug   # Debug build
-	# ./scripts/build.sh -bRelease   # Release build
+	./scripts/build.sh -bDebug   # Debug build, use "-bRelease" for a Release build
 	cargo build
 
 .PHONY: test
