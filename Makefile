@@ -5,7 +5,7 @@ YUM := $(shell command -v yum 2> /dev/null)
 WGET := $(shell command -v wget 2> /dev/null)
 LCOV := $(shell command -v lcov 2> /dev/null)
 CLANG := $(shell command -v clang 2> /dev/null)
-PROTOBUF := $(shell command -v protoc 2> /dev/null)
+PROTOC := $(shell command -v protoc 2> /dev/null)
 MDBOOK := $(shell command -v mdbook 2> /dev/null)
 GRCOV := $(shell command -v grcov 2> /dev/null)
 
@@ -41,7 +41,6 @@ endif
 
 .PHONY: protobuf
 protobuf: wget build-tools
-ifeq ($(PROTOBUF),)
 	@echo "Installing protobuf headers"
 	@echo "You might be prompted for your password to install the protobuf headers and set ldconfig."
 	wget https://github.com/google/protobuf/releases/download/v3.9.1/protobuf-all-3.9.1.zip
@@ -51,13 +50,12 @@ ifneq ($(YUM),)
 	sudo ldconfig
 endif
 ifneq ($(YUM),)
-	# this is probably useless inside a Makefile
+	# this is probably useless inside a Makefile, and also it assumes you are using Bash
 	export LD_LIBRARY_PATH=/usr/local/lib
 	echo "export LD_LIBRARY_PATH=/usr/local/lib" >> ~/.bashrc
 	source ~/.bashrc
 endif
 	rm -rf protobuf-*
-endif
 
 .PHONY: clang
 clang:
