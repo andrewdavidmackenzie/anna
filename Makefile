@@ -2,60 +2,28 @@ APTGET := $(shell command -v apt-get 2> /dev/null)
 BREW := $(shell command -v brew 2> /dev/null)
 DNF := $(shell command -v dnf 2> /dev/null)
 YUM := $(shell command -v yum 2> /dev/null)
-WGET := $(shell command -v wget 2> /dev/null)
-LCOV := $(shell command -v lcov 2> /dev/null)
 CLANG := $(shell command -v clang 2> /dev/null)
-PROTOC := $(shell command -v protoc 2> /dev/null)
 MDBOOK := $(shell command -v mdbook 2> /dev/null)
 GRCOV := $(shell command -v grcov 2> /dev/null)
 
-all: clippy build test docs
+all: clippy build test upload_coverage docs
 
 .PHONY: dependencies
-dependencies: build-tools lcov protobuf
-ifneq ($(BREW),)
-	@echo "Installing Mac OS X specific dependencies using $(BREW)"
-	brew install zmq graphviz
-endif
-ifneq ($(APTGET),)
-	@echo "Installing Linux specific dependencies using $(APTGET)"
-	sudo apt-get -y install libzmq3-dev graphviz
-endif
-ifneq ($(YUM),)
-	@echo "Installing Linux specific dependencies using $(YUM)"
-	sudo yum install -y zeromq zeromq-devel graphviz
-endif
-
-.PHONY: build-tools
-build-tools: clang
+dependencies: clang
 	@echo "Installing build-tools"
 ifneq ($(BREW),)
-	brew install autoconf automake libtool unzip pkg-config cmake
+	brew install autoconf automake libtool unzip pkg-config cmake protobuf lcov zmq graphviz
 endif
 ifneq ($(APTGET),)
-	sudo apt-get -y install build-essential autoconf automake libtool unzip pkg-config cmake libc++-dev libc++abi-dev
+	sudo apt-get -y install build-essential autoconf automake libtool unzip pkg-config cmake libc++-dev libc++abi-dev protobuf-compiler lcov libzmq3-dev graphviz
 endif
 ifneq ($(YUM),)
-	sudo yum install -y build-essential autoconf automake libtool cmake
+	sudo yum install -y build-essential autoconf automake libtool cmake protobuf-compiler lcov zeromq zeromq-devel graphviz
 endif
-
-.PHONY: protobuf
-protobuf: wget build-tools
-	@echo "Installing protobuf headers"
-	@echo "You might be prompted for your password to install the protobuf headers and set ldconfig."
-	wget https://github.com/google/protobuf/releases/download/v3.9.1/protobuf-all-3.9.1.zip
-	unzip -o protobuf-all-3.9.1
-	cd protobuf-3.9.1 && ./autogen.sh && ./configure CXX=clang++ CXXFLAGS='-O3 -g' && make -j8 && sudo make install
-ifneq ($(YUM),)
-	sudo ldconfig
-endif
-ifneq ($(YUM),) # Fedora
-	# this is probably useless inside a Makefile, and also it assumes you are using Bash
-	export LD_LIBRARY_PATH=/usr/local/lib
-	echo "export LD_LIBRARY_PATH=/usr/local/lib" >> ~/.bashrc
-	source ~/.bashrc
-endif
-	rm -rf protobuf-*
+	cargo install mdbook
+	cargo install mdbook-linkcheck
+	cargo install grcov
+	rustup component add llvm-tools-preview
 
 .PHONY: clang
 clang:
@@ -71,42 +39,17 @@ ifneq ($(APTGET),)
 endif
 endif
 
-.PHONY: wget
-wget:
-ifeq ($(WGET),)
-	@echo "Installing wget"
-ifneq ($(BREW),)
-	brew install wget
-else
-	sudo apt-get install -y wget
-endif
-endif
-
-.PHONY: lcov
-lcov: wget build-tools
-ifeq ($(LCOV),)
-	@echo "Installing lcov"
-	@echo "You might be asked for your password to install lcov..."
-	wget http://downloads.sourceforge.net/ltp/lcov-1.13.tar.gz
-	tar xvzf lcov-1.13.tar.gz
-	rm -rf lcov-1.13.tar.gz
-	cd lcov-1.13 && sudo make install
-	which lcov
-	lcov -v
-	rm -rf lcov-1.13
-endif
-
 .PHONY: clippy
 clippy:
 	cargo clippy --tests # -- -D warnings # for now, don't fail on warnings
 
 .PHONY: build
-build: build-tools
-	./scripts/build.sh -bDebug   # Debug build, use "-bRelease" for a Release build
+build:
+	LD_LIBRARY_PATH=/usr/local/lib ./scripts/build.sh -bDebug   # Debug build, use "-bRelease" for a Release build
 	cargo build
 
 .PHONY: test
-test: test-simple
+test: configure_coverage test-simple
 	cargo test
 	rm -f log.txt log_0.txt pids client_log.txt
 
@@ -116,35 +59,19 @@ test: test-simple
 test-simple: build
 	./tests/simple/test-simple.sh y
 
-.PHONY: mdbook
-mdbook:
-ifeq ($(MDBOOK),)
-	@echo "Installing mdbook"
-	cargo install mdbook
-	cargo install mdbook-linkcheck
-endif
-
 .PHONY: docs
-docs: mdbook
+docs:
 	cargo doc --no-deps --target-dir=target/html/code
 	mdbook build
 
-.PHONY: grcov
-grcov:
-ifeq ($(GRCOV),)
-	@echo "Installing grcov"
-	cargo install grcov
-	rustup component add llvm-tools-preview
-endif
-
 .PHONY: configure_coverage
-configure_coverage: grcov
+configure_coverage:
 	# This is probably useless in a Makefile
 	export RUSTFLAGS="-C instrument-coverage"
-	export LLVM_PROFILE_FILE="flow-%p-%m.profraw"
+	export LLVM_PROFILE_FILE="anna-%p-%m.profraw"
 
 .PHONY: upload_coverage
-upload_coverage: configure_coverage
+upload_coverage:
 	grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o lcov.info
 	bash <(curl -s https://codecov.io/bash) -f lcov.info
 	rm -f lcov.info
