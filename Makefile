@@ -6,7 +6,7 @@ CLANG := $(shell command -v clang 2> /dev/null)
 MDBOOK := $(shell command -v mdbook 2> /dev/null)
 GRCOV := $(shell command -v grcov 2> /dev/null)
 
-all: clippy build test upload_coverage docs
+all: clippy build test docs
 
 .PHONY: dependencies
 dependencies: clang
