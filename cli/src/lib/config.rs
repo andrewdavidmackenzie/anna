@@ -1,3 +1,4 @@
+#![allow(dead_code)] // TODO remove eventually
 use std::fs::File;
 use std::io::Read;
 
@@ -33,7 +34,7 @@ struct Monitoring {
 #[derive(Deserialize)]
 struct Routing {
     monitoring: Vec<Address>,
-    ip: Address
+    ip: Address,
 }
 
 /// User configuration section
@@ -41,7 +42,7 @@ struct Routing {
 struct User {
     monitoring: Vec<Address>,
     routing: Vec<Address>,
-    ip: Address
+    ip: Address,
 }
 
 /// Server configuration section
@@ -75,7 +76,7 @@ struct Capacities {
     #[serde(rename = "memory-cap")]
     memory_cap: usize,
     #[serde(rename = "ebs-cap")]
-    ebs_cap: usize
+    ebs_cap: usize,
 }
 
 /// Threads configuration section
@@ -100,8 +101,8 @@ struct Replication {
 impl Config {
     /// Read the `Config` from a yaml config file and return it or Error
     pub fn read(filename: &str) -> Result<Config> {
-        let mut file = File::open(filename)
-            .chain_err(|| format!("Could not open file '{:?}'", filename))?;
+        let mut file =
+            File::open(filename).chain_err(|| format!("Could not open file '{:?}'", filename))?;
         let mut content = String::new();
         file.read_to_string(&mut content)
             .chain_err(|| format!("Could not read content from '{:?}'", filename))?;
@@ -112,8 +113,8 @@ impl Config {
     /// Return a vector of `Address` used for routing
     pub fn get_routing_ips(&self) -> &Vec<Address> {
         match &self.routing_elb {
-            Some(elb_ip) => &elb_ip,
-            None => &self.user.routing
+            Some(elb_ip) => elb_ip,
+            None => &self.user.routing,
         }
     }
 

@@ -9,7 +9,7 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.6)
 
 INCLUDE(ExternalProject)
 
-SET(CXX "clang++ -stdlib=c++")
+SET(CXX "clang++")
 
 if(APPLE)
   set(PREFIX /usr/local)
