@@ -34,7 +34,7 @@ serde = "~1.0.27"
 serde_yaml = "~0.8"
 rand = "0.8.5"
 rand_pcg = "0.3.0"
-prost = "0.7"
+prost = "0.10"
 #prost-types = "0.7"
 
 [build-dependencies]
