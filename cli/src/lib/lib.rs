@@ -101,6 +101,8 @@ pub fn stop() -> Result<usize> {
 mod test {
     #[test]
     fn no_such_process_to_stop() {
+        let _ = super::stop();
+
         assert_eq!(
             super::stop().expect("Expected zero processes killed"),
             0,
