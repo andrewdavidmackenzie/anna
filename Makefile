@@ -42,7 +42,8 @@ endif
 .PHONY: clean
 clean:
 	rm -rf build
-	mkdir build
+	rm -f *.profraw
+	rm -f cli/*.profraw
 
 .PHONY: clippy
 clippy:
@@ -50,6 +51,7 @@ clippy:
 
 .PHONY: build
 build:  # Debug build, use "Release" for a Release build
+	mkdir build
 	LD_LIBRARY_PATH="/usr/local/lib" cd build && cmake "-GUnix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER="/usr/bin/clang++" -DBUILD_TEST=ON .. && make -j8
 	cargo build
 
@@ -69,4 +71,4 @@ docs:
 upload_coverage:
 	grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o lcov.info
 	bash <(curl -s https://codecov.io/bash) -f lcov.info
-	rm -f lcov.info
+	rm -f lcov.info *.profraw
