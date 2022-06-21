@@ -6,7 +6,7 @@ CLANG := $(shell command -v clang 2> /dev/null)
 MDBOOK := $(shell command -v mdbook 2> /dev/null)
 GRCOV := $(shell command -v grcov 2> /dev/null)
 
-all: clippy build test docs
+all: clean clippy build test docs
 
 .PHONY: dependencies
 dependencies: clang
@@ -39,36 +39,31 @@ ifneq ($(APTGET),)
 endif
 endif
 
+.PHONY: clean
+clean:
+	rm -rf build
+	mkdir build
+
 .PHONY: clippy
 clippy:
 	cargo clippy --tests # -- -D warnings # for now, don't fail on warnings
 
 .PHONY: build
-build:
-	LD_LIBRARY_PATH=/usr/local/lib ./scripts/build.sh -bDebug   # Debug build, use "-bRelease" for a Release build
+build:  # Debug build, use "Release" for a Release build
+	LD_LIBRARY_PATH="/usr/local/lib" cd build && cmake "-GUnix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER="/usr/bin/clang++" -DBUILD_TEST=ON .. && make -j8
 	cargo build
 
 .PHONY: test
-test: configure_coverage test-simple
-	cargo test
-	rm -f log.txt log_0.txt pids client_log.txt
-
-# This target replaces the ./tests/simple/test-simple.sh script with Makefile steps
-# "Usage: $0 <build>"
-.PHONY: test-simple
-test-simple: build
+test:
 	./tests/simple/test-simple.sh y
+	cd build && make test
+	RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE="anna-%p-%m.profraw" cargo test
+	rm -f log.txt log_0.txt pids client_log.txt
 
 .PHONY: docs
 docs:
 	cargo doc --no-deps --target-dir=target/html/code
 	mdbook build
-
-.PHONY: configure_coverage
-configure_coverage:
-	# This is probably useless in a Makefile
-	export RUSTFLAGS="-C instrument-coverage"
-	export LLVM_PROFILE_FILE="anna-%p-%m.profraw"
 
 .PHONY: upload_coverage
 upload_coverage:
