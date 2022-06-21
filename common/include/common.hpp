@@ -18,7 +18,7 @@
 #include <algorithm>
 #include <sstream>
 
-#include "anna.pb.h"
+#include "kvs.pb.h"
 #include "lattices/lww_pair_lattice.hpp"
 #include "lattices/multi_key_causal_lattice.hpp"
 #include "lattices/priority_lattice.hpp"
@@ -89,7 +89,7 @@ inline Key get_key_from_user_metadata(Key metadata_key) {
 }
 
 inline string serialize(const LWWPairLattice<string>& l) {
-  LWWValue lww_value;
+  kvs::LWWValue lww_value;
   lww_value.set_timestamp(l.reveal().timestamp);
   lww_value.set_value(l.reveal().value);
 
@@ -100,7 +100,7 @@ inline string serialize(const LWWPairLattice<string>& l) {
 
 inline string serialize(const unsigned long long& timestamp,
                         const string& value) {
-  LWWValue lww_value;
+  kvs::LWWValue lww_value;
   lww_value.set_timestamp(timestamp);
   lww_value.set_value(value);
 
@@ -110,7 +110,7 @@ inline string serialize(const unsigned long long& timestamp,
 }
 
 inline string serialize(const SetLattice<string>& l) {
-  SetValue set_value;
+  kvs::SetValue set_value;
   for (const string& val : l.reveal()) {
     set_value.add_values(val);
   }
@@ -124,7 +124,7 @@ inline string serialize(const OrderedSetLattice<string>& l) {
   // We will just serialize ordered sets as regular sets for now;
   // order in serialization helps with performance
   // but is not necessary for correctness.
-  SetValue set_value;
+  kvs::SetValue set_value;
   for (const string& val : l.reveal()) {
     set_value.add_values(val);
   }
@@ -135,7 +135,7 @@ inline string serialize(const OrderedSetLattice<string>& l) {
 }
 
 inline string serialize(const set<string>& set) {
-  SetValue set_value;
+  kvs::SetValue set_value;
   for (const string& val : set) {
     set_value.add_values(val);
   }
@@ -146,7 +146,7 @@ inline string serialize(const set<string>& set) {
 }
 
 inline string serialize(const SingleKeyCausalLattice<SetLattice<string>>& l) {
-  SingleKeyCausalValue sk_causal_value;
+  kvs::SingleKeyCausalValue sk_causal_value;
   auto ptr = sk_causal_value.mutable_vector_clock();
   // serialize vector clock
   for (const auto& pair : l.reveal().vector_clock.reveal()) {
@@ -163,7 +163,7 @@ inline string serialize(const SingleKeyCausalLattice<SetLattice<string>>& l) {
 }
 
 inline string serialize(const MultiKeyCausalLattice<SetLattice<string>>& l) {
-  MultiKeyCausalValue mk_causal_value;
+  kvs::MultiKeyCausalValue mk_causal_value;
   auto ptr = mk_causal_value.mutable_vector_clock();
   // serialize vector clock
   for (const auto& pair : l.reveal().vector_clock.reveal()) {
@@ -191,7 +191,7 @@ inline string serialize(const MultiKeyCausalLattice<SetLattice<string>>& l) {
 }
 
 inline string serialize(const PriorityLattice<double, string>& l) {
-  PriorityValue priority_value;
+  kvs::PriorityValue priority_value;
   priority_value.set_priority(l.reveal().priority);
   priority_value.set_value(l.reveal().value);
 
@@ -201,7 +201,7 @@ inline string serialize(const PriorityLattice<double, string>& l) {
 }
 
 inline LWWPairLattice<string> deserialize_lww(const string& serialized) {
-  LWWValue lww;
+  kvs::LWWValue lww;
   lww.ParseFromString(serialized);
 
   return LWWPairLattice<string>(
@@ -209,7 +209,7 @@ inline LWWPairLattice<string> deserialize_lww(const string& serialized) {
 }
 
 inline SetLattice<string> deserialize_set(const string& serialized) {
-  SetValue s;
+  kvs::SetValue s;
   s.ParseFromString(serialized);
 
   set<string> result;
@@ -221,9 +221,8 @@ inline SetLattice<string> deserialize_set(const string& serialized) {
   return SetLattice<string>(result);
 }
 
-inline OrderedSetLattice<string> deserialize_ordered_set(
-    const string& serialized) {
-  SetValue s;
+inline OrderedSetLattice<string> deserialize_ordered_set(const string& serialized) {
+  kvs::SetValue s;
   s.ParseFromString(serialized);
   ordered_set<string> result;
   for (const string& value : s.values()) {
@@ -232,31 +231,29 @@ inline OrderedSetLattice<string> deserialize_ordered_set(
   return OrderedSetLattice<string>(result);
 }
 
-inline SingleKeyCausalValue deserialize_causal(const string& serialized) {
-  SingleKeyCausalValue causal;
+inline kvs::SingleKeyCausalValue deserialize_causal(const string& serialized) {
+  kvs::SingleKeyCausalValue causal;
   causal.ParseFromString(serialized);
 
   return causal;
 }
 
-inline MultiKeyCausalValue deserialize_multi_key_causal(
-    const string& serialized) {
-  MultiKeyCausalValue mk_causal;
+inline kvs::MultiKeyCausalValue deserialize_multi_key_causal(const string& serialized) {
+  kvs::MultiKeyCausalValue mk_causal;
   mk_causal.ParseFromString(serialized);
 
   return mk_causal;
 }
 
-inline PriorityLattice<double, string> deserialize_priority(
-    const string& serialized) {
-  PriorityValue pv;
+inline PriorityLattice<double, string> deserialize_priority(const string& serialized) {
+  kvs::PriorityValue pv;
   pv.ParseFromString(serialized);
   return PriorityLattice<double, string>(
       PriorityValuePair<double, string>(pv.priority(), pv.value()));
 }
 
 inline VectorClockValuePair<SetLattice<string>> to_vector_clock_value_pair(
-    const SingleKeyCausalValue& cv) {
+    const kvs::SingleKeyCausalValue& cv) {
   VectorClockValuePair<SetLattice<string>> p;
   for (const auto& pair : cv.vector_clock()) {
     p.vector_clock.insert(pair.first, pair.second);
@@ -268,7 +265,7 @@ inline VectorClockValuePair<SetLattice<string>> to_vector_clock_value_pair(
 }
 
 inline MultiKeyCausalPayload<SetLattice<string>> to_multi_key_causal_payload(
-    const MultiKeyCausalValue& mkcv) {
+    const kvs::MultiKeyCausalValue& mkcv) {
   MultiKeyCausalPayload<SetLattice<string>> p;
 
   for (const auto& pair : mkcv.vector_clock()) {
@@ -292,7 +289,7 @@ inline MultiKeyCausalPayload<SetLattice<string>> to_multi_key_causal_payload(
 }
 
 struct lattice_type_hash {
-  std::size_t operator()(const LatticeType& lt) const {
+  std::size_t operator()(const kvs::LatticeType& lt) const {
     return std::hash<string>()(LatticeType_Name(lt));
   }
 };

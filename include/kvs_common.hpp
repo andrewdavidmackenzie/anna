@@ -47,16 +47,16 @@ extern unsigned kDefaultGlobalEbsReplication;
 extern unsigned kDefaultLocalReplication;
 extern unsigned kMinimumReplicaNumber;
 
-inline void prepare_get_tuple(KeyRequest &req, Key key,
-                              LatticeType lattice_type) {
-  KeyTuple *tp = req.add_tuples();
+inline void prepare_get_tuple(kvs::KeyRequest &req, Key key,
+                              kvs::LatticeType lattice_type) {
+  kvs::KeyTuple *tp = req.add_tuples();
   tp->set_key(std::move(key));
   tp->set_lattice_type(std::move(lattice_type));
 }
 
-inline void prepare_put_tuple(KeyRequest &req, Key key,
-                              LatticeType lattice_type, string payload) {
-  KeyTuple *tp = req.add_tuples();
+inline void prepare_put_tuple(kvs::KeyRequest &req, Key key,
+                              kvs::LatticeType lattice_type, string payload) {
+  kvs::KeyTuple *tp = req.add_tuples();
   tp->set_key(std::move(key));
   tp->set_lattice_type(std::move(lattice_type));
   tp->set_payload(std::move(payload));

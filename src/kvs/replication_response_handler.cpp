@@ -23,18 +23,18 @@ void replication_response_handler(
     map<Key, KeyProperty> &stored_key_map,
     map<Key, KeyReplication> &key_replication_map, set<Key> &local_changeset,
     ServerThread &wt, SerializerMap &serializers, SocketCache &pushers) {
-  KeyResponse response;
+  kvs::KeyResponse response;
   response.ParseFromString(serialized);
 
   // we assume tuple 0 because there should only be one tuple responding to a
   // replication factor request
-  KeyTuple tuple = response.tuples(0);
+  kvs::KeyTuple tuple = response.tuples(0);
   Key key = get_key_from_metadata(tuple.key());
 
-  AnnaError error = tuple.error();
+  kvs::AnnaError error = tuple.error();
 
-  if (error == AnnaError::NO_ERROR) {
-    LWWValue lww_value;
+  if (error == kvs::AnnaError::NO_ERROR) {
+    kvs::LWWValue lww_value;
     lww_value.ParseFromString(tuple.payload());
     ReplicationFactor rep_data;
     rep_data.ParseFromString(lww_value.value());
@@ -47,11 +47,11 @@ void replication_response_handler(
     for (const auto &local : rep_data.local()) {
       key_replication_map[key].local_replication_[local.tier()] = local.value();
     }
-  } else if (error == AnnaError::KEY_DNE) {
+  } else if (error == kvs::AnnaError::KEY_DNE) {
     // KEY_DNE means that the receiving thread was responsible for the metadata
     // but didn't have any values stored -- we use the default rep factor
     init_replication(key_replication_map, key);
-  } else if (error == AnnaError::WRONG_THREAD) {
+  } else if (error == kvs::AnnaError::WRONG_THREAD) {
     // this means that the node that received the rep factor request was not
     // responsible for that metadata
     auto respond_address = wt.replication_response_connect_address();
@@ -81,7 +81,7 @@ void replication_response_handler(
         auto now = std::chrono::system_clock::now();
 
         if (!responsible && request.addr_ != "") {
-          KeyResponse response;
+          kvs::KeyResponse response;
 
           response.set_type(request.type_);
 
@@ -89,20 +89,20 @@ void replication_response_handler(
             response.set_response_id(request.response_id_);
           }
 
-          KeyTuple *tp = response.add_tuples();
+          kvs::KeyTuple *tp = response.add_tuples();
           tp->set_key(key);
-          tp->set_error(AnnaError::WRONG_THREAD);
+          tp->set_error(kvs::AnnaError::WRONG_THREAD);
 
           string serialized_response;
           response.SerializeToString(&serialized_response);
           kZmqUtil->send_string(serialized_response, &pushers[request.addr_]);
         } else if (responsible && request.addr_ == "") {
           // only put requests should fall into this category
-          if (request.type_ == RequestType::PUT) {
-            if (request.lattice_type_ == LatticeType::NONE) {
+          if (request.type_ == kvs::RequestType::PUT) {
+            if (request.lattice_type_ == kvs::LatticeType::NONE) {
               log->error("PUT request missing lattice type.");
             } else if (stored_key_map.find(key) != stored_key_map.end() &&
-                       stored_key_map[key].type_ != LatticeType::NONE &&
+                       stored_key_map[key].type_ != kvs::LatticeType::NONE &&
                        stored_key_map[key].type_ != request.lattice_type_) {
 
               log->error(
@@ -122,7 +122,7 @@ void replication_response_handler(
             log->error("Received a GET request with no response address.");
           }
         } else if (responsible && request.addr_ != "") {
-          KeyResponse response;
+          kvs::KeyResponse response;
 
           response.set_type(request.type_);
 
@@ -130,13 +130,13 @@ void replication_response_handler(
             response.set_response_id(request.response_id_);
           }
 
-          KeyTuple *tp = response.add_tuples();
+          kvs::KeyTuple *tp = response.add_tuples();
           tp->set_key(key);
 
-          if (request.type_ == RequestType::GET) {
+          if (request.type_ == kvs::RequestType::GET) {
             if (stored_key_map.find(key) == stored_key_map.end() ||
-                stored_key_map[key].type_ == LatticeType::NONE) {
-              tp->set_error(AnnaError::KEY_DNE);
+                stored_key_map[key].type_ == kvs::LatticeType::NONE) {
+              tp->set_error(kvs::AnnaError::KEY_DNE);
             } else {
               auto res =
                   process_get(key, serializers[stored_key_map[key].type_]);
@@ -145,10 +145,10 @@ void replication_response_handler(
               tp->set_error(res.second);
             }
           } else {
-            if (request.lattice_type_ == LatticeType::NONE) {
+            if (request.lattice_type_ == kvs::LatticeType::NONE) {
               log->error("PUT request missing lattice type.");
             } else if (stored_key_map.find(key) != stored_key_map.end() &&
-                       stored_key_map[key].type_ != LatticeType::NONE &&
+                       stored_key_map[key].type_ != kvs::LatticeType::NONE &&
                        stored_key_map[key].type_ != request.lattice_type_) {
               log->error(
                   "Lattice type mismatch for key {}: {} from query but {} "
@@ -188,7 +188,7 @@ void replication_response_handler(
       if (std::find(threads.begin(), threads.end(), wt) != threads.end()) {
         for (const PendingGossip &gossip : pending_gossip[key]) {
           if (stored_key_map.find(key) != stored_key_map.end() &&
-              stored_key_map[key].type_ != LatticeType::NONE &&
+              stored_key_map[key].type_ != kvs::LatticeType::NONE &&
               stored_key_map[key].type_ != gossip.lattice_type_) {
             log->error("Lattice type mismatch for key {}: {} from query but {} "
                        "expected.",
@@ -200,12 +200,12 @@ void replication_response_handler(
           }
         }
       } else {
-        map<Address, KeyRequest> gossip_map;
+        map<Address, kvs::KeyRequest> gossip_map;
 
         // forward the gossip
         for (const ServerThread &thread : threads) {
           gossip_map[thread.gossip_connect_address()].set_type(
-              RequestType::PUT);
+              kvs::RequestType::PUT);
 
           for (const PendingGossip &gossip : pending_gossip[key]) {
             prepare_put_tuple(gossip_map[thread.gossip_connect_address()], key,

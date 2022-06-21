@@ -17,16 +17,16 @@
 void send_gossip(AddressKeysetMap &addr_keyset_map, SocketCache &pushers,
                  SerializerMap &serializers,
                  map<Key, KeyProperty> &stored_key_map) {
-  map<Address, KeyRequest> gossip_map;
+  map<Address, kvs::KeyRequest> gossip_map;
 
   for (const auto &key_pair : addr_keyset_map) {
     string address = key_pair.first;
-    RequestType type;
+    kvs::RequestType type;
     RequestType_Parse("PUT", &type);
     gossip_map[address].set_type(type);
 
     for (const auto &key : key_pair.second) {
-      LatticeType type;
+      kvs::LatticeType type;
       if (stored_key_map.find(key) == stored_key_map.end()) {
         // we don't have this key stored, so skip
         continue;
@@ -50,14 +50,14 @@ void send_gossip(AddressKeysetMap &addr_keyset_map, SocketCache &pushers,
   }
 }
 
-std::pair<string, AnnaError> process_get(const Key &key,
+std::pair<string, kvs::AnnaError> process_get(const Key &key,
                                          Serializer *serializer) {
-  AnnaError error = AnnaError::NO_ERROR;
+  kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
   auto res = serializer->get(key, error);
-  return std::pair<string, AnnaError>(std::move(res), error);
+  return std::pair<string, kvs::AnnaError>(std::move(res), error);
 }
 
-void process_put(const Key &key, LatticeType lattice_type,
+void process_put(const Key &key, kvs::LatticeType lattice_type,
                  const string &payload, Serializer *serializer,
                  map<Key, KeyProperty> &stored_key_map) {
   stored_key_map[key].size_ = serializer->put(key, payload);

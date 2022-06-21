@@ -117,9 +117,9 @@ set<unsigned> responsible_local(const Key &key, unsigned local_rep,
 Address prepare_metadata_request(const Key &key,
                                  GlobalHashRing &global_memory_hash_ring,
                                  LocalHashRing &local_memory_hash_ring,
-                                 map<Address, KeyRequest> &addr_request_map,
+                                 map<Address, kvs::KeyRequest> &addr_request_map,
                                  Address response_address, unsigned &rid,
-                                 RequestType type) {
+                                 kvs::RequestType type) {
   auto threads = kHashRingUtil->get_responsible_threads_metadata(
       key, global_memory_hash_ring, local_memory_hash_ring);
 
@@ -145,29 +145,29 @@ Address prepare_metadata_request(const Key &key,
 void prepare_metadata_get_request(const Key &key,
                                   GlobalHashRing &global_memory_hash_ring,
                                   LocalHashRing &local_memory_hash_ring,
-                                  map<Address, KeyRequest> &addr_request_map,
+                                  map<Address, kvs::KeyRequest> &addr_request_map,
                                   Address response_address, unsigned &rid) {
   Address target_address = prepare_metadata_request(
       key, global_memory_hash_ring, local_memory_hash_ring, addr_request_map,
-      response_address, rid, RequestType::GET);
+      response_address, rid, kvs::RequestType::GET);
 
   if (!target_address.empty()) {
-    prepare_get_tuple(addr_request_map[target_address], key, LatticeType::LWW);
+    prepare_get_tuple(addr_request_map[target_address], key, kvs::LatticeType::LWW);
   }
 }
 
 void prepare_metadata_put_request(const Key &key, const string &value,
                                   GlobalHashRing &global_memory_hash_ring,
                                   LocalHashRing &local_memory_hash_ring,
-                                  map<Address, KeyRequest> &addr_request_map,
+                                  map<Address, kvs::KeyRequest> &addr_request_map,
                                   Address response_address, unsigned &rid) {
   Address target_address = prepare_metadata_request(
       key, global_memory_hash_ring, local_memory_hash_ring, addr_request_map,
-      response_address, rid, RequestType::PUT);
+      response_address, rid, kvs::RequestType::PUT);
 
   if (!target_address.empty()) {
     auto ts = generate_timestamp(0);
-    prepare_put_tuple(addr_request_map[target_address], key, LatticeType::LWW,
+    prepare_put_tuple(addr_request_map[target_address], key, kvs::LatticeType::LWW,
                       serialize(ts, value));
   }
 }
@@ -206,11 +206,11 @@ void HashRingUtilInterface::issue_replication_factor_request(
       std::next(begin(threads), rand_r(&seed) % threads.size())
           ->key_request_connect_address();
 
-  KeyRequest key_request;
-  key_request.set_type(RequestType::GET);
+  kvs::KeyRequest key_request;
+  key_request.set_type(kvs::RequestType::GET);
   key_request.set_response_address(response_address);
 
-  prepare_get_tuple(key_request, replication_key, LatticeType::LWW);
+  prepare_get_tuple(key_request, replication_key, kvs::LatticeType::LWW);
   string serialized;
   key_request.SerializeToString(&serialized);
   kZmqUtil->send_string(serialized, &pushers[target_address]);

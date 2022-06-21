@@ -19,7 +19,7 @@
 
 #include "gtest/gtest.h"
 
-#include "anna.pb.h"
+#include "kvs.pb.h"
 #include "metadata.pb.h"
 #include "types.hpp"
 

@@ -25,11 +25,11 @@ TEST_F(RoutingHandlerTest, ReplicationResponse) {
   EXPECT_EQ(key_replication_map[key].local_replication_[Tier::MEMORY], 1);
   EXPECT_EQ(key_replication_map[key].local_replication_[Tier::DISK], 1);
 
-  KeyResponse response;
-  response.set_type(RequestType::PUT);
-  KeyTuple *tp = response.add_tuples();
+  kvs::KeyResponse response;
+  response.set_type(kvs::RequestType::PUT);
+  kvs::KeyTuple *tp = response.add_tuples();
   tp->set_key(get_metadata_key(key, MetadataType::replication));
-  tp->set_lattice_type(LatticeType::LWW);
+  tp->set_lattice_type(kvs::LatticeType::LWW);
 
   string metakey = key;
   ReplicationFactor rf;

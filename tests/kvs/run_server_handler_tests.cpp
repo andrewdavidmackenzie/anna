@@ -18,7 +18,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-#include "anna.pb.h"
+#include "kvs.pb.h"
 #include "kvs/server_utils.hpp"
 #include "metadata.pb.h"
 #include "types.hpp"

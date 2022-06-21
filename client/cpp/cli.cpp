@@ -44,7 +44,7 @@ void handle_request(KvsClientInterface *client, string input) {
   if (v[0] == "GET") {
     client->get_async(v[1]);
 
-    vector<KeyResponse> responses = client->receive_async();
+    vector<kvs::KeyResponse> responses = client->receive_async();
     while (responses.size() == 0) {
       responses = client->receive_async();
     }
@@ -53,7 +53,7 @@ void handle_request(KvsClientInterface *client, string input) {
       std::cout << "Error: received more than one response" << std::endl;
     }
 
-    assert(responses[0].tuples(0).lattice_type() == LatticeType::LWW);
+    assert(responses[0].tuples(0).lattice_type() == kvs::LatticeType::LWW);
 
     LWWPairLattice<string> lww_lattice =
         deserialize_lww(responses[0].tuples(0).payload());
@@ -62,7 +62,7 @@ void handle_request(KvsClientInterface *client, string input) {
     // currently this mode is only for testing purpose
     client->get_async(v[1]);
 
-    vector<KeyResponse> responses = client->receive_async();
+    vector<kvs::KeyResponse> responses = client->receive_async();
     while (responses.size() == 0) {
       responses = client->receive_async();
     }
@@ -71,7 +71,7 @@ void handle_request(KvsClientInterface *client, string input) {
       std::cout << "Error: received more than one response" << std::endl;
     }
 
-    assert(responses[0].tuples(0).lattice_type() == LatticeType::MULTI_CAUSAL);
+    assert(responses[0].tuples(0).lattice_type() == kvs::LatticeType::MULTI_CAUSAL);
 
     MultiKeyCausalLattice<SetLattice<string>> mkcl =
         MultiKeyCausalLattice<SetLattice<string>>(to_multi_key_causal_payload(
@@ -98,21 +98,21 @@ void handle_request(KvsClientInterface *client, string input) {
         TimestampValuePair<string>(generate_timestamp(0), v[2]));
 
     // Put async
-    string rid = client->put_async(key, serialize(val), LatticeType::LWW);
+    string rid = client->put_async(key, serialize(val), kvs::LatticeType::LWW);
 
     // Receive
-    vector<KeyResponse> responses = client->receive_async();
+    vector<kvs::KeyResponse> responses = client->receive_async();
     while (responses.size() == 0) {
       responses = client->receive_async();
     }
 
-    KeyResponse response = responses[0];
+    kvs::KeyResponse response = responses[0];
 
     if (response.response_id() != rid) {
       std::cout << "Invalid response: ID did not match request ID!"
                 << std::endl;
     }
-    if (response.error() == AnnaError::NO_ERROR) {
+    if (response.error() == kvs::AnnaError::NO_ERROR) {
       std::cout << "Success!" << std::endl;
     } else {
       std::cout << "Failure!" << std::endl;
@@ -135,21 +135,21 @@ void handle_request(KvsClientInterface *client, string input) {
     MultiKeyCausalLattice<SetLattice<string>> mkcl(mkcp);
 
     // Put async
-    string rid = client->put_async(key, serialize(mkcl), LatticeType::MULTI_CAUSAL);
+    string rid = client->put_async(key, serialize(mkcl), kvs::LatticeType::MULTI_CAUSAL);
 
     // Receive
-    vector<KeyResponse> responses = client->receive_async();
+    vector<kvs::KeyResponse> responses = client->receive_async();
     while (responses.size() == 0) {
       responses = client->receive_async();
     }
 
-    KeyResponse response = responses[0];
+    kvs::KeyResponse response = responses[0];
 
     if (response.response_id() != rid) {
       std::cout << "Invalid response: ID did not match request ID!"
                 << std::endl;
     }
-    if (response.error() == AnnaError::NO_ERROR) {
+    if (response.error() == kvs::AnnaError::NO_ERROR) {
       std::cout << "Success!" << std::endl;
     } else {
       std::cout << "Failure!" << std::endl;
@@ -162,21 +162,21 @@ void handle_request(KvsClientInterface *client, string input) {
 
     // Put async
     string rid = client->put_async(v[1], serialize(SetLattice<string>(set)),
-                                   LatticeType::SET);
+                                   kvs::LatticeType::SET);
 
     // Receive
-    vector<KeyResponse> responses = client->receive_async();
+    vector<kvs::KeyResponse> responses = client->receive_async();
     while (responses.size() == 0) {
       responses = client->receive_async();
     }
 
-    KeyResponse response = responses[0];
+    kvs::KeyResponse response = responses[0];
 
     if (response.response_id() != rid) {
       std::cout << "Invalid response: ID did not match request ID!"
                 << std::endl;
     }
-    if (response.error() == AnnaError::NO_ERROR) {
+    if (response.error() == kvs::AnnaError::NO_ERROR) {
       std::cout << "Success!" << std::endl;
     } else {
       std::cout << "Failure!" << std::endl;
@@ -187,7 +187,7 @@ void handle_request(KvsClientInterface *client, string input) {
     string serialized;
 
     // Receive
-    vector<KeyResponse> responses = client->receive_async();
+    vector<kvs::KeyResponse> responses = client->receive_async();
     while (responses.size() == 0) {
       responses = client->receive_async();
     }

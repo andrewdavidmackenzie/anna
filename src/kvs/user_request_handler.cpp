@@ -22,17 +22,17 @@ void user_request_handler(
     map<Key, KeyProperty> &stored_key_map,
     map<Key, KeyReplication> &key_replication_map, set<Key> &local_changeset,
     ServerThread &wt, SerializerMap &serializers, SocketCache &pushers) {
-  KeyRequest request;
+  kvs::KeyRequest request;
   request.ParseFromString(serialized);
 
-  KeyResponse response;
+  kvs::KeyResponse response;
   string response_id = request.request_id();
   response.set_response_id(request.request_id());
 
   response.set_type(request.type());
 
   bool succeed;
-  RequestType request_type = request.type();
+  kvs::RequestType request_type = request.type();
   string response_address = request.response_address();
 
   for (const auto &tuple : request.tuples()) {
@@ -49,11 +49,11 @@ void user_request_handler(
       if (std::find(threads.begin(), threads.end(), wt) == threads.end()) {
         if (is_metadata(key)) {
           // this means that this node is not responsible for this metadata key
-          KeyTuple *tp = response.add_tuples();
+          kvs::KeyTuple *tp = response.add_tuples();
 
           tp->set_key(key);
           tp->set_lattice_type(tuple.lattice_type());
-          tp->set_error(AnnaError::WRONG_THREAD);
+          tp->set_error(kvs::AnnaError::WRONG_THREAD);
         } else {
           // if we don't know what threads are responsible, we issue a rep
           // factor request and make the request pending
@@ -67,25 +67,25 @@ void user_request_handler(
                              response_address, response_id));
         }
       } else { // if we know the responsible threads, we process the request
-        KeyTuple *tp = response.add_tuples();
+        kvs::KeyTuple *tp = response.add_tuples();
         tp->set_key(key);
 
-        if (request_type == RequestType::GET) {
+        if (request_type == kvs::RequestType::GET) {
           if (stored_key_map.find(key) == stored_key_map.end() ||
-              stored_key_map[key].type_ == LatticeType::NONE) {
+              stored_key_map[key].type_ == kvs::LatticeType::NONE) {
 
-            tp->set_error(AnnaError::KEY_DNE);
+            tp->set_error(kvs::AnnaError::KEY_DNE);
           } else {
             auto res = process_get(key, serializers[stored_key_map[key].type_]);
             tp->set_lattice_type(stored_key_map[key].type_);
             tp->set_payload(res.first);
             tp->set_error(res.second);
           }
-        } else if (request_type == RequestType::PUT) {
-          if (tuple.lattice_type() == LatticeType::NONE) {
+        } else if (request_type == kvs::RequestType::PUT) {
+          if (tuple.lattice_type() == kvs::LatticeType::NONE) {
             log->error("PUT request missing lattice type.");
           } else if (stored_key_map.find(key) != stored_key_map.end() &&
-                     stored_key_map[key].type_ != LatticeType::NONE &&
+                     stored_key_map[key].type_ != kvs::LatticeType::NONE &&
                      stored_key_map[key].type_ != tuple.lattice_type()) {
             log->error(
                 "Lattice type mismatch for key {}: query is {} but we expect "

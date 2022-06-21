@@ -18,7 +18,7 @@ void cache_ip_response_handler(string &serialized,
                                map<Address, set<Key>> &cache_ip_to_keys,
                                map<Key, set<Address>> &key_to_cache_ips) {
   // The response will be a list of cache IPs and their responsible keys.
-  KeyResponse response;
+  kvs::KeyResponse response;
   response.ParseFromString(serialized);
 
   for (const auto &tuple : response.tuples()) {
@@ -26,12 +26,12 @@ void cache_ip_response_handler(string &serialized,
     // here, the key is the metadata key for the cache IP,
     // and the value is the list of keys that cache is responsible for.
 
-    if (tuple.error() == AnnaError::NO_ERROR) {
+    if (tuple.error() == kvs::AnnaError::NO_ERROR) {
       // Extract the cache IP.
       Address cache_ip = get_key_from_user_metadata(tuple.key());
 
       // Extract the keys that the cache is responsible for.
-      LWWValue lww_value;
+      kvs::LWWValue lww_value;
       lww_value.ParseFromString(tuple.payload());
 
       shared::StringSet key_set;
