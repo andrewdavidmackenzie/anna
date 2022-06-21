@@ -61,7 +61,7 @@ void change_replication_factor(map<Key, KeyReplication> &requests,
   map<Key, KeyReplication> orig_key_replication_map_info;
 
   // store the new replication factor synchronously in storage servers
-  map<Address, KeyRequest> addr_request_map;
+  map<Address, kvs::KeyRequest> addr_request_map;
 
   // form the replication factor update request map
   map<Address, ReplicationFactorUpdate> replication_factor_map;
@@ -110,7 +110,7 @@ void change_replication_factor(map<Key, KeyReplication> &requests,
   set<Key> failed_keys;
   for (const auto &request_pair : addr_request_map) {
     bool succeed;
-    auto res = make_request<KeyRequest, KeyResponse>(
+    auto res = make_request<kvs::KeyRequest, kvs::KeyResponse>(
         request_pair.second, pushers[request_pair.first], response_puller,
         succeed);
 

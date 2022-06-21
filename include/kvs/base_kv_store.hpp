@@ -15,7 +15,7 @@
 #ifndef INCLUDE_KVS_BASE_KV_STORE_HPP_
 #define INCLUDE_KVS_BASE_KV_STORE_HPP_
 
-#include "anna.pb.h"
+#include "kvs.pb.h"
 #include "lattices/core_lattices.hpp"
 
 template <typename K, typename V> class KVStore {
@@ -27,9 +27,9 @@ public:
 
   KVStore<K, V>(MapLattice<K, V> &other) { db = other; }
 
-  V get(const K &k, AnnaError &error) {
+  V get(const K &k, kvs::AnnaError &error) {
     if (!db.contains(k).reveal()) {
-      error = AnnaError::KEY_DNE;
+      error = kvs::AnnaError::KEY_DNE;
     }
 
     return db.at(k);

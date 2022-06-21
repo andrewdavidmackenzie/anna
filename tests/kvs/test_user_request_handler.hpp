@@ -17,8 +17,8 @@
 TEST_F(ServerHandlerTest, UserGetLWWTest) {
   Key key = "key";
   string value = "value";
-  serializers[LatticeType::LWW]->put(key, serialize(0, value));
-  stored_key_map[key].type_ = LatticeType::LWW;
+  serializers[kvs::LatticeType::LWW]->put(key, serialize(0, value));
+  stored_key_map[key].type_ = kvs::LatticeType::LWW;
 
   string get_request = get_key_request(key, ip);
 
@@ -35,13 +35,13 @@ TEST_F(ServerHandlerTest, UserGetLWWTest) {
   vector<string> messages = get_zmq_messages();
   EXPECT_EQ(messages.size(), 1);
 
-  KeyResponse response;
+  kvs::KeyResponse response;
   response.ParseFromString(messages[0]);
 
   EXPECT_EQ(response.response_id(), kRequestId);
   EXPECT_EQ(response.tuples().size(), 1);
 
-  KeyTuple rtp = response.tuples(0);
+  kvs::KeyTuple rtp = response.tuples(0);
 
   EXPECT_EQ(rtp.key(), key);
   EXPECT_EQ(rtp.payload(), serialize(0, value));
@@ -58,8 +58,8 @@ TEST_F(ServerHandlerTest, UserGetSetTest) {
   s.emplace("value1");
   s.emplace("value2");
   s.emplace("value3");
-  serializers[LatticeType::SET]->put(key, serialize(SetLattice<string>(s)));
-  stored_key_map[key].type_ = LatticeType::SET;
+  serializers[kvs::LatticeType::SET]->put(key, serialize(SetLattice<string>(s)));
+  stored_key_map[key].type_ = kvs::LatticeType::SET;
 
   string get_request = get_key_request(key, ip);
 
@@ -76,13 +76,13 @@ TEST_F(ServerHandlerTest, UserGetSetTest) {
   vector<string> messages = get_zmq_messages();
   EXPECT_EQ(messages.size(), 1);
 
-  KeyResponse response;
+  kvs::KeyResponse response;
   response.ParseFromString(messages[0]);
 
   EXPECT_EQ(response.response_id(), kRequestId);
   EXPECT_EQ(response.tuples().size(), 1);
 
-  KeyTuple rtp = response.tuples(0);
+  kvs::KeyTuple rtp = response.tuples(0);
 
   EXPECT_EQ(rtp.key(), key);
   EXPECT_EQ(rtp.payload(), serialize(SetLattice<string>(s)));
@@ -99,9 +99,9 @@ TEST_F(ServerHandlerTest, UserGetOrderedSetTest) {
   s.emplace("value1");
   s.emplace("value2");
   s.emplace("value3");
-  serializers[LatticeType::ORDERED_SET]->put(
+  serializers[kvs::LatticeType::ORDERED_SET]->put(
       key, serialize(OrderedSetLattice<string>(s)));
-  stored_key_map[key].type_ = LatticeType::ORDERED_SET;
+  stored_key_map[key].type_ = kvs::LatticeType::ORDERED_SET;
 
   string get_request = get_key_request(key, ip);
 
@@ -118,13 +118,13 @@ TEST_F(ServerHandlerTest, UserGetOrderedSetTest) {
   vector<string> messages = get_zmq_messages();
   EXPECT_EQ(messages.size(), 1);
 
-  KeyResponse response;
+  kvs::KeyResponse response;
   response.ParseFromString(messages[0]);
 
   EXPECT_EQ(response.response_id(), kRequestId);
   EXPECT_EQ(response.tuples().size(), 1);
 
-  KeyTuple rtp = response.tuples(0);
+  kvs::KeyTuple rtp = response.tuples(0);
 
   EXPECT_EQ(rtp.key(), key);
   EXPECT_EQ(rtp.payload(), serialize(OrderedSetLattice<string>(s)));
@@ -144,9 +144,9 @@ TEST_F(ServerHandlerTest, UserGetCausalTest) {
   p.value.insert("value2");
   p.value.insert("value3");
 
-  serializers[LatticeType::SINGLE_CAUSAL]->put(
+  serializers[kvs::LatticeType::SINGLE_CAUSAL]->put(
       key, serialize(SingleKeyCausalLattice<SetLattice<string>>(p)));
-  stored_key_map[key].type_ = LatticeType::SINGLE_CAUSAL;
+  stored_key_map[key].type_ = kvs::LatticeType::SINGLE_CAUSAL;
 
   string get_request = get_key_request(key, ip);
 
@@ -163,18 +163,18 @@ TEST_F(ServerHandlerTest, UserGetCausalTest) {
   vector<string> messages = get_zmq_messages();
   EXPECT_EQ(messages.size(), 1);
 
-  KeyResponse response;
+  kvs::KeyResponse response;
   response.ParseFromString(messages[0]);
 
   EXPECT_EQ(response.response_id(), kRequestId);
   EXPECT_EQ(response.tuples().size(), 1);
 
-  KeyTuple rtp = response.tuples(0);
+  kvs::KeyTuple rtp = response.tuples(0);
 
   EXPECT_EQ(rtp.key(), key);
 
-  SingleKeyCausalValue left_value;
-  SingleKeyCausalValue right_value;
+  kvs::SingleKeyCausalValue left_value;
+  kvs::SingleKeyCausalValue right_value;
   left_value.ParseFromString(rtp.payload());
   right_value.ParseFromString(
       serialize(SingleKeyCausalLattice<SetLattice<string>>(p)));
@@ -214,7 +214,7 @@ TEST_F(ServerHandlerTest, UserPutAndGetLWWTest) {
   Key key = "key";
   string value = "value";
   string put_request =
-      put_key_request(key, LatticeType::LWW, serialize(0, value), ip);
+      put_key_request(key, kvs::LatticeType::LWW, serialize(0, value), ip);
 
   unsigned access_count = 0;
   unsigned seed = 0;
@@ -229,13 +229,13 @@ TEST_F(ServerHandlerTest, UserPutAndGetLWWTest) {
   vector<string> messages = get_zmq_messages();
   EXPECT_EQ(messages.size(), 1);
 
-  KeyResponse response;
+  kvs::KeyResponse response;
   response.ParseFromString(messages[0]);
 
   EXPECT_EQ(response.response_id(), kRequestId);
   EXPECT_EQ(response.tuples().size(), 1);
 
-  KeyTuple rtp = response.tuples(0);
+  kvs::KeyTuple rtp = response.tuples(0);
 
   EXPECT_EQ(rtp.key(), key);
   EXPECT_EQ(rtp.error(), 0);
@@ -276,7 +276,7 @@ TEST_F(ServerHandlerTest, UserPutAndGetSetTest) {
   s.emplace("value1");
   s.emplace("value2");
   s.emplace("value3");
-  string put_request = put_key_request(key, LatticeType::SET,
+  string put_request = put_key_request(key, kvs::LatticeType::SET,
                                        serialize(SetLattice<string>(s)), ip);
 
   unsigned access_count = 0;
@@ -292,13 +292,13 @@ TEST_F(ServerHandlerTest, UserPutAndGetSetTest) {
   vector<string> messages = get_zmq_messages();
   EXPECT_EQ(messages.size(), 1);
 
-  KeyResponse response;
+  kvs::KeyResponse response;
   response.ParseFromString(messages[0]);
 
   EXPECT_EQ(response.response_id(), kRequestId);
   EXPECT_EQ(response.tuples().size(), 1);
 
-  KeyTuple rtp = response.tuples(0);
+  kvs::KeyTuple rtp = response.tuples(0);
 
   EXPECT_EQ(rtp.key(), key);
   EXPECT_EQ(rtp.error(), 0);
@@ -340,7 +340,7 @@ TEST_F(ServerHandlerTest, UserPutAndGetOrderedSetTest) {
   s.emplace("value2");
   s.emplace("value3");
   string put_request = put_key_request(
-      key, LatticeType::SET, serialize(OrderedSetLattice<string>(s)), ip);
+      key, kvs::LatticeType::SET, serialize(OrderedSetLattice<string>(s)), ip);
 
   unsigned access_count = 0;
   unsigned seed = 0;
@@ -355,13 +355,13 @@ TEST_F(ServerHandlerTest, UserPutAndGetOrderedSetTest) {
   vector<string> messages = get_zmq_messages();
   EXPECT_EQ(messages.size(), 1);
 
-  KeyResponse response;
+  kvs::KeyResponse response;
   response.ParseFromString(messages[0]);
 
   EXPECT_EQ(response.response_id(), kRequestId);
   EXPECT_EQ(response.tuples().size(), 1);
 
-  KeyTuple rtp = response.tuples(0);
+  kvs::KeyTuple rtp = response.tuples(0);
 
   EXPECT_EQ(rtp.key(), key);
   EXPECT_EQ(rtp.error(), 0);
@@ -405,7 +405,7 @@ TEST_F(ServerHandlerTest, UserPutAndGetCausalTest) {
   p.value.insert("value2");
   p.value.insert("value3");
   string put_request = put_key_request(
-      key, LatticeType::SINGLE_CAUSAL,
+      key, kvs::LatticeType::SINGLE_CAUSAL,
       serialize(SingleKeyCausalLattice<SetLattice<string>>(p)), ip);
 
   unsigned access_count = 0;
@@ -421,13 +421,13 @@ TEST_F(ServerHandlerTest, UserPutAndGetCausalTest) {
   vector<string> messages = get_zmq_messages();
   EXPECT_EQ(messages.size(), 1);
 
-  KeyResponse response;
+  kvs::KeyResponse response;
   response.ParseFromString(messages[0]);
 
   EXPECT_EQ(response.response_id(), kRequestId);
   EXPECT_EQ(response.tuples().size(), 1);
 
-  KeyTuple rtp = response.tuples(0);
+  kvs::KeyTuple rtp = response.tuples(0);
 
   EXPECT_EQ(rtp.key(), key);
   EXPECT_EQ(rtp.error(), 0);
@@ -455,8 +455,8 @@ TEST_F(ServerHandlerTest, UserPutAndGetCausalTest) {
 
   EXPECT_EQ(rtp.key(), key);
 
-  SingleKeyCausalValue left_value;
-  SingleKeyCausalValue right_value;
+  kvs::SingleKeyCausalValue left_value;
+  kvs::SingleKeyCausalValue right_value;
   left_value.ParseFromString(rtp.payload());
   right_value.ParseFromString(
       serialize(SingleKeyCausalLattice<SetLattice<string>>(p)));

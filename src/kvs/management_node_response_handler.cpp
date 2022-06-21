@@ -23,7 +23,7 @@ void management_node_response_handler(string &serialized,
                                       SocketCache &pushers, ServerThread &wt,
                                       unsigned &rid) {
   // Get the response.
-  StringSet func_nodes;
+  shared::StringSet func_nodes;
   func_nodes.ParseFromString(serialized);
 
   // Update extant_caches with the response.
@@ -47,7 +47,7 @@ void management_node_response_handler(string &serialized,
   // Get the cached keys by cache IP.
   // First, prepare the requests for all the IPs we know about
   // and put them in an address request map.
-  map<Address, KeyRequest> addr_request_map;
+  map<Address, kvs::KeyRequest> addr_request_map;
   for (const auto &cacheip : extant_caches) {
     Key key = get_user_metadata_key(cacheip, UserMetadataType::cache_ip);
     prepare_metadata_get_request(
@@ -57,6 +57,6 @@ void management_node_response_handler(string &serialized,
 
   // Loop over the address request map and execute all the requests.
   for (const auto &addr_request : addr_request_map) {
-    send_request<KeyRequest>(addr_request.second, pushers[addr_request.first]);
+    send_request<kvs::KeyRequest>(addr_request.second, pushers[addr_request.first]);
   }
 }

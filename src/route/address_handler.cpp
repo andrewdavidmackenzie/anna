@@ -20,10 +20,10 @@ void address_handler(logger log, string &serialized, SocketCache &pushers,
                      map<Key, KeyReplication> &key_replication_map,
                      map<Key, vector<pair<Address, string>>> &pending_requests,
                      unsigned &seed) {
-  KeyAddressRequest addr_request;
+  kvs::KeyAddressRequest addr_request;
   addr_request.ParseFromString(serialized);
 
-  KeyAddressResponse addr_response;
+  kvs::KeyAddressResponse addr_response;
   addr_response.set_response_id(addr_request.request_id());
   bool succeed;
 
@@ -34,10 +34,10 @@ void address_handler(logger log, string &serialized, SocketCache &pushers,
 
   bool respond = false;
   if (num_servers == 0) {
-    addr_response.set_error(AnnaError::NO_SERVERS);
+    addr_response.set_error(kvs::AnnaError::NO_SERVERS);
 
     for (const Key &key : addr_request.keys()) {
-      KeyAddressResponse_KeyAddress *tp = addr_response.add_addresses();
+      kvs::KeyAddressResponse_KeyAddress *tp = addr_response.add_addresses();
       tp->set_key(key);
     }
 
@@ -68,7 +68,7 @@ void address_handler(logger log, string &serialized, SocketCache &pushers,
         }
       }
 
-      KeyAddressResponse_KeyAddress *tp = addr_response.add_addresses();
+      kvs::KeyAddressResponse_KeyAddress *tp = addr_response.add_addresses();
       tp->set_key(key);
       respond = true;
 

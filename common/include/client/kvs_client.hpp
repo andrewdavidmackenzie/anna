@@ -15,7 +15,7 @@
 #ifndef INCLUDE_ASYNC_CLIENT_HPP_
 #define INCLUDE_ASYNC_CLIENT_HPP_
 
-#include "anna.pb.h"
+#include "kvs.pb.h"
 #include "common.hpp"
 #include "requests.hpp"
 #include "threads.hpp"
@@ -26,15 +26,15 @@ using TimePoint = std::chrono::time_point<std::chrono::system_clock>;
 struct PendingRequest {
   TimePoint tp_;
   Address worker_addr_;
-  KeyRequest request_;
+  kvs::KeyRequest request_;
 };
 
 class KvsClientInterface {
  public:
   virtual string put_async(const Key& key, const string& payload,
-                           LatticeType lattice_type) = 0;
+                           kvs::LatticeType lattice_type) = 0;
   virtual void get_async(const Key& key) = 0;
-  virtual vector<KeyResponse> receive_async() = 0;
+  virtual vector<kvs::KeyResponse> receive_async() = 0;
   virtual zmq::context_t* get_context() = 0;
 };
 
@@ -86,10 +86,10 @@ class KvsClient : public KvsClientInterface {
    * Issue an async PUT request to the KVS for a certain lattice typed value.
    */
   string put_async(const Key& key, const string& payload,
-                   LatticeType lattice_type) {
-    KeyRequest request;
-    KeyTuple* tuple = prepare_data_request(request, key);
-    request.set_type(RequestType::PUT);
+                   kvs::LatticeType lattice_type) {
+    kvs::KeyRequest request;
+    kvs::KeyTuple* tuple = prepare_data_request(request, key);
+    request.set_type(kvs::RequestType::PUT);
     tuple->set_lattice_type(lattice_type);
     tuple->set_payload(payload);
 
@@ -104,26 +104,26 @@ class KvsClient : public KvsClientInterface {
     // we issue GET only when it is not in the pending map
     if (pending_get_response_map_.find(key) ==
         pending_get_response_map_.end()) {
-      KeyRequest request;
+      kvs::KeyRequest request;
       prepare_data_request(request, key);
-      request.set_type(RequestType::GET);
+      request.set_type(kvs::RequestType::GET);
 
       try_request(request);
     }
   }
 
-  vector<KeyResponse> receive_async() {
-    vector<KeyResponse> result;
+  vector<kvs::KeyResponse> receive_async() {
+    vector<kvs::KeyResponse> result;
     kZmqUtil->poll(0, &pollitems_);
 
     if (pollitems_[0].revents & ZMQ_POLLIN) {
       string serialized = kZmqUtil->recv_string(&key_address_puller_);
-      KeyAddressResponse response;
+      kvs::KeyAddressResponse response;
       response.ParseFromString(serialized);
       Key key = response.addresses(0).key();
 
       if (pending_request_map_.find(key) != pending_request_map_.end()) {
-        if (response.error() == AnnaError::NO_SERVERS) {
+        if (response.error() == kvs::AnnaError::NO_SERVERS) {
           log_->error(
               "No servers have joined the cluster yet. Retrying request.");
           pending_request_map_[key].first = std::chrono::system_clock::now();
@@ -148,11 +148,11 @@ class KvsClient : public KvsClientInterface {
 
     if (pollitems_[1].revents & ZMQ_POLLIN) {
       string serialized = kZmqUtil->recv_string(&response_puller_);
-      KeyResponse response;
+      kvs::KeyResponse response;
       response.ParseFromString(serialized);
       Key key = response.tuples(0).key();
 
-      if (response.type() == RequestType::GET) {
+      if (response.type() == kvs::RequestType::GET) {
         if (pending_get_response_map_.find(key) !=
             pending_get_response_map_.end()) {
           if (check_tuple(response.tuples(0))) {
@@ -284,7 +284,7 @@ class KvsClient : public KvsClientInterface {
    * the above implementation of try_multi_request, except it only operates on
    * a single request.
    */
-  void try_request(KeyRequest& request) {
+  void try_request(kvs::KeyRequest& request) {
     // we only get NULL back for the worker thread if the query to the routing
     // tier timed out, which should never happen.
     Key key = request.tuples(0).key();
@@ -301,9 +301,9 @@ class KvsClient : public KvsClientInterface {
     request.mutable_tuples(0)->set_address_cache_size(
         key_address_cache_[key].size());
 
-    send_request<KeyRequest>(request, socket_cache_[worker]);
+    send_request<kvs::KeyRequest>(request, socket_cache_[worker]);
 
-    if (request.type() == RequestType::GET) {
+    if (request.type() == kvs::RequestType::GET) {
       if (pending_get_response_map_.find(key) ==
           pending_get_response_map_.end()) {
         pending_get_response_map_[key].tp_ = std::chrono::system_clock::now();
@@ -329,7 +329,7 @@ class KvsClient : public KvsClientInterface {
    * the request (this happens if errno == 2). Otherwise, it returns false. It
    * invalidates the local cache if the information is out of date.
    */
-  bool check_tuple(const KeyTuple& tuple) {
+  bool check_tuple(const kvs::KeyTuple& tuple) {
     Key key = tuple.key();
     if (tuple.error() == 2) {
       log_->info(
@@ -357,7 +357,7 @@ class KvsClient : public KvsClientInterface {
    * the updated information for that key, and update our cache with that
    * information.
    */
-  void invalidate_cache_for_key(const Key& key, const KeyTuple& tuple) {
+  void invalidate_cache_for_key(const Key& key, const kvs::KeyTuple& tuple) {
     key_address_cache_.erase(key);
   }
 
@@ -395,11 +395,11 @@ class KvsClient : public KvsClientInterface {
    * KeyRequest and also returns a pointer to the KeyTuple contained by this
    * request.
    */
-  KeyTuple* prepare_data_request(KeyRequest& request, const Key& key) {
+  kvs::KeyTuple* prepare_data_request(kvs::KeyRequest& request, const Key& key) {
     request.set_request_id(get_request_id());
     request.set_response_address(ut_.response_connect_address());
 
-    KeyTuple* tp = request.add_tuples();
+    kvs::KeyTuple* tp = request.add_tuples();
     tp->set_key(key);
 
     return tp;
@@ -452,7 +452,7 @@ class KvsClient : public KvsClientInterface {
    */
   void query_routing_async(const Key& key) {
     // define protobuf request objects
-    KeyAddressRequest request;
+    kvs::KeyAddressRequest request;
 
     // populate request with response address, request id, etc.
     request.set_request_id(get_request_id());
@@ -460,7 +460,7 @@ class KvsClient : public KvsClientInterface {
     request.add_keys(key);
 
     Address rt_thread = get_routing_thread();
-    send_request<KeyAddressRequest>(request, socket_cache_[rt_thread]);
+    send_request<kvs::KeyAddressRequest>(request, socket_cache_[rt_thread]);
   }
 
   /**
@@ -472,17 +472,17 @@ class KvsClient : public KvsClientInterface {
            std::to_string(rid_++);
   }
 
-  KeyResponse generate_bad_response(const KeyRequest& req) {
-    KeyResponse resp;
+  kvs::KeyResponse generate_bad_response(const kvs::KeyRequest& req) {
+    kvs::KeyResponse resp;
 
     resp.set_type(req.type());
     resp.set_response_id(req.request_id());
-    resp.set_error(AnnaError::TIMEOUT);
+    resp.set_error(kvs::AnnaError::TIMEOUT);
 
-    KeyTuple* tp = resp.add_tuples();
+    kvs::KeyTuple* tp = resp.add_tuples();
     tp->set_key(req.tuples(0).key());
 
-    if (req.type() == RequestType::PUT) {
+    if (req.type() == kvs::RequestType::PUT) {
       tp->set_lattice_type(req.tuples(0).lattice_type());
       tp->set_payload(req.tuples(0).payload());
     }
@@ -525,7 +525,7 @@ class KvsClient : public KvsClientInterface {
   unsigned timeout_;
 
   // keeps track of pending requests due to missing worker address
-  map<Key, pair<TimePoint, vector<KeyRequest>>> pending_request_map_;
+  map<Key, pair<TimePoint, vector<kvs::KeyRequest>>> pending_request_map_;
 
   // keeps track of pending get responses
   map<Key, PendingRequest> pending_get_response_map_;

@@ -15,7 +15,7 @@
 syntax = "proto3";
 
 // A message to capture the periodic reporting of each server thread's local
-// statistics; these are aggregated by the monioring system.
+// statistics; these are aggregated by the monitoring system.
 message ServerThreadStatistics {
   // What percentage of the server thread's storage capacity is being consumed.
   uint64 storage_consumption = 1;

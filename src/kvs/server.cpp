@@ -228,12 +228,12 @@ void run(unsigned thread_id, Address public_ip, Address private_ip,
     exit(1);
   }
 
-  serializers[LatticeType::LWW] = lww_serializer;
-  serializers[LatticeType::SET] = set_serializer;
-  serializers[LatticeType::ORDERED_SET] = ordered_set_serializer;
-  serializers[LatticeType::SINGLE_CAUSAL] = sk_causal_serializer;
-  serializers[LatticeType::MULTI_CAUSAL] = mk_causal_serializer;
-  serializers[LatticeType::PRIORITY] = priority_serializer;
+  serializers[kvs::LatticeType::LWW] = lww_serializer;
+  serializers[kvs::LatticeType::SET] = set_serializer;
+  serializers[kvs::LatticeType::ORDERED_SET] = ordered_set_serializer;
+  serializers[kvs::LatticeType::SINGLE_CAUSAL] = sk_causal_serializer;
+  serializers[kvs::LatticeType::MULTI_CAUSAL] = mk_causal_serializer;
+  serializers[kvs::LatticeType::PRIORITY] = priority_serializer;
 
   // the set of changes made on this thread since the last round of gossip
   set<Key> local_changeset;
@@ -545,9 +545,9 @@ void run(unsigned thread_id, Address public_ip, Address private_ip,
       string serialized_stat;
       stat.SerializeToString(&serialized_stat);
 
-      KeyRequest req;
-      req.set_type(RequestType::PUT);
-      prepare_put_tuple(req, key, LatticeType::LWW,
+      kvs::KeyRequest req;
+      req.set_type(kvs::RequestType::PUT);
+      prepare_put_tuple(req, key, kvs::LatticeType::LWW,
                         serialize(ts, serialized_stat));
 
       auto threads = kHashRingUtil->get_responsible_threads_metadata(
@@ -591,8 +591,8 @@ void run(unsigned thread_id, Address public_ip, Address private_ip,
       access.SerializeToString(&serialized_access);
 
       req.Clear();
-      req.set_type(RequestType::PUT);
-      prepare_put_tuple(req, key, LatticeType::LWW,
+      req.set_type(kvs::RequestType::PUT);
+      prepare_put_tuple(req, key, kvs::LatticeType::LWW,
                         serialize(ts, serialized_access));
 
       threads = kHashRingUtil->get_responsible_threads_metadata(
@@ -623,8 +623,8 @@ void run(unsigned thread_id, Address public_ip, Address private_ip,
       primary_key_size.SerializeToString(&serialized_size);
 
       req.Clear();
-      req.set_type(RequestType::PUT);
-      prepare_put_tuple(req, key, LatticeType::LWW,
+      req.set_type(kvs::RequestType::PUT);
+      prepare_put_tuple(req, key, kvs::LatticeType::LWW,
                         serialize(ts, serialized_size));
 
       threads = kHashRingUtil->get_responsible_threads_metadata(

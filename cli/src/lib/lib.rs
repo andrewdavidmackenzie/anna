@@ -2,23 +2,20 @@
 
 //! This is the rust `anna` Library for working with the `anna` key-value store. It is linked into
 //! the `anna` CLI binary but can also be used by others to create new binaries
-//!
 #[macro_use]
 extern crate error_chain;
 
+use crate::config::Config;
 use nix::sys::signal::{kill, Signal};
 use nix::unistd::Pid;
 use std::path::PathBuf;
-use sysinfo::{ProcessExt, System, SystemExt};
-// use nix::sys::socket::bind;
-use crate::config::Config;
 use std::process::Command;
+use sysinfo::{ProcessExt, System, SystemExt};
 
-pub mod info;
-// mod proto;
 pub mod config;
+pub mod info;
 pub mod kvs_client;
-pub mod proto;
+mod proto;
 mod threads;
 
 // Pending them being defined elsewhere in a build script or similar
@@ -66,9 +63,9 @@ fn project_root() -> Result<PathBuf> {
     Ok(root)
 }
 
-/// `start` the KVS processes in background
+/// `start` function starts the processes `anna-kvs`, `anna-monitor` and `anna-route`
 ///
-/// It returns a Result<usize> with the number of processes terminated
+/// It returns a Result<usize> with the number of processes started
 pub fn start(_config: &Config) -> Result<usize> {
     let bin_dir = project_root()?.join(BINARY_FOLDER);
 
@@ -84,7 +81,7 @@ pub fn start(_config: &Config) -> Result<usize> {
     Ok(process_count)
 }
 
-/// `stop` function terminates the running processes for `anna-kvs`, `anna-monitor` and `anna-route`
+/// `stop` function terminates the processes `anna-kvs`, `anna-monitor` and `anna-route`
 ///
 /// It returns a Result<usize> with the number of processes terminated
 pub fn stop() -> Result<usize> {
@@ -104,6 +101,12 @@ pub fn stop() -> Result<usize> {
 mod test {
     #[test]
     fn no_such_process_to_stop() {
-        assert_eq!(super::stop().expect("Expected zero processes killed"), 0);
+        let _ = super::stop();
+
+        assert_eq!(
+            super::stop().expect("Expected zero processes killed"),
+            0,
+            "Expected zero processes killed"
+        );
     }
 }

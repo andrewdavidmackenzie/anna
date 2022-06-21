@@ -22,13 +22,13 @@ void gossip_handler(unsigned &seed, string &serialized,
                     map<Key, KeyReplication> &key_replication_map,
                     ServerThread &wt, SerializerMap &serializers,
                     SocketCache &pushers, logger log) {
-  KeyRequest gossip;
+  kvs::KeyRequest gossip;
   gossip.ParseFromString(serialized);
 
   bool succeed;
-  map<Address, KeyRequest> gossip_map;
+  map<Address, kvs::KeyRequest> gossip_map;
 
-  for (const KeyTuple &tuple : gossip.tuples()) {
+  for (const kvs::KeyTuple &tuple : gossip.tuples()) {
     // first check if the thread is responsible for the key
     Key key = tuple.key();
     ServerThreadList threads = kHashRingUtil->get_responsible_threads(
@@ -55,7 +55,7 @@ void gossip_handler(unsigned &seed, string &serialized,
             if (gossip_map.find(thread.gossip_connect_address()) ==
                 gossip_map.end()) {
               gossip_map[thread.gossip_connect_address()].set_type(
-                  RequestType::PUT);
+                  kvs::RequestType::PUT);
             }
 
             prepare_put_tuple(gossip_map[thread.gossip_connect_address()], key,

@@ -69,11 +69,11 @@ protected:
     priority_kvs = new MemoryPriorityKVS();
     priority_serializer = new MemoryPrioritySerializer(priority_kvs);
 
-    serializers[LatticeType::LWW] = lww_serializer;
-    serializers[LatticeType::SET] = set_serializer;
-    serializers[LatticeType::ORDERED_SET] = ordered_set_serializer;
-    serializers[LatticeType::SINGLE_CAUSAL] = sk_causal_serializer;
-    serializers[LatticeType::PRIORITY] = priority_serializer;
+    serializers[kvs::LatticeType::LWW] = lww_serializer;
+    serializers[kvs::LatticeType::SET] = set_serializer;
+    serializers[kvs::LatticeType::ORDERED_SET] = ordered_set_serializer;
+    serializers[kvs::LatticeType::SINGLE_CAUSAL] = sk_causal_serializer;
+    serializers[kvs::LatticeType::PRIORITY] = priority_serializer;
 
     wt = ServerThread(ip, ip, thread_id);
     global_hash_rings[Tier::MEMORY].insert(ip, ip, 0, thread_id);
@@ -84,11 +84,11 @@ protected:
     delete set_kvs;
     delete ordered_set_kvs;
     delete sk_causal_kvs;
-    delete serializers[LatticeType::LWW];
-    delete serializers[LatticeType::SET];
-    delete serializers[LatticeType::ORDERED_SET];
-    delete serializers[LatticeType::SINGLE_CAUSAL];
-    delete serializers[LatticeType::PRIORITY];
+    delete serializers[kvs::LatticeType::LWW];
+    delete serializers[kvs::LatticeType::SET];
+    delete serializers[kvs::LatticeType::ORDERED_SET];
+    delete serializers[kvs::LatticeType::SINGLE_CAUSAL];
+    delete serializers[kvs::LatticeType::PRIORITY];
   }
 
 public:
@@ -110,12 +110,12 @@ public:
   // NOTE: Pass in an empty string to avoid putting something into the
   // serializer
   string get_key_request(Key key, string ip) {
-    KeyRequest request;
-    request.set_type(RequestType::GET);
+    kvs::KeyRequest request;
+    request.set_type(kvs::RequestType::GET);
     request.set_response_address(UserThread(ip, 0).response_connect_address());
     request.set_request_id(kRequestId);
 
-    KeyTuple *tp = request.add_tuples();
+    kvs::KeyTuple *tp = request.add_tuples();
     tp->set_key(std::move(key));
 
     string request_str;
@@ -124,14 +124,14 @@ public:
     return request_str;
   }
 
-  string put_key_request(Key key, LatticeType lattice_type, string payload,
+  string put_key_request(Key key, kvs::LatticeType lattice_type, string payload,
                          string ip) {
-    KeyRequest request;
-    request.set_type(RequestType::PUT);
+    kvs::KeyRequest request;
+    request.set_type(kvs::RequestType::PUT);
     request.set_response_address(UserThread(ip, 0).response_connect_address());
     request.set_request_id(kRequestId);
 
-    KeyTuple *tp = request.add_tuples();
+    kvs::KeyTuple *tp = request.add_tuples();
     tp->set_key(std::move(key));
     tp->set_lattice_type(std::move(lattice_type));
     tp->set_payload(std::move(payload));

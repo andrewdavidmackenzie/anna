@@ -39,7 +39,7 @@ double get_zipf_prob(unsigned rank, double skew, double base) {
 }
 
 void receive(KvsClientInterface *client) {
-  vector<KeyResponse> responses = client->receive_async();
+  vector<kvs::KeyResponse> responses = client->receive_async();
   while (responses.size() == 0) {
     responses = client->receive_async();
   }
@@ -189,7 +189,7 @@ void run(const unsigned &thread_id,
             LWWPairLattice<string> val(
                 TimestampValuePair<string>(ts, string(length, 'a')));
 
-            client.put_async(key, serialize(val), LatticeType::LWW);
+            client.put_async(key, serialize(val), kvs::LatticeType::LWW);
             receive(&client);
             count += 1;
           } else if (type == "M") {
@@ -198,7 +198,7 @@ void run(const unsigned &thread_id,
             LWWPairLattice<string> val(
                 TimestampValuePair<string>(ts, string(length, 'a')));
 
-            client.put_async(key, serialize(val), LatticeType::LWW);
+            client.put_async(key, serialize(val), kvs::LatticeType::LWW);
             receive(&client);
             client.get_async(key);
             receive(&client);
@@ -310,7 +310,7 @@ void run(const unsigned &thread_id,
           LWWPairLattice<string> val(
               TimestampValuePair<string>(ts, string(length, 'a')));
 
-          client.put_async(generate_key(i), serialize(val), LatticeType::LWW);
+          client.put_async(generate_key(i), serialize(val), kvs::LatticeType::LWW);
           receive(&client);
         }
 

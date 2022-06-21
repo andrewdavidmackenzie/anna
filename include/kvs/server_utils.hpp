@@ -48,7 +48,7 @@ typedef map<Address, set<Key>> AddressKeysetMap;
 
 class Serializer {
 public:
-  virtual string get(const Key &key, AnnaError &error) = 0;
+  virtual string get(const Key &key, kvs::AnnaError &error) = 0;
   virtual unsigned put(const Key &key, const string &serialized) = 0;
   virtual void remove(const Key &key) = 0;
   virtual ~Serializer(){};
@@ -60,11 +60,11 @@ class MemoryLWWSerializer : public Serializer {
 public:
   MemoryLWWSerializer(MemoryLWWKVS *kvs) : kvs_(kvs) {}
 
-  string get(const Key &key, AnnaError &error) {
+  string get(const Key &key, kvs::AnnaError &error) {
     auto val = kvs_->get(key, error);
 
     if (val.reveal().value == "") {
-      error = AnnaError::KEY_DNE;
+      error = kvs::AnnaError::KEY_DNE;
     }
 
     return serialize(val);
@@ -85,10 +85,10 @@ class MemorySetSerializer : public Serializer {
 public:
   MemorySetSerializer(MemorySetKVS *kvs) : kvs_(kvs) {}
 
-  string get(const Key &key, AnnaError &error) {
+  string get(const Key &key, kvs::AnnaError &error) {
     auto val = kvs_->get(key, error);
     if (val.size().reveal() == 0) {
-      error = AnnaError::KEY_DNE;
+      error = kvs::AnnaError::KEY_DNE;
     }
     return serialize(val);
   }
@@ -108,7 +108,7 @@ class MemoryOrderedSetSerializer : public Serializer {
 public:
   MemoryOrderedSetSerializer(MemoryOrderedSetKVS *kvs) : kvs_(kvs) {}
 
-  string get(const Key &key, AnnaError &error) {
+  string get(const Key &key, kvs::AnnaError &error) {
     auto val = kvs_->get(key, error);
     return serialize(val);
   }
@@ -128,16 +128,16 @@ class MemorySingleKeyCausalSerializer : public Serializer {
 public:
   MemorySingleKeyCausalSerializer(MemorySingleKeyCausalKVS *kvs) : kvs_(kvs) {}
 
-  string get(const Key &key, AnnaError &error) {
+  string get(const Key &key, kvs::AnnaError &error) {
     auto val = kvs_->get(key, error);
     if (val.reveal().value.size().reveal() == 0) {
-      error = AnnaError::KEY_DNE;
+      error = kvs::AnnaError::KEY_DNE;
     }
     return serialize(val);
   }
 
   unsigned put(const Key &key, const string &serialized) {
-    SingleKeyCausalValue causal_value = deserialize_causal(serialized);
+    kvs::SingleKeyCausalValue causal_value = deserialize_causal(serialized);
     VectorClockValuePair<SetLattice<string>> p =
         to_vector_clock_value_pair(causal_value);
     kvs_->put(key, SingleKeyCausalLattice<SetLattice<string>>(p));
@@ -153,16 +153,16 @@ class MemoryMultiKeyCausalSerializer : public Serializer {
 public:
   MemoryMultiKeyCausalSerializer(MemoryMultiKeyCausalKVS *kvs) : kvs_(kvs) {}
 
-  string get(const Key &key, AnnaError &error) {
+  string get(const Key &key, kvs::AnnaError &error) {
     auto val = kvs_->get(key, error);
     if (val.reveal().value.size().reveal() == 0) {
-      error = AnnaError::KEY_DNE;
+      error = kvs::AnnaError::KEY_DNE;
     }
     return serialize(val);
   }
 
   unsigned put(const Key &key, const string &serialized) {
-    MultiKeyCausalValue multi_key_causal_value =
+    kvs::MultiKeyCausalValue multi_key_causal_value =
         deserialize_multi_key_causal(serialized);
     MultiKeyCausalPayload<SetLattice<string>> p =
         to_multi_key_causal_payload(multi_key_causal_value);
@@ -179,10 +179,10 @@ class MemoryPrioritySerializer : public Serializer {
 public:
   MemoryPrioritySerializer(MemoryPriorityKVS *kvs) : kvs_(kvs) {}
 
-  string get(const Key &key, AnnaError &error) {
+  string get(const Key &key, kvs::AnnaError &error) {
     auto val = kvs_->get(key, error);
     if (val.reveal().value == "") {
-      error = AnnaError::KEY_DNE;
+      error = kvs::AnnaError::KEY_DNE;
     }
     return serialize(val);
   }
@@ -211,22 +211,22 @@ public:
     }
   }
 
-  string get(const Key &key, AnnaError &error) {
+  string get(const Key &key, kvs::AnnaError &error) {
     string res;
-    LWWValue value;
+    kvs::LWWValue value;
 
     // open a new filestream for reading in a binary
     string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
     std::fstream input(fname, std::ios::in | std::ios::binary);
 
     if (!input) {
-      error = AnnaError::KEY_DNE;
+      error = kvs::AnnaError::KEY_DNE;
     } else if (!value.ParseFromIstream(&input)) {
       std::cerr << "Failed to parse payload." << std::endl;
-      error = AnnaError::KEY_DNE;
+      error = kvs::AnnaError::KEY_DNE;
     } else {
       if (value.value() == "") {
-        error = AnnaError::KEY_DNE;
+        error = kvs::AnnaError::KEY_DNE;
       } else {
         value.SerializeToString(&res);
       }
@@ -235,10 +235,10 @@ public:
   }
 
   unsigned put(const Key &key, const string &serialized) {
-    LWWValue input_value;
+    kvs::LWWValue input_value;
     input_value.ParseFromString(serialized);
 
-    LWWValue original_value;
+    kvs::LWWValue original_value;
 
     string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
     std::fstream input(fname, std::ios::in | std::ios::binary);
@@ -296,22 +296,22 @@ public:
     }
   }
 
-  string get(const Key &key, AnnaError &error) {
+  string get(const Key &key, kvs::AnnaError &error) {
     string res;
-    SetValue value;
+    kvs::SetValue value;
 
     // open a new filestream for reading in a binary
     string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
     std::fstream input(fname, std::ios::in | std::ios::binary);
 
     if (!input) {
-      error = AnnaError::KEY_DNE;
+      error = kvs::AnnaError::KEY_DNE;
     } else if (!value.ParseFromIstream(&input)) {
       std::cerr << "Failed to parse payload." << std::endl;
-      error = AnnaError::KEY_DNE;
+      error = kvs::AnnaError::KEY_DNE;
     } else {
       if (value.values_size() == 0) {
-        error = AnnaError::KEY_DNE;
+        error = kvs::AnnaError::KEY_DNE;
       } else {
         value.SerializeToString(&res);
       }
@@ -320,10 +320,10 @@ public:
   }
 
   unsigned put(const Key &key, const string &serialized) {
-    SetValue input_value;
+    kvs::SetValue input_value;
     input_value.ParseFromString(serialized);
 
-    SetValue original_value;
+    kvs::SetValue original_value;
 
     string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
     std::fstream input(fname, std::ios::in | std::ios::binary);
@@ -352,7 +352,7 @@ public:
         set_union.emplace(std::move(val));
       }
 
-      SetValue new_value;
+      kvs::SetValue new_value;
       for (auto &val : set_union) {
         new_value.add_values(std::move(val));
       }
@@ -392,19 +392,19 @@ public:
     }
   }
 
-  string get(const Key &key, AnnaError &error) {
+  string get(const Key &key, kvs::AnnaError &error) {
     string res;
-    SetValue value;
+    kvs::SetValue value;
 
     // open a new filestream for reading in a binary
     string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
     std::fstream input(fname, std::ios::in | std::ios::binary);
 
     if (!input) {
-      error = AnnaError::KEY_DNE;
+      error = kvs::AnnaError::KEY_DNE;
     } else if (!value.ParseFromIstream(&input)) {
       std::cerr << "Failed to parse payload." << std::endl;
-      error = AnnaError::KEY_DNE;
+      error = kvs::AnnaError::KEY_DNE;
     } else {
       value.SerializeToString(&res);
     }
@@ -412,10 +412,10 @@ public:
   }
 
   unsigned put(const Key &key, const string &serialized) {
-    SetValue input_value;
+    kvs::SetValue input_value;
     input_value.ParseFromString(serialized);
 
-    SetValue original_value;
+    kvs::SetValue original_value;
 
     string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
     std::fstream input(fname, std::ios::in | std::ios::binary);
@@ -444,7 +444,7 @@ public:
         set_union.emplace(std::move(val));
       }
 
-      SetValue new_value;
+      kvs::SetValue new_value;
       for (auto &val : set_union) {
         new_value.add_values(std::move(val));
       }
@@ -484,22 +484,22 @@ public:
     }
   }
 
-  string get(const Key &key, AnnaError &error) {
+  string get(const Key &key, kvs::AnnaError &error) {
     string res;
-    SingleKeyCausalValue value;
+    kvs::SingleKeyCausalValue value;
 
     // open a new filestream for reading in a binary
     string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
     std::fstream input(fname, std::ios::in | std::ios::binary);
 
     if (!input) {
-      error = AnnaError::KEY_DNE;
+      error = kvs::AnnaError::KEY_DNE;
     } else if (!value.ParseFromIstream(&input)) {
       std::cerr << "Failed to parse payload." << std::endl;
-      error = AnnaError::KEY_DNE;
+      error = kvs::AnnaError::KEY_DNE;
     } else {
       if (value.values_size() == 0) {
-        error = AnnaError::KEY_DNE;
+        error = kvs::AnnaError::KEY_DNE;
       } else {
         value.SerializeToString(&res);
       }
@@ -508,10 +508,10 @@ public:
   }
 
   unsigned put(const Key &key, const string &serialized) {
-    SingleKeyCausalValue input_value;
+    kvs::SingleKeyCausalValue input_value;
     input_value.ParseFromString(serialized);
 
-    SingleKeyCausalValue original_value;
+    kvs::SingleKeyCausalValue original_value;
 
     string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
     std::fstream input(fname, std::ios::in | std::ios::binary);
@@ -552,7 +552,7 @@ public:
 
       orig.merge(input);
 
-      SingleKeyCausalValue new_value;
+      kvs::SingleKeyCausalValue new_value;
       auto ptr = new_value.mutable_vector_clock();
       // serialize vector clock
       for (const auto &pair : orig.reveal().vector_clock.reveal()) {
@@ -601,22 +601,22 @@ public:
     }
   }
 
-  string get(const Key &key, AnnaError &error) {
+  string get(const Key &key, kvs::AnnaError &error) {
     string res;
-    MultiKeyCausalValue value;
+    kvs::MultiKeyCausalValue value;
 
     // open a new filestream for reading in a binary
     string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
     std::fstream input(fname, std::ios::in | std::ios::binary);
 
     if (!input) {
-      error = AnnaError::KEY_DNE;
+      error = kvs::AnnaError::KEY_DNE;
     } else if (!value.ParseFromIstream(&input)) {
       std::cerr << "Failed to parse payload." << std::endl;
-      error = AnnaError::KEY_DNE;
+      error = kvs::AnnaError::KEY_DNE;
     } else {
       if (value.values_size() == 0) {
-        error = AnnaError::KEY_DNE;
+        error = kvs::AnnaError::KEY_DNE;
       } else {
         value.SerializeToString(&res);
       }
@@ -625,10 +625,10 @@ public:
   }
 
   unsigned put(const Key &key, const string &serialized) {
-    MultiKeyCausalValue input_value;
+    kvs::MultiKeyCausalValue input_value;
     input_value.ParseFromString(serialized);
 
-    MultiKeyCausalValue original_value;
+    kvs::MultiKeyCausalValue original_value;
 
     string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
     std::fstream input(fname, std::ios::in | std::ios::binary);
@@ -690,7 +690,7 @@ public:
       MultiKeyCausalLattice<SetLattice<string>> input(input_payload);
       orig.merge(input);
 
-      MultiKeyCausalValue new_value;
+      kvs::MultiKeyCausalValue new_value;
       auto ptr = new_value.mutable_vector_clock();
 
       // serialize vector clock
@@ -754,19 +754,19 @@ public:
       ebs_root_ += "/";
   }
 
-  string get(const Key &key, AnnaError &error) override {
+  string get(const Key &key, kvs::AnnaError &error) override {
     string res;
-    PriorityValue value;
+    kvs::PriorityValue value;
 
     std::fstream input(fname(key), std::ios::in | std::ios::binary);
 
     if (!input) {
-      error = AnnaError::KEY_DNE;
+      error = kvs::AnnaError::KEY_DNE;
     } else if (!value.ParseFromIstream(&input)) {
       std::cerr << "Failed to parse payload." << std::endl;
-      error = AnnaError::KEY_DNE;
+      error = kvs::AnnaError::KEY_DNE;
     } else if (value.value() == "") {
-      error = AnnaError::KEY_DNE;
+      error = kvs::AnnaError::KEY_DNE;
     } else {
       value.SerializeToString(&res);
     }
@@ -774,7 +774,7 @@ public:
   }
 
   unsigned put(const Key &key, const string &serialized) override {
-    PriorityValue input_value;
+    kvs::PriorityValue input_value;
     input_value.ParseFromString(serialized);
 
     int fd = open(fname(key).c_str(), O_RDWR | O_CREAT);
@@ -783,7 +783,7 @@ public:
       return 0;
     }
 
-    PriorityValue original_value;
+    kvs::PriorityValue original_value;
     if (!original_value.ParseFromFileDescriptor(fd) ||
         input_value.priority() < original_value.priority()) {
       // resize the file to 0
@@ -810,17 +810,17 @@ public:
 };
 
 using SerializerMap =
-    std::unordered_map<LatticeType, Serializer *, lattice_type_hash>;
+    std::unordered_map<kvs::LatticeType, Serializer *, lattice_type_hash>;
 
 struct PendingRequest {
   PendingRequest() {}
-  PendingRequest(RequestType type, LatticeType lattice_type, string payload,
+  PendingRequest(kvs::RequestType type, kvs::LatticeType lattice_type, string payload,
                  Address addr, string response_id)
       : type_(type), lattice_type_(std::move(lattice_type)),
         payload_(std::move(payload)), addr_(addr), response_id_(response_id) {}
 
-  RequestType type_;
-  LatticeType lattice_type_;
+  kvs::RequestType type_;
+  kvs::LatticeType lattice_type_;
   string payload_;
   Address addr_;
   string response_id_;
@@ -828,9 +828,9 @@ struct PendingRequest {
 
 struct PendingGossip {
   PendingGossip() {}
-  PendingGossip(LatticeType lattice_type, string payload)
+  PendingGossip(kvs::LatticeType lattice_type, string payload)
       : lattice_type_(std::move(lattice_type)), payload_(std::move(payload)) {}
-  LatticeType lattice_type_;
+  kvs::LatticeType lattice_type_;
   string payload_;
 };
 

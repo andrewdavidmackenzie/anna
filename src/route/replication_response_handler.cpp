@@ -19,18 +19,18 @@ void replication_response_handler(
     GlobalRingMap &global_hash_rings, LocalRingMap &local_hash_rings,
     map<Key, KeyReplication> &key_replication_map,
     map<Key, vector<pair<Address, string>>> &pending_requests, unsigned &seed) {
-  KeyResponse response;
+  kvs::KeyResponse response;
   response.ParseFromString(serialized);
   // we assume tuple 0 because there should only be one tuple responding to a
   // replication factor request
-  KeyTuple tuple = response.tuples(0);
+  kvs::KeyTuple tuple = response.tuples(0);
 
   Key key = get_key_from_metadata(tuple.key());
 
-  AnnaError error = tuple.error();
+  kvs::AnnaError error = tuple.error();
 
-  if (error == AnnaError::NO_ERROR) {
-    LWWValue lww_value;
+  if (error == kvs::AnnaError::NO_ERROR) {
+    kvs::LWWValue lww_value;
     lww_value.ParseFromString(tuple.payload());
     ReplicationFactor rep_data;
     rep_data.ParseFromString(lww_value.value());
@@ -43,11 +43,11 @@ void replication_response_handler(
     for (const auto &local : rep_data.local()) {
       key_replication_map[key].local_replication_[local.tier()] = local.value();
     }
-  } else if (error == AnnaError::KEY_DNE) {
+  } else if (error == kvs::AnnaError::KEY_DNE) {
     // this means that the receiving thread was responsible for the metadata
     // but didn't have any values stored -- we use the default rep factor
     init_replication(key_replication_map, key);
-  } else if (error == AnnaError::WRONG_THREAD) {
+  } else if (error == kvs::AnnaError::WRONG_THREAD) {
     // this means that the node that received the rep factor request was not
     // responsible for that metadata
     auto respond_address = rt.replication_response_connect_address();
@@ -83,7 +83,7 @@ void replication_response_handler(
     }
 
     for (const auto &pending_key_req : pending_requests[key]) {
-      KeyAddressResponse key_res;
+      kvs::KeyAddressResponse key_res;
       key_res.set_response_id(pending_key_req.second);
       auto *tp = key_res.add_addresses();
       tp->set_key(key);

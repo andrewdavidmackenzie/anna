@@ -15,7 +15,7 @@
 #ifndef INCLUDE_CLIENT_KVS_MOCK_CLIENT_HPP_
 #define INCLUDE_CLIENT_KVS_MOCK_CLIENT_HPP_
 
-#include "anna.pb.h"
+#include "kvs.pb.h"
 #include "client/kvs_client.hpp"
 #include "common.hpp"
 #include "requests.hpp"

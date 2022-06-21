@@ -47,6 +47,8 @@ fi
 
 # Cleanup
 rm tmp.out
-cargo run -- stop
+
+echo "Stopping local server..."
+cargo run -p cli --quiet -- stop > /dev/null 2>&1
 
 exit 0

@@ -24,7 +24,7 @@ void collect_internal_stats(
     StorageStats &ebs_storage, OccupancyStats &memory_occupancy,
     OccupancyStats &ebs_occupancy, AccessStats &memory_accesses,
     AccessStats &ebs_accesses) {
-  map<Address, KeyRequest> addr_request_map;
+  map<Address, kvs::KeyRequest> addr_request_map;
 
   for (const Tier &tier : kAllTiers) {
     GlobalHashRing hash_ring = global_hash_rings[tier];
@@ -54,12 +54,12 @@ void collect_internal_stats(
 
   for (const auto &addr_request_pair : addr_request_map) {
     bool succeed;
-    auto res = make_request<KeyRequest, KeyResponse>(
+    auto res = make_request<kvs::KeyRequest, kvs::KeyResponse>(
         addr_request_pair.second, pushers[addr_request_pair.first],
         response_puller, succeed);
 
     if (succeed) {
-      for (const KeyTuple &tuple : res.tuples()) {
+      for (const kvs::KeyTuple &tuple : res.tuples()) {
         if (tuple.error() == 0) {
           vector<string> tokens = split_metadata_key(tuple.key());
 
@@ -69,7 +69,7 @@ void collect_internal_stats(
           Tier tier;
           Tier_Parse(tokens[5], &tier);
 
-          LWWValue lww_value;
+          kvs::LWWValue lww_value;
           lww_value.ParseFromString(tuple.payload());
 
           if (metadata_type == "stats") {

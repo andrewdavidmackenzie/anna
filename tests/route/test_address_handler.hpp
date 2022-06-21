@@ -19,7 +19,7 @@ TEST_F(RoutingHandlerTest, Address) {
 
   unsigned seed = 0;
 
-  KeyAddressRequest req;
+  kvs::KeyAddressRequest req;
   req.set_request_id("1");
   req.set_response_address("tcp://127.0.0.1:5000");
   req.add_keys("key");
@@ -36,13 +36,13 @@ TEST_F(RoutingHandlerTest, Address) {
   EXPECT_EQ(messages.size(), 1);
   string serialized_resp = messages[0];
 
-  KeyAddressResponse resp;
+  kvs::KeyAddressResponse resp;
   resp.ParseFromString(serialized_resp);
 
   EXPECT_EQ(resp.response_id(), "1");
   EXPECT_EQ(resp.error(), 0);
 
-  for (const KeyAddressResponse_KeyAddress &addr : resp.addresses()) {
+  for (const kvs::KeyAddressResponse_KeyAddress &addr : resp.addresses()) {
     string key = addr.key();
     EXPECT_EQ(key, "key");
     for (const string &ip : addr.ips()) {

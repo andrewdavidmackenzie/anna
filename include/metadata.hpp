@@ -33,7 +33,7 @@ struct KeyReplication {
 
 struct KeyProperty {
   unsigned size_;
-  LatticeType type_;
+  kvs::LatticeType type_;
 };
 
 inline bool operator==(const KeyReplication &lhs, const KeyReplication &rhs) {
