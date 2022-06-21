@@ -2,7 +2,7 @@ use std::io;
 
 const PROTO_FILES: &[&str] = &[
     "shared.proto",
-    "anna.proto",
+    "kvs.proto",
     "cloudburst.proto",
     "causal.proto",
 ];
