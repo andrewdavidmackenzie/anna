@@ -27,7 +27,7 @@ jobs:
       run: make dependencies
 
     - name: ConfigureCoverage
-      if: matrix.os == 'ubuntu-latest'
+      if: matrix.os == 'macos-latest'
       run: |
         echo RUSTFLAGS="-C instrument-coverage" >> "$GITHUB_ENV"
         echo LLVM_PROFILE_FILE="flow-%p-%m.profraw" >> "$GITHUB_ENV"
@@ -41,17 +41,17 @@ jobs:
     - name: test
       run: make test
 
-    - name: docs
-      if: matrix.os == 'ubuntu-latest'
-      run: make docs
+    - uses: codecov/codecov-action@v2
+      with:
+        files: ./build/coverage.info, ./lcov.info
 
-    - name: UploadCoverage
-      if: matrix.os == 'ubuntu-latest'
-      run: make upload_coverage
+    - name: docs
+      if: matrix.os == 'macos-latest'
+      run: make docs
 
     - name: DeployDocsToGHPages
       uses: JamesIves/github-pages-deploy-action@4.1.4
-      if: matrix.os == 'ubuntu-latest' && github.ref == 'refs/heads/master'
+      if: matrix.os == 'macos-latest' && github.ref == 'refs/heads/master'
       with:
         branch: gh-pages
         folder: target/html

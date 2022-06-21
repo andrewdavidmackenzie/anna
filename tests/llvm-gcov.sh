@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 #  Copyright 2019 U.C. Berkeley RISE Lab
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,25 +14,4 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-cargo run -- start > /dev/null 2>&1
-
-echo "Running tests..."
-./build/cli/anna-cli conf/anna-local.yml tests/simple/input > tests/simple/output
-
-DIFF=$(diff tests/simple/output tests/simple/expected)
-
-if [ "$DIFF" != "" ]; then
-  echo "Output did not match expected output (tests/simple/expected.out). Diff:"
-  echo "$DIFF"
-  exit 1
-else
-  echo "Test succeeded!"
-fi
-
-# Cleanup
-rm tests/simple/output
-
-echo "Stopping local server..."
-cargo run -- stop > /dev/null 2>&1
-
-exit 0
+exec llvm-cov gcov "$@"

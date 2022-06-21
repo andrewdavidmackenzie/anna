@@ -6,7 +6,7 @@ CLANG := $(shell command -v clang 2> /dev/null)
 MDBOOK := $(shell command -v mdbook 2> /dev/null)
 GRCOV := $(shell command -v grcov 2> /dev/null)
 
-all: clean clippy build test docs
+all: clean clippy build test docs cleanup
 
 # Dependencies not installed
 # clang on mac
@@ -67,19 +67,18 @@ build:  # Debug build, use "Release" for a Release build
 .PHONY: test
 test:
 	./tests/simple/test-simple.sh y
-#	cd build && make test
-	cd build && make test-coverage
+	cd build && make test
+	cd build && make test-coverage && lcov --list coverage.info
 	RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE="anna-%p-%m.profraw" cargo test
-	rm -f log.txt log_0.txt pids client_log.txt
+	grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o lcov.info
 
 .PHONY: docs
 docs:
 	cargo doc --no-deps --target-dir=target/html/code
 	mdbook build
 
-.PHONY: upload_coverage
-upload_coverage:
-	lcov --list coverage.info
-	grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o lcov.info
-	bash <(curl -s https://codecov.io/bash) -f lcov.info -f coverage.info
-	rm -f lcov.info *.profraw
+.PHONY: cleanup
+cleanup:
+	rm -f log.txt log_0.txt pids client_log.txt
+	rm -f lcov.info build/coverage.info
+	find . -name \*.profraw | xargs rm -f
