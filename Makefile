@@ -8,22 +8,31 @@ GRCOV := $(shell command -v grcov 2> /dev/null)
 
 all: clean clippy build test docs
 
+# Dependencies not installed
+# clang on mac
+# make
+
 .PHONY: dependencies
 dependencies: clang
 	@echo "Installing build-tools"
 ifneq ($(BREW),)
-	brew install autoconf automake libtool unzip pkg-config cmake protobuf lcov zmq graphviz
+	brew install autoconf automake libtool unzip pkg-config cmake protobuf curl lcov zmq graphviz
 endif
 ifneq ($(APTGET),)
-	sudo apt-get -y install build-essential autoconf automake libtool unzip pkg-config cmake libc++-dev libc++abi-dev protobuf-compiler lcov libzmq3-dev graphviz
+	sudo apt-get -y install build-essential autoconf automake libtool curl unzip pkg-config cmake libc++-dev libc++abi-dev protobuf-compiler lcov libzmq3-dev graphviz
 endif
 ifneq ($(YUM),)
-	sudo yum install -y build-essential autoconf automake libtool cmake protobuf-compiler lcov zeromq zeromq-devel graphviz
+	sudo yum install -y build-essential autoconf automake libtool curl cmake protobuf-compiler lcov zeromq zeromq-devel graphviz
 endif
 	cargo install mdbook
 	cargo install mdbook-linkcheck
 	cargo install grcov
 	rustup component add llvm-tools-preview
+	# Skipping installing Python pre-requisites for now
+	# sudo apt-get install -y python3-pip
+	# brew install python
+	# sudo pip3 install pycodestyle coverage codecov
+	# awscli jq
 
 .PHONY: clang
 clang:
@@ -58,7 +67,8 @@ build:  # Debug build, use "Release" for a Release build
 .PHONY: test
 test:
 	./tests/simple/test-simple.sh y
-	cd build && make test
+#	cd build && make test
+	cd build && make test-coverage
 	RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE="anna-%p-%m.profraw" cargo test
 	rm -f log.txt log_0.txt pids client_log.txt
 
@@ -69,6 +79,7 @@ docs:
 
 .PHONY: upload_coverage
 upload_coverage:
+	lcov --list coverage.info
 	grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o lcov.info
-	bash <(curl -s https://codecov.io/bash) -f lcov.info
+	bash <(curl -s https://codecov.io/bash) -f lcov.info -f coverage.info
 	rm -f lcov.info *.profraw
