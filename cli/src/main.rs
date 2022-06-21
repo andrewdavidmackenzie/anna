@@ -14,7 +14,7 @@ use annalib::{config::Config, info, kvs_client::KVSClient, start, stop};
 use clap::{App, Arg, ArgMatches, SubCommand};
 use log::{debug, info, warn};
 use rustyline::Editor;
-use simplog::simplog::SimpleLogger;
+use simplog::SimpleLogger;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
