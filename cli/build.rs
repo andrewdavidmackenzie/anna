@@ -5,9 +5,9 @@ const PROTO_FILES: &[&str] = &[
     "anna.proto",
     "cloudburst.proto",
     "causal.proto",
-    ];
+];
 
 fn main() -> io::Result<()> {
     // Rust code generation for protobuf definitions
-    prost_build::compile_protos(PROTO_FILES, &["src/lib/proto/"])
+    prost_build::compile_protos(PROTO_FILES, &["../protobuf/"])
 }

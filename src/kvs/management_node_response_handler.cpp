@@ -23,7 +23,7 @@ void management_node_response_handler(string &serialized,
                                       SocketCache &pushers, ServerThread &wt,
                                       unsigned &rid) {
   // Get the response.
-  StringSet func_nodes;
+  shared::StringSet func_nodes;
   func_nodes.ParseFromString(serialized);
 
   // Update extant_caches with the response.

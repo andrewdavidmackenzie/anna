@@ -20,10 +20,6 @@ import "shared.proto";
 import "anna.proto";
 import "cloudburst.proto";
 
-//import "shared.proto";
-//import "anna.proto";
-//import "cloudburst.proto";
-
 // A message representing an individual tuple when the system is operating in causal mode.
 message CausalTuple {
   // The name of the key-value pair this tuple represents.
@@ -33,7 +29,7 @@ message CausalTuple {
   bytes payload = 2;
 
   // Any errors generated while retrieving this tuple (see CausalError).
-  anna.AnnaError error = 3;
+  AnnaError error = 3;
 }
 
 // A request for one or more causal tuples, made from an executor and answered

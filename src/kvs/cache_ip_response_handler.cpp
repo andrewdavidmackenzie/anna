@@ -34,7 +34,7 @@ void cache_ip_response_handler(string &serialized,
       LWWValue lww_value;
       lww_value.ParseFromString(tuple.payload());
 
-      StringSet key_set;
+      shared::StringSet key_set;
       key_set.ParseFromString(lww_value.value());
 
       // First, update key_to_cache_ips with dropped keys for this cache.
