@@ -16,13 +16,13 @@ all: clean clippy build test docs cleanup
 dependencies: clang
 	@echo "Installing build-tools"
 ifneq ($(BREW),)
-	brew install autoconf automake libtool unzip pkg-config cmake protobuf curl lcov zmq graphviz
+	brew install autoconf automake libtool unzip pkg-config cmake protobuf curl lcov llvm zmq graphviz
 endif
 ifneq ($(APTGET),)
-	sudo apt-get -y install build-essential autoconf automake libtool curl unzip pkg-config cmake libc++-dev libc++abi-dev protobuf-compiler lcov libzmq3-dev graphviz
+	sudo apt-get -y install build-essential autoconf automake libtool curl unzip pkg-config cmake libc++-dev libc++abi-dev protobuf-compiler lcov llvm libzmq3-dev graphviz
 endif
 ifneq ($(YUM),)
-	sudo yum install -y build-essential autoconf automake libtool curl cmake protobuf-compiler lcov zeromq zeromq-devel graphviz
+	sudo yum install -y build-essential autoconf automake libtool curl cmake protobuf-compiler lcov llvm zeromq zeromq-devel graphviz
 endif
 	cargo install mdbook
 	cargo install mdbook-linkcheck
