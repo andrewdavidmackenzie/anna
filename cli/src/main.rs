@@ -92,12 +92,14 @@ fn run() -> Result<String> {
 
     let kvs_client = KVSClient::new(&config, None);
 
-    match matches.subcommand() {
+    match matches
+        .subcommand()
+        .ok_or("Could not find valid subcommand")?
+    {
         ("help", _) => help(app_clone),
         ("start", _) => Ok(format!("{} anna processes were started", start(&config)?)),
         ("stop", _) => Ok(format!("{} anna processes were terminated", stop()?)),
-        ("cli", None) => Ok(cli_loop_interactive(kvs_client)?.into()),
-        ("cli", Some(args)) => Ok(cli_loop(kvs_client, args)?.into()),
+        ("cli", arg_matches) => Ok(cli(kvs_client, arg_matches)?.into()),
         (_, _) => Ok("No command executed".into()),
     }
 }
@@ -155,7 +157,7 @@ fn cli_loop_file(client: KVSClient, filename: &str) -> Result<&'static str> {
 /*
    Try to parse and then open a command_file of anna commands
 */
-fn cli_loop(client: KVSClient, args: &ArgMatches) -> Result<&'static str> {
+fn cli(client: KVSClient, args: &ArgMatches) -> Result<&'static str> {
     match args.value_of("command_file") {
         None => cli_loop_interactive(client),
         Some(filename) => cli_loop_file(client, filename),
@@ -173,12 +175,12 @@ fn help(mut app: App) -> Result<String> {
 /*
     Create the clap app with the desired options and sub commands
 */
-fn get_app() -> App<'static, 'static> {
+fn get_app() -> App<'static> {
     App::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
         .arg(
             Arg::with_name("verbosity")
-                .short("v")
+                .short('v')
                 .long("verbosity")
                 .takes_value(true)
                 .value_name("VERBOSITY_LEVEL")
@@ -186,7 +188,7 @@ fn get_app() -> App<'static, 'static> {
         )
         .arg(
             Arg::with_name("config")
-                .short("c")
+                .short('c')
                 .long("config")
                 .takes_value(true)
                 .value_name("CONFIG_FILE")
