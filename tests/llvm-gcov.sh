@@ -14,6 +14,4 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-ls /usr/local/opt/llvm/bin
-which llvm-gov
-exec llvm-cov gcov "$@"
+llvm-cov gcov "$@"
