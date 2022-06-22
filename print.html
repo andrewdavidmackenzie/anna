@@ -1,0 +1,280 @@
+<!DOCTYPE HTML>
+<html lang="en" class="sidebar-visible no-js light">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>The &#x27;anna&#x27; book</title>
+        <meta name="robots" content="noindex" />
+
+
+        <!-- Custom HTML head -->
+        
+        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+        <meta name="description" content="A guide to &#x27;anna&#x27;">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body>
+        <!-- Provide site root to javascript -->
+        <script type="text/javascript">
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script type="text/javascript">
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script type="text/javascript">
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script type="text/javascript">
+            var html = document.querySelector('html');
+            var sidebar = 'hidden';
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="README.html">README.md</a></li><li class="chapter-item expanded affix "><li class="part-title">Building anna</li><li class="chapter-item expanded "><a href="docs/building-anna.html"><strong aria-hidden="true">1.</strong> Detailed instructions on building anna</a></li><li class="chapter-item expanded affix "><li class="part-title">Oxidization of anna</li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky bordered">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light (default)</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The &#x27;anna&#x27; book</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script type="text/javascript">
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="anna"><a class="header" href="#anna">Anna</a></h1>
+<p><a href="https://travis-ci.com/andrewdavidmackenzie/anna"><img src="https://travis-ci.com/hydro-project/anna.svg?branch=master" alt="Build Status" /></a>
+<a href="https://codecov.io/gh/andrewdavidmackenzie/anna"><img src="https://codecov.io/gh/hydro-project/anna/branch/master/graph/badge.svg" alt="codecov" /></a>
+<a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License" /></a></p>
+<p>Anna is a low-latency, autoscaling key-value store developed in the <a href="https://rise.cs.berkeley.edu">RISE Lab</a> at <a href="https://berkeley.edu">UC Berkeley</a>. </p>
+<h2 id="design"><a class="header" href="#design">Design</a></h2>
+<p>The core design goal for Anna is to avoid expensive locking and lock-free atomic instructions, 
+which have recently been <a href="http://www.jmfaleiro.com/pubs/latch-free-cidr2017.pdf">shown to be extremely inefficient</a>. 
+Anna instead employs a wait-free, shared-nothing architecture, where each thread in the system is given a private memory 
+buffer and is allowed to process requests unencumbered by coordination. To resolve potentially conflicting updates, 
+Anna encapsulates all user data in <a href="https://en.wikipedia.org/wiki/Lattice_(order)">lattice</a> data structures, which have 
+associative, commutative, and idempotent merge functions. As a result, for workloads that can tolerate slightly stale 
+data, Anna provides best-in-class performance. A more detailed description of the system design and the coordination-free 
+consistency mechanisms, as well as an evaluation and comparison against other state-of-the-art systems can be found 
+in our <a href="http://db.cs.berkeley.edu/jmh/papers/anna_ieee18.pdf">ICDE 2018 paper</a>.</p>
+<p>Anna also is designed to be a cloud-native, autoscaling system. When deployed in a cluster, 
+Anna comes with a monitoring subsystem that tracks workload volume, and responds with three key policy decisions: 
+(1) horizontal elasticity to add or remove resources from the cluster; (2) selective replication of hot keys; and 
+(3) data movement across two storage tiers (memory- and disk-based) for cost efficiency. This enables Anna to maintain 
+its extremely low latencies while also being orders of magnitude more cost efficient than systems like 
+<a href="https://aws.amazon.com/dynamodb">AWS DynamoDB</a>. A more detailed description of the cloud-native design of the system 
+can be found in our <a href="http://www.vikrams.io/papers/anna-vldb19.pdf">VLDB 2019 paper</a>.</p>
+<h2 id="building"><a class="header" href="#building">Building</a></h2>
+<p>See more detailed instructions on building in <a href="docs/building-anna.html">building-anna</a></p>
+<h2 id="using-anna-in-local-mode"><a class="header" href="#using-anna-in-local-mode">Using Anna in Local Mode</a></h2>
+<h3 id="starting-anna"><a class="header" href="#starting-anna">Starting Anna</a></h3>
+<p>You can start anna background processes by using the <code>anna</code> CLI <code>start</code> command</p>
+<p>If you have the <code>anna</code> crate installed, just use</p>
+<pre><code class="language-bash">&gt; anna start
+</code></pre>
+<p>If you have not installed it, then you can build and run the development version using</p>
+<pre><code class="language-bash">&gt; cargo run -- start
+</code></pre>
+<p>By default, the <code>conf/anna-config.yml</code> config file is used, which only specifies one routing thread and one storage 
+thread.</p>
+<p>You are welcome to modify this file if you would like, but we generally do not recommend running more than one
+thread per process in local mode.</p>
+<h3 id="stopping-anna"><a class="header" href="#stopping-anna">Stopping Anna</a></h3>
+<p>You can stop the running background processes by using the <code>anna</code> CLI <code>stop</code> command</p>
+<p>If you have the <code>anna</code> crate installed, just use</p>
+<pre><code class="language-bash">&gt; anna stop
+</code></pre>
+<p>If you have not installed it, then you can build and run the development version using</p>
+<pre><code class="language-bash">&gt; cargo run -- stop
+</code></pre>
+<h2 id="running-anna-in-cluster-mode"><a class="header" href="#running-anna-in-cluster-mode">Running Anna in cluster mode</a></h2>
+<p>For instructions on how to run Anna in cluster mode, please see the <code>hydro-project/cluster</code>
+<a href="https://github.com/hydro-project/cluster">repository</a>.</p>
+<h2 id="cli"><a class="header" href="#cli">CLI</a></h2>
+<p>This repository has an interactive CLI (<a href="client/cpp/cli.cpp">source</a>, executable compiles to <code>build/cli/anna-cli</code>).</p>
+<h2 id="clients"><a class="header" href="#clients">Clients</a></h2>
+<p>It also includes:</p>
+<ul>
+<li>a Python client (<a href="client/python/anna/client.py">source</a>).</li>
+<li><code>common</code> repository has an importable C++ client that can embed into other applications.</li>
+</ul>
+<h2 id="more-information-on-anna"><a class="header" href="#more-information-on-anna">More Information on Anna</a></h2>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=9qU1zO9wCNs&amp;t=2036s">video of talk</a></li>
+</ul>
+<h2 id="license"><a class="header" href="#license">License</a></h2>
+<p>The Project is licensed under the <a href="LICENSE">Apache v2 License</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="building-anna"><a class="header" href="#building-anna">Building Anna</a></h1>
+<h2 id="prerequisites-left-to-the-user"><a class="header" href="#prerequisites-left-to-the-user">Prerequisites left to the user</a></h2>
+<p>There are a few pre-requisites that we don't install and that we leave to the user to install first:</p>
+<ul>
+<li>rust toolchain (cargo, rustc etc). We suggest using <a href="https://rustup.rs/">rustup</a>
+<ul>
+<li>There is a <code>rustup</code> Makefile target to install it for you. Use <code>make rustup</code> in the project root.</li>
+</ul>
+</li>
+<li>clang <code>C</code> and <code>C++</code> compiler on macos. The most normal way of getting this 
+would be:
+<ul>
+<li>install <a href="https://apps.apple.com/us/app/xcode/id497799835?mt=12">XCode from the Mac App Store</a></li>
+<li>install <a href="https://www.freecodecamp.org/news/install-xcode-command-line-tools/">Xcode command line tools</a></li>
+<li><a href="https://developer.apple.com/forums/thread/91443">accept the license</a> from the command line.</li>
+</ul>
+</li>
+</ul>
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<p>In order to build Anna, there are additional build-tool dependencies.
+Most can be installed with standard package managers like <code>brew</code> on macOS and <code>apt-get</code> on Linux.
+Some require download and being built locally with the build-tools previously installed.</p>
+<p>You can install them using <code>make dependencies</code> from the root of the project.</p>
+<h2 id="building-with-make"><a class="header" href="#building-with-make">Building with <code>make</code></a></h2>
+<p>Once all pre-requisites are correctly working on the development machine, you 
+can run the standard build using the top-level <code>Makefile</code> with just <code>make</code></p>
+<p>This will build, lint, run tests, generate docs etc.</p>
+<p>KVS server executables will be in <code>build/target</code>, the CPP-based interactive CLI for Anna in 
+<code>build/client</code> and the rust cli <code>anna</code> in <code>cli/target</code>.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+
+
+
+        <script type="text/javascript">
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="mark.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="searcher.js" type="text/javascript" charset="utf-8"></script>
+
+        <script src="clipboard.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="highlight.js" type="text/javascript" charset="utf-8"></script>
+        <script src="book.js" type="text/javascript" charset="utf-8"></script>
+
+        <!-- Custom JS scripts -->
+
+        <script type="text/javascript">
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+    </body>
+</html>

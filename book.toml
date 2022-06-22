@@ -1,0 +1,16 @@
+[book]
+title = "The 'anna' book"
+authors = ["Andrew Mackenzie"]
+description = "A guide to 'anna'"
+multilingual = false
+src = "."
+
+[build]
+build-dir = "target"
+create-missing = false
+use-default-preprocessors = false
+
+[output.html]
+[preprocessor.links]
+
+[output.linkcheck]
