@@ -6,24 +6,39 @@ CLANG := $(shell command -v clang 2> /dev/null)
 MDBOOK := $(shell command -v mdbook 2> /dev/null)
 GRCOV := $(shell command -v grcov 2> /dev/null)
 
-all: clean clippy build test docs
+all: clean clippy build test docs cleanup
+
+# Dependencies not installed
+# clang on mac
+# make
+# rust toolchain
 
 .PHONY: dependencies
 dependencies: clang
 	@echo "Installing build-tools"
 ifneq ($(BREW),)
-	brew install autoconf automake libtool unzip pkg-config cmake protobuf lcov zmq graphviz
+	brew install autoconf automake libtool pkg-config cmake protobuf curl lcov zmq graphviz llvm
 endif
 ifneq ($(APTGET),)
-	sudo apt-get -y install build-essential autoconf automake libtool unzip pkg-config cmake libc++-dev libc++abi-dev protobuf-compiler lcov libzmq3-dev graphviz
+	sudo apt-get -y install build-essential autoconf automake libtool curl unzip pkg-config cmake libc++-dev libc++abi-dev protobuf-compiler lcov llvm libzmq3-dev graphviz
 endif
 ifneq ($(YUM),)
-	sudo yum install -y build-essential autoconf automake libtool cmake protobuf-compiler lcov zeromq zeromq-devel graphviz
+	sudo yum install -y build-essential autoconf automake libtool curl cmake protobuf-compiler lcov llvm zeromq zeromq-devel graphviz
 endif
 	cargo install mdbook
 	cargo install mdbook-linkcheck
 	cargo install grcov
 	rustup component add llvm-tools-preview
+	# Skipping installing Python pre-requisites for now
+	# sudo apt-get install -y python3-pip
+	# brew install python
+	# sudo pip3 install pycodestyle coverage codecov
+	# awscli jq
+
+.PHONY: rustup
+rustup:
+	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+	@. ${HOME}/.cargo/env
 
 .PHONY: clang
 clang:
@@ -59,16 +74,29 @@ build:  # Debug build, use "Release" for a Release build
 test:
 	./tests/simple/test-simple.sh y
 	cd build && make test
+	cd build && make test-coverage && lcov --list coverage.info
 	RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE="anna-%p-%m.profraw" cargo test
-	rm -f log.txt log_0.txt pids client_log.txt
+	grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o lcov.info
 
 .PHONY: docs
 docs:
 	cargo doc --no-deps --target-dir=target/html/code
 	mdbook build
+	rm -f target/html/*.profraw target/html/client_log.txt target/html/log.txt target/html/log_0.txt target/html/*.info
+	rm -f target/html/Makefile
+	rm -f target/html/LICENSE target/html/Cargo.toml target/html/Cargo.lock target/html/CMakeLists.txt
+	rm -rf target/html/build target/html/conf target/html/common target/html/dockerfiles target/html/include
+	rm -rf target/html/src target/html/tests target/html/protobuf
+	rm -rf target/html/cli target/html/client
 
-.PHONY: upload_coverage
-upload_coverage:
-	grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o lcov.info
-	bash <(curl -s https://codecov.io/bash) -f lcov.info
-	rm -f lcov.info *.profraw
+.PHONY: cleanup
+cleanup: test-cleanup coverage-cleanup
+
+.PHONY: test-cleanup
+test-cleanup:
+	rm -f log.txt log_0.txt pids client_log.txt
+
+.PHONY: coverage-cleanup
+coverage-cleanup:
+	rm -f lcov.info build/coverage.info
+	find . -name \*.profraw | xargs rm -f

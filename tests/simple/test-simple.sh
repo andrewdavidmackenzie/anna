@@ -15,30 +15,15 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-if [ $# -gt 2 ]; then
-  echo "Usage: $0 <build>"
-  echo "If no build option is specified, the test will default to not building."
-
-  exit 1
-fi
-
-if [ -z "$1" ]; then
-  BUILD="n"
-else
-  BUILD=$1
-fi
-
-echo "Starting local server..."
-# "Usage: start-anna-local build start-user"
-./scripts/start-anna-local.sh "$BUILD" n
+cargo run -- start > /dev/null 2>&1
 
 echo "Running tests..."
-./build/cli/anna-cli conf/anna-local.yml tests/simple/input > tmp.out
+./build/cli/anna-cli conf/anna-local.yml tests/simple/input > tests/simple/output
 
-DIFF=$(diff tmp.out tests/simple/expected)
+DIFF=$(diff tests/simple/output tests/simple/expected)
 
 if [ "$DIFF" != "" ]; then
-  echo "Output did not match expected output (tests/simple/expected.out). Observed output was: "
+  echo "Output did not match expected output (tests/simple/expected.out). Diff:"
   echo "$DIFF"
   exit 1
 else
@@ -46,9 +31,9 @@ else
 fi
 
 # Cleanup
-rm tmp.out
+rm tests/simple/output
 
 echo "Stopping local server..."
-cargo run -p cli --quiet -- stop > /dev/null 2>&1
+cargo run -- stop > /dev/null 2>&1
 
 exit 0

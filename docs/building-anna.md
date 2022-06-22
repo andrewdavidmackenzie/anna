@@ -3,6 +3,7 @@
 ## Prerequisites left to the user
 There are a few pre-requisites that we don't install and that we leave to the user to install first:
 * rust toolchain (cargo, rustc etc). We suggest using [rustup](https://rustup.rs/)
+  * There is a `rustup` Makefile target to install it for you. Use `make rustup` in the project root.
 * clang `C` and `C++` compiler on macos. The most normal way of getting this 
   would be:
   * install [XCode from the Mac App Store](https://apps.apple.com/us/app/xcode/id497799835?mt=12)
