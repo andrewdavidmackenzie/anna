@@ -6,7 +6,7 @@ CLANG := $(shell command -v clang 2> /dev/null)
 MDBOOK := $(shell command -v mdbook 2> /dev/null)
 GRCOV := $(shell command -v grcov 2> /dev/null)
 
-all: clean clippy build test docs cleanup
+all: clean clippy build test docs #cleanup
 
 # Dependencies not installed
 # clang on mac
@@ -33,6 +33,11 @@ endif
 	# brew install python
 	# sudo pip3 install pycodestyle coverage codecov
 	# awscli jq
+
+.PHONY: rustup
+rustup:
+	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+	source $HOME/.cargo/env
 
 .PHONY: clang
 clang:
