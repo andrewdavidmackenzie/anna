@@ -6,11 +6,12 @@ CLANG := $(shell command -v clang 2> /dev/null)
 MDBOOK := $(shell command -v mdbook 2> /dev/null)
 GRCOV := $(shell command -v grcov 2> /dev/null)
 
-all: clean clippy build test docs #cleanup
+all: clean clippy build test docs cleanup
 
 # Dependencies not installed
 # clang on mac
 # make
+# rust toolchain
 
 .PHONY: dependencies
 dependencies: clang
