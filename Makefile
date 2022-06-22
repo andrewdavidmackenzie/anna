@@ -36,8 +36,8 @@ endif
 
 .PHONY: rustup
 rustup:
-	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-	source $HOME/.cargo/env
+	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+	. $(HOME)/.cargo/env
 
 .PHONY: clang
 clang:
