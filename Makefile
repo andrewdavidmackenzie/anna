@@ -78,7 +78,13 @@ docs:
 	mdbook build
 
 .PHONY: cleanup
-cleanup:
+cleanup: test-cleanup coverage-cleanup
+
+.PHONY: test-cleanup
+test-cleanup:
 	rm -f log.txt log_0.txt pids client_log.txt
+
+.PHONY: coverage-cleanup
+coverage-cleanup:
 	rm -f lcov.info build/coverage.info
 	find . -name \*.profraw | xargs rm -f
