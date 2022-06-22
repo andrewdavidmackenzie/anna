@@ -16,7 +16,7 @@ all: clean clippy build test docs #cleanup
 dependencies: clang
 	@echo "Installing build-tools"
 ifneq ($(BREW),)
-	brew install autoconf automake libtool unzip pkg-config cmake protobuf curl lcov zmq graphviz llvm
+	brew install autoconf automake libtool pkg-config cmake protobuf curl lcov zmq graphviz llvm
 endif
 ifneq ($(APTGET),)
 	sudo apt-get -y install build-essential autoconf automake libtool curl unzip pkg-config cmake libc++-dev libc++abi-dev protobuf-compiler lcov llvm libzmq3-dev graphviz
