@@ -18,7 +18,7 @@
 #include "common.hpp"
 #include "hash_ring/consistent_hash_map.hpp"
 #include "hash_ring/hashers.hpp"
-#include "kvs_common.hpp"
+#include "kvs/kvs_common.hpp"
 #include "metadata.hpp"
 
 template <typename H>

@@ -15,7 +15,7 @@
 #ifndef KVS_INCLUDE_KVS_COMMON_HPP_
 #define KVS_INCLUDE_KVS_COMMON_HPP_
 
-#include "kvs_types.hpp"
+#include "kvs/kvs_types.hpp"
 #include "metadata.pb.h"
 
 const unsigned kMetadataReplicationFactor = 1;

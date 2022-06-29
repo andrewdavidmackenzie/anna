@@ -21,7 +21,7 @@
 
 #include "base_kv_store.hpp"
 #include "common.hpp"
-#include "kvs_common.hpp"
+#include "kvs/kvs_common.hpp"
 #include "lattices/lww_pair_lattice.hpp"
 #include "yaml-cpp/yaml.h"
 
