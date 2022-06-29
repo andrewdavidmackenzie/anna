@@ -15,7 +15,7 @@
 #include <stdlib.h>
 
 #include "common.hpp"
-#include "hash_ring.hpp"
+#include "hash_ring/hash_ring.hpp"
 #include "kvs_common.hpp"
 #include "threads.hpp"
 #include "yaml-cpp/yaml.h"

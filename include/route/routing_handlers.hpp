@@ -15,7 +15,7 @@
 #ifndef INCLUDE_ROUTE_ROUTING_HANDLERS_HPP_
 #define INCLUDE_ROUTE_ROUTING_HANDLERS_HPP_
 
-#include "hash_ring.hpp"
+#include "hash_ring/hash_ring.hpp"
 #include "metadata.pb.h"
 
 string seed_handler(logger log, GlobalRingMap &global_hash_rings);

@@ -15,7 +15,7 @@
 #ifndef KVS_INCLUDE_MONITOR_POLICIES_HPP_
 #define KVS_INCLUDE_MONITOR_POLICIES_HPP_
 
-#include "hash_ring.hpp"
+#include "hash_ring/hash_ring.hpp"
 
 extern bool kEnableTiering;
 extern bool kEnableElasticity;

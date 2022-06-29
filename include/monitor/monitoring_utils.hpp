@@ -15,7 +15,7 @@
 #ifndef KVS_INCLUDE_MONITOR_MONITORING_UTILS_HPP_
 #define KVS_INCLUDE_MONITOR_MONITORING_UTILS_HPP_
 
-#include "hash_ring.hpp"
+#include "hash_ring/hash_ring.hpp"
 #include "metadata.pb.h"
 #include "requests.hpp"
 

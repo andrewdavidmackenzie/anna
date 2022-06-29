@@ -16,8 +16,8 @@
 #define INCLUDE_HASH_RING_HPP_
 
 #include "common.hpp"
-#include "consistent_hash_map.hpp"
-#include "hashers.hpp"
+#include "hash_ring/consistent_hash_map.hpp"
+#include "hash_ring/hashers.hpp"
 #include "kvs_common.hpp"
 #include "metadata.hpp"
 
