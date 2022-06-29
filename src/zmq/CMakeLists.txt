@@ -14,20 +14,10 @@
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 
-SET(KV_LIBRARY_DEPENDENCIES
-    protobuf::libprotobuf
-    kvs-proto
-    pthread
-    zmq
-    anna-zmq
-    yaml-cpp
-)
+SET(ZMQ_SOURCE
+	socket_cache.cpp
+	zmq_util.cpp)
 
-SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/target/kvs)
+ADD_LIBRARY(anna-zmq STATIC ${ZMQ_SOURCE})
 
-ADD_SUBDIRECTORY(benchmark)
-ADD_SUBDIRECTORY(hash_ring)
-ADD_SUBDIRECTORY(kvs)
-ADD_SUBDIRECTORY(monitor)
-ADD_SUBDIRECTORY(route)
-ADD_SUBDIRECTORY(zmq)
+ADD_DEPENDENCIES(anna-zmq zeromq zeromqcpp)

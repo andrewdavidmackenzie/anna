@@ -29,4 +29,4 @@ SET(KVS_SOURCE
 
 ADD_EXECUTABLE(anna-kvs ${KVS_SOURCE})
 TARGET_LINK_LIBRARIES(anna-kvs anna-hash-ring ${KV_LIBRARY_DEPENDENCIES})
-ADD_DEPENDENCIES(anna-kvs hydro-zmq zeromq zeromqcpp)
+ADD_DEPENDENCIES(anna-kvs anna-zmq zeromq zeromqcpp)

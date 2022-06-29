@@ -20,7 +20,7 @@ SET(LIBRARY_DEPENDENCIES
     protobuf::libprotobuf
     kvs-proto
     zmq
-    hydro-zmq
+    anna-zmq
     yaml-cpp
 )
 

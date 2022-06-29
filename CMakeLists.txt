@@ -82,15 +82,6 @@ PROTOBUF_GENERATE_CPP(BPROTO_SRC BPROTO_HEADER
 ADD_LIBRARY(kvs-proto ${PROTO_HEADER} ${PROTO_SRC})
 ADD_LIBRARY(anna-bench-proto ${BPROTO_HEADER} ${BPROTO_SRC})
 
-
-
-FILE(GLOB_RECURSE ZMQ_UTIL_SRC include/zmq/*.cpp)
-FILE(GLOB_RECURSE ZMQ_UTIL_HEADER include/zmq/*.hpp)
-ADD_LIBRARY(hydro-zmq STATIC ${ZMQ_UTIL_HEADER} ${ZMQ_UTIL_SRC})
-ADD_DEPENDENCIES(hydro-zmq zeromq zeromqcpp spdlog) 
-
-
-
 IF(${CMAKE_BUILD_TYPE} STREQUAL "Debug") 
   INCLUDE(common/cmake/CodeCoverage.cmake)
 ENDIF()
