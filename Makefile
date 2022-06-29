@@ -7,6 +7,7 @@ MDBOOK := $(shell command -v mdbook 2> /dev/null)
 GRCOV := $(shell command -v grcov 2> /dev/null)
 
 all: clean clippy build test docs cleanup
+	@echo "SUCCESS!!"
 
 # Dependencies not installed
 # clang on mac

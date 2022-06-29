@@ -15,7 +15,7 @@
 #include <stdlib.h>
 
 #include "benchmark.pb.h"
-#include "client/kvs_client.hpp"
+#include "kvs_client.hpp"
 #include "kvs_threads.hpp"
 #include "yaml-cpp/yaml.h"
 
