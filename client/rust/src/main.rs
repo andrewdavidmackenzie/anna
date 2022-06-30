@@ -17,9 +17,10 @@ use rustyline::Editor;
 use simplog::SimpleLogger;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 
 const ANNA_HISTORY_FILENAME: &str = ".anna_history";
-const DEFAULT_CONFIG_FILENAME: &str = "conf/anna-config.yml";
+const DEFAULT_CONFIG_FILENAME: &str = "default-config.yml";
 
 // We'll put our errors in an `errors` module, and other modules in this crate will
 // `use crate::errors::*;` to get access to everything `error_chain!` creates.
@@ -64,6 +65,18 @@ fn main() {
     }
 }
 
+fn get_config_path(args: &ArgMatches) -> Result<PathBuf> {
+    match args.value_of("config") {
+        Some(config_file) => PathBuf::from(config_file)
+            .canonicalize()
+            .chain_err(|| "Could not canonicalize config file path"),
+        None => PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join(DEFAULT_CONFIG_FILENAME)
+            .canonicalize()
+            .chain_err(|| "Could not canonicalize config file path"),
+    }
+}
+
 /*
     run the cli using clap to interpret commands and options
 */
@@ -82,13 +95,10 @@ fn run() -> Result<String> {
     // Initialize the logger with the level of verbosity requested via option (or the default)
     SimpleLogger::init_prefix(matches.value_of("verbosity"), false);
 
-    let config_file = matches
-        .value_of("config")
-        .unwrap_or(DEFAULT_CONFIG_FILENAME);
-    info!("Using config file: {}", config_file);
+    let config_file_path = get_config_path(&matches)?;
+    info!("Using config file: {}", config_file_path.display());
 
-    let config = Config::read(config_file)
-        .chain_err(|| format!("Could not read config file: {}", config_file))?;
+    let config = Config::read(&config_file_path).chain_err(|| "Could not load config from file")?;
 
     let kvs_client = KVSClient::new(&config, None);
 

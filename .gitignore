@@ -18,7 +18,7 @@ vendor/gtest/build
 *log*.txt
 *tmp*
 pids
-.anna_history
+**/.anna_history
 
 # ignore compiled byte code
 target

@@ -1,10 +1,11 @@
 #![allow(dead_code)] // TODO remove eventually
 use std::fs::File;
 use std::io::Read;
+use std::path::PathBuf;
 
 use serde_derive::Deserialize;
 
-use crate::errors::*;
+use super::errors::*;
 use crate::kvs_client::Address;
 
 /// `Config` structure containing the configuration read from the yaml config file
@@ -100,14 +101,19 @@ struct Replication {
 /// `Config` Contains the Anna configuration deserialized form Yaml config file
 impl Config {
     /// Read the `Config` from a yaml config file and return it or Error
-    pub fn read(filename: &str) -> Result<Config> {
-        let mut file =
-            File::open(filename).chain_err(|| format!("Could not open file '{:?}'", filename))?;
+    /// The `config_file_path` should be already an absolute/canonicalized path
+    pub fn read(config_file_path: &PathBuf) -> Result<Config> {
+        let mut file = File::open(config_file_path)
+            .chain_err(|| format!("Could not open file '{:?}'", config_file_path))?;
         let mut content = String::new();
         file.read_to_string(&mut content)
-            .chain_err(|| format!("Could not read content from '{:?}'", filename))?;
-        serde_yaml::from_str(&content)
-            .chain_err(|| format!("Error deserializing Yaml config from: '{}'", filename))
+            .chain_err(|| format!("Could not read content from '{:?}'", config_file_path))?;
+        serde_yaml::from_str(&content).chain_err(|| {
+            format!(
+                "Error deserializing Yaml config from: '{}'",
+                config_file_path.display()
+            )
+        })
     }
 
     /// Return a vector of `Address` used for routing
@@ -132,24 +138,25 @@ impl Config {
 #[cfg(test)]
 mod test {
     use super::Config;
+    use std::path::PathBuf;
 
     #[test]
     fn routing_ips_no_elb() {
-        let config = Config::read("src/lib/test_config.yml")
+        let config = Config::read(&PathBuf::from("src/lib/test_config.yml"))
             .expect("Could not read the 'test_config.yml' config file");
         assert_eq!(config.get_routing_ips(), &vec!("127.0.0.1".to_string()));
     }
 
     #[test]
     fn user_ip() {
-        let config = Config::read("src/lib/test_config.yml")
+        let config = Config::read(&PathBuf::from("src/lib/test_config.yml"))
             .expect("Could not read the 'test_config.yml' config file");
         assert_eq!(config.get_user_ip(), "127.0.0.1");
     }
 
     #[test]
     fn routing_thread_count() {
-        let config = Config::read("src/lib/test_config.yml")
+        let config = Config::read(&PathBuf::from("src/lib/test_config.yml"))
             .expect("Could not read the 'test_config.yml' config file");
         assert_eq!(config.get_routing_thread_count(), 1);
     }

@@ -15,7 +15,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-cargo run -- start > /dev/null 2>&1
+PATH=$PATH:"./build/target/kvs" cargo run --quiet -- --config ./conf/anna-config.yml start
 
 echo "Running tests..."
 ./build/cli/anna-cli conf/anna-local.yml tests/simple/input > tests/simple/output
@@ -34,6 +34,6 @@ fi
 rm tests/simple/output
 
 echo "Stopping local server..."
-cargo run -- stop > /dev/null 2>&1
+PATH=$PATH:"./build/target/kvs" cargo run --quiet -- --config ./conf/anna-config.yml stop
 
 exit 0
