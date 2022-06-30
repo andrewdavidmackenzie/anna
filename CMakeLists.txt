@@ -101,8 +101,6 @@ IF(${BUILD_TEST})
 
   ADD_SUBDIRECTORY(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR})
 
-  INCLUDE_DIRECTORIES(common/mock)
   INCLUDE_DIRECTORIES(tests)
-  ADD_SUBDIRECTORY(common/mock)
   ADD_SUBDIRECTORY(tests)
 ENDIF()

@@ -23,7 +23,7 @@ ADD_EXECUTABLE(run_routing_handler_tests
          ${HANDLER_SOURCES})
 
 TARGET_LINK_LIBRARIES(run_routing_handler_tests gtest gmock
-  anna-hash-ring zmq anna-mock hydro-zmq-mock)
+  anna-hash-ring zmq anna-mock)
 ADD_DEPENDENCIES(run_routing_handler_tests gtest)
 
 ADD_TEST(NAME RouteTests COMMAND run_routing_handler_tests)
