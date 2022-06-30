@@ -83,7 +83,7 @@ ADD_LIBRARY(kvs-proto ${PROTO_HEADER} ${PROTO_SRC})
 ADD_LIBRARY(anna-bench-proto ${BPROTO_HEADER} ${BPROTO_SRC})
 
 IF(${CMAKE_BUILD_TYPE} STREQUAL "Debug") 
-  INCLUDE(common/cmake/CodeCoverage.cmake)
+  INCLUDE(cmake/CodeCoverage.cmake)
 ENDIF()
 
 LINK_DIRECTORIES(${ZEROMQ_LINK_DIRS} ${YAMLCPP_LINK_DIRS})
@@ -92,7 +92,7 @@ ADD_SUBDIRECTORY(src)
 ADD_SUBDIRECTORY(client/cpp)
 
 IF(${BUILD_TEST})
-  INCLUDE(common/cmake/DownloadProject.cmake)
+  INCLUDE(cmake/DownloadProject.cmake)
   DOWNLOAD_PROJECT(PROJ                googletest
                    GIT_REPOSITORY      https://github.com/google/googletest.git
                    GIT_TAG             release-1.8.0
