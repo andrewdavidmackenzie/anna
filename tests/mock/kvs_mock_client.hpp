@@ -16,7 +16,7 @@
 #define INCLUDE_CLIENT_KVS_MOCK_CLIENT_HPP_
 
 #include "kvs.pb.h"
-#include "client/kvs_client.hpp"
+#include "kvs_client.hpp"
 #include "common.hpp"
 #include "requests.hpp"
 #include "threads.hpp"

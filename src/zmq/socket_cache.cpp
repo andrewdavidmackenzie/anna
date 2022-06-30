@@ -12,23 +12,23 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#ifndef KVS_INCLUDE_TYPES_HPP_
-#define KVS_INCLUDE_TYPES_HPP_
+#include "zmq/socket_cache.hpp"
 
-#include "kvs_threads.hpp"
-#include "types.hpp"
-#include <chrono>
+#include <utility>
 
-using StorageStats = map<Address, map<unsigned, unsigned long long>>;
+zmq::socket_t& SocketCache::At(const Address& addr) {
+  auto iter = cache_.find(addr);
+  if (iter != cache_.end()) {
+    return iter->second;
+  }
 
-using OccupancyStats = map<Address, map<unsigned, pair<double, unsigned>>>;
+  zmq::socket_t socket(*context_, type_);
+  socket.connect(addr);
+  auto p = cache_.insert(std::make_pair(addr, std::move(socket)));
 
-using AccessStats = map<Address, map<unsigned, unsigned>>;
+  return p.first->second;
+}
 
-using TimePoint = std::chrono::time_point<std::chrono::system_clock>;
+zmq::socket_t& SocketCache::operator[](const Address& addr) { return At(addr); }
 
-using ServerThreadList = vector<ServerThread>;
-
-using ServerThreadSet = std::unordered_set<ServerThread, ThreadHash>;
-
-#endif // KVS_INCLUDE_TYPES_HPP_
+void SocketCache::clear_cache() { cache_.clear(); }

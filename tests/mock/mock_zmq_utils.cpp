@@ -12,23 +12,14 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#include "socket_cache.hpp"
+#include "mock/mock_zmq_utils.hpp"
 
-#include <utility>
-
-zmq::socket_t& SocketCache::At(const Address& addr) {
-  auto iter = cache_.find(addr);
-  if (iter != cache_.end()) {
-    return iter->second;
-  }
-
-  zmq::socket_t socket(*context_, type_);
-  socket.connect(addr);
-  auto p = cache_.insert(std::make_pair(addr, std::move(socket)));
-
-  return p.first->second;
+void MockZmqUtil::send_string(const string &s, zmq::socket_t *socket) {
+  sent_messages.push_back(s);
 }
 
-zmq::socket_t& SocketCache::operator[](const Address& addr) { return At(addr); }
+string MockZmqUtil::recv_string(zmq::socket_t *socket) { return ""; }
 
-void SocketCache::clear_cache() { cache_.clear(); }
+int MockZmqUtil::poll(long timeout, vector<zmq::pollitem_t> *items) {
+  return 0;
+}

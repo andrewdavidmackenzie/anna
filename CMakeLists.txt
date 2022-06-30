@@ -55,15 +55,11 @@ SET(CMAKE_CXX_FLAGS_RELEASE
 
 ADD_SUBDIRECTORY(${VENDOR_DIR}/spdlog)
 ADD_SUBDIRECTORY(${VENDOR_DIR}/yamlcpp)
-ADD_SUBDIRECTORY(${VENDOR_DIR}/zeromq)
-ADD_SUBDIRECTORY(${VENDOR_DIR}/zeromqcpp)
 
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
 INCLUDE_DIRECTORIES(${SPDLOG_INCLUDE_DIRS})
-INCLUDE_DIRECTORIES(${ZEROMQCPP_INCLUDE_DIRS})
-INCLUDE_DIRECTORIES(${ZEROMQ_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${YAMLCPP_INCLUDE_DIRS})
-INCLUDE_DIRECTORIES(common/include)
+INCLUDE_DIRECTORIES(client/cpp)
 INCLUDE_DIRECTORIES(include)
 
 INCLUDE(FindProtobuf)
@@ -79,16 +75,13 @@ PROTOBUF_GENERATE_CPP(BPROTO_SRC BPROTO_HEADER
   ./protobuf/benchmark.proto
 )
 
+FIND_PACKAGE(cppzmq REQUIRED)
+
 ADD_LIBRARY(kvs-proto ${PROTO_HEADER} ${PROTO_SRC})
 ADD_LIBRARY(anna-bench-proto ${BPROTO_HEADER} ${BPROTO_SRC})
 
-FILE(GLOB_RECURSE ZMQ_UTIL_SRC common/include/zmq/*.cpp)
-FILE(GLOB_RECURSE ZMQ_UTIL_HEADER common/include/zmq/*.hpp)
-ADD_LIBRARY(hydro-zmq STATIC ${ZMQ_UTIL_HEADER} ${ZMQ_UTIL_SRC})
-ADD_DEPENDENCIES(hydro-zmq zeromq zeromqcpp spdlog) 
-
 IF(${CMAKE_BUILD_TYPE} STREQUAL "Debug") 
-  INCLUDE(common/cmake/CodeCoverage.cmake)
+  INCLUDE(cmake/CodeCoverage.cmake)
 ENDIF()
 
 LINK_DIRECTORIES(${ZEROMQ_LINK_DIRS} ${YAMLCPP_LINK_DIRS})
@@ -97,17 +90,15 @@ ADD_SUBDIRECTORY(src)
 ADD_SUBDIRECTORY(client/cpp)
 
 IF(${BUILD_TEST})
-  INCLUDE(common/cmake/DownloadProject.cmake)
+  INCLUDE(cmake/DownloadProject.cmake)
   DOWNLOAD_PROJECT(PROJ                googletest
                    GIT_REPOSITORY      https://github.com/google/googletest.git
-                   GIT_TAG             release-1.8.0
+                   GIT_TAG             release-1.12.1
                    UPDATE_DISCONNECTED 1
   )
 
   ADD_SUBDIRECTORY(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR})
 
-  INCLUDE_DIRECTORIES(common/mock)
   INCLUDE_DIRECTORIES(tests)
-  ADD_SUBDIRECTORY(common/mock)
   ADD_SUBDIRECTORY(tests)
 ENDIF()

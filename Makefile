@@ -6,18 +6,20 @@ CLANG := $(shell command -v clang 2> /dev/null)
 MDBOOK := $(shell command -v mdbook 2> /dev/null)
 GRCOV := $(shell command -v grcov 2> /dev/null)
 
-all: clean clippy build test docs cleanup
+all: clippy build test docs cleanup
+	@echo "SUCCESS!!"
 
 # Dependencies not installed
 # clang on mac
 # make
 # rust toolchain
+# python tooling
 
 .PHONY: dependencies
 dependencies: clang
 	@echo "Installing build-tools"
 ifneq ($(BREW),)
-	brew install autoconf automake libtool pkg-config cmake protobuf curl lcov zmq graphviz llvm
+	brew install autoconf automake libtool pkg-config cmake protobuf curl lcov zmq cppzmq graphviz llvm
 endif
 ifneq ($(APTGET),)
 	sudo apt-get -y install build-essential autoconf automake libtool curl unzip pkg-config cmake libc++-dev libc++abi-dev protobuf-compiler lcov llvm libzmq3-dev graphviz
@@ -66,7 +68,7 @@ clippy:
 
 .PHONY: build
 build:  # Debug build, use "Release" for a Release build
-	mkdir build
+	mkdir -p build
 	LD_LIBRARY_PATH="/usr/local/lib" cd build && cmake "-GUnix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER="/usr/bin/clang++" -DBUILD_TEST=ON .. && make -j8
 	cargo build
 
@@ -91,12 +93,13 @@ docs:
 
 .PHONY: cleanup
 cleanup: test-cleanup coverage-cleanup
+	@echo "Cleaned up files left over from build and test"
 
 .PHONY: test-cleanup
 test-cleanup:
-	rm -f log.txt log_0.txt pids client_log.txt
+	@rm -f log.txt log_0.txt pids client_log.txt
 
 .PHONY: coverage-cleanup
 coverage-cleanup:
-	rm -f lcov.info build/coverage.info
-	find . -name \*.profraw | xargs rm -f
+	@rm -f lcov.info build/coverage.info
+	@find . -name \*.profraw | xargs rm -f

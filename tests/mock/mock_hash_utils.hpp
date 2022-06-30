@@ -15,7 +15,7 @@
 #ifndef TESTS_MOCK_MOCK_HASH_UTILS_HPP_
 #define TESTS_MOCK_MOCK_HASH_UTILS_HPP_
 
-#include "hash_ring.hpp"
+#include "hash_ring/hash_ring.hpp"
 #include "zmq/zmq_util.hpp"
 
 class MockHashRingUtil : public HashRingUtilInterface {

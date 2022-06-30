@@ -12,6 +12,15 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-CMAKE_MINIMUM_REQUIRED(VERSION 3.6)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 
-ADD_SUBDIRECTORY(lattices)
+SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/target/benchmark)
+
+ADD_EXECUTABLE(anna-bench benchmark.cpp)
+TARGET_LINK_LIBRARIES(anna-bench anna-hash-ring ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES}
+  anna-bench-proto)
+
+ADD_EXECUTABLE(anna-bench-trigger trigger.cpp)
+TARGET_LINK_LIBRARIES(anna-bench-trigger anna-hash-ring ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES}
+  anna-bench-proto)
+ADD_DEPENDENCIES(anna-bench-trigger anna-hash-ring)

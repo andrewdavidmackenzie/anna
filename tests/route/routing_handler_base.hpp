@@ -13,7 +13,7 @@
 //  limitations under the License.
 
 #include "mock/mock_hash_utils.hpp"
-#include "mock_zmq_utils.hpp"
+#include "mock/mock_zmq_utils.hpp"
 
 MockZmqUtil mock_zmq_util;
 ZmqUtilInterface *kZmqUtil = &mock_zmq_util;

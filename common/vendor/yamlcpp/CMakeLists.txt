@@ -11,7 +11,7 @@ IF(${CMAKE_CXX_COMPILER} STREQUAL "/usr/bin/g++")
 ENDIF()
 
 EXTERNALPROJECT_ADD(yamlcpp
-    URL "https://github.com/jbeder/yaml-cpp/archive/yaml-cpp-0.6.2.tar.gz"
+    URL "https://github.com/jbeder/yaml-cpp/archive/yaml-cpp-0.6.3.tar.gz"
     PREFIX ${CMAKE_CURRENT_BINARY_DIR}
     BUILD_IN_SOURCE 1
     INSTALL_DIR "${CMAKE_BINARY_DIR}/"

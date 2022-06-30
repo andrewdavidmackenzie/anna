@@ -12,7 +12,7 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#include "hash_ring.hpp"
+#include "hash_ring/hash_ring.hpp"
 
 #include <unistd.h>
 

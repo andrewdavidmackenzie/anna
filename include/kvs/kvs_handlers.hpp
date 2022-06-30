@@ -15,7 +15,7 @@
 #ifndef INCLUDE_KVS_KVS_HANDLERS_HPP_
 #define INCLUDE_KVS_KVS_HANDLERS_HPP_
 
-#include "hash_ring.hpp"
+#include "hash_ring/hash_ring.hpp"
 #include "metadata.pb.h"
 #include "requests.hpp"
 #include "server_utils.hpp"

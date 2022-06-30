@@ -12,7 +12,7 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#include "zmq_util.hpp"
+#include "zmq/zmq_util.hpp"
 
 #include <iomanip>
 #include <ios>

@@ -12,14 +12,23 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#include "mock_zmq_utils.hpp"
+#ifndef KVS_INCLUDE_TYPES_HPP_
+#define KVS_INCLUDE_TYPES_HPP_
 
-void MockZmqUtil::send_string(const string &s, zmq::socket_t *socket) {
-  sent_messages.push_back(s);
-}
+#include "kvs/kvs_threads.hpp"
+#include "types.hpp"
+#include <chrono>
 
-string MockZmqUtil::recv_string(zmq::socket_t *socket) { return ""; }
+using StorageStats = map<Address, map<unsigned, unsigned long long>>;
 
-int MockZmqUtil::poll(long timeout, vector<zmq::pollitem_t> *items) {
-  return 0;
-}
+using OccupancyStats = map<Address, map<unsigned, pair<double, unsigned>>>;
+
+using AccessStats = map<Address, map<unsigned, unsigned>>;
+
+using TimePoint = std::chrono::time_point<std::chrono::system_clock>;
+
+using ServerThreadList = vector<ServerThread>;
+
+using ServerThreadSet = std::unordered_set<ServerThread, ThreadHash>;
+
+#endif // KVS_INCLUDE_TYPES_HPP_

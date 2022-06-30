@@ -15,7 +15,7 @@
 #ifndef KVS_INCLUDE_HASHERS_HPP_
 #define KVS_INCLUDE_HASHERS_HPP_
 
-#include "kvs_threads.hpp"
+#include "kvs/kvs_threads.hpp"
 #include <vector>
 
 struct GlobalHasher {

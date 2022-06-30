@@ -14,5 +14,5 @@
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 
-ADD_LIBRARY(anna-mock STATIC mock_hash_utils.cpp)
+ADD_LIBRARY(anna-mock STATIC mock_hash_utils.cpp mock_zmq_utils.cpp kvs_mock_client.hpp)
 TARGET_LINK_LIBRARIES(anna-mock anna-hash-ring)
