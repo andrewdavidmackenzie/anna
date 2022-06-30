@@ -12,7 +12,7 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#include "mock_zmq_utils.hpp"
+#include "mock/mock_zmq_utils.hpp"
 
 void MockZmqUtil::send_string(const string &s, zmq::socket_t *socket) {
   sent_messages.push_back(s);
