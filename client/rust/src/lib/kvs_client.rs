@@ -16,7 +16,7 @@ use zmq::Context;
 
 pub type Address = String;
 pub type Key = String;
-pub type TimePoint = std::time::SystemTime;
+pub type TimePoint = SystemTime;
 
 struct PendingRequest {
     tp: TimePoint,
@@ -122,7 +122,7 @@ impl KVSClient {
 
         let seed = Self::generate_seed(config.get_user_ip(), tid);
         info!("Random seed is {}.", seed);
-        let rng = rand_pcg::Pcg64::seed_from_u64(seed);
+        let rng = Pcg64::seed_from_u64(seed);
 
         // socket_cache_(SocketCache(&context_, ZMQ_PUSH)),
         // key_address_puller_(zmq::socket_t(context_, ZMQ_PULL)),
@@ -143,7 +143,7 @@ impl KVSClient {
             ut: UserThread::new(config.get_user_ip(), tid),
             seed,
             rng,
-            context: zmq::Context::new(),
+            context: Context::new(),
             key_address_cache: HashMap::new(),
             timeout: 10000,
         }

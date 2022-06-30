@@ -9,5 +9,5 @@ const PROTO_FILES: &[&str] = &[
 
 fn main() -> io::Result<()> {
     // Rust code generation for protobuf definitions
-    prost_build::compile_protos(PROTO_FILES, &["../protobuf/"])
+    prost_build::compile_protos(PROTO_FILES, &["../../protobuf/"])
 }
