@@ -8,15 +8,14 @@ extern crate error_chain;
 use crate::config::Config;
 use nix::sys::signal::{kill, Signal};
 use nix::unistd::Pid;
-use std::path::PathBuf;
 use std::process::Command;
 use sysinfo::{ProcessExt, System, SystemExt};
 
 pub mod config;
 pub mod info;
 pub mod kvs_client;
-mod proto;
-mod threads;
+pub mod proto;
+pub mod threads;
 
 // Pending them being defined elsewhere in a build script or similar
 const ANNA_MONITOR_PROCESS_NAME: &str = "anna-monitor";
