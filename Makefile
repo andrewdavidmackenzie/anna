@@ -84,12 +84,13 @@ test:
 docs:
 	cargo doc --no-deps --target-dir=target/html/code
 	mdbook build
-	rm -f target/html/*.profraw target/html/client_log.txt target/html/log.txt target/html/log_0.txt target/html/*.info
-	rm -f target/html/Makefile
-	rm -f target/html/LICENSE target/html/Cargo.toml target/html/Cargo.lock target/html/CMakeLists.txt
-	rm -rf target/html/build target/html/conf target/html/common target/html/dockerfiles target/html/include
-	rm -rf target/html/src target/html/tests target/html/protobuf
-	rm -rf target/html/cli target/html/client
+	@rm -f target/html/*.profraw target/html/client_log.txt target/html/log.txt target/html/log_0.txt target/html/*.info
+	@rm -f target/html/Makefile
+	@rm -f target/html/LICENSE target/html/Cargo.toml target/html/Cargo.lock target/html/CMakeLists.txt
+	@rm -rf target/html/build target/html/conf target/html/common target/html/dockerfiles target/html/include
+	@rm -rf target/html/src target/html/tests target/html/protobuf
+	@rm -rf target/html/cli target/html/client
+	@echo "Cleaned up extra files in docs folder"
 
 .PHONY: cleanup
 cleanup: test-cleanup coverage-cleanup
