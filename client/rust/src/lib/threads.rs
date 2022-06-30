@@ -1,6 +1,7 @@
 use crate::kvs_client::Address;
 
 // The port on which clients send key address requests to routing nodes.
+#[allow(dead_code)]
 const K_KEY_ADDRESS_PORT: usize = 6450;
 
 // The port on which clients receive responses from the KVS.

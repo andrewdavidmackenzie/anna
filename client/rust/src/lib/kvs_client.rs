@@ -18,12 +18,14 @@ pub type Address = String;
 pub type Key = String;
 pub type TimePoint = SystemTime;
 
+#[allow(dead_code)]
 struct PendingRequest {
     tp: TimePoint,
     worker_addr: Address,
     // request:    KeyRequest
 }
 
+#[allow(dead_code)]
 pub struct KVSClient {
     // the set of routing addresses outside the cluster
     routing_threads: Vec<UserRoutingThread>,
@@ -197,6 +199,7 @@ impl KVSClient {
       Generates a unique request ID. usize will overflow and start counting from
       zero again when MAX_INT is reached.
     */
+    #[allow(dead_code)]
     fn get_request_id(&mut self) -> String {
         self.rid += 1;
         format!("{}:{}_{}", self.ut.ip(), self.ut.tid(), self.rid)
@@ -207,6 +210,7 @@ impl KVSClient {
       client is running outside of the cluster (ie, it is querying the ELB),
       there's only one address to choose from.
     */
+    #[allow(dead_code)]
     fn get_routing_thread(&mut self) -> Address {
         // random index into threads array - from 0 upto but not including routing_threads.len()
         self.routing_threads[self.rng.gen_range(0..self.routing_threads.len())]
@@ -383,6 +387,7 @@ impl KVSClient {
      * the updated information for that key, and update our cache with that
      * information.
      */
+    #[allow(dead_code)]
     fn invalidate_cache_for_key(&mut self, key: &Key, _tuple: &KeyTuple) {
         self.key_address_cache.remove(key);
     }
