@@ -13,6 +13,7 @@ all: clippy build test docs cleanup
 # clang on mac
 # make
 # rust toolchain
+# python tooling
 
 .PHONY: dependencies
 dependencies: clang
