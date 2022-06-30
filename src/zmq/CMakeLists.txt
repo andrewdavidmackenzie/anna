@@ -14,10 +14,8 @@
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 
-SET(ZMQ_SOURCE
-	socket_cache.cpp
-	zmq_util.cpp)
+SET(ANNA_ZMQ_SOURCE socket_cache.cpp zmq_util.cpp)
 
-ADD_LIBRARY(anna-zmq STATIC ${ZMQ_SOURCE})
+ADD_LIBRARY(anna-zmq STATIC ${ANNA_ZMQ_SOURCE})
 
-ADD_DEPENDENCIES(anna-zmq zeromq zeromqcpp)
+ADD_DEPENDENCIES(anna-zmq spdlog)

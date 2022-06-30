@@ -14,16 +14,32 @@
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 
+
+## load in pkg-config support
+find_package(PkgConfig)
+## use pkg-config to get hints for 0mq locations
+pkg_check_modules(PC_ZeroMQ QUIET zmq)
+
+## use the hint from above to find where 'zmq.hpp' is located
+find_path(ZeroMQ_INCLUDE_DIR
+        NAMES zmq.hpp
+        PATHS ${PC_ZeroMQ_INCLUDE_DIRS}
+        )
+
+## use the hint from above to find the location of libzmq
+find_library(ZeroMQ_LIBRARY
+        NAMES zmq
+        PATHS ${PC_ZeroMQ_LIBRARY_DIRS}
+        )
+
 SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/cli)
 
 SET(LIBRARY_DEPENDENCIES
     protobuf::libprotobuf
     kvs-proto
-    zmq
     anna-zmq
     yaml-cpp
 )
 
 ADD_EXECUTABLE(anna-cli cli.cpp)
-TARGET_LINK_LIBRARIES(anna-cli ${LIBRARY_DEPENDENCIES})
-ADD_DEPENDENCIES(anna-cli zeromq zeromqcpp)
+TARGET_LINK_LIBRARIES(anna-cli ${ZeroMQ_LIBRARY} ${LIBRARY_DEPENDENCIES})
