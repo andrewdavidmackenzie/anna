@@ -30,7 +30,8 @@ bool receive(zmq::socket_t& recv_socket, set<string>& request_ids,
   while (true) {
     RES response;
 
-    if (recv_socket.recv(&message)) {
+    zmq::message_t& msg = message;
+    if (recv_socket.recv(msg)) {
       string serialized_resp = kZmqUtil->message_to_string(message);
       response.ParseFromString(serialized_resp);
       string resp_id = response.response_id();
