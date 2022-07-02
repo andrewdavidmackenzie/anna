@@ -12,6 +12,8 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
+#include "spdlog/sinks/basic_file_sink.h"
+#include "spdlog/spdlog.h"
 #include "mock/mock_hash_utils.hpp"
 #include "mock/mock_zmq_utils.hpp"
 

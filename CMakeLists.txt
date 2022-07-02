@@ -53,11 +53,9 @@ SET(CMAKE_CXX_FLAGS_RELEASE
     ${CMAKE_CXX_FLAGS_COMMON} \
     -O3")
 
-ADD_SUBDIRECTORY(${VENDOR_DIR}/spdlog)
 ADD_SUBDIRECTORY(${VENDOR_DIR}/yamlcpp)
 
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
-INCLUDE_DIRECTORIES(${SPDLOG_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${YAMLCPP_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(client/cpp)
 INCLUDE_DIRECTORIES(include)
@@ -76,6 +74,7 @@ PROTOBUF_GENERATE_CPP(BPROTO_SRC BPROTO_HEADER
 )
 
 FIND_PACKAGE(cppzmq REQUIRED)
+FIND_PACKAGE(spdlog REQUIRED)
 
 ADD_LIBRARY(kvs-proto ${PROTO_HEADER} ${PROTO_SRC})
 ADD_LIBRARY(anna-bench-proto ${BPROTO_HEADER} ${BPROTO_SRC})
@@ -94,6 +93,8 @@ IF(${BUILD_TEST})
   DOWNLOAD_PROJECT(PROJ                googletest
                    GIT_REPOSITORY      https://github.com/google/googletest.git
                    GIT_TAG             release-1.12.1
+                   BUILD_COMMAND       "make –-no-print-directory -s"
+                   QUIET
                    UPDATE_DISCONNECTED 1
   )
 

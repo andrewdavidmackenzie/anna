@@ -16,6 +16,6 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 
 ADD_EXECUTABLE(run_lattice_tests run_lattice_tests.cpp)
 TARGET_LINK_LIBRARIES (run_lattice_tests gtest gmock)
-ADD_DEPENDENCIES(run_lattice_tests gtest spdlog)
-
+ADD_DEPENDENCIES(run_lattice_tests gtest)
+TARGET_LINK_LIBRARIES(run_lattice_tests ${spdlog_LIBRARY} ${fmt_LIBRARY})
 ADD_TEST(NAME LatticeTest COMMAND run_lattice_tests)

@@ -31,6 +31,21 @@ find_library(ZeroMQ_LIBRARY
         PATHS ${PC_ZeroMQ_LIBRARY_DIRS}
         )
 
+find_path(spdlog_INCLUDE_DIR
+        NAMES spdlog.h
+        PATHS ${PC_spdlog_INCLUDE_DIRS}
+        )
+
+find_library(spdlog_LIBRARY
+        NAMES spdlog
+        PATHS ${PC_spdlog_LIBRARY_DIRS}
+        )
+
+find_library(fmt_LIBRARY
+        NAMES fmt
+        PATHS ${PC_fmt_LIBRARY_DIRS}
+        )
+
 SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/tests)
 
 ADD_SUBDIRECTORY(benchmark)
