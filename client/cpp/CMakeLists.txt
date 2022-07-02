@@ -47,6 +47,11 @@ find_library(fmt_LIBRARY
         PATHS ${PC_fmt_LIBRARY_DIRS}
         )
 
+find_library(yamlcpp_LIBRARY
+        NAMES yaml-cpp
+        PATHS ${PC_yamlcpp_LIBRARY_DIRS}
+        )
+
 SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/cli)
 
 SET(LIBRARY_DEPENDENCIES
@@ -57,4 +62,5 @@ SET(LIBRARY_DEPENDENCIES
 )
 
 ADD_EXECUTABLE(anna-cli cli.cpp)
-TARGET_LINK_LIBRARIES(anna-cli ${spdlog_LIBRARY} ${fmt_LIBRARY} ${ZeroMQ_LIBRARY} ${LIBRARY_DEPENDENCIES})
+TARGET_LINK_LIBRARIES(anna-cli ${spdlog_LIBRARY} ${fmt_LIBRARY}
+    ${yamlcpp_LIBRARY} ${ZeroMQ_LIBRARY} ${LIBRARY_DEPENDENCIES})
