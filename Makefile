@@ -83,7 +83,7 @@ test:
 	@echo "Building C++ tests"
 	@cd build && make --no-print-directory -s test
 	@echo "Running C++ tests with coverage"
-	@cd build && make --no-print-directory -s test-coverage && lcov --list coverage.info
+	@cd build && make --no-print-directory -s test-coverage && lcov --quiet --list coverage.info
 	@echo "Running rust tests with coverage"
 	@RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE="anna-%p-%m.profraw" cargo --quiet test
 	@echo "Generating coverage reports"
@@ -92,7 +92,7 @@ test:
 .PHONY: docs
 docs:
 	@echo "Generating docs with cargo doc and mdbook"
-	@cargo doc --no-deps --target-dir=target/html/code
+	@cargo doc --quiet --no-deps --target-dir=target/html/code
 	@mdbook build
 	@rm -f target/html/*.profraw target/html/client_log.txt target/html/log.txt target/html/log_0.txt target/html/*.info
 	@rm -f target/html/Makefile
