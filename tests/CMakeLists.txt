@@ -14,6 +14,17 @@
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 
+INCLUDE(DownloadProject.cmake)
+DOWNLOAD_PROJECT(PROJ              googletest
+               GIT_REPOSITORY      https://github.com/google/googletest.git
+               GIT_TAG             release-1.12.1
+               BUILD_COMMAND       "make –-no-print-directory -s"
+               QUIET
+               UPDATE_DISCONNECTED 1
+)
+
+ADD_SUBDIRECTORY(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR})
+
 ## load in pkg-config support
 find_package(PkgConfig)
 ## use pkg-config to get hints for 0mq locations
