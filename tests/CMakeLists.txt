@@ -14,21 +14,46 @@
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 
-## load in pkg-config support
+# load in pkg-config support
 find_package(PkgConfig)
-## use pkg-config to get hints for 0mq locations
+# use pkg-config to get hints for 0mq locations
 pkg_check_modules(PC_ZeroMQ QUIET zmq)
 
-## use the hint from above to find where 'zmq.hpp' is located
+# use the hint from above to find where 'zmq.hpp' is located
 find_path(ZeroMQ_INCLUDE_DIR
         NAMES zmq.hpp
         PATHS ${PC_ZeroMQ_INCLUDE_DIRS}
         )
 
-## use the hint from above to find the location of libzmq
+# use the hint from above to find the location of libzmq
 find_library(ZeroMQ_LIBRARY
         NAMES zmq
         PATHS ${PC_ZeroMQ_LIBRARY_DIRS}
+        )
+
+find_path(spdlog_INCLUDE_DIR
+        NAMES spdlog.h
+        PATHS ${PC_spdlog_INCLUDE_DIRS}
+        )
+
+find_library(spdlog_LIBRARY
+        NAMES spdlog
+        PATHS ${PC_spdlog_LIBRARY_DIRS}
+        )
+
+find_library(fmt_LIBRARY
+        NAMES fmt
+        PATHS ${PC_fmt_LIBRARY_DIRS}
+        )
+
+find_library(googletest_LIBRARY
+        NAMES gtest
+        PATHS ${PC_googletest_LIBRARY_DIRS}
+        )
+
+find_library(gmock_LIBRARY
+        NAMES gmock
+        PATHS ${PC_gmock_LIBRARY_DIRS}
         )
 
 SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/tests)

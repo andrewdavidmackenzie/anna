@@ -136,12 +136,10 @@ int main(int argc, char *argv[]) {
   zmq::context_t context(1);
   SocketCache pushers(&context, ZMQ_PUSH);
 
-  // responsible for listening to the response of the replication factor change
-  // request
+  // responsible for listening to the response of the replication factor change request
   zmq::socket_t response_puller(context, ZMQ_PULL);
-  int timeout = 10000;
 
-  response_puller.setsockopt(ZMQ_RCVTIMEO, &timeout, sizeof(timeout));
+  response_puller.set(zmq::sockopt::rcvtimeo, 10000);
   response_puller.bind(mt.response_bind_address());
 
   // keep track of departing node status
