@@ -21,8 +21,7 @@ ADD_EXECUTABLE(run_server_handler_tests
          ${HANDLER_SOURCES}
          ${CMAKE_SOURCE_DIR}/src/kvs/utils.cpp)
 
-TARGET_LINK_LIBRARIES(run_server_handler_tests gtest gmock
+TARGET_LINK_LIBRARIES(run_server_handler_tests ${googletest_LIBRARY} ${gmock_LIBRARY}
   anna-hash-ring ${spdlog_LIBRARY} ${fmt_LIBRARY} ${ZeroMQ_LIBRARY} anna-mock)
-ADD_DEPENDENCIES(run_server_handler_tests gtest)
 
 ADD_TEST(NAME ServerTests COMMAND run_server_handler_tests)
