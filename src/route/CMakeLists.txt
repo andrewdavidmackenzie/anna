@@ -23,5 +23,5 @@ SET(ROUTING_SOURCE
 		address_handler.cpp)
 
 ADD_EXECUTABLE(anna-route ${ROUTING_SOURCE})
-TARGET_LINK_LIBRARIES(anna-route anna-hash-ring ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES})
+TARGET_LINK_LIBRARIES(anna-route anna-hash-ring ${spdlog_LIBRARY} ${fmt_LIBRARY} ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES})
 ADD_DEPENDENCIES(anna-route anna-hash-ring)

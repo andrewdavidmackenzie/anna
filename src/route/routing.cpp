@@ -42,12 +42,7 @@ void run(unsigned thread_id, Address ip, vector<Address> monitoring_ips) {
   // prepare the zmq context
   zmq::context_t context(1);
 
-  auto res = context.setctxopt(ZMQ_MAX_SOCKETS, kMaxSocketNumber);
-  if (res == 0) {
-    log->info("Successfully set max socket number to {}", kMaxSocketNumber);
-  } else {
-    log->error("E: socket error number {} ({})", errno, zmq_strerror(errno));
-  }
+  context.set(zmq::ctxopt::max_sockets, kMaxSocketNumber);
 
   SocketCache pushers(&context, ZMQ_PUSH);
   map<Key, KeyReplication> key_replication_map;

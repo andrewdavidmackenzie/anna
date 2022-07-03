@@ -28,4 +28,4 @@ SET(KVS_SOURCE
   utils.cpp)
 
 ADD_EXECUTABLE(anna-kvs ${KVS_SOURCE})
-TARGET_LINK_LIBRARIES(anna-kvs anna-hash-ring ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES})
+TARGET_LINK_LIBRARIES(anna-kvs anna-hash-ring ${spdlog_LIBRARY} ${fmt_LIBRARY} ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES})

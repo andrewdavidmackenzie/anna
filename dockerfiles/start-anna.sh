@@ -67,7 +67,7 @@ git submodule sync
 git submodule update
 
 # Compile the latest version of the code on the branch we just check out.
-cd build && make -j2 && cd ..
+cd build && make –no-print-directory -s -j2 && cd ..
 
 # Do not start the server until conf/anna-config.yml has been copied onto this
 # pod -- if we start earlier, we won't now how to configure the system.

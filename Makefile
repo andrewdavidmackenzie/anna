@@ -19,7 +19,7 @@ all: clippy build test docs cleanup
 dependencies: clang
 	@echo "Installing build-tools"
 ifneq ($(BREW),)
-	brew install autoconf automake libtool pkg-config cmake protobuf curl lcov zmq cppzmq graphviz llvm
+	brew install autoconf automake libtool pkg-config cmake protobuf curl lcov zmq cppzmq spdlog yaml-cpp googletest graphviz llvm
 endif
 ifneq ($(APTGET),)
 	sudo apt-get -y install build-essential autoconf automake libtool curl unzip pkg-config cmake libc++-dev libc++abi-dev protobuf-compiler lcov llvm libzmq3-dev graphviz
@@ -58,38 +58,49 @@ endif
 
 .PHONY: clean
 clean:
-	rm -rf build
-	rm -f *.profraw
-	rm -f cli/*.profraw
+	@echo "Deleting all build artifacts"
+	@rm -rf build
+	@rm -f *.profraw
+	@rm -f cli/*.profraw
 
 .PHONY: clippy
 clippy:
-	cargo clippy --tests # -- -D warnings # for now, don't fail on warnings
+	@echo "Running 'clippy' on rust code"
+	@cargo clippy --quiet --tests # -- -D warnings # for now, don't fail on warnings
 
 .PHONY: build
 build:  # Debug build, use "Release" for a Release build
-	mkdir -p build
-	LD_LIBRARY_PATH="/usr/local/lib" cd build && cmake "-GUnix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER="/usr/bin/clang++" -DBUILD_TEST=ON .. && make -j8
-	cargo build
+	@mkdir -p build
+	@echo "Building C++ code into ./build"
+	@LD_LIBRARY_PATH="/usr/local/lib" cd build && cmake "-GUnix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER="/usr/bin/clang++" -DBUILD_TEST=ON .. && make -s -j8
+	@echo "Building rust code into ./target"
+	@cargo build --quiet
 
 .PHONY: test
 test:
-	./tests/simple/test-simple.sh y
-	cd build && make test
-	cd build && make test-coverage && lcov --list coverage.info
-	RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE="anna-%p-%m.profraw" cargo test
-	grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o lcov.info
+	@echo "Running test-simple"
+	@./tests/simple/test-simple.sh y
+	@echo "Building C++ tests"
+	@cd build && make --no-print-directory -s test
+	@echo "Running C++ tests with coverage"
+	@cd build && make --no-print-directory -s test-coverage && lcov --quiet --list coverage.info
+	@echo "Running rust tests with coverage"
+	@RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE="anna-%p-%m.profraw" cargo --quiet test
+	@echo "Generating coverage reports"
+	@grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o lcov.info
 
 .PHONY: docs
 docs:
-	cargo doc --no-deps --target-dir=target/html/code
-	mdbook build
-	rm -f target/html/*.profraw target/html/client_log.txt target/html/log.txt target/html/log_0.txt target/html/*.info
-	rm -f target/html/Makefile
-	rm -f target/html/LICENSE target/html/Cargo.toml target/html/Cargo.lock target/html/CMakeLists.txt
-	rm -rf target/html/build target/html/conf target/html/common target/html/dockerfiles target/html/include
-	rm -rf target/html/src target/html/tests target/html/protobuf
-	rm -rf target/html/cli target/html/client
+	@echo "Generating docs with cargo doc and mdbook"
+	@cargo doc --quiet --no-deps --target-dir=target/html/code
+	@mdbook build
+	@rm -f target/html/*.profraw target/html/client_log.txt target/html/log.txt target/html/log_0.txt target/html/*.info
+	@rm -f target/html/Makefile
+	@rm -f target/html/LICENSE target/html/Cargo.toml target/html/Cargo.lock target/html/CMakeLists.txt
+	@rm -rf target/html/build target/html/conf target/html/common target/html/dockerfiles target/html/include
+	@rm -rf target/html/src target/html/tests target/html/protobuf
+	@rm -rf target/html/cli target/html/client
+	@echo "Cleaned up extra files in docs folder"
 
 .PHONY: cleanup
 cleanup: test-cleanup coverage-cleanup
