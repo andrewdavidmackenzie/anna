@@ -159,6 +159,10 @@ fn test(name: &str) -> io::Result<()> {
     // if test passed, remove output
     let _ = fs::remove_file(test_dir.join("test.err"));
     let _ = fs::remove_file(test_dir.join("test.output"));
+    // and remove misc log files generated
+    let _ = fs::remove_file(test_dir.join("client_log.txt"));
+    let _ = fs::remove_file(test_dir.join("log.txt"));
+    let _ = fs::remove_file(test_dir.join("log_0.txt"));
 
     Ok(())
 }
