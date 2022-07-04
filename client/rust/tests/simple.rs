@@ -170,23 +170,4 @@ fn test(name: &str) -> io::Result<()> {
 #[test]
 fn simple_test() {
     test("simple").expect("simple_test failed");
-    /*
-
-    DIFF=$(diff tests/simple/output tests/simple/expected)
-
-    if [ "$DIFF" != "" ]; then
-    echo "Output did not match expected output (tests/simple/expected). Diff:"
-    echo "$DIFF"
-    exit 1
-    else
-    echo "Test succeeded!"
-    fi
-
-    # Cleanup
-    rm tests/simple/output
-
-    echo "Stopping local server..."
-    PATH=$PATH:"./build/target/kvs" cargo run --quiet -- --config ./conf/anna-config.yml stop
-
-    exit 0*/
 }
