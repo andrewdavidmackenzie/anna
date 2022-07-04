@@ -14,6 +14,10 @@
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 
+IF(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+  INCLUDE(CodeCoverage.cmake)
+ENDIF()
+
 # load in pkg-config support
 find_package(PkgConfig)
 # use pkg-config to get hints for 0mq locations
