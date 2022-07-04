@@ -99,7 +99,6 @@ fn run() -> Result<String> {
     info!("Using config file: {}", config_file_path.display());
 
     let config = Config::read(&config_file_path).chain_err(|| "Could not load config from file")?;
-
     let kvs_client = KVSClient::new(&config, None);
 
     match matches
@@ -107,7 +106,10 @@ fn run() -> Result<String> {
         .ok_or("Could not find valid subcommand")?
     {
         ("help", _) => help(app_clone),
-        ("start", _) => Ok(format!("{} anna processes were started", start(&config)?)),
+        ("start", _) => Ok(format!(
+            "{} anna processes were started",
+            start(config_file_path)?
+        )),
         ("stop", _) => Ok(format!("{} anna processes were terminated", stop()?)),
         ("cli", arg_matches) => Ok(cli(kvs_client, arg_matches)?.into()),
         (_, _) => Ok("No command executed".into()),

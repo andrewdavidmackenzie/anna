@@ -201,10 +201,8 @@ class DiskLWWSerializer : public Serializer {
   string ebs_root_;
 
 public:
-  DiskLWWSerializer(unsigned &tid) : tid_(tid) {
-    YAML::Node conf = YAML::LoadFile("conf/anna-config.yml");
-
-    ebs_root_ = conf["ebs"].as<string>();
+  DiskLWWSerializer(unsigned &tid, string ebs_root) : tid_(tid) {
+    ebs_root_ = ebs_root;
 
     if (ebs_root_.back() != '/') {
       ebs_root_ += "/";
@@ -286,14 +284,8 @@ class DiskSetSerializer : public Serializer {
   string ebs_root_;
 
 public:
-  DiskSetSerializer(unsigned &tid) : tid_(tid) {
-    YAML::Node conf = YAML::LoadFile("conf/anna-config.yml");
-
-    ebs_root_ = conf["ebs"].as<string>();
-
-    if (ebs_root_.back() != '/') {
-      ebs_root_ += "/";
-    }
+  DiskSetSerializer(unsigned &tid, string ebs_root) : tid_(tid) {
+    ebs_root_ = ebs_root;
   }
 
   string get(const Key &key, kvs::AnnaError &error) {
@@ -382,14 +374,8 @@ class DiskOrderedSetSerializer : public Serializer {
   string ebs_root_;
 
 public:
-  DiskOrderedSetSerializer(unsigned &tid) : tid_(tid) {
-    YAML::Node conf = YAML::LoadFile("conf/anna-config.yml");
-
-    ebs_root_ = conf["ebs"].as<string>();
-
-    if (ebs_root_.back() != '/') {
-      ebs_root_ += "/";
-    }
+  DiskOrderedSetSerializer(unsigned &tid, string ebs_root) : tid_(tid) {
+    ebs_root_ = ebs_root;
   }
 
   string get(const Key &key, kvs::AnnaError &error) {
@@ -474,14 +460,8 @@ class DiskSingleKeyCausalSerializer : public Serializer {
   string ebs_root_;
 
 public:
-  DiskSingleKeyCausalSerializer(unsigned &tid) : tid_(tid) {
-    YAML::Node conf = YAML::LoadFile("conf/anna-config.yml");
-
-    ebs_root_ = conf["ebs"].as<string>();
-
-    if (ebs_root_.back() != '/') {
-      ebs_root_ += "/";
-    }
+  DiskSingleKeyCausalSerializer(unsigned &tid, string ebs_root) : tid_(tid) {
+    ebs_root_ = ebs_root;
   }
 
   string get(const Key &key, kvs::AnnaError &error) {
@@ -591,14 +571,8 @@ class DiskMultiKeyCausalSerializer : public Serializer {
   string ebs_root_;
 
 public:
-  DiskMultiKeyCausalSerializer(unsigned &tid) : tid_(tid) {
-    YAML::Node conf = YAML::LoadFile("conf/anna-config.yml");
-
-    ebs_root_ = conf["ebs"].as<string>();
-
-    if (ebs_root_.back() != '/') {
-      ebs_root_ += "/";
-    }
+  DiskMultiKeyCausalSerializer(unsigned &tid, string ebs_root) : tid_(tid) {
+    ebs_root_ = ebs_root;
   }
 
   string get(const Key &key, kvs::AnnaError &error) {
@@ -745,13 +719,9 @@ class DiskPrioritySerializer : public Serializer {
   }
 
 public:
-  DiskPrioritySerializer(unsigned tid) : tid_(tid) {
-    YAML::Node conf = YAML::LoadFile("conf/anna-config.yml");
-
-    ebs_root_ = conf["ebs"].as<string>();
-
-    if (ebs_root_.back() != '/')
-      ebs_root_ += "/";
+  DiskPrioritySerializer(unsigned tid, string ebs_root) : tid_(tid) {
+    ebs_root_ = ebs_root;
+    ebs_root_ = ebs_root;
   }
 
   string get(const Key &key, kvs::AnnaError &error) override {

@@ -326,13 +326,13 @@ void run(const unsigned &thread_id,
 }
 
 int main(int argc, char *argv[]) {
-  if (argc != 1) {
-    std::cerr << "Usage: " << argv[0] << std::endl;
+  if (argc != 3) {
+    std::cerr << "Usage: " << argv[0] << "--config <config file path>" << std::endl;
     return 1;
   }
 
   // read the YAML conf
-  YAML::Node conf = YAML::LoadFile("conf/anna-config.yml");
+  YAML::Node conf = YAML::LoadFile(argv[2]);
   YAML::Node user = conf["user"];
   Address ip = user["ip"].as<string>();
 

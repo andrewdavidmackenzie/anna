@@ -45,13 +45,13 @@ int main(int argc, char *argv[]) {
   auto log = spdlog::basic_logger_mt("monitoring_log", "log.txt", true);
   log->flush_on(spdlog::level::info);
 
-  if (argc != 1) {
-    std::cerr << "Usage: " << argv[0] << std::endl;
+  if (argc != 3) {
+    std::cerr << "Usage: " << argv[0] << "--config <config file path>" << std::endl;
     return 1;
   }
 
   // read the YAML conf
-  YAML::Node conf = YAML::LoadFile("conf/anna-config.yml");
+  YAML::Node conf = YAML::LoadFile(argv[2]);
   YAML::Node monitoring = conf["monitoring"];
   Address ip = monitoring["ip"].as<Address>();
   Address management_ip = monitoring["mgmt_ip"].as<Address>();

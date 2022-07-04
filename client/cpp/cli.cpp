@@ -226,10 +226,11 @@ void run(KvsClientInterface *client, string filename) {
 int main(int argc, char *argv[]) {
   // There can be two or three options
   // #0 - binary name
-  // #1 - config filename
-  // #2 - input file with commands
-  if (argc < 2 || argc > 3) {
-    std::cerr << "Usage: " << argv[0] << " conf-file <input-file>" << std::endl;
+  // #1 - "--config" directive
+  // #2 - config filename
+  // #3 - input file with commands
+  if (argc < 3 || argc > 4) {
+    std::cerr << "Usage: " << argv[0] << " --config conf-file <input-file>" << std::endl;
     std::cerr
         << "Filename is optional. Omit the filename to run in interactive mode."
         << std::endl;
@@ -237,7 +238,7 @@ int main(int argc, char *argv[]) {
   }
 
   // read the YAML conf
-  YAML::Node conf = YAML::LoadFile(argv[1]);
+  YAML::Node conf = YAML::LoadFile(argv[2]);
   kRoutingThreadCount = conf["threads"]["routing"].as<unsigned>();
 
   YAML::Node user = conf["user"];
@@ -262,9 +263,9 @@ int main(int argc, char *argv[]) {
 
   KvsClient client(threads, ip, 0, 10000);
 
-  if (argc == 2) {
+  if (argc == 3) {
     run(&client);
   } else {
-    run(&client, argv[2]);
+    run(&client, argv[3]);
   }
 }
