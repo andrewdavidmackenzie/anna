@@ -5,9 +5,9 @@
 #[macro_use]
 extern crate error_chain;
 
-use crate::config::Config;
 use nix::sys::signal::{kill, Signal};
 use nix::unistd::Pid;
+use std::path::PathBuf;
 use std::process::Command;
 use sysinfo::{ProcessExt, System, SystemExt};
 
@@ -58,12 +58,29 @@ fn pids_from_name(name: &str) -> Vec<i32> {
 /// `start` function starts the processes `anna-kvs`, `anna-monitor` and `anna-route`
 ///
 /// It returns a Result<usize> with the number of processes started
-pub fn start(_config: &Config) -> Result<usize> {
+pub fn start(config_file_path: PathBuf) -> Result<usize> {
     let mut process_count = 0;
     for process_name in PROCESS_LIST.iter() {
-        if pids_from_name(process_name).is_empty() && Command::new(process_name).spawn().is_ok() {
-            process_count += 1;
+        let pids = pids_from_name(process_name);
+        if !pids.is_empty() {
+            bail!(
+                "Process '{}' is already running with pids = {:?}",
+                process_count,
+                pids
+            )
         }
+
+        Command::new(process_name)
+            .args([
+                "--config",
+                config_file_path
+                    .to_str()
+                    .ok_or("Could not get config file path")?,
+            ])
+            .spawn()
+            .chain_err(|| format!("Failed to spawn process '{}'", process_name))?;
+
+        process_count += 1;
     }
 
     Ok(process_count)
