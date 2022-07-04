@@ -78,10 +78,6 @@ build:  # Debug build, use "Release" for a Release build
 
 .PHONY: test
 test:
-	@echo "Running test-simple"
-	@./tests/simple/test-simple.sh y
-	@echo "Building C++ tests"
-	@cd build && make --no-print-directory -s test
 	@echo "Running C++ tests with coverage"
 	@cd build && make --no-print-directory -s test-coverage && lcov --quiet --list coverage.info
 	@echo "Running rust tests with coverage"

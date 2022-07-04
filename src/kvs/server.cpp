@@ -44,7 +44,7 @@ ZmqUtilInterface *kZmqUtil = &zmq_util;
 HashRingUtil hash_ring_util;
 HashRingUtilInterface *kHashRingUtil = &hash_ring_util;
 
-void run(unsigned thread_id, Address public_ip, Address private_ip,
+void run(unsigned thread_id, string ebs_root, Address public_ip, Address private_ip,
          Address seed_ip, vector<Address> routing_ips,
          vector<Address> monitoring_ips, Address management_ip) {
   string log_file = "log_" + std::to_string(thread_id) + ".txt";
@@ -212,12 +212,12 @@ void run(unsigned thread_id, Address public_ip, Address private_ip,
     MemoryPriorityKVS *priority_kvs = new MemoryPriorityKVS();
     priority_serializer = new MemoryPrioritySerializer(priority_kvs);
   } else if (kSelfTier == Tier::DISK) {
-    lww_serializer = new DiskLWWSerializer(thread_id);
-    set_serializer = new DiskSetSerializer(thread_id);
-    ordered_set_serializer = new DiskOrderedSetSerializer(thread_id);
-    sk_causal_serializer = new DiskSingleKeyCausalSerializer(thread_id);
-    mk_causal_serializer = new DiskMultiKeyCausalSerializer(thread_id);
-    priority_serializer = new DiskPrioritySerializer(thread_id);
+    lww_serializer = new DiskLWWSerializer(thread_id, ebs_root);
+    set_serializer = new DiskSetSerializer(thread_id, ebs_root);
+    ordered_set_serializer = new DiskOrderedSetSerializer(thread_id, ebs_root);
+    sk_causal_serializer = new DiskSingleKeyCausalSerializer(thread_id, ebs_root);
+    mk_causal_serializer = new DiskMultiKeyCausalSerializer(thread_id, ebs_root);
+    priority_serializer = new DiskPrioritySerializer(thread_id, ebs_root);
   } else {
     log->info("Invalid node type");
     exit(1);
@@ -745,6 +745,12 @@ int main(int argc, char *argv[]) {
   kDefaultGlobalEbsReplication = replication["ebs"].as<unsigned>();
   kDefaultLocalReplication = replication["local"].as<unsigned>();
 
+  string ebs_root = conf["ebs"].as<string>();
+  // ensure terminated in a '/'
+  if (ebs_root.back() != '/') {
+    ebs_root += "/";
+  }
+
   YAML::Node server = conf["server"];
   Address public_ip = server["public_ip"].as<string>();
   Address private_ip = server["private_ip"].as<string>();
@@ -777,12 +783,12 @@ int main(int argc, char *argv[]) {
   // start the initial threads based on kThreadNum
   vector<std::thread> worker_threads;
   for (unsigned thread_id = 1; thread_id < kThreadNum; thread_id++) {
-    worker_threads.push_back(std::thread(run, thread_id, public_ip, private_ip,
+    worker_threads.push_back(std::thread(run, thread_id, ebs_root, public_ip, private_ip,
                                          seed_ip, routing_ips, monitoring_ips,
                                          mgmt_ip));
   }
 
-  run(0, public_ip, private_ip, seed_ip, routing_ips, monitoring_ips, mgmt_ip);
+  run(0, ebs_root, public_ip, private_ip, seed_ip, routing_ips, monitoring_ips, mgmt_ip);
 
   // join on all threads to make sure they finish before exiting
   for (unsigned tid = 1; tid < kThreadNum; tid++) {
