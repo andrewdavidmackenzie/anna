@@ -114,7 +114,7 @@ class KvsClient : public KvsClientInterface {
 
   vector<kvs::KeyResponse> receive_async() {
     vector<kvs::KeyResponse> result;
-    kZmqUtil->poll(0, &pollitems_);
+    kZmqUtil->poll(&pollitems_, std::chrono::milliseconds{0});
 
     if (pollitems_[0].revents & ZMQ_POLLIN) {
       string serialized = kZmqUtil->recv_string(&key_address_puller_);
