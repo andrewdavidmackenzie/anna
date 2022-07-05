@@ -1,11 +1,6 @@
 use std::io;
 
-const PROTO_FILES: &[&str] = &[
-    "shared.proto",
-    "kvs.proto",
-    "cloudburst.proto",
-    "causal.proto",
-];
+const PROTO_FILES: &[&str] = &["shared.proto", "kvs.proto", "causal.proto"];
 
 fn main() -> io::Result<()> {
     // Rust code generation for protobuf definitions
