@@ -15,7 +15,7 @@
 #  limitations under the License.
 
 cd anna
-protoc -I=../../../protobuf/ --python_out=. kvs.proto shared.proto causal.proto cloudburst.proto
+protoc -I=../../../protobuf/ --python_out=. kvs.proto shared.proto causal.proto
 
 if [[ "$OSTYPE" = "darwin"* ]]; then
   sed -i "" "s/import shared_pb2/from . import shared_pb2/g" anna_pb2.py
