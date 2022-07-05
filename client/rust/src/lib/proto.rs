@@ -10,12 +10,6 @@ pub mod kvs {
     include!(concat!(env!("OUT_DIR"), "/kvs.rs"));
 }
 
-// Include the `cloudburst` module, which is generated from cloudburst.proto.
-#[allow(warnings, missing_docs)]
-pub mod cloudburst {
-    include!(concat!(env!("OUT_DIR"), "/cloudburst.rs"));
-}
-
 // Include the `causal` module, which is generated from causal.proto.
 #[allow(warnings, missing_docs)]
 pub mod causal {

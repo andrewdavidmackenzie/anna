@@ -18,7 +18,6 @@ package causal;
 
 import "shared.proto";
 import "kvs.proto";
-import "cloudburst.proto";
 
 // A message representing an individual tuple when the system is operating in causal mode.
 message CausalTuple {
@@ -32,12 +31,25 @@ message CausalTuple {
   kvs.AnnaError error = 3;
 }
 
+// The consistency mode to be used with an individual request.
+enum ConsistencyType {
+  // Normal consistency means that any non-causal lattice types are supported
+  // -- sets, last writer wins, etc.
+  NORMAL = 0;
+
+  // Single-key causal mode is supported (see Anna KVS definitions for more detail).
+  SINGLE = 1;
+
+  // Multi-key causal more is supported (see Anna KVS definitions for more detail).
+  MULTI = 2;
+}
+
 // A request for one or more causal tuples, made from an executor and answered
 // by a cache.
 message CausalRequest {
   // The consistency mode that the request is being run in -- this should only
   // be SINGLE or MULTI.
-  cloudburst.ConsistencyType consistency = 1;
+  ConsistencyType consistency = 1;
 
   // The unique ID of the client that is making this request -- this may be
   // independent from the physical node on which the request is running.
