@@ -36,14 +36,14 @@ class ZmqUtilInterface {
   virtual string recv_string(zmq::socket_t* socket) = 0;
   // `poll` is a wrapper around `zmq::poll` that takes a vector instead of a
   // pointer and a size.
-  virtual int poll(long timeout, vector<zmq::pollitem_t>* items) = 0;
+  virtual int poll(vector<zmq::pollitem_t>* items, std::chrono::milliseconds timeout) = 0;
 };
 
 class ZmqUtil : public ZmqUtilInterface {
  public:
   virtual void send_string(const string& s, zmq::socket_t* socket);
   virtual string recv_string(zmq::socket_t* socket);
-  virtual int poll(long timeout, vector<zmq::pollitem_t>* items);
+  virtual int poll(vector<zmq::pollitem_t>* items, std::chrono::milliseconds timeout);
 };
 
 extern ZmqUtilInterface* kZmqUtil;

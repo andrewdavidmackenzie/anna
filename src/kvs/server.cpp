@@ -301,7 +301,7 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
 
   // enter event loop
   while (true) {
-    kZmqUtil->poll(0, &pollitems);
+    kZmqUtil->poll(&pollitems, std::chrono::milliseconds{0});
 
     // receives a node join
     if (pollitems[0].revents & ZMQ_POLLIN) {

@@ -177,7 +177,7 @@ int main(int argc, char *argv[]) {
   unsigned rid = 0;
 
   while (true) {
-    kZmqUtil->poll(0, &pollitems);
+    kZmqUtil->poll(&pollitems, std::chrono::milliseconds{0});
 
     if (pollitems[0].revents & ZMQ_POLLIN) {
       string serialized = kZmqUtil->recv_string(&notify_puller);

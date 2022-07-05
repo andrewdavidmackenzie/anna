@@ -102,9 +102,9 @@ void run(unsigned thread_id, Address ip, vector<Address> monitoring_ips) {
       {static_cast<void *>(key_address_puller), 0, ZMQ_POLLIN, 0}};
 
   while (true) {
-    kZmqUtil->poll(-1, &pollitems);
+    kZmqUtil->poll(&pollitems, std::chrono::milliseconds{-1});
 
-    // only relavant for the seed node
+    // only relevant for the seed node
     if (pollitems[0].revents & ZMQ_POLLIN) {
       kZmqUtil->recv_string(&addr_responder);
       auto serialized = seed_handler(log, global_hash_rings);
