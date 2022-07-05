@@ -28,15 +28,16 @@ zmq::message_t ZmqUtilInterface::string_to_message(const string& s) {
 }
 
 void ZmqUtil::send_string(const string& s, zmq::socket_t* socket) {
-  socket->send(string_to_message(s));
+  socket->send(string_to_message(s), zmq::send_flags::none);
 }
 
 string ZmqUtil::recv_string(zmq::socket_t* socket) {
   zmq::message_t message;
-  socket->recv(&message);
+  zmq::message_t& msg = message;
+  socket->recv(msg);
   return message_to_string(message);
 }
 
-int ZmqUtil::poll(long timeout, vector<zmq::pollitem_t>* items) {
+int ZmqUtil::poll(vector<zmq::pollitem_t>* items, std::chrono::milliseconds timeout) {
   return zmq::poll(items->data(), items->size(), timeout);
 }

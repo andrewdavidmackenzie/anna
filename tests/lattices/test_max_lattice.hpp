@@ -28,7 +28,7 @@ protected:
 };
 
 typedef ::testing::Types<int, float, double> MaxTypes;
-TYPED_TEST_CASE(MaxLatticeTest, MaxTypes);
+TYPED_TEST_SUITE(MaxLatticeTest, MaxTypes);
 
 TYPED_TEST(MaxLatticeTest, Assign) {
   EXPECT_EQ(0, this->ml->reveal());

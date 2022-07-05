@@ -109,7 +109,7 @@ void run(const unsigned &thread_id,
       {static_cast<void *>(command_puller), 0, ZMQ_POLLIN, 0}};
 
   while (true) {
-    kZmqUtil->poll(-1, &pollitems);
+    kZmqUtil->poll(&pollitems, std::chrono::milliseconds{-1});
 
     if (pollitems[0].revents & ZMQ_POLLIN) {
       string msg = kZmqUtil->recv_string(&command_puller);
