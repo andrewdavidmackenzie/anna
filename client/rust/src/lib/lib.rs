@@ -9,7 +9,7 @@ use nix::sys::signal::{kill, Signal};
 use nix::unistd::Pid;
 use std::path::PathBuf;
 use std::process::Command;
-use sysinfo::{ProcessExt, System, SystemExt};
+use sysinfo::{ProcessExt, Signal, System, SystemExt};
 
 pub mod config;
 pub mod info;
@@ -49,9 +49,8 @@ error_chain! {
 */
 fn pids_from_name(name: &str) -> Vec<i32> {
     let s = System::new_all();
-    s.get_process_by_name(name)
-        .iter()
-        .map(|p| p.pid())
+    s.processes_by_name(name)
+        .map(|process| process.pid().into())
         .collect()
 }
 
