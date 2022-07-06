@@ -5,11 +5,11 @@
 #[macro_use]
 extern crate error_chain;
 
-use nix::sys::signal::{kill, Signal};
+use nix::sys::signal::kill;
 use nix::unistd::Pid;
 use std::path::PathBuf;
 use std::process::Command;
-use sysinfo::{ProcessExt, Signal, System, SystemExt};
+use sysinfo::{ProcessExt, System, SystemExt};
 
 pub mod config;
 pub mod info;
@@ -92,7 +92,7 @@ pub fn stop() -> Result<usize> {
     let mut kill_count: usize = 0;
     for process_name in PROCESS_LIST.iter() {
         for pid in pids_from_name(process_name) {
-            if kill(Pid::from_raw(pid), Some(Signal::SIGTERM)).is_ok() {
+            if kill(Pid::from_raw(pid), Some(nix::sys::signal::SIGTERM)).is_ok() {
                 kill_count += 1;
             }
         }
