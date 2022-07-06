@@ -5,7 +5,7 @@
 #[macro_use]
 extern crate error_chain;
 
-use nix::sys::signal::{kill, Signal};
+use nix::sys::signal::kill;
 use nix::unistd::Pid;
 use std::path::PathBuf;
 use std::process::Command;
@@ -49,9 +49,8 @@ error_chain! {
 */
 fn pids_from_name(name: &str) -> Vec<i32> {
     let s = System::new_all();
-    s.get_process_by_name(name)
-        .iter()
-        .map(|p| p.pid())
+    s.processes_by_name(name)
+        .map(|process| process.pid().into())
         .collect()
 }
 
@@ -93,7 +92,7 @@ pub fn stop() -> Result<usize> {
     let mut kill_count: usize = 0;
     for process_name in PROCESS_LIST.iter() {
         for pid in pids_from_name(process_name) {
-            if kill(Pid::from_raw(pid), Some(Signal::SIGTERM)).is_ok() {
+            if kill(Pid::from_raw(pid), Some(nix::sys::signal::SIGTERM)).is_ok() {
                 kill_count += 1;
             }
         }
