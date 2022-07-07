@@ -79,7 +79,7 @@ build:  # Debug build, use "Release" for a Release build
 .PHONY: test
 test:
 	@echo "Running C++ tests with coverage"
-	@cd build && make --no-print-directory -s test-coverage 2>&1 > /dev/null && lcov --quiet --list coverage.info 2>&1 > /dev/null
+	@cd build && make --no-print-directory -s test-coverage > /dev/null 2>&1 && lcov --quiet --list coverage.info > /dev/null 2>&1
 	@echo "Running rust tests with coverage"
 	@RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE="anna-%p-%m.profraw" cargo --quiet test 2>&1 > /dev/null
 	@echo "Generating coverage reports"
@@ -89,7 +89,7 @@ test:
 docs:
 	@echo "Generating docs with cargo doc and mdbook"
 	@cargo doc --quiet --no-deps --target-dir=target/html/code 2>&1 > /dev/null
-	@mdbook build 2>&1 > /dev/null
+	@mdbook build > /dev/null 2>&1
 	@rm -f target/html/*.profraw target/html/client_log.txt target/html/log.txt target/html/log_0.txt target/html/*.info
 	@rm -f target/html/Makefile
 	@rm -f target/html/LICENSE target/html/Cargo.toml target/html/Cargo.lock target/html/CMakeLists.txt
