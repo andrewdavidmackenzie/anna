@@ -87,8 +87,9 @@ test:
 
 .PHONY: docs
 docs:
-	@echo "Generating docs with cargo doc and mdbook"
+	@echo "Generating docs with cargo doc"
 	@cargo doc --quiet --no-deps --target-dir=target/html/code 2>&1 > /dev/null
+	@echo "Generating book with mdbook"
 	@mdbook build > /dev/null 2>&1
 	@rm -f target/html/*.profraw target/html/client_log.txt target/html/log.txt target/html/log_0.txt target/html/*.info
 	@rm -f target/html/Makefile
