@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use serde_derive::Deserialize;
 
 use super::errors::*;
-use crate::kvs_client::Address;
+use crate::types::Address;
 
 /// `Config` structure containing the configuration read from the yaml config file
 #[derive(Deserialize)]

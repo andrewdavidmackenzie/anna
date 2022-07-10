@@ -6,21 +6,16 @@ use crate::config::Config;
 use crate::errors::*;
 use crate::proto::kvs::KeyTuple;
 use crate::threads::{UserRoutingThread, UserThread};
+use crate::types::{Address, Key, ThreadID, TimePoint};
 use log::{debug, info};
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use zmq::Context;
-
-/// An anna Address
-pub type Address = String;
-/// An anna Key
-pub type Key = String;
-/// An anna Timepoint
-pub type TimePoint = SystemTime;
 
 struct PendingRequest {
     tp: TimePoint,
@@ -94,7 +89,7 @@ pub struct KVSClient {
 
 impl KVSClient {
     /// Create a new `KVSClient` from a provided `Config` and optional thread id
-    pub fn new(config: &Config, tid: Option<usize>) -> Self {
+    pub fn new(config: &Config, tid: Option<ThreadID>) -> Self {
         let tid = tid.unwrap_or(0);
         let thread_count = config.get_routing_thread_count();
         let routing_ips = config.get_routing_ips();
@@ -154,7 +149,7 @@ impl KVSClient {
     /*
        Generate a random u64 seed from the time, ip address and thread id
     */
-    fn generate_seed(ip: &Address, tid: usize) -> u64 {
+    fn generate_seed(ip: &Address, tid: ThreadID) -> u64 {
         // Get the system time in ms since epoch as a u64 and initialize the seed with that
         let start = SystemTime::now();
         let since_the_epoch = start
@@ -174,49 +169,8 @@ impl KVSClient {
         seed
     }
 
-    /*
-       Clears the key address cache held by this client.
-    */
-    fn clear_cache(&mut self) {
-        self.key_address_cache.clear()
-    }
-
-    /*
-        Return the ZMQ context used by this client.
-    */
-    fn get_context(&self) -> &Context {
-        &self.context
-    }
-
-    /*
-        Return the random seed used by this client.
-    */
-    fn get_seed(&self) -> u64 {
-        self.seed
-    }
-
-    /*
-      Generates a unique request ID. usize will overflow and start counting from
-      zero again when MAX_INT is reached.
-    */
-    fn get_request_id(&mut self) -> String {
-        self.rid += 1;
-        format!("{}:{}_{}", self.ut.ip(), self.ut.tid(), self.rid)
-    }
-
-    /*
-      Returns one random routing thread's key address connection address. If the
-      client is running outside of the cluster (ie, it is querying the ELB),
-      there's only one address to choose from.
-    */
-    fn get_routing_thread(&mut self) -> Address {
-        // random index into threads array - from 0 upto but not including routing_threads.len()
-        self.routing_threads[self.rng.gen_range(0..self.routing_threads.len())]
-            .key_address_connect_address()
-    }
-
     /// Perform a `GET` operation against the KVS for value with key = `key`
-    pub fn get(&self, key: &str) -> Result<String> {
+    pub fn get<K: AsRef<str> + Display>(&self, key: K) -> Result<String> {
         debug!("GET: {}", key);
         //     client->get_async(key);
         //     vector<KeyResponse> responses = client->receive_async();
@@ -237,7 +191,7 @@ impl KVSClient {
     }
 
     /// Perform a `PUT` operation against the KVS
-    pub fn put(&self, key: &str, value: &str) -> Result<()> {
+    pub fn put<K: AsRef<str> + Display>(&self, key: K, value: &str) -> Result<()> {
         debug!("PUT: {} <- {}", key, value);
         unimplemented!()
 
@@ -261,7 +215,7 @@ impl KVSClient {
 
     /// Perform a causal `GET` operation against the KVS
     #[cfg(feature = "causal")]
-    pub fn get_causal(&self, key: &str) -> Result<String> {
+    pub fn get_causal<K: AsRef<str> + Display>(&self, key: K) -> Result<String> {
         debug!("GET_CAUSAL: {}", key);
         unimplemented!()
     }
@@ -298,7 +252,7 @@ impl KVSClient {
 
     /// Perform a causal `PUT` operation against the KVS
     #[cfg(feature = "causal")]
-    pub fn put_causal(&self, key: &str, value: &str) -> Result<()> {
+    pub fn put_causal<K: AsRef<str> + Display>(&self, key: K, value: &str) -> Result<()> {
         debug!("PUT_CAUSAL: {} <- {}", key, value);
         unimplemented!()
 
@@ -332,7 +286,7 @@ impl KVSClient {
 
     /// Perform a `GET` operation for a set of values against the KVS
     #[cfg(feature = "set")]
-    pub fn get_set(&self, key: &str) -> Result<String> {
+    pub fn get_set<K: AsRef<str> + Display>(&self, key: K) -> Result<String> {
         debug!("GET SET: {}", key);
         unimplemented!()
 
@@ -349,7 +303,7 @@ impl KVSClient {
 
     /// Perform a `PUT` operation for a set of values against the KVS
     #[cfg(feature = "set")]
-    pub fn put_set(&self, key: &str, set: &[&str]) -> Result<()> {
+    pub fn put_set<K: AsRef<str> + Display>(&self, key: K, set: &[&str]) -> Result<()> {
         debug!("PUT SET: {} <- {:?}", key, set);
         unimplemented!()
 
@@ -372,6 +326,33 @@ impl KVSClient {
         //       std::cout << "Invalid response: ID did not match request ID!"
         //                 << std::endl;
         //     }
+    }
+
+    /*
+       Clears the key address cache held by this client.
+    */
+    fn clear_cache(&mut self) {
+        self.key_address_cache.clear()
+    }
+
+    /*
+      Generates a unique request ID. usize will overflow and start counting from
+      zero again when MAX_INT is reached.
+    */
+    fn get_request_id(&mut self) -> String {
+        self.rid += 1;
+        format!("{}:{}_{}", self.ut.ip(), self.ut.tid(), self.rid)
+    }
+
+    /*
+      Returns one random routing thread's key address connection address. If the
+      client is running outside of the cluster (ie, it is querying the ELB),
+      there's only one address to choose from.
+    */
+    fn get_routing_thread(&mut self) -> Address {
+        // random index into threads array - from 0 upto but not including routing_threads.len()
+        self.routing_threads[self.rng.gen_range(0..self.routing_threads.len())]
+            .key_address_connect_address()
     }
 
     /*

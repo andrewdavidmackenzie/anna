@@ -118,18 +118,22 @@ fn run() -> Result<String> {
 
 fn execute_command(client: &KVSClient, line: &str) -> Result<()> {
     let split = line.split(' ').collect::<Vec<&str>>();
-    match (split[0].to_ascii_uppercase().as_str(), &split[1..]) {
-        ("GET", tokens) => println!("{}", client.get(tokens[1])?),
-        ("PUT", tokens) => client.put(tokens[1], tokens[2])?,
+    match (
+        split[0].to_ascii_uppercase().as_str(),
+        split[1],
+        &split[2..],
+    ) {
+        ("GET", key, _) => println!("{}", client.get(key)?),
+        ("PUT", key, tokens) => client.put(key, tokens[0])?,
         #[cfg(feature = "causal")]
-        ("GET_CAUSAL", tokens) => println!("{}", client.get_causal(tokens[1])?),
+        ("GET_CAUSAL", key, _) => println!("{}", client.get_causal(key)?),
         #[cfg(feature = "causal")]
-        ("PUT_CAUSAL", tokens) => client.put_causal(tokens[1], tokens[2])?,
+        ("PUT_CAUSAL", key, tokens) => client.put_causal(key, tokens[0])?,
         #[cfg(feature = "set")]
-        ("GET_SET", tokens) => println!("{}", client.get_set(tokens[1])?),
+        ("GET_SET", key, _) => println!("{}", client.get_set(key)?),
         #[cfg(feature = "set")]
-        ("PUT_SET", tokens) => client.put_set(tokens[1], &tokens[2..])?,
-        (command, _) => bail!("Unrecognized anna command: '{}'. Was ignored.", command),
+        ("PUT_SET", key, set) => client.put_set(key, set)?,
+        (command, _, _) => bail!("Unrecognized anna command: '{}'. Was ignored.", command),
     }
 
     Ok(())

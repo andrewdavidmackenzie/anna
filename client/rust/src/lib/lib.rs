@@ -22,6 +22,8 @@ pub mod kvs_client;
 pub mod proto;
 /// `threads` provides helper methods related to anna threads
 pub mod threads;
+/// Types used by KVS
+pub mod types;
 
 // Pending them being defined elsewhere in a build script or similar
 const ANNA_MONITOR_PROCESS_NAME: &str = "anna-monitor";

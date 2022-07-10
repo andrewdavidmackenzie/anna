@@ -1,4 +1,4 @@
-use crate::kvs_client::Address;
+use crate::types::Address;
 
 // The port on which clients send key address requests to routing nodes.
 #[allow(dead_code)]
