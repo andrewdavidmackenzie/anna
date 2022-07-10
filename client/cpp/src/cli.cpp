@@ -33,16 +33,8 @@ void print_set(set<string> set) {
   std::cout << "}" << std::endl;
 }
 
-void handle_request(KvsClientInterface *client, string input) {
-  vector<string> v;
-  split(input, ' ', v);
-
-  if (v.size() == 0) {
-    std::exit(EXIT_SUCCESS);
-  }
-
-  if (v[0] == "GET") {
-    client->get_async(v[1]);
+string get(KvsClientInterface *client, string key) {
+    client->get_async(key);
 
     vector<kvs::KeyResponse> responses = client->receive_async();
     while (responses.size() == 0) {
@@ -57,10 +49,12 @@ void handle_request(KvsClientInterface *client, string input) {
 
     LWWPairLattice<string> lww_lattice =
         deserialize_lww(responses[0].tuples(0).payload());
-    std::cout << lww_lattice.reveal().value << std::endl;
-  } else if (v[0] == "GET_CAUSAL") {
-    // currently this mode is only for testing purpose
-    client->get_async(v[1]);
+
+    return lww_lattice.reveal().value;
+}
+
+string get_causal(KvsClientInterface *client, string key) {
+    client->get_async(key);
 
     vector<kvs::KeyResponse> responses = client->receive_async();
     while (responses.size() == 0) {
@@ -91,16 +85,15 @@ void handle_request(KvsClientInterface *client, string input) {
       }
     }
 
-    std::cout << *(mkcl.reveal().value.reveal().begin()) << std::endl;
-  } else if (v[0] == "PUT") {
-    Key key = v[1];
-    LWWPairLattice<string> val(
-        TimestampValuePair<string>(generate_timestamp(0), v[2]));
+    return *(mkcl.reveal().value.reveal().begin());
+}
 
-    // Put async
+kvs::KeyResponse put(KvsClientInterface *client, string key, string value) {
+    LWWPairLattice<string> val(
+        TimestampValuePair<string>(generate_timestamp(0), value));
+
     string rid = client->put_async(key, serialize(val), kvs::LatticeType::LWW);
 
-    // Receive
     vector<kvs::KeyResponse> responses = client->receive_async();
     while (responses.size() == 0) {
       responses = client->receive_async();
@@ -108,17 +101,16 @@ void handle_request(KvsClientInterface *client, string input) {
 
     kvs::KeyResponse response = responses[0];
 
+    // TODO encode this error into the response
     if (response.response_id() != rid) {
       std::cout << "Invalid response: ID did not match request ID!"
                 << std::endl;
     }
-    if (response.error() != kvs::AnnaError::NO_ERROR) {
-      std::cout << "Failure!" << std::endl;
-    }
-  } else if (v[0] == "PUT_CAUSAL") {
-    // currently this mode is only for testing purpose
-    Key key = v[1];
 
+    return response;
+}
+
+kvs::KeyResponse put_causal(KvsClientInterface *client, string key, string value) {
     MultiKeyCausalPayload<SetLattice<string>> mkcp;
     // construct a test client id - version pair
     mkcp.vector_clock.insert("test", 1);
@@ -128,14 +120,12 @@ void handle_request(KvsClientInterface *client, string input) {
         "dep1", VectorClock(map<string, MaxLattice<unsigned>>({{"test1", 1}})));
 
     // populate the value
-    mkcp.value.insert(v[2]);
+    mkcp.value.insert(value);
 
     MultiKeyCausalLattice<SetLattice<string>> mkcl(mkcp);
 
-    // Put async
     string rid = client->put_async(key, serialize(mkcl), kvs::LatticeType::MULTI_CAUSAL);
 
-    // Receive
     vector<kvs::KeyResponse> responses = client->receive_async();
     while (responses.size() == 0) {
       responses = client->receive_async();
@@ -143,10 +133,69 @@ void handle_request(KvsClientInterface *client, string input) {
 
     kvs::KeyResponse response = responses[0];
 
+    // TODO encode this error into the response
     if (response.response_id() != rid) {
       std::cout << "Invalid response: ID did not match request ID!"
                 << std::endl;
     }
+
+    return response;
+}
+
+kvs::KeyResponse put_set(KvsClientInterface *client, string key, set<string> set) {
+    string rid = client->put_async(key, serialize(SetLattice<string>(set)),
+                                   kvs::LatticeType::SET);
+
+    vector<kvs::KeyResponse> responses = client->receive_async();
+    while (responses.size() == 0) {
+      responses = client->receive_async();
+    }
+
+    kvs::KeyResponse response = responses[0];
+
+    // TODO encode this error into the response
+    if (response.response_id() != rid) {
+      std::cout << "Invalid response: ID did not match request ID!"
+                << std::endl;
+    }
+
+    return response;
+}
+
+set<string> get_set(KvsClientInterface *client, string key) {
+    client->get_async(key);
+    string serialized;
+
+    vector<kvs::KeyResponse> responses = client->receive_async();
+    while (responses.size() == 0) {
+      responses = client->receive_async();
+    }
+
+    SetLattice<string> latt = deserialize_set(responses[0].tuples(0).payload());
+    set<string> set_value = latt.reveal();
+
+    return set_value;
+}
+
+void execute_command(KvsClientInterface *client, string input) {
+  vector<string> v;
+  split(input, ' ', v);
+
+  if (v.size() == 0) { // EOF?
+    std::exit(EXIT_SUCCESS);
+  }
+
+  if (v[0] == "GET") {
+    std::cout << get(client, v[1]) << std::endl;
+  } else if (v[0] == "GET_CAUSAL") {
+    std::cout << get_causal(client, v[1]) << std::endl;
+  } else if (v[0] == "PUT") {
+    kvs::KeyResponse response = put(client, v[1], v[2]);
+    if (response.error() != kvs::AnnaError::NO_ERROR) {
+      std::cout << "Failure!" << std::endl;
+    }
+  } else if (v[0] == "PUT_CAUSAL") {
+    kvs::KeyResponse response = put_causal(client, v[1], v[2]);
     if (response.error() != kvs::AnnaError::NO_ERROR) {
       std::cout << "Failure!" << std::endl;
     }
@@ -155,39 +204,12 @@ void handle_request(KvsClientInterface *client, string input) {
     for (int i = 2; i < v.size(); i++) {
       set.insert(v[i]);
     }
-
-    // Put async
-    string rid = client->put_async(v[1], serialize(SetLattice<string>(set)),
-                                   kvs::LatticeType::SET);
-
-    // Receive
-    vector<kvs::KeyResponse> responses = client->receive_async();
-    while (responses.size() == 0) {
-      responses = client->receive_async();
-    }
-
-    kvs::KeyResponse response = responses[0];
-
-    if (response.response_id() != rid) {
-      std::cout << "Invalid response: ID did not match request ID!"
-                << std::endl;
-    }
+    kvs::KeyResponse response = put_set(client, v[1], set);
     if (response.error() != kvs::AnnaError::NO_ERROR) {
       std::cout << "Failure!" << std::endl;
     }
   } else if (v[0] == "GET_SET") {
-    // Get Async
-    client->get_async(v[1]);
-    string serialized;
-
-    // Receive
-    vector<kvs::KeyResponse> responses = client->receive_async();
-    while (responses.size() == 0) {
-      responses = client->receive_async();
-    }
-
-    SetLattice<string> latt = deserialize_set(responses[0].tuples(0).payload());
-    print_set(latt.reveal());
+    print_set(get_set(client, v[1]));
   } else {
     std::cout << "Unrecognized command " << v[0]
               << ". Valid commands are GET, GET_SET, PUT, PUT_SET, PUT_CAUSAL, "
@@ -203,7 +225,7 @@ void cli_loop_interactive(KvsClientInterface *client) {
     std::cout << "anna> ";
 
     getline(std::cin, input);
-    handle_request(client, input);
+    execute_command(client, input);
   }
 }
 
@@ -213,7 +235,7 @@ void cli_loop_file(KvsClientInterface *client, string filename) {
   std::ifstream infile(filename);
 
   while (getline(infile, input)) {
-    handle_request(client, input);
+    execute_command(client, input);
   }
 }
 

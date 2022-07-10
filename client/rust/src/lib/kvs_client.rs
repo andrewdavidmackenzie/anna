@@ -215,9 +215,10 @@ impl KVSClient {
             .key_address_connect_address()
     }
 
-    /// Perform a `GET` operation against the KVS
-    pub fn get(&self, tokens: &[&str]) -> Result<String> {
-        debug!("GET: {:?}", tokens);
+    /// Perform a `GET` operation against the KVS for value with key = `key`
+    pub fn get(&self, key: &str) -> Result<String> {
+        debug!("GET: {}", key);
+        //     client->get_async(key);
         //     vector<KeyResponse> responses = client->receive_async();
         //     while (responses.size() == 0) {
         //       responses = client->receive_async();
@@ -231,23 +232,20 @@ impl KVSClient {
         //
         //     LWWPairLattice<string> lww_lattice =
         //         deserialize_lww(responses[0].tuples(0).payload());
-        //     lww_lattice.reveal().value
+        //     Ok( lww_lattice.reveal().value )
         unimplemented!()
     }
 
     /// Perform a `PUT` operation against the KVS
-    pub fn put(&self, tokens: &[&str]) -> Result<()> {
-        debug!("PUT: {:?}", tokens);
+    pub fn put(&self, key: &str, value: &str) -> Result<()> {
+        debug!("PUT: {} <- {}", key, value);
         unimplemented!()
 
-        //     Key key = v[1];
         //     LWWPairLattice<string> val(
-        //         TimestampValuePair<string>(generate_timestamp(0), v[2]));
+        //         TimestampValuePair<string>(generate_timestamp(0), value));
         //
-        //     // Put async
         //     string rid = client->put_async(key, serialize(val), LatticeType::LWW);
         //
-        //     // Receive
         //     vector<KeyResponse> responses = client->receive_async();
         //     while (responses.size() == 0) {
         //       responses = client->receive_async();
@@ -259,15 +257,12 @@ impl KVSClient {
         //       std::cout << "Invalid response: ID did not match request ID!"
         //                 << std::endl;
         //     }
-        //     if (response.error() != AnnaError::NO_ERROR) {
-        //       std::cout << "Failure!" << std::endl;
-        //     }
     }
 
     /// Perform a causal `GET` operation against the KVS
     #[cfg(feature = "causal")]
-    pub fn get_causal(&self, tokens: &[&str]) -> Result<String> {
-        debug!("GET_CAUSAL: {:?}", tokens);
+    pub fn get_causal(&self, key: &str) -> Result<String> {
+        debug!("GET_CAUSAL: {}", key);
         unimplemented!()
     }
     //     vector<KeyResponse> responses = client->receive_async();
@@ -299,16 +294,14 @@ impl KVSClient {
     //       }
     //     }
     //
-    //     std::cout << *(mkcl.reveal().value.reveal().begin()) << std::endl;
+    //     Ok( *(mkcl.reveal().value.reveal().begin()) )
 
     /// Perform a causal `PUT` operation against the KVS
     #[cfg(feature = "causal")]
-    pub fn put_causal(&self, tokens: &[&str]) -> Result<()> {
-        debug!("PUT_CAUSAL: {:?}", tokens);
+    pub fn put_causal(&self, key: &str, value: &str) -> Result<()> {
+        debug!("PUT_CAUSAL: {} <- {}", key, value);
         unimplemented!()
 
-        //     Key key = v[1];
-        //
         //     MultiKeyCausalPayload<SetLattice<string>> mkcp;
         //     // construct a test client id - version pair
         //     mkcp.vector_clock.insert("test", 1);
@@ -318,14 +311,12 @@ impl KVSClient {
         //         "dep1", VectorClock(map<string, MaxLattice<unsigned>>({{"test1", 1}})));
         //
         //     // populate the value
-        //     mkcp.value.insert(v[2]);
+        //     mkcp.value.insert(value);
         //
         //     MultiKeyCausalLattice<SetLattice<string>> mkcl(mkcp);
         //
-        //     // Put async
         //     string rid = client->put_async(key, serialize(mkcl), LatticeType::MULTI_CAUSAL);
         //
-        //     // Receive
         //     vector<KeyResponse> responses = client->receive_async();
         //     while (responses.size() == 0) {
         //       responses = client->receive_async();
@@ -337,34 +328,29 @@ impl KVSClient {
         //       std::cout << "Invalid response: ID did not match request ID!"
         //                 << std::endl;
         //     }
-        //     if (response.error() != AnnaError::NO_ERROR) {
-        //       std::cout << "Failure!" << std::endl;
-        //     }
     }
 
     /// Perform a `GET` operation for a set of values against the KVS
     #[cfg(feature = "set")]
-    pub fn get_set(&self, tokens: &[&str]) -> Result<String> {
-        debug!("GET SET: {:?}", tokens);
+    pub fn get_set(&self, key: &str) -> Result<String> {
+        debug!("GET SET: {}", key);
         unimplemented!()
 
-        //     // Get Async
         //     string serialized;
         //
-        //     // Receive
         //     vector<KeyResponse> responses = client->receive_async();
         //     while (responses.size() == 0) {
         //       responses = client->receive_async();
         //     }
         //
         //     SetLattice<string> latt = deserialize_set(responses[0].tuples(0).payload());
-        //     print_set(latt.reveal());
+        //     Ok( latt.reveal() )    // set
     }
 
     /// Perform a `PUT` operation for a set of values against the KVS
     #[cfg(feature = "set")]
-    pub fn put_set(&self, tokens: &[&str]) -> Result<()> {
-        debug!("PUT SET: {:?}", tokens);
+    pub fn put_set(&self, key: &str, set: &[&str]) -> Result<()> {
+        debug!("PUT SET: {} <- {:?}", key, set);
         unimplemented!()
 
         //     set<string> set;
@@ -372,11 +358,9 @@ impl KVSClient {
         //       set.insert(v[i]);
         //     }
         //
-        //     // Put async
         //     string rid = client->put_async(v[1], serialize(SetLattice<string>(set)),
         //                                    LatticeType::SET);
         //
-        //     // Receive
         //     vector<KeyResponse> responses = client->receive_async();
         //     while (responses.size() == 0) {
         //       responses = client->receive_async();
@@ -387,9 +371,6 @@ impl KVSClient {
         //     if (response.response_id() != rid) {
         //       std::cout << "Invalid response: ID did not match request ID!"
         //                 << std::endl;
-        //     }
-        //     if (response.error() != AnnaError::NO_ERROR) {
-        //       std::cout << "Failure!" << std::endl;
         //     }
     }
 
