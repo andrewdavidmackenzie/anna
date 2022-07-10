@@ -1,9 +1,8 @@
 #![warn(clippy::unwrap_used)]
+#![deny(missing_docs)]
 
 //! This is the rust `anna` Library for working with the `anna` key-value store. It is linked into
 //! the `anna` CLI binary but can also be used by others to create new binaries
-#[macro_use]
-extern crate error_chain;
 
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
@@ -11,10 +10,17 @@ use std::path::PathBuf;
 use std::process::Command;
 use sysinfo::{ProcessExt, System, SystemExt};
 
+/// `config` of anna - read from config file or created via API calls.
 pub mod config;
+/// put all error types and methods into an `errors` module
+mod errors;
+/// `info` module provides additional information about this anna client and server components running
 pub mod info;
+/// `kvs_client` connects to key-value-store server to perform operations
 pub mod kvs_client;
+/// `proto` module holds definition of protobufs for communication between client and server
 pub mod proto;
+/// `threads` provides helper methods related to anna threads
 pub mod threads;
 
 // Pending them being defined elsewhere in a build script or similar
@@ -27,22 +33,7 @@ const PROCESS_LIST: [&str; 3] = [
     ANNA_KVS_PROCESS_NAME,
 ];
 
-// We'll put our errors in an `errors` module, and other modules in this crate will
-// `use crate::errors::*;` to get access to everything `error_chain!` creates.
-#[doc(hidden)]
-pub mod errors {
-    // Create the Error, ErrorKind, ResultExt, and Result types
-    error_chain! {}
-}
-
 pub use errors::*;
-
-error_chain! {
-    foreign_links {
-        Io(::std::io::Error);
-        Serde(serde_yaml::Error);
-    }
-}
 
 /*
    Gather a list of pids that are running for a process using the process name

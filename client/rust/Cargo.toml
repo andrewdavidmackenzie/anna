@@ -18,7 +18,9 @@ name = "annalib"
 path = "src/lib/lib.rs"
 
 [features]
-default = []
+default = ["causal", "set"]
+causal = []
+set = []
 
 [dependencies]
 clap = "~3"

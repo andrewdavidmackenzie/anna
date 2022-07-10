@@ -112,9 +112,7 @@ void handle_request(KvsClientInterface *client, string input) {
       std::cout << "Invalid response: ID did not match request ID!"
                 << std::endl;
     }
-    if (response.error() == kvs::AnnaError::NO_ERROR) {
-      std::cout << "Success!" << std::endl;
-    } else {
+    if (response.error() != kvs::AnnaError::NO_ERROR) {
       std::cout << "Failure!" << std::endl;
     }
   } else if (v[0] == "PUT_CAUSAL") {
@@ -149,9 +147,7 @@ void handle_request(KvsClientInterface *client, string input) {
       std::cout << "Invalid response: ID did not match request ID!"
                 << std::endl;
     }
-    if (response.error() == kvs::AnnaError::NO_ERROR) {
-      std::cout << "Success!" << std::endl;
-    } else {
+    if (response.error() != kvs::AnnaError::NO_ERROR) {
       std::cout << "Failure!" << std::endl;
     }
   } else if (v[0] == "PUT_SET") {
@@ -176,9 +172,7 @@ void handle_request(KvsClientInterface *client, string input) {
       std::cout << "Invalid response: ID did not match request ID!"
                 << std::endl;
     }
-    if (response.error() == kvs::AnnaError::NO_ERROR) {
-      std::cout << "Success!" << std::endl;
-    } else {
+    if (response.error() != kvs::AnnaError::NO_ERROR) {
       std::cout << "Failure!" << std::endl;
     }
   } else if (v[0] == "GET_SET") {
@@ -203,10 +197,10 @@ void handle_request(KvsClientInterface *client, string input) {
 }
 
 // Read commands interactively from the terminal
-void run(KvsClientInterface *client) {
+void cli_loop_interactive(KvsClientInterface *client) {
   string input;
   while (true) {
-    std::cout << "kvs> ";
+    std::cout << "anna> ";
 
     getline(std::cin, input);
     handle_request(client, input);
@@ -214,7 +208,7 @@ void run(KvsClientInterface *client) {
 }
 
 // Read commands from `filename` until EOF
-void run(KvsClientInterface *client, string filename) {
+void cli_loop_file(KvsClientInterface *client, string filename) {
   string input;
   std::ifstream infile(filename);
 
@@ -264,8 +258,8 @@ int main(int argc, char *argv[]) {
   KvsClient client(threads, ip, 0, 10000);
 
   if (argc == 3) {
-    run(&client);
+    cli_loop_interactive(&client);
   } else {
-    run(&client, argv[3]);
+    cli_loop_file(&client, argv[3]);
   }
 }

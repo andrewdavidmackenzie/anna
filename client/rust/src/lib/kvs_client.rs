@@ -3,6 +3,7 @@
 // #include "requests.hpp"
 
 use crate::config::Config;
+use crate::errors::*;
 use crate::proto::kvs::KeyTuple;
 use crate::threads::{UserRoutingThread, UserThread};
 use log::{debug, info};
@@ -14,18 +15,21 @@ use std::hash::{Hash, Hasher};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use zmq::Context;
 
+/// An anna Address
 pub type Address = String;
+/// An anna Key
 pub type Key = String;
+/// An anna Timepoint
 pub type TimePoint = SystemTime;
 
-#[allow(dead_code)]
 struct PendingRequest {
     tp: TimePoint,
     worker_addr: Address,
     // request:    KeyRequest
 }
 
-#[allow(dead_code)]
+/// `KVSClient` struct holds all the information necessary to allow a client to perform operations
+/// against the Key-Value-Store server
 pub struct KVSClient {
     // the set of routing addresses outside the cluster
     routing_threads: Vec<UserRoutingThread>,
@@ -42,25 +46,24 @@ pub struct KVSClient {
     key_address_cache: HashMap<Key, HashSet<Address>>,
     // GC timeout
     timeout: usize,
+    //     // cache for opened sockets
+    //     socket_cache: SocketCache,
+    //
+    //     // ZMQ receiving sockets
+    //     key_address_puller: zmq::socket_t,
+    //     response_puller: zmq::socket_t,
+    //
+    //     pollitems: Vec<zmq::pollitem_t>,
+    //
+    //     // keeps track of pending requests due to missing worker address
+    //     pending_request_map: Map<Key, (TimePoint, Vec<KeyRequest>)>,
+    //
+    //     // keeps track of pending get responses
+    //     pending_get_response_map: Map<Key, PendingRequest>,
+    //
+    //     // keeps track of pending put responses
+    //     pending_put_response_map: Map<Key, Map<string, PendingRequest>>
 }
-
-//     // cache for opened sockets
-//     socket_cache: SocketCache,
-//
-//     // ZMQ receiving sockets
-//     key_address_puller: zmq::socket_t,
-//     response_puller: zmq::socket_t,
-//
-//     pollitems: Vec<zmq::pollitem_t>,
-//
-//     // keeps track of pending requests due to missing worker address
-//     pending_request_map: Map<Key, (TimePoint, Vec<KeyRequest>)>,
-//
-//     // keeps track of pending get responses
-//     pending_get_response_map: Map<Key, PendingRequest>,
-//
-//     // keeps track of pending put responses
-//     pending_put_response_map: Map<Key, Map<string, PendingRequest>>
 
 //     /*
 //         addrs A vector of routing addresses.
@@ -69,7 +72,6 @@ pub struct KVSClient {
 //         tid My client's thread ID
 //         timeout Length of request timeouts in ms
 //     */
-// //       log_(spdlog::basic_logger_mt("client_log", "client_log.txt", true)),
 //     pub fn new(
 //             routing_threads: Vec<UserRoutingThread>,
 //             ip: String,
@@ -86,31 +88,12 @@ pub struct KVSClient {
 //
 
 //
-//         let client = KVSClient {
-//             ut,
-//             context,
-//             socket_cache: SocketCache(&context_, ZMQ_PUSH),
-//             key_address_puller,
-//             response_puller,
-//             routing_threads,
-//             rid: 0,
-//             timeout: timeout.some_or(10000),
-//             pending_request_map: (),
-//             pending_get_response_map: (),
-//             pollitems,
-//             seed,
-//             key_address_cache: (),
-//             pending_put_response_map: ()
-//         };
 //
-//         // bind the two sockets we listen on
-//         key_address_puller.bind(ut.key_address_bind_address());
-//         response_puller.bind(ut.response_bind_address());
 //
-//         client
 //     }
 
 impl KVSClient {
+    /// Create a new `KVSClient` from a provided `Config` and optional thread id
     pub fn new(config: &Config, tid: Option<usize>) -> Self {
         let tid = tid.unwrap_or(0);
         let thread_count = config.get_routing_thread_count();
@@ -139,7 +122,7 @@ impl KVSClient {
         // {static_cast<void*>(response_puller_), 0, ZMQ_POLLIN, 0},
         // };
 
-        KVSClient {
+        let client = KVSClient {
             routing_threads,
             rid: 0,
             ut: UserThread::new(config.get_user_ip(), tid),
@@ -148,7 +131,24 @@ impl KVSClient {
             context: Context::new(),
             key_address_cache: HashMap::new(),
             timeout: 10000,
-        }
+        };
+
+        //         let client = KVSClient {
+        //             socket_cache: SocketCache(&context_, ZMQ_PUSH),
+        //             key_address_puller,
+        //             response_puller,
+        //             pending_request_map: (),
+        //             pending_get_response_map: (),
+        //             pollitems,
+        //             seed,
+        //             pending_put_response_map: ()
+        //         };
+
+        // bind the two sockets we listen on
+        //         key_address_puller.bind(ut.key_address_bind_address());
+        //         response_puller.bind(ut.response_bind_address());
+
+        client
     }
 
     /*
@@ -177,21 +177,21 @@ impl KVSClient {
     /*
        Clears the key address cache held by this client.
     */
-    pub fn clear_cache(&mut self) {
+    fn clear_cache(&mut self) {
         self.key_address_cache.clear()
     }
 
     /*
         Return the ZMQ context used by this client.
     */
-    pub fn get_context(&self) -> &Context {
+    fn get_context(&self) -> &Context {
         &self.context
     }
 
     /*
         Return the random seed used by this client.
     */
-    pub fn get_seed(&self) -> u64 {
+    fn get_seed(&self) -> u64 {
         self.seed
     }
 
@@ -199,7 +199,6 @@ impl KVSClient {
       Generates a unique request ID. usize will overflow and start counting from
       zero again when MAX_INT is reached.
     */
-    #[allow(dead_code)]
     fn get_request_id(&mut self) -> String {
         self.rid += 1;
         format!("{}:{}_{}", self.ut.ip(), self.ut.tid(), self.rid)
@@ -210,14 +209,14 @@ impl KVSClient {
       client is running outside of the cluster (ie, it is querying the ELB),
       there's only one address to choose from.
     */
-    #[allow(dead_code)]
     fn get_routing_thread(&mut self) -> Address {
         // random index into threads array - from 0 upto but not including routing_threads.len()
         self.routing_threads[self.rng.gen_range(0..self.routing_threads.len())]
             .key_address_connect_address()
     }
 
-    pub fn get(&self, tokens: &[&str]) {
+    /// Perform a `GET` operation against the KVS
+    pub fn get(&self, tokens: &[&str]) -> Result<String> {
         debug!("GET: {:?}", tokens);
         //     vector<KeyResponse> responses = client->receive_async();
         //     while (responses.size() == 0) {
@@ -232,11 +231,44 @@ impl KVSClient {
         //
         //     LWWPairLattice<string> lww_lattice =
         //         deserialize_lww(responses[0].tuples(0).payload());
-        //     std::cout << lww_lattice.reveal().value << std::endl;
+        //     lww_lattice.reveal().value
+        unimplemented!()
     }
 
-    pub fn get_causal(&self, tokens: &[&str]) {
+    /// Perform a `PUT` operation against the KVS
+    pub fn put(&self, tokens: &[&str]) -> Result<()> {
+        debug!("PUT: {:?}", tokens);
+        unimplemented!()
+
+        //     Key key = v[1];
+        //     LWWPairLattice<string> val(
+        //         TimestampValuePair<string>(generate_timestamp(0), v[2]));
+        //
+        //     // Put async
+        //     string rid = client->put_async(key, serialize(val), LatticeType::LWW);
+        //
+        //     // Receive
+        //     vector<KeyResponse> responses = client->receive_async();
+        //     while (responses.size() == 0) {
+        //       responses = client->receive_async();
+        //     }
+        //
+        //     KeyResponse response = responses[0];
+        //
+        //     if (response.response_id() != rid) {
+        //       std::cout << "Invalid response: ID did not match request ID!"
+        //                 << std::endl;
+        //     }
+        //     if (response.error() != AnnaError::NO_ERROR) {
+        //       std::cout << "Failure!" << std::endl;
+        //     }
+    }
+
+    /// Perform a causal `GET` operation against the KVS
+    #[cfg(feature = "causal")]
+    pub fn get_causal(&self, tokens: &[&str]) -> Result<String> {
         debug!("GET_CAUSAL: {:?}", tokens);
+        unimplemented!()
     }
     //     vector<KeyResponse> responses = client->receive_async();
     //     while (responses.size() == 0) {
@@ -269,36 +301,12 @@ impl KVSClient {
     //
     //     std::cout << *(mkcl.reveal().value.reveal().begin()) << std::endl;
 
-    pub fn put(&self, tokens: &[&str]) {
-        debug!("PUT: {:?}", tokens);
-        //     Key key = v[1];
-        //     LWWPairLattice<string> val(
-        //         TimestampValuePair<string>(generate_timestamp(0), v[2]));
-        //
-        //     // Put async
-        //     string rid = client->put_async(key, serialize(val), LatticeType::LWW);
-        //
-        //     // Receive
-        //     vector<KeyResponse> responses = client->receive_async();
-        //     while (responses.size() == 0) {
-        //       responses = client->receive_async();
-        //     }
-        //
-        //     KeyResponse response = responses[0];
-        //
-        //     if (response.response_id() != rid) {
-        //       std::cout << "Invalid response: ID did not match request ID!"
-        //                 << std::endl;
-        //     }
-        //     if (response.error() == AnnaError::NO_ERROR) {
-        //       std::cout << "Success!" << std::endl;
-        //     } else {
-        //       std::cout << "Failure!" << std::endl;
-        //     }
-    }
-
-    pub fn put_causal(&self, tokens: &[&str]) {
+    /// Perform a causal `PUT` operation against the KVS
+    #[cfg(feature = "causal")]
+    pub fn put_causal(&self, tokens: &[&str]) -> Result<()> {
         debug!("PUT_CAUSAL: {:?}", tokens);
+        unimplemented!()
+
         //     Key key = v[1];
         //
         //     MultiKeyCausalPayload<SetLattice<string>> mkcp;
@@ -329,15 +337,36 @@ impl KVSClient {
         //       std::cout << "Invalid response: ID did not match request ID!"
         //                 << std::endl;
         //     }
-        //     if (response.error() == AnnaError::NO_ERROR) {
-        //       std::cout << "Success!" << std::endl;
-        //     } else {
+        //     if (response.error() != AnnaError::NO_ERROR) {
         //       std::cout << "Failure!" << std::endl;
         //     }
     }
 
-    pub fn put_set(&self, tokens: &[&str]) {
+    /// Perform a `GET` operation for a set of values against the KVS
+    #[cfg(feature = "set")]
+    pub fn get_set(&self, tokens: &[&str]) -> Result<String> {
+        debug!("GET SET: {:?}", tokens);
+        unimplemented!()
+
+        //     // Get Async
+        //     string serialized;
+        //
+        //     // Receive
+        //     vector<KeyResponse> responses = client->receive_async();
+        //     while (responses.size() == 0) {
+        //       responses = client->receive_async();
+        //     }
+        //
+        //     SetLattice<string> latt = deserialize_set(responses[0].tuples(0).payload());
+        //     print_set(latt.reveal());
+    }
+
+    /// Perform a `PUT` operation for a set of values against the KVS
+    #[cfg(feature = "set")]
+    pub fn put_set(&self, tokens: &[&str]) -> Result<()> {
         debug!("PUT SET: {:?}", tokens);
+        unimplemented!()
+
         //     set<string> set;
         //     for (int i = 2; i < v.size(); i++) {
         //       set.insert(v[i]);
@@ -359,26 +388,9 @@ impl KVSClient {
         //       std::cout << "Invalid response: ID did not match request ID!"
         //                 << std::endl;
         //     }
-        //     if (response.error() == AnnaError::NO_ERROR) {
-        //       std::cout << "Success!" << std::endl;
-        //     } else {
+        //     if (response.error() != AnnaError::NO_ERROR) {
         //       std::cout << "Failure!" << std::endl;
         //     }
-    }
-
-    pub fn get_set(&self, tokens: &[&str]) {
-        debug!("GET SET: {:?}", tokens);
-        //     // Get Async
-        //     string serialized;
-        //
-        //     // Receive
-        //     vector<KeyResponse> responses = client->receive_async();
-        //     while (responses.size() == 0) {
-        //       responses = client->receive_async();
-        //     }
-        //
-        //     SetLattice<string> latt = deserialize_set(responses[0].tuples(0).payload());
-        //     print_set(latt.reveal());
     }
 
     /*
@@ -387,7 +399,6 @@ impl KVSClient {
      * the updated information for that key, and update our cache with that
      * information.
      */
-    #[allow(dead_code)]
     fn invalidate_cache_for_key(&mut self, key: &Key, _tuple: &KeyTuple) {
         self.key_address_cache.remove(key);
     }
