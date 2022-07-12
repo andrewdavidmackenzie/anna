@@ -43,7 +43,7 @@ jobs:
 
     - uses: codecov/codecov-action@v2
       with:
-        files: ./build/coverage.info, ./lcov.info
+        files: ./build/server.info, ./lcov.info
 
     - name: docs
       if: matrix.os == 'macos-latest'

@@ -6,7 +6,7 @@ CLANG := $(shell command -v clang 2> /dev/null)
 MDBOOK := $(shell command -v mdbook 2> /dev/null)
 GRCOV := $(shell command -v grcov 2> /dev/null)
 
-all: clippy build test docs cleanup
+all: clippy build test coverage docs cleanup
 	@echo "SUCCESS!!"
 
 # Dependencies not installed
@@ -69,7 +69,7 @@ clippy:
 	@cargo clippy --quiet --tests # -- -D warnings # for now, don't fail on warnings
 
 .PHONY: build
-build:  # Debug build, use "Release" for a Release build
+build:  # Debug build, use "-DCMAKE_BUILD_TYPE=Release" for a Release build
 	@mkdir -p build
 	@echo "Building C++ code into ./build"
 	@LD_LIBRARY_PATH="/usr/local/lib" cd build && cmake "-GUnix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER="/usr/bin/clang++" -DBUILD_TEST=ON .. 2>&1 > /dev/null && make -s -j8 2>&1 > /dev/null
@@ -77,13 +77,30 @@ build:  # Debug build, use "Release" for a Release build
 	@cargo build --quiet
 
 .PHONY: test
-test:
-	@echo "Running C++ tests with coverage"
-	@cd build && make --no-print-directory -s test-coverage > /dev/null 2>&1 && lcov --quiet --list coverage.info > /dev/null 2>&1
+test: server-cpp-tests workspace-rust-tests
+
+.PHONY: coverage
+coverage: test
+	@echo "Generating coverage report in ./coverage/index.html"
+	@genhtml -o coverage --quiet rust_workspace.info build/server.info #build/client.info
+
+.PHONY: server-cpp-tests
+server-cpp-tests:
+	@echo "Running C++ server tests with coverage"
+	@cd build && make --no-print-directory -s server-test-coverage > /dev/null 2>&1
+
+.PHONY: client-cpp-tests
+client-cpp-tests:
+	@echo "Running C++ client tests with coverage"
+	@cd build && make --no-print-directory -s client-test-coverage > /dev/null 2>&1
+
+.PHONY: workspace-rust-tests
+workspace-rust-tests:
 	@echo "Running rust tests with coverage"
 	@RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE="anna-%p-%m.profraw" cargo --quiet test 2>&1 > /dev/null
-	@echo "Generating coverage reports"
-	@grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o lcov.info 2>&1 > /dev/null
+	@echo "Gathering covering information"
+	@grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o rust_workspace.info 2>&1 > /dev/null
+	@lcov  --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' -o rust_workspace.info 2>&1 > /dev/null
 
 .PHONY: docs
 docs:
@@ -109,5 +126,5 @@ test-cleanup:
 
 .PHONY: coverage-cleanup
 coverage-cleanup:
-	@rm -f lcov.info build/coverage.info
+	@rm -f rust_workspace.info build/server.info build/client.info
 	@find . -name \*.profraw | xargs rm -f

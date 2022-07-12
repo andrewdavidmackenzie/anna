@@ -1,5 +1,10 @@
 #include "kvs/kvs_handlers.hpp"
 
+TEST_F(ClientBaseTest, SimpleTest2) {
+    EXPECT_EQ(1, 2);
+}
+
+/*
 TEST_F(ClientBaseTest, SimpleTest) {
   Key key = "key";
   string value = "value1";
@@ -23,3 +28,4 @@ TEST_F(ClientBaseTest, SimpleTest) {
   EXPECT_EQ(pending_gossip.size(), 0);
   EXPECT_EQ(serializer->get(key, error).reveal().value, value);
 }
+*/
