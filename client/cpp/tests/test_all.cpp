@@ -5,7 +5,7 @@
 
 #include "kvs.pb.h"
 #include "types.hpp"
-#include "client_base.hpp"
+#include "simple/simple_test.hpp"
 
 int main(int argc, char *argv[]) {
 //  log->set_level(spdlog::level::info);

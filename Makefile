@@ -77,12 +77,12 @@ build:  # Debug build, use "-DCMAKE_BUILD_TYPE=Release" for a Release build
 	@cargo build --quiet
 
 .PHONY: test
-test: server-cpp-tests workspace-rust-tests
+test: server-cpp-tests client-cpp-tests workspace-rust-tests
 
 .PHONY: coverage
 coverage: test
 	@echo "Generating coverage report in ./coverage/index.html"
-	@genhtml -o coverage --quiet rust_workspace.info build/server.info #build/client.info
+	@genhtml -o coverage --quiet rust_workspace.info build/server.info build/client.info
 
 .PHONY: server-cpp-tests
 server-cpp-tests:
