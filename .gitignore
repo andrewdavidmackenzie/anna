@@ -19,6 +19,8 @@ vendor/gtest/build
 *tmp*
 pids
 **/.anna_history
+rust_workspace.info
+coverage
 
 # ignore compiled byte code
 target

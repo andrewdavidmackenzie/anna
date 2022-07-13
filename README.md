@@ -72,7 +72,7 @@ For instructions on how to run Anna in cluster mode, please see the `hydro-proje
 
 ## CLI
 
-This repository has an interactive CLI ([source](client/cpp/cli.cpp), executable compiles to `build/cli/anna-cli`).
+This repository has an interactive CLI ([source](client/cpp/src/cli.cpp), executable compiles to `build/cli/anna-cli`).
 
 ## Clients
 It also includes:

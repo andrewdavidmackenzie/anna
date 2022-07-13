@@ -16,7 +16,7 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 
 IF(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
   INCLUDE(CodeCoverage.cmake)
-  SETUP_TARGET_FOR_COVERAGE(test-coverage ctest coverage)
+  SETUP_TARGET_FOR_COVERAGE(server-test-coverage ctest server)
 ENDIF()
 
 find_library(googletest_LIBRARY
@@ -32,12 +32,12 @@ find_library(gmock_LIBRARY
 SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/tests)
 
 INCLUDE_DIRECTORIES(.)
+INCLUDE_DIRECTORIES(../client/cpp/src)
 
 ADD_SUBDIRECTORY(benchmark)
 ADD_SUBDIRECTORY(kvs)
 ADD_SUBDIRECTORY(lattices)
 ADD_SUBDIRECTORY(mock)
 ADD_SUBDIRECTORY(route)
-
 
 ADD_CUSTOM_TARGET(ctest ${CMAKE_CTEST_COMMAND})

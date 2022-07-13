@@ -12,7 +12,7 @@ use std::process::exit;
 
 use annalib::{config::Config, info, kvs_client::KVSClient, start, stop};
 use clap::{App, Arg, ArgMatches, SubCommand};
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use rustyline::Editor;
 use simplog::SimpleLogger;
 use std::fs::File;
@@ -116,17 +116,27 @@ fn run() -> Result<String> {
     }
 }
 
-fn execute_command(line: &str, client: &KVSClient) {
+fn execute_command(client: &KVSClient, line: &str) -> Result<()> {
     let split = line.split(' ').collect::<Vec<&str>>();
-    match (split[0].to_ascii_uppercase().as_str(), &split[1..]) {
-        ("GET", tokens) => client.get(tokens),
-        ("GET_CAUSAL", tokens) => client.get_causal(tokens),
-        ("PUT", tokens) => client.put(tokens),
-        ("PUT_CAUSAL", tokens) => client.put_causal(tokens),
-        ("PUT_SET", tokens) => client.put_set(tokens),
-        ("GET_SET", tokens) => client.get_set(tokens),
-        (command, _) => eprintln!("Unrecognized anna command: {}. Was ignored.", command),
+    match (
+        split[0].to_ascii_uppercase().as_str(),
+        split[1],
+        &split[2..],
+    ) {
+        ("GET", key, _) => println!("{}", client.get(key)?),
+        ("PUT", key, tokens) => client.put(key, tokens[0])?,
+        #[cfg(feature = "causal")]
+        ("GET_CAUSAL", key, _) => println!("{}", client.get_causal(key)?),
+        #[cfg(feature = "causal")]
+        ("PUT_CAUSAL", key, tokens) => client.put_causal(key, tokens[0])?,
+        #[cfg(feature = "set")]
+        ("GET_SET", key, _) => println!("{}", client.get_set(key)?),
+        #[cfg(feature = "set")]
+        ("PUT_SET", key, set) => client.put_set(key, set)?,
+        (command, _, _) => bail!("Unrecognized anna command: '{}'. Was ignored.", command),
     }
+
+    Ok(())
 }
 
 /*
@@ -143,7 +153,9 @@ fn cli_loop_interactive(client: KVSClient) -> Result<&'static str> {
 
     while let Ok(line) = rl.readline("anna> ") {
         rl.add_history_entry(&line);
-        execute_command(&line, &client);
+        if let Err(e) = execute_command(&client, &line) {
+            error!("Error while executing command line: '{}'\n{}", line, e);
+        }
     }
 
     rl.save_history(ANNA_HISTORY_FILENAME)?;
@@ -160,7 +172,9 @@ fn cli_loop_file(client: KVSClient, filename: &str) -> Result<&'static str> {
     let reader = BufReader::new(file);
 
     for line in reader.lines().flatten() {
-        execute_command(&line, &client);
+        if let Err(e) = execute_command(&client, &line) {
+            error!("Error while executing command line: '{}'\n{}", line, e);
+        }
     }
 
     Ok("")

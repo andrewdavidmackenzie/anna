@@ -42,7 +42,7 @@ class KvsClient : public KvsClientInterface {
  public:
   /**
    * @addrs A vector of routing addresses.
-   * @routing_thread_count The number of thread sone ach routing node
+   * @routing_thread_count The number of threads on each routing node
    * @ip My node's IP address
    * @tid My client's thread ID
    * @timeout Length of request timeouts in ms

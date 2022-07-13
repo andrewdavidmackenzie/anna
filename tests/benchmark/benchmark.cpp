@@ -16,6 +16,7 @@
 
 #include "benchmark.pb.h"
 #include "kvs_client.hpp"
+#include "zmq/zmq_util.hpp"
 #include "kvs/kvs_threads.hpp"
 #include "yaml-cpp/yaml.h"
 
