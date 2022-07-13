@@ -117,26 +117,46 @@ fn run() -> Result<String> {
 }
 
 fn execute_command(client: &KVSClient, line: &str) -> Result<()> {
-    let split = line.split(' ').collect::<Vec<&str>>();
-    match (
-        split[0].to_ascii_uppercase().as_str(),
-        split[1],
-        &split[2..],
-    ) {
-        ("GET", key, _) => println!("{}", client.get(key)?),
-        ("PUT", key, tokens) => client.put(key, tokens[0])?,
+    let split = line.trim().split(' ').collect::<Vec<&str>>();
+
+    match split[0].to_ascii_uppercase().as_str() {
+        "GET" if split.len() == 2 => println!("{}", client.get(split[1])?),
+        "PUT" if split.len() == 3 => client.put(split[1], split[2])?,
         #[cfg(feature = "causal")]
-        ("GET_CAUSAL", key, _) => println!("{}", client.get_causal(key)?),
+        "GET_CAUSAL" if split.len() == 2 => println!("{}", client.get_causal(split[1])?),
         #[cfg(feature = "causal")]
-        ("PUT_CAUSAL", key, tokens) => client.put_causal(key, tokens[0])?,
+        "PUT_CAUSAL" if split.len() == 3 => client.put_causal(split[1], split[1])?,
         #[cfg(feature = "set")]
-        ("GET_SET", key, _) => println!("{}", client.get_set(key)?),
+        "GET_SET" if split.len() == 2 => println!("{}", client.get_set(split[1])?),
         #[cfg(feature = "set")]
-        ("PUT_SET", key, set) => client.put_set(key, set)?,
-        (command, _, _) => bail!("Unrecognized anna command: '{}'. Was ignored.", command),
+        "PUT_SET" if split.len() >= 3 => client.put_set(split[1], &split[2..])?,
+        "HELP" => println!("{}", usage()),
+        "EXIT" => exit(0),
+        _ => bail!("Invalid anna command line: '{}'\n{}", line, usage()),
     }
 
     Ok(())
+}
+
+fn usage() -> String {
+    let mut usage = "Valid commands are:\n\tget {{key}}\n\tput {{key}} {{value}}".into();
+
+    #[cfg(feature = "causal")]
+    {
+        usage = format!(
+            "{}\n\tget_causal {{key}}\n\tput_causal {{key}} {{value}}",
+            usage
+        );
+    }
+
+    #[cfg(feature = "set")]
+    {
+        usage = format!("{}\n\tget_set {{key}}\n\tput_set {{key}} {{set}}", usage);
+    }
+
+    usage = format!("{}\n\thelp\n\texit", usage);
+
+    usage
 }
 
 /*
@@ -154,7 +174,7 @@ fn cli_loop_interactive(client: KVSClient) -> Result<&'static str> {
     while let Ok(line) = rl.readline("anna> ") {
         rl.add_history_entry(&line);
         if let Err(e) = execute_command(&client, &line) {
-            error!("Error while executing command line: '{}'\n{}", line, e);
+            error!("{}", e);
         }
     }
 
