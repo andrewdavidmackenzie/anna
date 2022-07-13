@@ -10,7 +10,7 @@ extern crate error_chain;
 use std::env;
 use std::process::exit;
 
-use annalib::{config::Config, info, kvs_client::KVSClient, start, stop};
+use annalib::{config::Config, info, kvs_client::KVSClient, start, status, stop};
 use clap::{App, Arg, ArgMatches, SubCommand};
 use log::{debug, error, info, warn};
 use rustyline::Editor;
@@ -108,15 +108,15 @@ fn run() -> Result<String> {
         ("help", _) => help(app_clone),
         ("start", _) => Ok(format!(
             "{} anna processes were started",
-            start(config_file_path)?
+            start(&config_file_path)?
         )),
         ("stop", _) => Ok(format!("{} anna processes were terminated", stop()?)),
-        ("cli", arg_matches) => Ok(cli(kvs_client, arg_matches)?.into()),
+        ("cli", arg_matches) => Ok(cli(kvs_client, arg_matches, config_file_path)?.into()),
         (_, _) => Ok("No command executed".into()),
     }
 }
 
-fn execute_command(client: &KVSClient, line: &str) -> Result<()> {
+fn execute_command(client: &KVSClient, line: &str, config_file_path: &PathBuf) -> Result<()> {
     let split = line.trim().split(' ').collect::<Vec<&str>>();
 
     match split[0].to_ascii_uppercase().as_str() {
@@ -130,6 +130,9 @@ fn execute_command(client: &KVSClient, line: &str) -> Result<()> {
         "GET_SET" if split.len() == 2 => println!("{}", client.get_set(split[1])?),
         #[cfg(feature = "set")]
         "PUT_SET" if split.len() >= 3 => client.put_set(split[1], &split[2..])?,
+        "START" => println!("{} anna processes were started", start(&config_file_path)?),
+        "STOP" => println!("{} anna processes were terminated", stop()?),
+        "STATUS" => println!("{}", status()?),
         "HELP" => println!("{}", usage()),
         "EXIT" => exit(0),
         _ => bail!("Invalid anna command line: '{}'\n{}", line, usage()),
@@ -154,7 +157,11 @@ fn usage() -> String {
         usage = format!("{}\n\tget_set {{key}}\n\tput_set {{key}} {{set}}", usage);
     }
 
-    usage = format!("{}\n\thelp\n\texit", usage);
+    usage = format!(
+        "{}\n\tstart - start anna processes\n\tstop - stop running anna processes\
+        \n\tstatus - print the status of anna processes\n\thelp\n\texit",
+        usage
+    );
 
     usage
 }
@@ -162,7 +169,7 @@ fn usage() -> String {
 /*
     Enter a loop of command/response for the CLI and interact with the server processes for each
 */
-fn cli_loop_interactive(client: KVSClient) -> Result<&'static str> {
+fn cli_loop_interactive(client: KVSClient, config_file_path: PathBuf) -> Result<&'static str> {
     let mut rl = Editor::<()>::new(); // `()` can be used when no completer is required
     if rl.load_history(ANNA_HISTORY_FILENAME).is_err() {
         println!(
@@ -173,7 +180,7 @@ fn cli_loop_interactive(client: KVSClient) -> Result<&'static str> {
 
     while let Ok(line) = rl.readline("anna> ") {
         rl.add_history_entry(&line);
-        if let Err(e) = execute_command(&client, &line) {
+        if let Err(e) = execute_command(&client, &line, &config_file_path) {
             error!("{}", e);
         }
     }
@@ -186,13 +193,17 @@ fn cli_loop_interactive(client: KVSClient) -> Result<&'static str> {
 /*
     Enter a loop of command/response for the CLI and interact with the server processes for each
 */
-fn cli_loop_file(client: KVSClient, filename: &str) -> Result<&'static str> {
+fn cli_loop_file(
+    client: KVSClient,
+    filename: &str,
+    config_file_path: PathBuf,
+) -> Result<&'static str> {
     let file = File::open(filename)
         .chain_err(|| format!("Could not open the command_file: {}", filename))?;
     let reader = BufReader::new(file);
 
     for line in reader.lines().flatten() {
-        if let Err(e) = execute_command(&client, &line) {
+        if let Err(e) = execute_command(&client, &line, &config_file_path) {
             error!("Error while executing command line: '{}'\n{}", line, e);
         }
     }
@@ -203,10 +214,10 @@ fn cli_loop_file(client: KVSClient, filename: &str) -> Result<&'static str> {
 /*
    Try to parse and then open a command_file of anna commands
 */
-fn cli(client: KVSClient, args: &ArgMatches) -> Result<&'static str> {
+fn cli(client: KVSClient, args: &ArgMatches, config_file_path: PathBuf) -> Result<&'static str> {
     match args.value_of("command_file") {
-        None => cli_loop_interactive(client),
-        Some(filename) => cli_loop_file(client, filename),
+        None => cli_loop_interactive(client, config_file_path),
+        Some(filename) => cli_loop_file(client, filename, config_file_path),
     }
 }
 
