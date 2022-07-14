@@ -315,7 +315,7 @@ impl KVSClient {
         //     string rid = client->put_async(v[1], serialize(SetLattice<string>(set)),
         //                                    LatticeType::SET);
         //
-        //     vector<KeyResponse> responses = client->receive_async();
+        //     vector<KeyResponse> responses =client->receive_async();
         //     while (responses.size() == 0) {
         //       responses = client->receive_async();
         //     }

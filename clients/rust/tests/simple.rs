@@ -70,7 +70,7 @@ fn run_test(test_dir: &Path, path: &str, config_file: &str) -> io::Result<Output
 
 fn get_paths() -> io::Result<(String, String)> {
     let mut root_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    root_dir = root_dir.parent().unwrap(); // project_root/client
+    root_dir = root_dir.parent().unwrap(); // project_root/clients
     root_dir = root_dir.parent().unwrap(); // project_root
 
     let path = format!(

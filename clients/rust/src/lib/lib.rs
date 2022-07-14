@@ -6,7 +6,7 @@
 
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use sysinfo::{ProcessExt, System, SystemExt};
 

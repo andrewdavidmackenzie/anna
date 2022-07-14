@@ -62,7 +62,7 @@ clean:
 	@rm -rf build
 	@rm -f *.profraw
 	@rm -f cli/*.profraw
-	@rm -f client/python/anna/*_pb2.py
+	@rm -f clients/python/anna/*_pb2.py
 
 .PHONY: clippy
 clippy:
@@ -87,7 +87,7 @@ client-rust:
 .PHONY: client-python
 client-python:
 	@echo "Compiling python client"
-	@cd client/python/anna && protoc -I=../../../protobuf/ --python_out=. kvs.proto shared.proto causal.proto
+	@cd clients/python/anna && protoc -I=../../../protobuf/ --python_out=. kvs.proto shared.proto causal.proto
 
 .PHONY: test
 test: server-cpp-tests client-cpp-tests workspace-rust-tests
