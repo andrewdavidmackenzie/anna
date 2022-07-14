@@ -152,24 +152,35 @@ fn execute_command(client: &KVSClient, line: &str, config_file_path: &PathBuf) -
 }
 
 fn usage() -> String {
-    let mut usage = "Valid commands are:\n\tget {{key}}\n\tput {{key}} {{value}}".into();
+    let mut usage = "Valid commands are:\
+    \n\tget {{key}} \t\t\t- get the value of entry with key = {{key}} from the KVS\
+    \n\tput {{key}} {{value}} \t\t- set entry with key = {{key}} in the KVS to have value = {{value}}"
+        .into();
 
     #[cfg(feature = "causal")]
     {
         usage = format!(
-            "{}\n\tget_causal {{key}}\n\tput_causal {{key}} {{value}}",
+            "{}\n\tget_causal {{key}} \t\t- causal 'get' of value with key = {{key}} in the KVS\
+            \n\tput_causal {{key}} {{value}} \t- causal set of value with key = {{key}} in the KVS",
             usage
         );
     }
 
     #[cfg(feature = "set")]
     {
-        usage = format!("{}\n\tget_set {{key}}\n\tput_set {{key}} {{set}}", usage);
+        usage = format!(
+            "{}\n\tget_set {{key}} \t\t\t- get the value of the set with key = {{key}} in the KVS\
+        \n\tput_set {{key}} {{set}} \t\t- set the value of the set with key = {{key}} in the KVS",
+            usage
+        );
     }
 
     usage = format!(
-        "{}\n\tstart - start anna processes\n\tstop - stop running anna processes\
-        \n\tstatus - print the status of anna processes\n\thelp\n\texit",
+        "{}\n\tstart \t\t\t\t- start anna processes\
+        \n\tstop \t\t\t\t- stop running anna processes\
+        \n\tstatus \t\t\t\t- print the status of anna processes\
+        \n\thelp \t\t\t\t- print this usage message\
+        \n\texit \t\t\t\t- exit the CLI (does not stop any anna processes)",
         usage
     );
 
