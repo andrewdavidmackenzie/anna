@@ -17,7 +17,7 @@ use rustyline::Editor;
 use simplog::SimpleLogger;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const ANNA_HISTORY_FILENAME: &str = ".anna_history";
 const DEFAULT_CONFIG_FILENAME: &str = "default-config.yml";
@@ -126,7 +126,7 @@ fn print_status(status: Vec<(String, Vec<i32>)>) {
     }
 }
 
-fn execute_command(client: &KVSClient, line: &str, config_file_path: &PathBuf) -> Result<()> {
+fn execute_command(client: &KVSClient, line: &str, config_file_path: &Path) -> Result<()> {
     let split = line.trim().split(' ').collect::<Vec<&str>>();
 
     match split[0].to_ascii_uppercase().as_str() {
@@ -140,7 +140,7 @@ fn execute_command(client: &KVSClient, line: &str, config_file_path: &PathBuf) -
         "GET_SET" if split.len() == 2 => println!("{}", client.get_set(split[1])?),
         #[cfg(feature = "set")]
         "PUT_SET" if split.len() >= 3 => client.put_set(split[1], &split[2..])?,
-        "START" => println!("{} anna processes were started", start(&config_file_path)?),
+        "START" => println!("{} anna processes were started", start(config_file_path)?),
         "STOP" => println!("{} anna processes were terminated", stop()?),
         "STATUS" => print_status(status()?),
         "HELP" => println!("{}", usage()),

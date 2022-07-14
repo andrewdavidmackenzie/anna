@@ -17,7 +17,7 @@ REQUEST_PULLING_BASE_PORT = 6460
 KEY_ADDRESS_BASE_PORT = 6760
 
 
-class Thread():
+class Thread:
     def __init__(self, ip, tid):
         self.ip = ip
         self.tid = tid

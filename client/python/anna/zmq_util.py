@@ -36,7 +36,7 @@ def recv_response(req_ids, rcv_sock, resp_class):
     return responses
 
 
-class SocketCache():
+class SocketCache:
     def __init__(self, context, zmq_type):
         self.context = context
         self._cache = {}
