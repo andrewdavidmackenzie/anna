@@ -62,19 +62,32 @@ clean:
 	@rm -rf build
 	@rm -f *.profraw
 	@rm -f cli/*.profraw
+	@rm -f client/python/anna/*_pb2.py
 
 .PHONY: clippy
 clippy:
 	@echo "Running 'clippy' on rust code"
 	@cargo clippy --quiet --tests # -- -D warnings # for now, don't fail on warnings
 
+# Debug build, use "-DCMAKE_BUILD_TYPE=Release" for a Release build
 .PHONY: build
-build:  # Debug build, use "-DCMAKE_BUILD_TYPE=Release" for a Release build
+build: client-cpp client-rust client-python
+
+.PHONY: client-cpp
+client-cpp:
 	@mkdir -p build
-	@echo "Building C++ code into ./build"
+	@echo "Building entire C++ project into ./build"
 	@LD_LIBRARY_PATH="/usr/local/lib" cd build && cmake "-GUnix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER="/usr/bin/clang++" -DBUILD_TEST=ON .. 2>&1 > /dev/null && make -s -j8 2>&1 > /dev/null
-	@echo "Building rust code into ./target"
+
+.PHONY: client-rust
+client-rust:
+	@echo "Building rust code in workspace into ./target"
 	@cargo build --quiet
+
+.PHONY: client-python
+client-python:
+	@echo "Compiling python client"
+	@cd client/python/anna && protoc -I=../../../protobuf/ --python_out=. kvs.proto shared.proto causal.proto
 
 .PHONY: test
 test: server-cpp-tests client-cpp-tests workspace-rust-tests

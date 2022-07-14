@@ -6,7 +6,7 @@
 
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use sysinfo::{ProcessExt, System, SystemExt};
 
@@ -50,7 +50,7 @@ fn pids_from_name(name: &str) -> Vec<i32> {
 /// `start` function starts the processes `anna-kvs`, `anna-monitor` and `anna-route`
 ///
 /// It returns a Result<usize> with the number of processes started
-pub fn start(config_file_path: &PathBuf) -> Result<usize> {
+pub fn start(config_file_path: &Path) -> Result<usize> {
     let mut process_count = 0;
     for process_name in PROCESS_LIST.iter() {
         let pids = pids_from_name(process_name);

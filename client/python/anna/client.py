@@ -14,19 +14,19 @@
 
 import random
 import socket
-
 import zmq
 
-from anna.anna_pb2 import (
+from kvs_pb2 import (
     GET, PUT,  # Anna's request types
     NO_ERROR,  # Anna's error modes
     KeyAddressRequest,
     KeyAddressResponse,
-    KeyResponse
+    KeyResponse,
+    KeyRequest
 )
-from anna.base_client import BaseAnnaClient
-from anna.common import UserThread
-from anna.zmq_util import (
+from base_client import BaseAnnaClient
+from common import UserThread
+from zmq_util import (
     recv_response,
     send_request,
     SocketCache
@@ -35,7 +35,7 @@ from anna.zmq_util import (
 
 class AnnaTcpClient(BaseAnnaClient):
     def __init__(self, elb_addr, ip, local=False, offset=0):
-        '''
+        """
         The AnnaTcpClientTcpAnnaClient allows you to interact with a local
         copy of Anna or with a remote cluster running on AWS.
 
@@ -48,8 +48,9 @@ class AnnaTcpClient(BaseAnnaClient):
         running in local mode, otherwise do not change
         offset: A port numbering offset, which is only needed if multiple
         clients are running on the same machine
-        '''
+        """
 
+        super().__init__()
         self.elb_addr = elb_addr
 
         if local:
@@ -116,10 +117,9 @@ class AnnaTcpClient(BaseAnnaClient):
         return kv_pairs
 
     def get_all(self, keys):
-        if type(keys) != list:
-            keys = [keys]
-            raise ValueError('`get_all` currently only supports single key'
-                             + ' GETs.')
+        if type(keys) != list or not keys:
+            raise ValueError('`get_all` expects a list of keys')
+
         worker_addresses = {}
         for key in keys:
             worker_addresses[key] = self._get_worker_address(key, False)
@@ -190,8 +190,7 @@ class AnnaTcpClient(BaseAnnaClient):
 
             send_request(req, send_sock)
 
-        responses = recv_response(request_ids, self.response_puller,
-                                 KeyResponse)
+        responses = recv_response(request_ids, self.response_puller, KeyResponse)
 
         results = {}
         for response in responses:
@@ -231,7 +230,7 @@ class AnnaTcpClient(BaseAnnaClient):
             if tup.invalidate:
                 # reissue the request
                 self._invalidate_cache(tup.key)
-                return self.durable_put(key, value)
+                return self.put(key, value)
 
             if tup.error != NO_ERROR:
                 return False
@@ -259,6 +258,34 @@ class AnnaTcpClient(BaseAnnaClient):
     # the client that its cache is out of date.
     def _invalidate_cache(self, key):
         del self.address_cache[key]
+
+    # Returns and increments a request ID. Loops back after 10,000 requests.
+    def _get_request_id(self):
+        response = self.ut.get_ip() + ':' + str(self.rid)
+        self.rid = (self.rid + 1) % 10000
+        return response
+
+    # Helper function to create a KeyRequest (see
+    # hydro-project/common/lib.proto/anna.lib.proto). Takes in a key name and returns a
+    # tuple containing a KeyRequest and a KeyTuple contained in that KeyRequest
+    # with response_address, request_id, and address_cache_size automatically
+    # populated.
+    def _prepare_data_request(self, keys):
+        req = KeyRequest()
+        req.request_id = self._get_request_id()
+        req.response_address = self.response_address
+
+        tuples = []
+
+        for key in keys:
+            tup = req.tuples.add()
+            tuples.append(tup)
+            tup.key = key
+
+            if self.address_cache and key in self.address_cache:
+                tup.address_cache_size = len(self.address_cache[key])
+
+        return req, tuples
 
     # Issues a synchronous query to the routing tier. Takes in a key and a
     # (randomly chosen) routing port to issue the request to. Returns a list of

@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-from anna.anna_pb2 import (
+from kvs_pb2 import (
     # Anna's lattice types as an enum
     LWW, SET, ORDERED_SET, SINGLE_CAUSAL, MULTI_CAUSAL, PRIORITY,
     # Serialized representations of Anna's lattices
@@ -37,37 +37,38 @@ class Lattice:
         return self.reveal() == other.reveal()
 
     def reveal(self):
-        '''
+        """
         The reveal method returns an unwrapped version of the data underlying
         data structure stored by the lattice.
-        '''
+        """
         raise NotImplementedError
 
     def assign(self, value):
-        '''
+        """
         Assigns a new value to the lattice -- this must be the same as the type
         expected when creating an instance of a particular lattice.
-        '''
+        """
         raise NotImplementedError
 
     def merge(self, other):
-        '''
+        """
         Merge two lattices into one. How the merge function works is contingent
         on what the underlying data structure us.
-        '''
+        """
         raise NotImplementedError
 
     def serialize(self):
-        '''
+        """
         Serializes the underlying data structure, including metadata relevant
         to the lattice, into a protobuf and returns a protobuf object along
         with an enum tag indicating the type of this lattice.
-        '''
+        """
         raise NotImplementedError
 
 
 class LWWPairLattice(Lattice):
     def __init__(self, timestamp, value):
+        super().__init__()
         if type(timestamp) != int or type(value) != bytes:
             raise ValueError('LWWPairLattice must be a timestamp-bytes pair.')
 
@@ -101,8 +102,12 @@ class LWWPairLattice(Lattice):
 
         return res, LWW
 
+
 class SetLattice(Lattice):
-    def __init__(self, value=set()):
+    def __init__(self, value=None):
+        super().__init__()
+        if value is None:
+            value = set()
         if type(value) != set:
             raise ValueError('SetLattice can only be formed from a set.')
 
@@ -153,14 +158,16 @@ class SetLattice(Lattice):
 class ListBasedOrderedSet:
     # Preconditions: iterable's elements are unique and sorted ascending.
     # Behaviour is undefined if it is not.
-    def __init__(self, iterable=[]):
+    def __init__(self, iterable=None):
+        if iterable is None:
+            iterable = []
         self.lst = []
         for val in iterable:
             self.insert(val)
 
     # Inserts a value, maintaining sorted order.
     def insert(self, value):
-        # Microoptimization for the common case.
+        # Micro-optimization for the common case.
         if len(self.lst) == 0:
             self.lst.append(value)
         elif value > self.lst[-1]:
@@ -184,16 +191,17 @@ class ListBasedOrderedSet:
             middle = low + int((high - low) / 2)
             pivot = self.lst[middle]
             if value == pivot:
-                return (middle, True)
+                return middle, True
             elif value < pivot:
                 high = middle
             elif pivot < value:
                 low = middle + 1
-        return (low, False)
+        return low, False
 
 
 class OrderedSetLattice(Lattice):
     def __init__(self, value=ListBasedOrderedSet()):
+        super().__init__()
         if type(value) != ListBasedOrderedSet:
             raise ValueError('OrderedSetLattice can only be formed from a '
                              + 'ListBasedOrderedSet.')
@@ -252,6 +260,7 @@ class OrderedSetLattice(Lattice):
 
 class MaxIntLattice(Lattice):
     def __init__(self, value):
+        super().__init__()
         if type(value) != int:
             raise ValueError('MaxIntLattice only accepts integers.')
 
@@ -277,6 +286,7 @@ class MaxIntLattice(Lattice):
 
 class MapLattice(Lattice):
     def __init__(self, mp):
+        super().__init__()
         if type(mp) != dict:
             raise ValueError('MapLattice only accepts dict data structures.')
 
@@ -298,8 +308,7 @@ class MapLattice(Lattice):
 
         for key in other.mp.keys:
             if key in self.mp:
-                if (not isinstance(self.mp[key], Lattice) or not
-                        isinstance(other.mp[key], Lattice)):
+                if not isinstance(self.mp[key], Lattice) or not isinstance(other.mp[key], Lattice):
                     raise ValueError('Cannot merge a MapLattice with values' +
                                      ' that are not lattice types.')
                 self.mp[key].merge(other.mp[key])
@@ -312,16 +321,17 @@ class MapLattice(Lattice):
 
 class VectorClock(MapLattice):
     def __init__(self, mp, deserialize=False):
+        super().__init__(mp)
         if type(mp) != dict:
             raise ValueError('VectorClock must be a dict, not {type(mp)}.')
 
         if deserialize:
-            self.mp = VectorClock._deserialize(mp)
+            self.mp = VectorClock.deserialize(mp)
         else:
             VectorClock._validate_vc(mp)
             self.mp = mp
 
-    def _deserialize(mp):
+    def deserialize(mp):
         result = {}
 
         for key in mp:
@@ -337,7 +347,7 @@ class VectorClock(MapLattice):
         for val in mp.values():
             if type(val) != MaxIntLattice:
                 raise ValueError(('VectorClock values must be MaxIntLattices,'
-                                 + ' not %s.') % str(type(val)))
+                                  + ' not %s.') % str(type(val)))
 
     def assign(self, mp):
         if type(mp) != dict:
@@ -358,6 +368,7 @@ class VectorClock(MapLattice):
 
 class SingleKeyCausalLattice(Lattice):
     def __init__(self, vector_clock, value):
+        super().__init__()
         if type(vector_clock) != VectorClock:
             raise ValueError('Vector clock of SingleKeyCausalLattice must be a'
                              + ' VectorClock.')
@@ -396,21 +407,22 @@ class SingleKeyCausalLattice(Lattice):
             pass
 
     def serialize(self):
-        skcv = SingleKeyCausalValue()
+        single_key_causal_value = SingleKeyCausalValue()
 
         # Serialize the vector clock for this particular lattice by adding each
         # key-counter pair.
-        self.vector_clock.serialize(skcv.vector_clock)
+        self.vector_clock.serialize(single_key_causal_value.vector_clock)
 
         # Add the value(s) stored by this lattice.
         for v in self.value:
-            skcv.values.add(v)
+            single_key_causal_value.values.add(v)
 
-        return skcv, SINGLE_CAUSAL
+        return single_key_causal_value, SINGLE_CAUSAL
 
 
 class MultiKeyCausalLattice(Lattice):
     def __init__(self, vector_clock, dependencies, value):
+        super().__init__()
         if type(vector_clock) != VectorClock:
             raise ValueError('Vector clock of MultiKeyCausalLattice must be a'
                              + ' VectorClock.')
@@ -455,30 +467,32 @@ class MultiKeyCausalLattice(Lattice):
             pass
 
     def serialize(self):
-        mkcv = MultiKeyCausalValue()
+        multi_key_causal_value = MultiKeyCausalValue()
 
         # Serialize the vector clock for this particular lattice by adding each
         # key-counter pair.
-        self.vector_clock.serialize(mkcv.vector_clock)
+        self.vector_clock.serialize(multi_key_causal_value.vector_clock)
 
         # Serialize the vector clocks for each of the keys this lattice depends
         # on.
         for key in self.dependencies:
-            kv = mkcv.add_dependences()
+            kv = multi_key_causal_value.add_dependences()
             kv.key = key
             self.dependencies[key].serialize(kv.vector_clock)
 
         # Add the value(s) stored by this lattice.
         for v in self.value:
-            mkcv.values.add(v)
+            multi_key_causal_value.values.add(v)
 
-        return mkcv, MULTI_CAUSAL
+        return multi_key_causal_value, MULTI_CAUSAL
+
 
 class PriorityLattice(Lattice):
     def __init__(self, priority, value):
+        super().__init__()
         if type(priority) != float or type(value) != bytes:
             raise ValueError('PriorityLattice must be a double-bytes pair.')
-        
+
         self.priority = priority
         self.value = value
 
@@ -488,7 +502,7 @@ class PriorityLattice(Lattice):
     def assign(self, value):
         if type(value) != str:
             value = bytes(value, 'utf-8')
-            
+
         if type(value) != tuple or type(value[0]) != float or type(value[1]) != bytes:
             raise ValueError('PriorityLattice must be a double-bytes pair.')
 
@@ -505,5 +519,5 @@ class PriorityLattice(Lattice):
         res = PriorityValue()
         res.priority = self.priority
         res.value = self.value
-        
+
         return res, PRIORITY
