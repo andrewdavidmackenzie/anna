@@ -79,19 +79,12 @@ pub fn start(config_file_path: &PathBuf) -> Result<usize> {
 }
 
 /// Return a String representing the status of the anna processes
-pub fn status() -> Result<String> {
-    let mut status = String::new();
+pub fn status() -> Result<Vec<(String, Vec<i32>)>> {
+    let mut status = vec![];
 
     for process_name in PROCESS_LIST.iter() {
         let pids = pids_from_name(process_name);
-        if pids.is_empty() {
-            status = format!("{}'{}' is not running\n", status, process_name)
-        } else {
-            status = format!(
-                "{}'{}' is running with pids = {:?}\n",
-                status, process_name, pids
-            )
-        }
+        status.push((process_name.to_string(), pids));
     }
 
     Ok(status)

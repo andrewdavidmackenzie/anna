@@ -116,6 +116,16 @@ fn run() -> Result<String> {
     }
 }
 
+fn print_status(status: Vec<(String, Vec<i32>)>) {
+    for (process_name, pids) in status {
+        if pids.is_empty() {
+            println!("Process '{}' is not running", process_name);
+        } else {
+            println!("{}' is running with pids = {:?}", process_name, pids);
+        }
+    }
+}
+
 fn execute_command(client: &KVSClient, line: &str, config_file_path: &PathBuf) -> Result<()> {
     let split = line.trim().split(' ').collect::<Vec<&str>>();
 
@@ -132,7 +142,7 @@ fn execute_command(client: &KVSClient, line: &str, config_file_path: &PathBuf) -
         "PUT_SET" if split.len() >= 3 => client.put_set(split[1], &split[2..])?,
         "START" => println!("{} anna processes were started", start(&config_file_path)?),
         "STOP" => println!("{} anna processes were terminated", stop()?),
-        "STATUS" => println!("{}", status()?),
+        "STATUS" => print_status(status()?),
         "HELP" => println!("{}", usage()),
         "EXIT" => exit(0),
         _ => bail!("Invalid anna command line: '{}'\n{}", line, usage()),
