@@ -57,12 +57,13 @@ endif
 endif
 
 .PHONY: clean
-clean:
+clean: cleanup
 	@echo "Deleting all build artifacts"
-	@rm -rf build
-	@rm -f *.profraw
-	@rm -f cli/*.profraw
+	@rm -rf clients/cpp/build
+	@rm -rf server/cpp/build
+	@cargo --quiet clean
 	@rm -f clients/python/anna/*_pb2.py
+	@rm -rf coverage
 
 .PHONY: clippy
 clippy:
@@ -71,13 +72,19 @@ clippy:
 
 # Debug build, use "-DCMAKE_BUILD_TYPE=Release" for a Release build
 .PHONY: build
-build: client-cpp client-rust client-python
+build: client-cpp server-cpp client-rust client-python
 
 .PHONY: client-cpp
 client-cpp:
-	@mkdir -p build
-	@echo "Building entire C++ project into ./build"
-	@LD_LIBRARY_PATH="/usr/local/lib" cd build && cmake "-GUnix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER="/usr/bin/clang++" -DBUILD_TEST=ON .. 2>&1 > /dev/null && make -s -j8 2>&1 > /dev/null
+	@mkdir -p clients/cpp/build
+	@echo "Building client C++ project into ./clients/cpp/build"
+	@LD_LIBRARY_PATH="/usr/local/lib" cd clients/cpp/build && cmake "-GUnix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER="/usr/bin/clang++" -DBUILD_TEST=ON .. 2>&1 > /dev/null && make -s -j8 2>&1 > /dev/null
+
+.PHONY: server-cpp
+server-cpp:
+	@mkdir -p server/cpp/build
+	@echo "Building server C++ project into ./server/cpp/build"
+	@LD_LIBRARY_PATH="/usr/local/lib" cd server/cpp/build && cmake "-GUnix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER="/usr/bin/clang++" -DBUILD_TEST=ON .. 2>&1 > /dev/null && make -s -j8 2>&1 > /dev/null
 
 .PHONY: client-rust
 client-rust:
@@ -87,7 +94,7 @@ client-rust:
 .PHONY: client-python
 client-python:
 	@echo "Compiling python client"
-	@cd clients/python/anna && protoc -I=../../../protobuf/ --python_out=. kvs.proto shared.proto causal.proto
+	@cd clients/python/anna && protoc -I=../../../server/protobuf/ --python_out=. kvs.proto shared.proto causal.proto
 
 .PHONY: test
 test: server-cpp-tests client-cpp-tests workspace-rust-tests
@@ -95,17 +102,19 @@ test: server-cpp-tests client-cpp-tests workspace-rust-tests
 .PHONY: coverage
 coverage: test
 	@echo "Generating coverage report in ./coverage/index.html"
-	@genhtml -o coverage --quiet rust_workspace.info build/server.info build/client.info
+	@genhtml -o coverage --quiet rust_workspace.info server/cpp/build/server.info #clients/cpp/build/client.info
 
 .PHONY: server-cpp-tests
 server-cpp-tests:
 	@echo "Running C++ server tests with coverage"
-	@cd build && make --no-print-directory -s server-test-coverage > /dev/null 2>&1
+	@cd server/cpp/build && make --no-print-directory -s server-test-coverage > /dev/null 2>&1
+	@find server/cpp -name \*.profraw | xargs rm -f
 
 .PHONY: client-cpp-tests
 client-cpp-tests:
 	@echo "Running C++ client tests with coverage"
-	@cd build && make --no-print-directory -s client-test-coverage > /dev/null 2>&1
+	@cd clients/cpp/build && make --no-print-directory -s client-test-coverage > /dev/null 2>&1
+	@find clients/cpp -name \*.profraw | xargs rm -f
 
 .PHONY: workspace-rust-tests
 workspace-rust-tests:
@@ -113,7 +122,8 @@ workspace-rust-tests:
 	@RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE="anna-%p-%m.profraw" cargo --quiet test 2>&1 > /dev/null
 	@echo "Gathering covering information"
 	@grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o rust_workspace.info 2>&1 > /dev/null
-	@lcov  --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' -o rust_workspace.info 2>&1 > /dev/null
+	@lcov  --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' -o rust_workspace.info 2>&1 > /dev/null
+	@find clients/rust -name \*.profraw | xargs rm -f
 
 .PHONY: docs
 docs:

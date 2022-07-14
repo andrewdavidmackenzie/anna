@@ -14,14 +14,5 @@
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 
-SET(LIBRARY_DEPENDENCIES
-    protobuf::libprotobuf
-    kvs-proto
-    yaml-cpp
-    anna-zmq
-)
-
-ADD_EXECUTABLE(anna-cli cli.cpp)
-TARGET_LINK_LIBRARIES(anna-cli ${spdlog_LIBRARY} ${fmt_LIBRARY} ${yamlcpp_LIBRARY} ${ZeroMQ_LIBRARY} ${LIBRARY_DEPENDENCIES})
-
-SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/cli)
+ADD_LIBRARY(anna-hash-ring STATIC hash_ring.cpp)
+TARGET_LINK_LIBRARIES(anna-hash-ring anna-zmq ${KV_LIBRARY_DEPENDENCIES})

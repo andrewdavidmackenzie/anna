@@ -1,27 +1,9 @@
-#  Copyright 2019 U.C. Berkeley RISE Lab
-# 
-#  Licensed under the Apache License, Version 2.0 (the "License");
-#  you may not use this file except in compliance with the License.
-#  You may obtain a copy of the License at
-# 
-#      http://www.apache.org/licenses/LICENSE-2.0
-# 
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#  See the License for the specific language governing permissions and
-#  limitations under the License.
-
 CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 PROJECT(Anna)
 
 SET(ANNA_VERSION_MAJOR 0)
 SET(ANNA_VERSION_MINOR 1)
 SET(ANNA_VERSION_PATCH 0)
-
-IF(NOT DEFINED BUILD_TEST)
-  SET(BUILD_TEST OFF)
-ENDIF()
 
 IF(${BUILD_TEST})
   ENABLE_TESTING()
@@ -57,18 +39,16 @@ INCLUDE(FindProtobuf)
 FIND_PACKAGE(Protobuf REQUIRED)
 INCLUDE_DIRECTORIES(${PROTOBUF_INCLUDE_DIR})
 PROTOBUF_GENERATE_CPP(PROTO_SRC PROTO_HEADER
-  ./protobuf/kvs.proto
-  ./protobuf/shared.proto
-  ./protobuf/metadata.proto
+  ../protobuf/kvs.proto
+  ../protobuf/shared.proto
+  ../protobuf/metadata.proto
 )
 
 PROTOBUF_GENERATE_CPP(BPROTO_SRC BPROTO_HEADER
-  ./protobuf/benchmark.proto
+  ../protobuf/benchmark.proto
 )
 
-# load in pkg-config support
 find_package(PkgConfig)
-# use pkg-config to get hints for 0mq locations
 pkg_check_modules(PC_ZeroMQ QUIET zmq)
 
 # use the hint from above to find where 'zmq.hpp' is located
@@ -108,8 +88,7 @@ ADD_LIBRARY(anna-bench-proto ${BPROTO_HEADER} ${BPROTO_SRC})
 INCLUDE_DIRECTORIES(src)
 ADD_SUBDIRECTORY(src)
 
-ADD_SUBDIRECTORY(clients/cpp)
-
 IF(${BUILD_TEST})
+  SET(BUILD_TEST OFF)
   ADD_SUBDIRECTORY(tests)
 ENDIF()
