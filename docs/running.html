@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Detailed instructions on building anna - The &#x27;anna&#x27; book</title>
+        <title>Instructions for running anna - The &#x27;anna&#x27; book</title>
 
 
         <!-- Custom HTML head -->
@@ -81,7 +81,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../README.html">README.md</a></li><li class="chapter-item expanded affix "><li class="part-title">Building anna</li><li class="chapter-item expanded "><a href="../docs/building-anna.html" class="active"><strong aria-hidden="true">1.</strong> Detailed instructions on building anna</a></li><li class="chapter-item expanded affix "><li class="part-title">Running anna</li><li class="chapter-item expanded "><a href="../docs/running.html"><strong aria-hidden="true">2.</strong> Instructions for running anna</a></li><li class="chapter-item expanded affix "><li class="part-title">Oxidization of anna</li><li class="chapter-item expanded affix "><li class="part-title">Clients and CLIS</li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../README.html">README.md</a></li><li class="chapter-item expanded affix "><li class="part-title">Building anna</li><li class="chapter-item expanded "><a href="../docs/building-anna.html"><strong aria-hidden="true">1.</strong> Detailed instructions on building anna</a></li><li class="chapter-item expanded affix "><li class="part-title">Running anna</li><li class="chapter-item expanded "><a href="../docs/running.html" class="active"><strong aria-hidden="true">2.</strong> Instructions for running anna</a></li><li class="chapter-item expanded affix "><li class="part-title">Oxidization of anna</li><li class="chapter-item expanded affix "><li class="part-title">Clients and CLIS</li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -142,47 +142,39 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="building-anna"><a class="header" href="#building-anna">Building Anna</a></h1>
-<h2 id="prerequisites-left-to-the-user"><a class="header" href="#prerequisites-left-to-the-user">Prerequisites left to the user</a></h2>
-<p>There are a few pre-requisites that we don't install and that we leave to the user to install first:</p>
-<ul>
-<li>rust toolchain (cargo, rustc etc). We suggest using <a href="https://rustup.rs/">rustup</a>
-<ul>
-<li>There is a <code>rustup</code> Makefile target to install it for you. Use <code>make rustup</code> in the project root.</li>
-</ul>
-</li>
-<li>clang <code>C</code> and <code>C++</code> compiler on macos. The most normal way of getting this 
-would be:
-<ul>
-<li>install <a href="https://apps.apple.com/us/app/xcode/id497799835?mt=12">XCode from the Mac App Store</a></li>
-<li>install <a href="https://www.freecodecamp.org/news/install-xcode-command-line-tools/">Xcode command line tools</a></li>
-<li><a href="https://developer.apple.com/forums/thread/91443">accept the license</a> from the command line.</li>
-</ul>
-</li>
-</ul>
-<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
-<p>In order to build Anna, there are additional build-tool dependencies.
-Most can be installed with standard package managers like <code>brew</code> on macOS and <code>apt-get</code> on Linux.
-Some require download and being built locally with the build-tools previously installed.</p>
-<p>You can install them using <code>make dependencies</code> from the root of the project.</p>
-<h2 id="building-with-make"><a class="header" href="#building-with-make">Building with <code>make</code></a></h2>
-<p>Once all pre-requisites are correctly working on the development machine, you 
-can run the standard build using the top-level <code>Makefile</code> with just <code>make</code></p>
-<p>This will build, lint, run tests, generate docs etc.</p>
-<p>KVS server executables will be in <code>build/target</code>, the CPP-based interactive CLI for Anna in 
-<code>build/client</code> and the rust cli <code>anna</code> in <code>cli/target</code>.</p>
+                        <h2 id="using-anna-in-local-mode"><a class="header" href="#using-anna-in-local-mode">Using Anna in Local Mode</a></h2>
+<h3 id="starting-anna-processes-using-the-rust-cli"><a class="header" href="#starting-anna-processes-using-the-rust-cli">Starting Anna processes using the rust CLi</a></h3>
+<p>You can start anna background processes by using the <code>anna</code> CLI <code>start</code> command</p>
+<p>If you have the <code>anna</code> crate installed, just use</p>
+<pre><code class="language-bash">&gt; anna start
+</code></pre>
+<p>If you have not installed it, then you can build and run the development version using</p>
+<pre><code class="language-bash">&gt; cargo run -- start
+</code></pre>
+<p>By default, the <code>conf/anna-config.yml</code> config file is used, which only specifies one routing thread and one storage
+thread.</p>
+<p>You are welcome to modify this file if you would like, but we generally do not recommend running more than one
+thread per process in local mode.</p>
+<h3 id="stopping-anna"><a class="header" href="#stopping-anna">Stopping Anna</a></h3>
+<p>You can stop the running background processes by using the <code>anna</code> CLI <code>stop</code> command</p>
+<p>If you have the <code>anna</code> crate installed, just use</p>
+<pre><code class="language-bash">&gt; anna stop
+</code></pre>
+<p>If you have not installed it, then you can build and run the development version using</p>
+<pre><code class="language-bash">&gt; cargo run -- stop
+</code></pre>
+<h2 id="running-anna-in-cluster-mode"><a class="header" href="#running-anna-in-cluster-mode">Running Anna in cluster mode</a></h2>
+<p>For instructions on how to run Anna in cluster mode, please see the <code>hydro-project/cluster</code>
+<a href="https://github.com/hydro-project/cluster">repository</a>.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../README.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../docs/building-anna.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next" href="../docs/running.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                                <i class="fa fa-angle-right"></i>
-                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -190,13 +182,10 @@ can run the standard build using the top-level <code>Makefile</code> with just <
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../README.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../docs/building-anna.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next" href="../docs/running.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                        <i class="fa fa-angle-right"></i>
-                    </a>
             </nav>
 
         </div>
