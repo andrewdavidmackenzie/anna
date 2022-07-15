@@ -36,10 +36,12 @@ PROTOBUF_GENERATE_CPP(PROTO_SRC PROTO_HEADER
   ../../server/protobuf/shared.proto
   ../../server/protobuf/metadata.proto
 )
-
 PROTOBUF_GENERATE_CPP(BPROTO_SRC BPROTO_HEADER
   ../../server/protobuf/benchmark.proto
 )
+
+ADD_LIBRARY(kvs-proto ${PROTO_HEADER} ${PROTO_SRC})
+ADD_LIBRARY(anna-bench-proto ${BPROTO_HEADER} ${BPROTO_SRC})
 
 find_package(PkgConfig)
 pkg_check_modules(PC_ZeroMQ QUIET zmq)
@@ -72,9 +74,6 @@ find_library(fmt_LIBRARY
 FIND_PACKAGE(cppzmq REQUIRED)
 FIND_PACKAGE(spdlog REQUIRED)
 FIND_PACKAGE(yaml-cpp REQUIRED)
-
-ADD_LIBRARY(kvs-proto ${PROTO_HEADER} ${PROTO_SRC})
-ADD_LIBRARY(anna-bench-proto ${BPROTO_HEADER} ${BPROTO_SRC})
 
 INCLUDE_DIRECTORIES(../../server/cpp/src)
 
