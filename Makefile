@@ -109,13 +109,13 @@ coverage: test
 server-cpp-tests:
 	@echo "Running C++ server tests with coverage"
 	@cd server/cpp/build && make --no-print-directory -s server-test-coverage
-	@find server/cpp -name \*.profraw | xargs rm -f
+	@find server/cpp -name "*.profraw" | xargs rm -f
 
 .PHONY: client-cpp-tests
 client-cpp-tests:
 	@echo "Running C++ client tests with coverage"
 	@cd clients/cpp/build && make --no-print-directory -s client-test-coverage
-	@find clients/cpp -name \*.profraw | xargs rm -f
+	@find clients/cpp -name "*.profraw" | xargs rm -f
 
 .PHONY: workspace-rust-tests
 workspace-rust-tests:
@@ -124,7 +124,7 @@ workspace-rust-tests:
 	@echo "Gathering covering information"
 	@grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o rust_workspace.info
 	@lcov --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' -o rust_workspace.info
-	@find clients/rust -name \*.profraw | xargs rm -f
+	@find clients/rust -name "*.profraw" | xargs rm -f
 
 .PHONY: docs
 docs:
@@ -138,7 +138,7 @@ docs:
 	@rm -rf target/html/build target/html/conf target/html/dockerfiles
 	@rm -rf target/html/src target/html/tests target/html/protobuf
 	@rm -rf target/html/cli target/html/clients target/html/server
-	@rm -rf target/html/coverage
+	@rm -rf target/html/coverage target/html/venv
 	@echo "Cleaned up extra files in docs folder"
 
 .PHONY: cleanup
@@ -152,5 +152,3 @@ test-cleanup:
 .PHONY: coverage-cleanup
 coverage-cleanup:
 	@rm -f rust_workspace.info server/cpp/build/server.info clients/cpp/build/client.info
-	# TODO profraw still generated in root - maybe why client coverage is failing?
-	@find . -name \*.profraw | xargs rm -f
