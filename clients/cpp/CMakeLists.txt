@@ -36,11 +36,11 @@ PROTOBUF_GENERATE_CPP(PROTO_SRC PROTO_HEADER
   ../../server/protobuf/shared.proto
   ../../server/protobuf/metadata.proto
 )
+ADD_LIBRARY(kvs-proto ${PROTO_HEADER} ${PROTO_SRC})
+
 PROTOBUF_GENERATE_CPP(BPROTO_SRC BPROTO_HEADER
   ../../server/protobuf/benchmark.proto
 )
-
-ADD_LIBRARY(kvs-proto ${PROTO_HEADER} ${PROTO_SRC})
 ADD_LIBRARY(anna-bench-proto ${BPROTO_HEADER} ${BPROTO_SRC})
 
 find_package(PkgConfig)
