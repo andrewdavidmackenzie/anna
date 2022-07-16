@@ -103,25 +103,26 @@ test: server-cpp-tests client-cpp-tests workspace-rust-tests
 coverage: test
 	@echo "Generating coverage report in ./coverage/index.html"
 	@genhtml -o coverage --quiet rust_workspace.info server/cpp/build/server.info #clients/cpp/build/client.info
+	# TODO add back in client.info coverage data for cpp client
 
 .PHONY: server-cpp-tests
 server-cpp-tests:
 	@echo "Running C++ server tests with coverage"
-	@cd server/cpp/build && make --no-print-directory -s server-test-coverage > /dev/null 2>&1
+	@cd server/cpp/build && make --no-print-directory -s server-test-coverage
 	@find server/cpp -name \*.profraw | xargs rm -f
 
 .PHONY: client-cpp-tests
 client-cpp-tests:
 	@echo "Running C++ client tests with coverage"
-	@cd clients/cpp/build && make --no-print-directory -s client-test-coverage > /dev/null 2>&1
+	@cd clients/cpp/build && make --no-print-directory -s client-test-coverage
 	@find clients/cpp -name \*.profraw | xargs rm -f
 
 .PHONY: workspace-rust-tests
 workspace-rust-tests:
 	@echo "Running rust tests with coverage"
-	@RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE="anna-%p-%m.profraw" cargo --quiet test 2>&1 > /dev/null
+	@RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE="anna-%p-%m.profraw" cargo --quiet test
 	@echo "Gathering covering information"
-	@grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o rust_workspace.info 2>&1 > /dev/null
+	@grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o rust_workspace.info
 	@lcov  --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' -o rust_workspace.info 2>&1 > /dev/null
 	@find clients/rust -name \*.profraw | xargs rm -f
 
@@ -150,3 +151,5 @@ test-cleanup:
 .PHONY: coverage-cleanup
 coverage-cleanup:
 	@rm -f rust_workspace.info build/server.info build/client.info
+	# TODO profraw still generated in root - maybe why client coverage is failing?
+	@find . -name \*.profraw | xargs rm -f

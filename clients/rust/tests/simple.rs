@@ -77,10 +77,13 @@ fn get_paths() -> io::Result<(String, String)> {
         "{}:{}:{}",
         env::var("PATH").unwrap(),
         root_dir
-            .join("build/target/kvs")
+            .join("server/cpp/build/target/kvs")
             .as_path()
             .to_string_lossy(),
-        root_dir.join("build/cli").as_path().to_string_lossy(),
+        root_dir
+            .join("clients/cpp/build/cli")
+            .as_path()
+            .to_string_lossy(),
     );
 
     let config_file = root_dir.join("conf/anna-config.yml");
