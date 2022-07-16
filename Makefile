@@ -123,7 +123,7 @@ workspace-rust-tests:
 	@RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE="anna-%p-%m.profraw" cargo --quiet test
 	@echo "Gathering covering information"
 	@grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o rust_workspace.info
-	@lcov  --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' -o rust_workspace.info 2>&1 > /dev/null
+	@lcov --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' -o rust_workspace.info
 	@find clients/rust -name \*.profraw | xargs rm -f
 
 .PHONY: docs
@@ -135,9 +135,10 @@ docs:
 	@rm -f target/html/*.profraw target/html/client_log.txt target/html/log.txt target/html/log_0.txt target/html/*.info
 	@rm -f target/html/Makefile
 	@rm -f target/html/LICENSE target/html/Cargo.toml target/html/Cargo.lock target/html/CMakeLists.txt
-	@rm -rf target/html/build target/html/conf target/html/common target/html/dockerfiles target/html/include
+	@rm -rf target/html/build target/html/conf target/html/dockerfiles
 	@rm -rf target/html/src target/html/tests target/html/protobuf
-	@rm -rf target/html/cli target/html/client
+	@rm -rf target/html/cli target/html/clients target/html/server
+	@rm -rf target/html/coverage
 	@echo "Cleaned up extra files in docs folder"
 
 .PHONY: cleanup
@@ -150,6 +151,6 @@ test-cleanup:
 
 .PHONY: coverage-cleanup
 coverage-cleanup:
-	@rm -f rust_workspace.info build/server.info build/client.info
+	@rm -f rust_workspace.info server/cpp/build/server.info clients/cpp/build/client.info
 	# TODO profraw still generated in root - maybe why client coverage is failing?
 	@find . -name \*.profraw | xargs rm -f
