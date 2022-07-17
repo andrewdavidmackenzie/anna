@@ -110,20 +110,29 @@ fn run() -> Result<String> {
             "{} anna processes were started",
             start(&config_file_path)?
         )),
+        ("status", _) => Ok(print_status(status()?)),
         ("stop", _) => Ok(format!("{} anna processes were terminated", stop()?)),
         ("cli", arg_matches) => Ok(cli(kvs_client, arg_matches, config_file_path)?.into()),
         (_, _) => Ok("No command executed".into()),
     }
 }
 
-fn print_status(status: Vec<(String, Vec<i32>)>) {
+fn print_status(status: Vec<(String, Vec<i32>)>) -> String {
+    let mut status_string = String::new();
     for (process_name, pids) in status {
         if pids.is_empty() {
-            println!("Process '{}' is not running", process_name);
+            status_string = format!(
+                "{} Process '{}' is not running\n",
+                status_string, process_name
+            );
         } else {
-            println!("{}' is running with pids = {:?}", process_name, pids);
+            status_string = format!(
+                "{}{}' is running with pids = {:?}\n",
+                status_string, process_name, pids
+            );
         }
     }
+    status_string
 }
 
 fn execute_command(client: &KVSClient, line: &str, config_file_path: &Path) -> Result<()> {
@@ -142,16 +151,16 @@ fn execute_command(client: &KVSClient, line: &str, config_file_path: &Path) -> R
         "PUT_SET" if split.len() >= 3 => client.put_set(split[1], &split[2..])?,
         "START" => println!("{} anna processes were started", start(config_file_path)?),
         "STOP" => println!("{} anna processes were terminated", stop()?),
-        "STATUS" => print_status(status()?),
-        "HELP" => println!("{}", usage()),
+        "STATUS" => println!("{}", print_status(status()?)),
+        "HELP" => println!("{}", cli_usage()),
         "EXIT" => exit(0),
-        _ => bail!("Invalid anna command line: '{}'\n{}", line, usage()),
+        _ => bail!("Invalid anna command line: '{}'\n{}", line, cli_usage()),
     }
 
     Ok(())
 }
 
-fn usage() -> String {
+fn cli_usage() -> String {
     let mut usage = "Valid commands are:\
     \n\tget {{key}} \t\t\t- get the value of entry with key = {{key}} from the KVS\
     \n\tput {{key}} {{value}} \t\t- set entry with key = {{key}} in the KVS to have value = {{value}}"
@@ -287,6 +296,11 @@ fn get_app() -> App<'static> {
         )
         .subcommand(
             SubCommand::with_name("stop")
-                .about("Stop running instances of anna (monitor, route and kvs)"),
+                .about("Stop any running anna processes (monitor, route and kvs)"),
         )
+        .subcommand(
+            SubCommand::with_name("status")
+                .about("Show the status of anna processes (monitor, route and kvs)"),
+        )
+        .subcommand(SubCommand::with_name("help").about("Show the help string for anna CLI"))
 }
