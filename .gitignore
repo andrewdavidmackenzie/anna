@@ -13,7 +13,7 @@
 #  limitations under the License.
 
 # project specific
-build
+**/build
 vendor/gtest/build
 *log*.txt
 *tmp*

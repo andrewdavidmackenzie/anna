@@ -10,7 +10,7 @@
 
 # Oxidization of `anna`
 Work has begun to convert anna to a full rust project, starting gingerly by writing a rust client library 
-and cli [`anna`](client/rust/README.md).
+and cli [`anna`](clients/rust/README.md).
 
 # Clients and CLIS
 In the `client` folder there are three clients, written in C++, rust and Python. The rust one is separated
