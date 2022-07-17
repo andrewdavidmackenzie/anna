@@ -283,7 +283,7 @@ fn get_app() -> App<'static> {
         )
         .subcommand(
             SubCommand::with_name("cli")
-                .about("Start an interactive anna CLI session")
+                .about("Start anna CLI (interactive or specify file to read commands from)")
                 .arg(
                     Arg::with_name("command_file")
                         .index(1)
