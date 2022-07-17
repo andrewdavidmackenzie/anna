@@ -13,6 +13,10 @@
 //  limitations under the License.
 
 #include <fstream>
+#include <algorithm>
+#include <string>
+#include <stdio.h>
+#include <string.h>
 
 #include "kvs_client.hpp"
 #include "yaml-cpp/yaml.h"
@@ -314,8 +318,8 @@ void cli_loop_file(KvsClientInterface *client, string config_file, string filena
 }
 
 string usage(string name) {
-    return name + " --config conf-file command <CLI command file>\n" +
-    "Valid commands are help, start, stop, status, cli (interactive)\n";
+    return name + " --config config-file command <CLI command file>\n" +
+    "Valid commands are help, start, stop, status, cli\n";
 }
 
 int main(int argc, char *argv[]) {
@@ -329,6 +333,10 @@ int main(int argc, char *argv[]) {
     std::cerr << "Usage: " << usage(argv[0]) << std::endl;
     return 1;
   }
+  string my_name = argv[0];
+  string config_filename = argv[2];
+  string command = argv[3];
+  std::transform(command.begin(), command.end(), command.begin(), ::toupper);
 
   // read the YAML conf
   YAML::Node conf = YAML::LoadFile(argv[2]);
@@ -356,21 +364,22 @@ int main(int argc, char *argv[]) {
 
   KvsClient client(threads, ip, 0, 10000);
 
-  if (strcmp(argv[3], "CLI") == 0) {
+
+  if (command == "CLI") {
     if (argc == 3) {
-      cli_loop_interactive(&client, argv[2]);
+      cli_loop_interactive(&client, config_filename);
     } else {
       cli_loop_file(&client, argv[2], argv[4]);
     }
-  } else if (strcmp(argv[3], "START") == 0) {
-      std::cout << start(argv[2]) << " anna processes were started" << std::endl;
-  } else if (strcmp(argv[3], "START") == 0) {
-      std::cout << start(argv[2]) << " anna processes were stopped" << std::endl;
-  } else if (strcmp(argv[3], "STATUS") == 0) {
+  } else if (command == "START") {
+      std::cout << start(config_filename) << " anna processes were started" << std::endl;
+  } else if (command == "START") {
+      std::cout << start(config_filename) << " anna processes were stopped" << std::endl;
+  } else if (command == "STATUS") {
     for(const string &name : status()) {
         std::cout << name << " process is running" << std::endl;
     }
-  } else if (strcmp(argv[3], "HELP") == 0) {
-      std::cout << cli_usage() << std::endl;
+  } else if (command == "HELP") {
+      std::cout << usage(my_name) << std::endl;
   }
 }

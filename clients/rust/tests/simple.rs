@@ -56,7 +56,7 @@ fn run_test(test_dir: &Path, path: &str, config_file: &str) -> io::Result<Output
     let output = File::create(test_dir.join("test.output"))?;
     let error = File::create(test_dir.join("test.err"))?;
 
-    let command_args = vec!["--config", config_file, input.to_str().unwrap()];
+    let command_args = vec!["--config", config_file, "cli", input.to_str().unwrap()];
 
     Command::new("anna-cli")
         .args(command_args)
