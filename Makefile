@@ -96,14 +96,14 @@ client-python:
 	@echo "Compiling python client"
 	@cd clients/python/anna && protoc -I=../../../server/protobuf/ --python_out=. kvs.proto shared.proto causal.proto
 
-.PHONY: test
-test: server-cpp-tests client-cpp-tests workspace-rust-tests
-
 .PHONY: coverage
 coverage: test
 	@echo "Generating coverage report in ./coverage/index.html"
 	@genhtml -o coverage --quiet rust_workspace.info server/cpp/build/server.info #clients/cpp/build/client.info
 	# TODO add back in client.info coverage data for cpp client
+
+.PHONY: test
+test: server-cpp-tests client-cpp-tests workspace-rust-tests
 
 .PHONY: server-cpp-tests
 server-cpp-tests:
@@ -115,7 +115,7 @@ server-cpp-tests:
 client-cpp-tests:
 	@echo "Running C++ client tests with coverage"
 	@cd clients/cpp/build && make --no-print-directory -s client-test-coverage
-	@find clients/cpp -name "*.profraw" | xargs rm -f
+	#@find clients/cpp -name "*.profraw" | xargs rm -f #none generated at the moment!! :-(
 
 .PHONY: workspace-rust-tests
 workspace-rust-tests:
@@ -124,7 +124,8 @@ workspace-rust-tests:
 	@echo "Gathering covering information"
 	@grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o rust_workspace.info
 	@lcov --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' -o rust_workspace.info
-	@find clients/rust -name "*.profraw" | xargs rm -f
+	@find clients/rust -name "*.profraw" | xargs rm -f # .profraw files from execution of rust client
+	@find . -name "*.profraw" | xargs rm -f # .profraw files from execution of cpp client & server via rust test execution
 
 .PHONY: docs
 docs:
