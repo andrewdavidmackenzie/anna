@@ -183,8 +183,17 @@ set<string> get_set(KvsClientInterface *client, string key) {
     return set_value;
 }
 
+/*
+fn pids_from_name(name: &str) -> Vec<i32> {
+    let s = System::new_all();
+    s.processes_by_name(name)
+        .map(|process| process.pid().into())
+        .collect()
+}
+*/
+
 int start(string config_file_path) {
-    int process_count = 0;
+    int process_count = 3; // TODO until implemented
     for(const string &process_name : PROCESS_LIST) {
     /*
         let pids = pids_from_name(process_name);
@@ -227,7 +236,7 @@ vector<string> status()  {
 }
 
 int stop() {
-    int kill_count = 0;
+    int kill_count = 3; // TODO until we implement
     for(const string &process_name : PROCESS_LIST) {
     /*
         for pid in pids_from_name(process_name) {
@@ -253,21 +262,24 @@ void execute_cli_command(KvsClientInterface *client, string config_file, string 
     std::exit(EXIT_SUCCESS);
   }
 
-  if (v[0] == "GET") {
+  string command = v[0];
+  std::transform(command.begin(), command.end(), command.begin(), ::toupper);
+
+  if (command == "GET") {
     std::cout << get(client, v[1]) << std::endl;
-  } else if (v[0] == "GET_CAUSAL") {
+  } else if (command == "GET_CAUSAL") {
     std::cout << get_causal(client, v[1]) << std::endl;
-  } else if (v[0] == "PUT") {
+  } else if (command == "PUT") {
     kvs::KeyResponse response = put(client, v[1], v[2]);
     if (response.error() != kvs::AnnaError::NO_ERROR) {
       std::cout << "Failure!" << std::endl;
     }
-  } else if (v[0] == "PUT_CAUSAL") {
+  } else if (command == "PUT_CAUSAL") {
     kvs::KeyResponse response = put_causal(client, v[1], v[2]);
     if (response.error() != kvs::AnnaError::NO_ERROR) {
       std::cout << "Failure!" << std::endl;
     }
-  } else if (v[0] == "PUT_SET") {
+  } else if (command == "PUT_SET") {
     set<string> set;
     for (int i = 2; i < v.size(); i++) {
       set.insert(v[i]);
@@ -276,22 +288,22 @@ void execute_cli_command(KvsClientInterface *client, string config_file, string 
     if (response.error() != kvs::AnnaError::NO_ERROR) {
       std::cout << "Failure!" << std::endl;
     }
-  } else if (v[0] == "GET_SET") {
+  } else if (command == "GET_SET") {
     print_set(get_set(client, v[1]));
-  } else if (v[0] == "STATUS") {
+  } else if (command == "STATUS") {
     for(const string &name : status()) {
         std::cout << name << " process is running" << std::endl;
     }
-  } else if (v[0] == "START") {
+  } else if (command == "START") {
     std::cout << start(config_file) << " anna processes were started" << std::endl;
-  } else if (v[0] == "STOP") {
+  } else if (command == "STOP") {
     std::cout << start(config_file) << " anna processes were stopped" << std::endl;
-  } else if (v[0] == "HELP") {
+  } else if (command == "HELP") {
     std::cout << cli_usage() << std::endl;
-  } else if (v[0] == "EXIT") {
+  } else if (command == "EXIT") {
     std::exit(EXIT_SUCCESS);
   } else {
-    std::cout << "Unrecognized command " << v[0]
+    std::cout << "Unrecognized command: " << command << std::endl
               << cli_usage() << std::endl;
   }
 }
@@ -329,7 +341,7 @@ int main(int argc, char *argv[]) {
   // #2 - config filename
   // #3 - command
   // #4 - input file with commands if #3 is "CLI"
-  if (argc < 3 || argc > 5) {
+  if (argc < 4 || argc > 5) {
     std::cerr << "Usage: " << usage(argv[0]) << std::endl;
     return 1;
   }
@@ -366,7 +378,7 @@ int main(int argc, char *argv[]) {
 
 
   if (command == "CLI") {
-    if (argc == 3) {
+    if (argc == 4) {
       cli_loop_interactive(&client, config_filename);
     } else {
       cli_loop_file(&client, argv[2], argv[4]);
