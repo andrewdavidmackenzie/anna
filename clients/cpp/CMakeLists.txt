@@ -71,7 +71,10 @@ find_library(fmt_LIBRARY
         PATHS ${PC_fmt_LIBRARY_DIRS}
         )
 
-FIND_PACKAGE(cppzmq REQUIRED)
+if (APPLE)
+    FIND_PACKAGE(cppzmq REQUIRED)
+endif (APPLE)
+
 FIND_PACKAGE(spdlog REQUIRED)
 FIND_PACKAGE(yaml-cpp REQUIRED)
 
