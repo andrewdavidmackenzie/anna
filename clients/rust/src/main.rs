@@ -22,7 +22,10 @@ use std::path::{Path, PathBuf};
 const ANNA_HISTORY_FILENAME: &str = ".anna_history";
 const DEFAULT_CONFIG_FILENAME: &str = "default-config.yml";
 
-// Error codes
+/// `anna` CLI Error codes
+/// 0 - Success
+/// 1 - Config file error
+/// 2 - Command line arguments error (from clap)
 const SUCCESS: i32 = 0;
 
 // We'll put our errors in an `errors` module, and other modules in this crate will
@@ -40,23 +43,32 @@ error_chain! {
         Anna(annalib::Error);
         RustyLine(rustyline::error::ReadlineError);
     }
+
+    errors {
+        ConfigFileError(p: String, m: String) {
+            description("Config file error")
+            display("Problem loading config from file: '{}'\n{}", p, m)
+        }
+    }
 }
 
+use crate::ErrorKind::ConfigFileError;
 pub use errors::*;
 
 fn main() {
     match run() {
         Err(ref e) => {
-            println!("error: {}", e);
+            eprintln!("error: {}", e);
 
             for e in e.iter().skip(1) {
-                println!("caused by: {}", e);
+                eprintln!("caused by: {}", e);
             }
 
             // The backtrace is generated if env var `RUST_BACKTRACE` is set to `1` or `full`
             if let Some(backtrace) = e.backtrace() {
-                println!("backtrace: {:?}", backtrace);
+                eprintln!("backtrace: {:?}", backtrace);
             }
+
             exit(1);
         }
         Ok(msg) => {
@@ -70,13 +82,21 @@ fn main() {
 
 fn get_config_path(args: &ArgMatches) -> Result<PathBuf> {
     match args.value_of("config") {
-        Some(config_file) => PathBuf::from(config_file)
-            .canonicalize()
-            .chain_err(|| "Could not canonicalize config file path"),
+        Some(config_file) => PathBuf::from(config_file).canonicalize().chain_err(|| {
+            ConfigFileError(
+                config_file.into(),
+                "Could not canonicalize config file path".into(),
+            )
+        }),
         None => PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join(DEFAULT_CONFIG_FILENAME)
             .canonicalize()
-            .chain_err(|| "Could not canonicalize config file path"),
+            .chain_err(|| {
+                ConfigFileError(
+                    DEFAULT_CONFIG_FILENAME.into(),
+                    "Could not canonicalize default config file path".into(),
+                )
+            }),
     }
 }
 
