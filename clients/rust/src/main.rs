@@ -100,17 +100,17 @@ fn get_config_path(args: &ArgMatches) -> Result<PathBuf> {
     }
 }
 
+fn get_client(matches: &ArgMatches) -> Result<KVSClient> {
+    let config_file_path = get_config_path(matches)?;
+    let config = Config::read(&config_file_path)?;
+    info!("Using config file: {}", config_file_path.display());
+    Ok(KVSClient::new(&config, None))
+}
+
 /*
     run the cli using clap to interpret commands and options
 */
 fn run() -> Result<String> {
-    debug!(
-        "'{}' CLI version {}",
-        env!("CARGO_PKG_NAME"),
-        env!("CARGO_PKG_VERSION")
-    );
-    debug!("'anna' library version {}", info::version());
-
     let app = get_app();
     let app_clone = app.clone();
     let matches = app.get_matches();
@@ -118,10 +118,12 @@ fn run() -> Result<String> {
     // Initialize the logger with the level of verbosity requested via option (or the default)
     SimpleLogger::init_prefix(matches.value_of("verbosity"), false);
 
-    let config_file_path = get_config_path(&matches).chain_err(|| "Config file error")?;
-    let config = Config::read(&config_file_path).chain_err(|| "Could not load config from file")?;
-    info!("Using config file: {}", config_file_path.display());
-    let kvs_client = KVSClient::new(&config, None);
+    debug!(
+        "'{}' CLI version {}",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION")
+    );
+    debug!("'anna' library version {}", info::version());
 
     match matches
         .subcommand()
@@ -130,11 +132,16 @@ fn run() -> Result<String> {
         ("help", _) => help(app_clone),
         ("start", _) => Ok(format!(
             "{} anna processes were started",
-            start(&config_file_path)?
+            start(&get_config_path(&matches)?)?
         )),
         ("status", _) => Ok(print_status(status()?)),
         ("stop", _) => Ok(format!("{} anna processes were terminated", stop()?)),
-        ("cli", arg_matches) => Ok(cli(kvs_client, arg_matches, config_file_path)?.into()),
+        ("cli", arg_matches) => Ok(cli(
+            get_client(&arg_matches)?,
+            arg_matches,
+            get_config_path(&matches)?,
+        )?
+        .into()),
         (_, _) => Ok("No command executed".into()),
     }
 }

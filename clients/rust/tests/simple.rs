@@ -68,7 +68,7 @@ fn run_test(test_dir: &Path, path: &str, config_file: &str) -> io::Result<Output
         .output()
 }
 
-fn get_paths() -> io::Result<(String, String)> {
+fn get_cpp_paths() -> io::Result<String> {
     let mut root_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     root_dir = root_dir.parent().unwrap(); // project_root/clients
     root_dir = root_dir.parent().unwrap(); // project_root
@@ -86,10 +86,18 @@ fn get_paths() -> io::Result<(String, String)> {
             .to_string_lossy(),
     );
 
+    Ok(path)
+}
+
+fn get_config_file() -> io::Result<String> {
+    let mut root_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    root_dir = root_dir.parent().unwrap(); // project_root/clients
+    root_dir = root_dir.parent().unwrap(); // project_root
+
     let config_file = root_dir.join("conf/anna-config.yml");
     println!("Using config file '{}'", config_file.to_string_lossy());
 
-    Ok((path, config_file.to_string_lossy().to_string()))
+    Ok(config_file.to_string_lossy().to_string())
 }
 
 fn ctl_anna_processes(
@@ -144,7 +152,8 @@ fn test(name: &str) -> io::Result<()> {
 
     println!("test_dir = {}", test_dir.display());
 
-    let (path, config_file) = get_paths()?;
+    let config_file = get_config_file()?;
+    let path = get_cpp_paths()?;
 
     ctl_anna_processes(&test_dir, "start", &path, &config_file)
         .expect("Could not start anna processes");
