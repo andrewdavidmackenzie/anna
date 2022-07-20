@@ -22,6 +22,12 @@ use std::path::{Path, PathBuf};
 const ANNA_HISTORY_FILENAME: &str = ".anna_history";
 const DEFAULT_CONFIG_FILENAME: &str = "default-config.yml";
 
+/// `anna` CLI Error codes
+/// 0 - Success
+/// 1 - Config file error
+/// 2 - Command line arguments error (from clap)
+const SUCCESS: i32 = 0;
+
 // We'll put our errors in an `errors` module, and other modules in this crate will
 // `use crate::errors::*;` to get access to everything `error_chain!` creates.
 #[doc(hidden)]
@@ -37,57 +43,74 @@ error_chain! {
         Anna(annalib::Error);
         RustyLine(rustyline::error::ReadlineError);
     }
+
+    errors {
+        ConfigFileError(p: String, m: String) {
+            description("Config file error")
+            display("Problem loading config from file: '{}'\n{}", p, m)
+        }
+    }
 }
 
+use crate::ErrorKind::ConfigFileError;
 pub use errors::*;
 
 fn main() {
     match run() {
         Err(ref e) => {
-            println!("error: {}", e);
+            eprintln!("error: {}", e);
 
             for e in e.iter().skip(1) {
-                println!("caused by: {}", e);
+                eprintln!("caused by: {}", e);
             }
 
             // The backtrace is generated if env var `RUST_BACKTRACE` is set to `1` or `full`
             if let Some(backtrace) = e.backtrace() {
-                println!("backtrace: {:?}", backtrace);
+                eprintln!("backtrace: {:?}", backtrace);
             }
+
             exit(1);
         }
         Ok(msg) => {
             if !msg.is_empty() {
                 println!("{}", msg);
             }
-            exit(0)
+            exit(SUCCESS)
         }
     }
 }
 
 fn get_config_path(args: &ArgMatches) -> Result<PathBuf> {
     match args.value_of("config") {
-        Some(config_file) => PathBuf::from(config_file)
-            .canonicalize()
-            .chain_err(|| "Could not canonicalize config file path"),
+        Some(config_file) => PathBuf::from(config_file).canonicalize().chain_err(|| {
+            ConfigFileError(
+                config_file.into(),
+                "Could not canonicalize config file path".into(),
+            )
+        }),
         None => PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join(DEFAULT_CONFIG_FILENAME)
             .canonicalize()
-            .chain_err(|| "Could not canonicalize config file path"),
+            .chain_err(|| {
+                ConfigFileError(
+                    DEFAULT_CONFIG_FILENAME.into(),
+                    "Could not canonicalize default config file path".into(),
+                )
+            }),
     }
+}
+
+fn get_client(matches: &ArgMatches) -> Result<KVSClient> {
+    let config_file_path = get_config_path(matches)?;
+    let config = Config::read(&config_file_path)?;
+    info!("Using config file: {}", config_file_path.display());
+    Ok(KVSClient::new(&config, None))
 }
 
 /*
     run the cli using clap to interpret commands and options
 */
 fn run() -> Result<String> {
-    debug!(
-        "'{}' CLI version {}",
-        env!("CARGO_PKG_NAME"),
-        env!("CARGO_PKG_VERSION")
-    );
-    debug!("'anna' library version {}", info::version());
-
     let app = get_app();
     let app_clone = app.clone();
     let matches = app.get_matches();
@@ -95,11 +118,12 @@ fn run() -> Result<String> {
     // Initialize the logger with the level of verbosity requested via option (or the default)
     SimpleLogger::init_prefix(matches.value_of("verbosity"), false);
 
-    let config_file_path = get_config_path(&matches)?;
-    info!("Using config file: {}", config_file_path.display());
-
-    let config = Config::read(&config_file_path).chain_err(|| "Could not load config from file")?;
-    let kvs_client = KVSClient::new(&config, None);
+    debug!(
+        "'{}' CLI version {}",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION")
+    );
+    debug!("'anna' library version {}", info::version());
 
     match matches
         .subcommand()
@@ -108,22 +132,36 @@ fn run() -> Result<String> {
         ("help", _) => help(app_clone),
         ("start", _) => Ok(format!(
             "{} anna processes were started",
-            start(&config_file_path)?
+            start(&get_config_path(&matches)?)?
         )),
+        ("status", _) => Ok(print_status(status()?)),
         ("stop", _) => Ok(format!("{} anna processes were terminated", stop()?)),
-        ("cli", arg_matches) => Ok(cli(kvs_client, arg_matches, config_file_path)?.into()),
+        ("cli", arg_matches) => Ok(cli(
+            get_client(&arg_matches)?,
+            arg_matches,
+            get_config_path(&matches)?,
+        )?
+        .into()),
         (_, _) => Ok("No command executed".into()),
     }
 }
 
-fn print_status(status: Vec<(String, Vec<i32>)>) {
+fn print_status(status: Vec<(String, Vec<i32>)>) -> String {
+    let mut status_string = String::new();
     for (process_name, pids) in status {
         if pids.is_empty() {
-            println!("Process '{}' is not running", process_name);
+            status_string = format!(
+                "{} Process '{}' is not running\n",
+                status_string, process_name
+            );
         } else {
-            println!("{}' is running with pids = {:?}", process_name, pids);
+            status_string = format!(
+                "{}{}' is running with pids = {:?}\n",
+                status_string, process_name, pids
+            );
         }
     }
+    status_string
 }
 
 fn execute_command(client: &KVSClient, line: &str, config_file_path: &Path) -> Result<()> {
@@ -142,16 +180,16 @@ fn execute_command(client: &KVSClient, line: &str, config_file_path: &Path) -> R
         "PUT_SET" if split.len() >= 3 => client.put_set(split[1], &split[2..])?,
         "START" => println!("{} anna processes were started", start(config_file_path)?),
         "STOP" => println!("{} anna processes were terminated", stop()?),
-        "STATUS" => print_status(status()?),
-        "HELP" => println!("{}", usage()),
+        "STATUS" => println!("{}", print_status(status()?)),
+        "HELP" => println!("{}", cli_usage()),
         "EXIT" => exit(0),
-        _ => bail!("Invalid anna command line: '{}'\n{}", line, usage()),
+        _ => bail!("Invalid anna command line: '{}'\n{}", line, cli_usage()),
     }
 
     Ok(())
 }
 
-fn usage() -> String {
+fn cli_usage() -> String {
     let mut usage = "Valid commands are:\
     \n\tget {{key}} \t\t\t- get the value of entry with key = {{key}} from the KVS\
     \n\tput {{key}} {{value}} \t\t- set entry with key = {{key}} in the KVS to have value = {{value}}"
@@ -274,7 +312,7 @@ fn get_app() -> App<'static> {
         )
         .subcommand(
             SubCommand::with_name("cli")
-                .about("Start an interactive anna CLI session")
+                .about("Start anna CLI (interactive or specify file to read commands from)")
                 .arg(
                     Arg::with_name("command_file")
                         .index(1)
@@ -287,6 +325,11 @@ fn get_app() -> App<'static> {
         )
         .subcommand(
             SubCommand::with_name("stop")
-                .about("Stop running instances of anna (monitor, route and kvs)"),
+                .about("Stop any running anna processes (monitor, route and kvs)"),
         )
+        .subcommand(
+            SubCommand::with_name("status")
+                .about("Show the status of anna processes (monitor, route and kvs)"),
+        )
+        .subcommand(SubCommand::with_name("help").about("Show the help string for anna CLI"))
 }
