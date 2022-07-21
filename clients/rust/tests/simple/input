@@ -1,3 +1,4 @@
+start
 PUT a 1
 GET a
 PUT b 2
@@ -10,3 +11,4 @@ PUT_SET set 1 2 4
 GET_SET set
 PUT_CAUSAL c hello
 GET_CAUSAL c
+stop
