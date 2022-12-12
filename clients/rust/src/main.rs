@@ -11,7 +11,7 @@ use std::env;
 use std::process::exit;
 
 use annalib::{config::Config, info, kvs_client::KVSClient, start, status, stop};
-use clap::{App, Arg, ArgMatches, SubCommand};
+use clap::{Arg, ArgMatches, Command};
 use log::{debug, error, info, warn};
 use rustyline::Editor;
 use simplog::SimpleLogger;
@@ -81,7 +81,7 @@ fn main() {
 }
 
 fn get_config_path(args: &ArgMatches) -> Result<PathBuf> {
-    match args.value_of("config") {
+    match args.get_one::<String>("config").map(|s| s.as_str()) {
         Some(config_file) => PathBuf::from(config_file).canonicalize().chain_err(|| {
             ConfigFileError(
                 config_file.into(),
@@ -116,7 +116,8 @@ fn run() -> Result<String> {
     let matches = app.get_matches();
 
     // Initialize the logger with the level of verbosity requested via option (or the default)
-    SimpleLogger::init_prefix(matches.value_of("verbosity"), false);
+    let verbosity = matches.get_one::<String>("verbosity").map(|s| s.as_str());
+    SimpleLogger::init_prefix(verbosity, false);
 
     debug!(
         "'{}' CLI version {}",
@@ -274,7 +275,7 @@ fn cli_loop_file(
    Try to parse and then open a command_file of anna commands
 */
 fn cli(client: KVSClient, args: &ArgMatches, config_file_path: PathBuf) -> Result<&'static str> {
-    match args.value_of("command_file") {
+    match args.get_one::<String>("command_file").map(|s| s.as_str()) {
         None => cli_loop_interactive(client, config_file_path),
         Some(filename) => cli_loop_file(client, filename, config_file_path),
     }
@@ -283,7 +284,7 @@ fn cli(client: KVSClient, args: &ArgMatches, config_file_path: PathBuf) -> Resul
 /*
     The 'help' command
 */
-fn help(mut app: App) -> Result<String> {
+fn help(mut app: Command) -> Result<String> {
     app.print_long_help()?;
     Ok("".into())
 }
@@ -291,45 +292,44 @@ fn help(mut app: App) -> Result<String> {
 /*
     Create the clap app with the desired options and sub commands
 */
-fn get_app() -> App<'static> {
-    App::new(env!("CARGO_PKG_NAME"))
-        .version(env!("CARGO_PKG_VERSION"))
-        .arg(
-            Arg::with_name("verbosity")
-                .short('v')
-                .long("verbosity")
-                .takes_value(true)
-                .value_name("VERBOSITY_LEVEL")
-                .help("Set verbosity level for output (trace, debug, info, warn, error (default))"),
-        )
-        .arg(
-            Arg::with_name("config")
-                .short('c')
-                .long("config")
-                .takes_value(true)
-                .value_name("CONFIG_FILE")
-                .help("Specify the config file to be used"),
-        )
-        .subcommand(
-            SubCommand::with_name("cli")
-                .about("Start anna CLI (interactive or specify file to read commands from)")
-                .arg(
-                    Arg::with_name("command_file")
-                        .index(1)
-                        .help("A file where anna commands are read from"),
-                ),
-        )
-        .subcommand(
-            SubCommand::with_name("start")
-                .about("Start anna processes (monitor, route and kvs) in background"),
-        )
-        .subcommand(
-            SubCommand::with_name("stop")
-                .about("Stop any running anna processes (monitor, route and kvs)"),
-        )
-        .subcommand(
-            SubCommand::with_name("status")
-                .about("Show the status of anna processes (monitor, route and kvs)"),
-        )
-        .subcommand(SubCommand::with_name("help").about("Show the help string for anna CLI"))
+fn get_app() -> Command {
+    let app = Command::new(env!("CARGO_PKG_NAME")).version(env!("CARGO_PKG_VERSION"));
+
+    app.arg(
+        Arg::new("verbosity")
+            .short('v')
+            .long("verbosity")
+            .num_args(0..1)
+            .number_of_values(1)
+            .value_name("VERBOSITY_LEVEL")
+            .help("Set verbosity level for output (trace, debug, info, warn, error (default))"),
+    )
+    .arg(
+        Arg::new("config")
+            .short('c')
+            .long("config")
+            .num_args(1)
+            .number_of_values(1)
+            .value_name("CONFIG_FILE")
+            .help("Specify the config file to be used"),
+    )
+    .subcommand(
+        Command::new("cli")
+            .about("Start anna CLI (interactive or specify file to read commands from)")
+            .arg(
+                Arg::new("command_file")
+                    .index(1)
+                    .help("A file where anna commands are read from"),
+            ),
+    )
+    .subcommand(
+        Command::new("start").about("Start anna processes (monitor, route and kvs) in background"),
+    )
+    .subcommand(
+        Command::new("stop").about("Stop any running anna processes (monitor, route and kvs)"),
+    )
+    .subcommand(
+        Command::new("status").about("Show the status of anna processes (monitor, route and kvs)"),
+    )
+    .subcommand(Command::new("help").about("Show the help string for anna CLI"))
 }
