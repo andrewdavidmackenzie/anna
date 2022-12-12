@@ -137,7 +137,7 @@ fn run() -> Result<String> {
         ("status", _) => Ok(print_status(status()?)),
         ("stop", _) => Ok(format!("{} anna processes were terminated", stop()?)),
         ("cli", arg_matches) => Ok(cli(
-            get_client(&arg_matches)?,
+            get_client(arg_matches)?,
             arg_matches,
             get_config_path(&matches)?,
         )?
