@@ -25,7 +25,7 @@ fn invalid_command() -> Result<(), Box<dyn std::error::Error>> {
         .failure()
         .code(2)
         .stderr(predicate::str::contains(
-            "Found argument 'foo' which wasn't expected",
+            "The subcommand 'foo' wasn't recognized",
         ));
 
     Ok(())
@@ -52,21 +52,6 @@ fn default_config_file() -> Result<(), Box<dyn std::error::Error>> {
 
     cmd.arg("help");
     cmd.assert().success();
-
-    Ok(())
-}
-
-#[test]
-fn help_contains_version() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::cargo_bin("anna")?;
-
-    cmd.arg("help");
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains(format!(
-            "anna {}",
-            env!("CARGO_PKG_VERSION")
-        )));
 
     Ok(())
 }
