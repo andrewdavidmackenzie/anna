@@ -25,7 +25,7 @@ fn invalid_command() -> Result<(), Box<dyn std::error::Error>> {
         .failure()
         .code(2)
         .stderr(predicate::str::contains(
-            "Found argument 'foo' which wasn't expected",
+            "The subcommand 'foo' wasn't recognized",
         ));
 
     Ok(())
