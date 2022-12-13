@@ -25,7 +25,7 @@ set = []
 [dependencies]
 clap = "~3"
 log = "0.4.17"
-simplog = "~1.5"
+simplog = "~1.6"
 error-chain = "0.12.2"
 sysinfo = "0.27.0"
 nix = "0.24.2"
