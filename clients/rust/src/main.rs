@@ -130,7 +130,6 @@ fn run() -> Result<String> {
         .subcommand()
         .ok_or("Could not find valid subcommand")?
     {
-        ("help", _) => help(app_clone),
         ("start", _) => Ok(format!(
             "{} anna processes were started",
             start(&get_config_path(&matches)?)?
@@ -279,14 +278,6 @@ fn cli(client: KVSClient, args: &ArgMatches, config_file_path: PathBuf) -> Resul
         None => cli_loop_interactive(client, config_file_path),
         Some(filename) => cli_loop_file(client, filename, config_file_path),
     }
-}
-
-/*
-    The 'help' command
-*/
-fn help(mut app: Command) -> Result<String> {
-    app.print_long_help()?;
-    Ok("".into())
 }
 
 /*
