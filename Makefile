@@ -6,8 +6,12 @@ CLANG := $(shell command -v clang 2> /dev/null)
 MDBOOK := $(shell command -v mdbook 2> /dev/null)
 GRCOV := $(shell command -v grcov 2> /dev/null)
 
-all: clippy build test coverage docs cleanup
+all: clean-start clippy build test coverage docs cleanup
 	@echo "SUCCESS!!"
+
+.PHONY: clean-start
+clean-start:
+	@find . -name "*.profraw" | xargs rm -f
 
 # Dependencies not installed
 # clang on mac
