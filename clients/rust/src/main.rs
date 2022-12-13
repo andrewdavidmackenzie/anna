@@ -331,5 +331,4 @@ fn get_app() -> Command {
     .subcommand(
         Command::new("status").about("Show the status of anna processes (monitor, route and kvs)"),
     )
-    .subcommand(Command::new("help").about("Show the help string for anna CLI"))
 }
