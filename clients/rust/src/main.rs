@@ -112,7 +112,6 @@ fn get_client(matches: &ArgMatches) -> Result<KVSClient> {
 */
 fn run() -> Result<String> {
     let app = get_app();
-    let app_clone = app.clone();
     let matches = app.get_matches();
 
     // Initialize the logger with the level of verbosity requested via option (or the default)
@@ -229,7 +228,8 @@ fn cli_usage() -> String {
     Enter a loop of command/response for the CLI and interact with the server processes for each
 */
 fn cli_loop_interactive(client: KVSClient, config_file_path: PathBuf) -> Result<&'static str> {
-    let mut rl = Editor::<()>::new(); // `()` can be used when no completer is required
+    // `()` can be used when no completer is required
+    let mut rl = Editor::<()>::new()?;
     if rl.load_history(ANNA_HISTORY_FILENAME).is_err() {
         println!(
             "No previous history. Saving new history in {}",
