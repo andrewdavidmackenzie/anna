@@ -57,21 +57,6 @@ fn default_config_file() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn help_contains_version() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::cargo_bin("anna")?;
-
-    cmd.arg("help");
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains(format!(
-            "anna {}",
-            env!("CARGO_PKG_VERSION")
-        )));
-
-    Ok(())
-}
-
-#[test]
 fn debug_contains_lib_version() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("anna")?;
 
