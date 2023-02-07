@@ -9,11 +9,11 @@ SET(CMAKE_CXX_STANDARD 14)
 SET(CMAKE_CXX_STANDARD_REQUIRED on)
 
 IF(${CMAKE_CXX_COMPILER} STREQUAL "/usr/bin/clang++")
-  SET(CMAKE_CXX_FLAGS_COMMON "-std=c++11 -stdlib=libc++ -pthread")
+  SET(CMAKE_CXX_FLAGS_COMMON "-stdlib=libc++ -pthread")
 ENDIF()
 
 IF(${CMAKE_CXX_COMPILER} STREQUAL "/usr/bin/g++")
-  SET(CMAKE_CXX_FLAGS_COMMON "-std=c++11 -pthread")
+  SET(CMAKE_CXX_FLAGS_COMMON "-pthread")
 ENDIF()
 
 SET(CMAKE_CXX_FLAGS_DEBUG
