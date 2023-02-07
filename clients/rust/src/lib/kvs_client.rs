@@ -333,7 +333,7 @@ impl KVSClient {
     /*
        Clears the key address cache held by this client.
     */
-    #[warn(dead_code)] // TODO implement use of these functions
+    #[allow(dead_code)] // TODO implement use of these functions
     fn clear_cache(&mut self) {
         self.key_address_cache.clear()
     }
@@ -342,7 +342,7 @@ impl KVSClient {
       Generates a unique request ID. usize will overflow and start counting from
       zero again when MAX_INT is reached.
     */
-    #[warn(dead_code)] // TODO implement use of these functions
+    #[allow(dead_code)] // TODO implement use of these functions
     fn get_request_id(&mut self) -> String {
         self.rid += 1;
         format!("{}:{}_{}", self.ut.ip(), self.ut.tid(), self.rid)
@@ -353,7 +353,7 @@ impl KVSClient {
       client is running outside of the cluster (ie, it is querying the ELB),
       there's only one address to choose from.
     */
-    #[warn(dead_code)] // TODO implement use of these functions
+    #[allow(dead_code)] // TODO implement use of these functions
     fn get_routing_thread(&mut self) -> Address {
         // random index into threads array - from 0 upto but not including routing_threads.len()
         self.routing_threads[self.rng.gen_range(0..self.routing_threads.len())]
@@ -366,7 +366,7 @@ impl KVSClient {
      * the updated information for that key, and update our cache with that
      * information.
      */
-    #[warn(dead_code)] // TODO implement use of these functions
+    #[allow(dead_code)] // TODO implement use of these functions
     fn invalidate_cache_for_key(&mut self, key: &Key, _tuple: &KeyTuple) {
         self.key_address_cache.remove(key);
     }
