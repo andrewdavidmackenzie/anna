@@ -24,9 +24,7 @@ fn invalid_command() -> Result<(), Box<dyn std::error::Error>> {
     cmd.assert()
         .failure()
         .code(2)
-        .stderr(predicate::str::contains(
-            "The subcommand 'foo' wasn't recognized",
-        ));
+        .stderr(predicate::str::contains("unrecognized subcommand 'foo'"));
 
     Ok(())
 }
