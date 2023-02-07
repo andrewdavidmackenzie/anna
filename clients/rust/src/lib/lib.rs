@@ -49,7 +49,7 @@ fn pids_from_name(name: &str) -> Vec<i32> {
 
 /// `start` function starts the processes `anna-kvs`, `anna-monitor` and `anna-route`
 ///
-/// It returns a Result<usize> with the number of processes started
+/// It returns a `Result<usize>` with the number of processes started
 pub fn start(config_file_path: &Path) -> Result<usize> {
     let mut process_count = 0;
     for process_name in PROCESS_LIST.iter() {
@@ -78,7 +78,11 @@ pub fn start(config_file_path: &Path) -> Result<usize> {
     Ok(process_count)
 }
 
-/// Return a String representing the status of the anna processes
+/// `status` - get the status of the various anna processes that maybe running
+///
+/// Return a `Vec<(String, Vec<i32>)>` representing the status of the anna processes
+/// where `String` is the process name and `Vec<i32>` is a vector of pids of processes with
+/// that name
 pub fn status() -> Result<Vec<(String, Vec<i32>)>> {
     let mut status = vec![];
 
@@ -92,7 +96,7 @@ pub fn status() -> Result<Vec<(String, Vec<i32>)>> {
 
 /// `stop` function terminates the processes `anna-kvs`, `anna-monitor` and `anna-route`
 ///
-/// It returns a Result<usize> with the number of processes terminated
+/// It returns a `Result<usize>` with the number of processes terminated
 pub fn stop() -> Result<usize> {
     let mut kill_count: usize = 0;
     for process_name in PROCESS_LIST.iter() {
