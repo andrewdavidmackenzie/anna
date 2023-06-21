@@ -13,7 +13,7 @@ use std::process::exit;
 use annalib::{config::Config, info, kvs_client::KVSClient, start, status, stop};
 use clap::{Arg, ArgMatches, Command};
 use log::{debug, error, info, warn};
-use rustyline::Editor;
+use rustyline::DefaultEditor;
 use simplog::SimpleLogger;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -229,7 +229,7 @@ fn cli_usage() -> String {
 */
 fn cli_loop_interactive(client: KVSClient, config_file_path: PathBuf) -> Result<&'static str> {
     // `()` can be used when no completer is required
-    let mut rl = Editor::<()>::new()?;
+    let mut rl = DefaultEditor::new()?;
     if rl.load_history(ANNA_HISTORY_FILENAME).is_err() {
         println!(
             "No previous history. Saving new history in {}",
@@ -238,7 +238,7 @@ fn cli_loop_interactive(client: KVSClient, config_file_path: PathBuf) -> Result<
     }
 
     while let Ok(line) = rl.readline("anna> ") {
-        rl.add_history_entry(&line);
+        let _ = rl.add_history_entry(&line);
         if let Err(e) = execute_command(&client, &line, &config_file_path) {
             error!("{}", e);
         }
