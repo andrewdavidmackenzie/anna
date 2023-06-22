@@ -65,6 +65,7 @@ clean: cleanup
 	@echo "Deleting all build artifacts"
 	@rm -rf clients/cpp/build
 	@rm -rf server/cpp/build
+	@rm -rf build
 	@cargo --quiet clean
 	@rm -f clients/python/anna/*_pb2.py
 	@rm -rf coverage
