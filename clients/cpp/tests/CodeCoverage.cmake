@@ -142,7 +142,7 @@ FUNCTION(SETUP_TARGET_FOR_COVERAGE _targetname _testrunner _outputname)
     COMMAND lcov --version
 
     # Capturing lcov counters and generating report
-    COMMAND ${LCOV_PATH} --directory . --base-directory . --capture --output-file ${coverage_info} --gcov-tool="${CMAKE_SOURCE_DIR}/tests/llvm-gcov.sh"
+    COMMAND ${LCOV_PATH} --directory . --base-directory . --capture --output-file ${coverage_info} --gcov-tool="${CMAKE_SOURCE_DIR}/tests/llvm-gcov.sh" --ignore-errors inconsistent
     COMMAND ${LCOV_PATH} --remove ${coverage_info} '/Applications/*' '/usr*' '*/build/*' '*/test/*' '*tests/*' '*/ext/*' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '*/protobuf/*' -o ${coverage_info}
 
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
