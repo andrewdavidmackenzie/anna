@@ -9,7 +9,7 @@ IF(${BUILD_TEST})
   ENABLE_TESTING()
 ENDIF()
 
-SET(CMAKE_CXX_STANDARD 14)
+SET(CMAKE_CXX_STANDARD 17)
 SET(CMAKE_CXX_STANDARD_REQUIRED on)
 
 IF(${CMAKE_CXX_COMPILER} STREQUAL "/usr/bin/clang++") 
@@ -33,18 +33,27 @@ SET(CMAKE_CXX_FLAGS_RELEASE
 
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
 
-INCLUDE(FindProtobuf)
-FIND_PACKAGE(Protobuf REQUIRED)
-INCLUDE_DIRECTORIES(${PROTOBUF_INCLUDE_DIR})
-PROTOBUF_GENERATE_CPP(PROTO_SRC PROTO_HEADER
-  ../protobuf/kvs.proto
-  ../protobuf/shared.proto
-  ../protobuf/metadata.proto
-)
+FIND_PACKAGE(Protobuf CONFIG REQUIRED)
 
-PROTOBUF_GENERATE_CPP(BPROTO_SRC BPROTO_HEADER
-  ../protobuf/benchmark.proto
+protobuf_generate(
+  LANGUAGE cpp
+  PROTOS ../protobuf/kvs.proto ../protobuf/shared.proto ../protobuf/metadata.proto
+  IMPORT_DIRS ../protobuf
+  APPEND_PATH
+  OUT_VAR PROTO_SRC
 )
+ADD_LIBRARY(kvs-proto ${PROTO_SRC})
+TARGET_LINK_LIBRARIES(kvs-proto protobuf::libprotobuf)
+
+protobuf_generate(
+  LANGUAGE cpp
+  PROTOS ../protobuf/benchmark.proto
+  IMPORT_DIRS ../protobuf
+  APPEND_PATH
+  OUT_VAR BPROTO_SRC
+)
+ADD_LIBRARY(anna-bench-proto ${BPROTO_SRC})
+TARGET_LINK_LIBRARIES(anna-bench-proto protobuf::libprotobuf)
 
 find_package(PkgConfig)
 pkg_check_modules(PC_ZeroMQ QUIET zmq)
@@ -71,17 +80,11 @@ find_library(spdlog_LIBRARY
         PATHS ${PC_spdlog_LIBRARY_DIRS}
         )
 
-find_library(fmt_LIBRARY
-        NAMES fmt
-        PATHS ${PC_fmt_LIBRARY_DIRS}
-        )
+FIND_PACKAGE(fmt CONFIG QUIET)
 
 FIND_PACKAGE(cppzmq REQUIRED)
-FIND_PACKAGE(spdlog REQUIRED)
+FIND_PACKAGE(spdlog CONFIG REQUIRED)
 FIND_PACKAGE(yaml-cpp REQUIRED)
-
-ADD_LIBRARY(kvs-proto ${PROTO_HEADER} ${PROTO_SRC})
-ADD_LIBRARY(anna-bench-proto ${BPROTO_HEADER} ${BPROTO_SRC})
 
 INCLUDE_DIRECTORIES(src)
 ADD_SUBDIRECTORY(src)
