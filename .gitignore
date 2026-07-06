@@ -86,3 +86,4 @@ tags
 *.exe
 *.out
 *.app
+CMakeFiles/

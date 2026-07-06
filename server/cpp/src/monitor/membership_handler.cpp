@@ -62,7 +62,7 @@ void membership_handler(
     }
 
     for (const auto &pair : global_hash_rings) {
-      log->info("Hash ring for tier {} is size {}.", pair.first,
+      log->info("Hash ring for tier {} is size {}.", Tier_Name(pair.first),
                 pair.second.size());
     }
   } else if (type == "depart") {
@@ -99,7 +99,7 @@ void membership_handler(
     }
 
     for (const auto &pair : global_hash_rings) {
-      log->info("Hash ring for tier {} is size {}.", pair.first,
+      log->info("Hash ring for tier {} is size {}.", Tier_Name(pair.first),
                 pair.second.size());
     }
   }

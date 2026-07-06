@@ -1,0 +1,39 @@
+{
+  "commands": [
+    {
+      "name": "build",
+      "description": "Build all components (C++ server, C++ client, Rust client)",
+      "command": "make build"
+    },
+    {
+      "name": "test",
+      "description": "Run all tests (C++ server, C++ client, Rust)",
+      "command": "make test"
+    },
+    {
+      "name": "lint",
+      "description": "Run clippy on Rust code",
+      "command": "make clippy"
+    },
+    {
+      "name": "fmt",
+      "description": "Format Rust code with cargo fmt",
+      "command": "make fmt"
+    },
+    {
+      "name": "check",
+      "description": "Run lint + format check + test",
+      "command": "make clippy && make fmt && make test"
+    },
+    {
+      "name": "docs",
+      "description": "Build documentation and book",
+      "command": "make docs"
+    },
+    {
+      "name": "clean",
+      "description": "Clean all build artifacts",
+      "command": "make clean"
+    }
+  ]
+}
