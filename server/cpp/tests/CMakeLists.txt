@@ -19,15 +19,7 @@ IF(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
   SETUP_TARGET_FOR_COVERAGE(server-test-coverage ctest server)
 ENDIF()
 
-find_library(googletest_LIBRARY
-        NAMES gtest
-        PATHS ${PC_googletest_LIBRARY_DIRS}
-        )
-
-find_library(gmock_LIBRARY
-        NAMES gmock
-        PATHS ${PC_gmock_LIBRARY_DIRS}
-        )
+FIND_PACKAGE(GTest CONFIG REQUIRED)
 
 SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/tests)
 
