@@ -101,7 +101,7 @@ void user_request_handler(
           }
         } else {
           log->error("Unknown request type {} in user request handler.",
-                     request_type);
+                     kvs::RequestType_Name(request_type));
         }
 
         if (tuple.address_cache_size() > 0 &&

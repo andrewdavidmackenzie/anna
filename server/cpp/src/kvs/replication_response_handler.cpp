@@ -61,7 +61,7 @@ void replication_response_handler(
     return;
   } else {
     log->error("Unexpected error type {} in replication factor response.",
-               error);
+               kvs::AnnaError_Name(error));
     return;
   }
 
