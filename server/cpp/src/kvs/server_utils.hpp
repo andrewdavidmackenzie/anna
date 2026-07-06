@@ -15,6 +15,7 @@
 #ifndef INCLUDE_KVS_SERVER_UTILS_HPP_
 #define INCLUDE_KVS_SERVER_UTILS_HPP_
 
+#include <fcntl.h>
 #include <fstream>
 #include <string>
 #include <unistd.h> // for ftruncate(2)
