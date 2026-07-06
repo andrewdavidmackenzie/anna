@@ -15,4 +15,4 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 
 ADD_LIBRARY(anna-hash-ring STATIC hash_ring.cpp)
-TARGET_LINK_LIBRARIES(anna-hash-ring anna-zmq ${KV_LIBRARY_DEPENDENCIES})
+TARGET_LINK_LIBRARIES(anna-hash-ring anna-zmq spdlog::spdlog ${KV_LIBRARY_DEPENDENCIES})
