@@ -23,7 +23,7 @@ clean-start:
 dependencies: clang
 	@echo "Installing build-tools"
 ifneq ($(BREW),)
-	brew install autoconf automake libtool pkg-config cmake protobuf curl lcov zmq cppzmq spdlog yaml-cpp googletest llvm
+	brew install autoconf automake libtool pkg-config cmake protobuf curl lcov zmq cppzmq spdlog yaml-cpp googletest llvm lychee
 endif
 ifneq ($(APTGET),)
 	sudo apt-get -y install build-essential autoconf automake libtool curl unzip pkg-config cmake libc++-dev libc++abi-dev protobuf-compiler lcov llvm libzmq3-dev
@@ -32,7 +32,6 @@ ifneq ($(YUM),)
 	sudo yum install -y build-essential autoconf automake libtool curl cmake protobuf-compiler lcov llvm zeromq zeromq-devel
 endif
 	cargo install mdbook
-	cargo install mdbook-linkcheck
 	cargo install grcov
 	rustup component add llvm-tools-preview
 	# Skipping installing Python pre-requisites for now
@@ -150,6 +149,8 @@ docs:
 	@rm -rf target/html/src target/html/tests target/html/protobuf
 	@rm -rf target/html/cli target/html/clients target/html/server
 	@rm -rf target/html/coverage target/html/venv
+	@echo "Checking links"
+	@lychee --offline --root-dir target 'target/**/*.html' 2>&1
 	@echo "Cleaned up extra files in docs folder"
 
 .PHONY: cleanup
