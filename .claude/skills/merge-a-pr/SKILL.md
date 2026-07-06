@@ -13,9 +13,6 @@ Check that documentation was updated to reflect the changes.
 
 Check that integration tests were expanded to cover the changes.
 
-Check that tests and docs were updated to reflect any changes in the panic counts found or 
-the reason for the panics.
-
 ## Clean-up prior to Merge
 
 Check there are no uncommitted changes or files present locally that are not in revision
@@ -31,11 +28,13 @@ marked with a comment containing "DEBUG:".
 Check there is no dead-code.
 
 Run:
-- cargo fmt
+- make fmt
 - make clippy
 - make test
 
 Clean any files created in temporary directories such as "/tmp" or sub-folders not in version control.
+
+Check for C++ build artifacts left around: `.profraw` files, `server/cpp/build/`, `clients/cpp/build/`.
 
 ## Merge the PR
 
@@ -49,7 +48,7 @@ Ensure that the remote branch is also deleted along with the local branch.
 
 ## Cleaning up
 
-If everything is OK, then wait 5 seconds and then check out the master/main branch and git pull. 
-Check that the commits in the PR are present and everything is OK.
-Check that all checks pass by running "make test".
+If everything is OK, then check out the master/main branch and `git pull`.
+Verify the merge commit from the PR is present in the log.
+Check that all checks pass by running `make test`.
 Delete the feature branch that was merged, locally and remote.

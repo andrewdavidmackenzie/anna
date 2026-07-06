@@ -25,7 +25,7 @@ SET(BENCHMARK_DEPENDENCIES
 SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/target/benchmark)
 
 ADD_EXECUTABLE(anna-bench benchmark.cpp)
-TARGET_LINK_LIBRARIES(anna-bench ${spdlog_LIBRARY} ${fmt_LIBRARY} ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES} ${BENCHMARK_DEPENDENCIES} anna-bench-proto)
+TARGET_LINK_LIBRARIES(anna-bench spdlog::spdlog fmt::fmt ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES} ${BENCHMARK_DEPENDENCIES} anna-bench-proto)
 
 ADD_EXECUTABLE(anna-bench-trigger trigger.cpp)
-TARGET_LINK_LIBRARIES(anna-bench-trigger ${spdlog_LIBRARY} ${fmt_LIBRARY} ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES} ${BENCHMARK_DEPENDENCIES} anna-bench-proto)
+TARGET_LINK_LIBRARIES(anna-bench-trigger spdlog::spdlog fmt::fmt ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES} ${BENCHMARK_DEPENDENCIES} anna-bench-proto)

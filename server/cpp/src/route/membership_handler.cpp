@@ -72,7 +72,7 @@ void membership_handler(logger log, string &serialized, SocketCache &pushers,
     }
 
     for (const auto &pair : global_hash_rings) {
-      log->info("Hash ring for tier {} size is {}.", pair.first,
+      log->info("Hash ring for tier {} size is {}.", Tier_Name(pair.first),
                 pair.second.size());
     }
   } else if (type == "depart") {

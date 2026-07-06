@@ -75,6 +75,11 @@ clippy:
 	@echo "Running 'clippy' on rust code"
 	@cargo clippy --quiet --tests # -- -D warnings # for now, don't fail on warnings
 
+.PHONY: fmt
+fmt:
+	@echo "Running 'cargo fmt' on rust code"
+	@cargo fmt
+
 # Debug build, use "-DCMAKE_BUILD_TYPE=Release" for a Release build
 .PHONY: build
 build: client-cpp server-cpp client-rust client-python

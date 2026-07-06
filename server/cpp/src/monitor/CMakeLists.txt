@@ -28,4 +28,4 @@ SET(MONITORING_SOURCE
 
 ADD_EXECUTABLE(anna-monitor ${MONITORING_SOURCE})
 
-TARGET_LINK_LIBRARIES(anna-monitor anna-hash-ring ${spdlog_LIBRARY} ${fmt_LIBRARY} ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES} anna-bench-proto)
+TARGET_LINK_LIBRARIES(anna-monitor anna-hash-ring spdlog::spdlog fmt::fmt ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES} anna-bench-proto)

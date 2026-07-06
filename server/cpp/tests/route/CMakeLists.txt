@@ -22,7 +22,7 @@ ADD_EXECUTABLE(run_routing_handler_tests
          run_routing_handler_tests.cpp
          ${HANDLER_SOURCES})
 
-TARGET_LINK_LIBRARIES(run_routing_handler_tests ${googletest_LIBRARY} ${gmock_LIBRARY}
-  anna-hash-ring ${spdlog_LIBRARY} ${fmt_LIBRARY} ${ZeroMQ_LIBRARY} anna-mock)
+TARGET_LINK_LIBRARIES(run_routing_handler_tests GTest::gtest GTest::gmock
+  anna-hash-ring spdlog::spdlog fmt::fmt ${ZeroMQ_LIBRARY} anna-mock)
 
 ADD_TEST(NAME RouteTests COMMAND run_routing_handler_tests)
