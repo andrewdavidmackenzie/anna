@@ -44,7 +44,7 @@ void gossip_handler(unsigned &seed, string &serialized,
             stored_key_map[key].type_ != tuple.lattice_type()) {
           log->error("Lattice type mismatch: {} from query but {} expected.",
                      LatticeType_Name(tuple.lattice_type()),
-                     stored_key_map[key].type_);
+                     kvs::LatticeType_Name(stored_key_map[key].type_));
         } else {
           process_put(tuple.key(), tuple.lattice_type(), tuple.payload(),
                       serializers[tuple.lattice_type()], stored_key_map);

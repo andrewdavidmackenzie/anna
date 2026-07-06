@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make clippy:*)",
+      "Bash(make fmt:*)",
+      "Bash(make test:*)",
+      "Bash(make build:*)",
+      "Bash(make clean:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo test:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(cargo fmt:*)",
+      "Bash(cargo doc:*)",
+      "Bash(mdbook build:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.github.com)",
+      "WebFetch(domain:doc.rust-lang.org)",
+      "WebFetch(domain:docs.rs)",
+      "WebFetch(domain:crates.io)",
+      "WebFetch(domain:stackoverflow.com)",
+      "WebFetch(domain:google.com)",
+      "Bash(kill *)",
+      "Bash(pkill *)"
+    ]
+  },
+  "enableAllProjectMcpServers": true
+}

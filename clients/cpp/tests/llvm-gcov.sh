@@ -14,4 +14,10 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-/usr/local/opt/llvm/bin/llvm-cov gcov "$@"
+# Detect Homebrew prefix (Intel: /usr/local, ARM: /opt/homebrew)
+if [ -x /opt/homebrew/opt/llvm/bin/llvm-cov ]; then
+    LLVM_COV="/opt/homebrew/opt/llvm/bin/llvm-cov"
+else
+    LLVM_COV="/usr/local/opt/llvm/bin/llvm-cov"
+fi
+exec "$LLVM_COV" gcov "$@"

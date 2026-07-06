@@ -25,7 +25,7 @@ void node_depart_handler(unsigned thread_id, Address public_ip,
   Address departing_public_ip = v[1];
   Address departing_private_ip = v[2];
   log->info("Received departure for node {}/{} on tier {}.",
-            departing_public_ip, departing_private_ip, tier);
+            departing_public_ip, departing_private_ip, Tier_Name(tier));
 
   // update hash ring
   global_hash_rings[tier].remove(departing_public_ip, departing_private_ip, 0);
