@@ -36,7 +36,7 @@ serde = "~1.0.150"
 serde_yaml = "~0.9"
 rand = "0.8.5"
 rand_pcg = "0.3.1"
-prost = "0.11"
+prost = "0.14"
 
 [dev-dependencies]
 assert_cmd = "2.0"
