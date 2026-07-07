@@ -29,6 +29,14 @@ INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
 FIND_PACKAGE(Protobuf REQUIRED)
 INCLUDE_DIRECTORIES(${protobuf_INCLUDE_DIR})
 
+SET(KV_LIBRARY_DEPENDENCIES
+    protobuf::libprotobuf
+    kvs-proto
+    pthread
+    anna-zmq
+    yaml-cpp
+)
+
 protobuf_generate(
   LANGUAGE cpp
   PROTOS ../../server/protobuf/kvs.proto ../../server/protobuf/shared.proto ../../server/protobuf/metadata.proto
