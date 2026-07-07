@@ -74,7 +74,7 @@ clean: cleanup
 .PHONY: clippy
 clippy:
 	@echo "Running 'clippy' on rust code"
-	@cargo clippy --quiet --tests # -- -D warnings # for now, don't fail on warnings
+	@$(CARGO_ENV) cargo clippy --quiet --tests # -- -D warnings # for now, don't fail on warnings
 
 .PHONY: fmt
 fmt:
@@ -86,6 +86,14 @@ fmt:
 build: client-cpp server-cpp client-rust client-python
 
 UNAME := $(shell uname)
+
+# zeromq-src vendor crate fails to build with GCC on Linux due to strlcpy
+# conflict with glibc; use clang++ for Rust native crate builds on Linux.
+ifeq ($(UNAME), Linux)
+CARGO_ENV := CC=clang CXX=clang++
+else
+CARGO_ENV :=
+endif
 
 .PHONY: client-cpp
 client-cpp:
@@ -110,7 +118,7 @@ endif
 .PHONY: client-rust
 client-rust:
 	@echo "Building rust code in workspace into ./target"
-	@cargo build --quiet
+	@$(CARGO_ENV) cargo build --quiet
 
 .PHONY: client-python
 client-python:
@@ -141,7 +149,7 @@ client-cpp-tests:
 .PHONY: workspace-rust-tests
 workspace-rust-tests:
 	@echo "Running rust tests with coverage"
-	@RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE="target/profraw/anna-%p-%m.profraw" cargo --quiet test
+	@$(CARGO_ENV) RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE="target/profraw/anna-%p-%m.profraw" cargo --quiet test
 	@echo "Gathering covering information"
 	@grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o rust_workspace.info
 	@lcov --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' -o rust_workspace.info --ignore-errors inconsistent,format,unused
