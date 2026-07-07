@@ -14,9 +14,10 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-# Use llvm-cov from PATH first, then check Homebrew paths, then fall back to gcov
-if command -v llvm-cov >/dev/null 2>&1; then
-    LLVM_COV="llvm-cov"
+# On Linux the code is compiled with GCC, which needs gcov (from GCC).
+# On macOS the code is compiled with Clang, which needs llvm-cov gcov.
+if [ "$(uname -s)" = "Linux" ]; then
+    LLVM_COV="gcov"
 elif [ -x /opt/homebrew/opt/llvm/bin/llvm-cov ]; then
     LLVM_COV="/opt/homebrew/opt/llvm/bin/llvm-cov"
 elif [ -x /usr/local/opt/llvm/bin/llvm-cov ]; then
