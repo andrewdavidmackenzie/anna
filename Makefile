@@ -87,11 +87,11 @@ build: client-cpp server-cpp client-rust client-python
 
 UNAME := $(shell uname)
 
-# zeromq-src vendor crate fails to build on Linux with GCC or clang due to
-# strlcpy conflict between glibc (extern) and the vendored ZMQ (static).
-# Use clang++ and -fpermissive to work around it.
+# zeromq-src vendor crate fails to build on Linux due to strlcpy conflict
+# between glibc (extern) and the vendored ZMQ (static). -fpermissive
+# downgrades the error to a warning with GCC.
 ifeq ($(UNAME), Linux)
-CARGO_ENV := CC=clang CXX=clang++ CXXFLAGS="-fpermissive"
+CARGO_ENV := CXXFLAGS="-fpermissive"
 else
 CARGO_ENV :=
 endif
