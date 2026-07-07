@@ -11,7 +11,8 @@ all: clean-start clippy build test coverage docs cleanup
 
 .PHONY: clean-start
 clean-start:
-	@find . -name "*.profraw" | xargs rm -f
+	@rm -rf target/profraw # Rust coverage profraw files, now directed to a single directory
+	@find . -maxdepth 1 -name "*.profraw" -exec rm -f {} + # stray profraw in workspace root
 
 # Dependencies not installed
 # clang on mac
@@ -26,7 +27,7 @@ ifneq ($(BREW),)
 	brew install autoconf automake libtool pkg-config cmake protobuf curl lcov zmq cppzmq spdlog yaml-cpp googletest llvm lychee
 endif
 ifneq ($(APTGET),)
-	sudo apt-get -y install build-essential autoconf automake libtool curl unzip pkg-config cmake libc++-dev libc++abi-dev protobuf-compiler lcov llvm libzmq3-dev
+	sudo apt-get -y install build-essential autoconf automake libtool curl unzip pkg-config cmake libc++-dev libc++abi-dev protobuf-compiler libprotobuf-dev lcov llvm libzmq3-dev cppzmq-dev libspdlog-dev libfmt-dev libyaml-cpp-dev libgtest-dev
 endif
 ifneq ($(YUM),)
 	sudo yum install -y build-essential autoconf automake libtool curl cmake protobuf-compiler lcov llvm zeromq zeromq-devel
@@ -68,6 +69,7 @@ clean: cleanup
 	@cargo --quiet clean
 	@rm -f clients/python/anna/*_pb2.py
 	@rm -rf coverage
+	@rm -rf target/clients target/server # stale duplicate C++ builds under target/
 
 .PHONY: clippy
 clippy:
@@ -83,17 +85,27 @@ fmt:
 .PHONY: build
 build: client-cpp server-cpp client-rust client-python
 
+UNAME := $(shell uname)
+
 .PHONY: client-cpp
 client-cpp:
 	@mkdir -p clients/cpp/build
 	@echo "Building client C++ project into ./clients/cpp/build"
-	@LD_LIBRARY_PATH="/usr/local/lib" cd clients/cpp/build && cmake "-GUnix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER="/usr/bin/clang++" -DBUILD_TEST=ON .. 2>&1 > /dev/null && make -s -j8 2>&1 > /dev/null
+ifeq ($(UNAME), Darwin)
+	@cd clients/cpp/build && cmake "-GUnix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER="/usr/bin/clang++" -DBUILD_TEST=ON .. 2>&1 > /dev/null && LD_LIBRARY_PATH="/usr/local/lib" make -s -j8 2>&1 > /dev/null
+else
+	@cd clients/cpp/build && cmake "-GUnix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DBUILD_TEST=ON .. 2>&1 > /dev/null && make -s -j8 2>&1 > /dev/null
+endif
 
 .PHONY: server-cpp
 server-cpp:
 	@mkdir -p server/cpp/build
 	@echo "Building server C++ project into ./server/cpp/build"
-	@LD_LIBRARY_PATH="/usr/local/lib" cd server/cpp/build && cmake "-GUnix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER="/usr/bin/clang++" -DBUILD_TEST=ON .. 2>&1 > /dev/null && make -s -j8 2>&1 > /dev/null
+ifeq ($(UNAME), Darwin)
+	@cd server/cpp/build && cmake "-GUnix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER="/usr/bin/clang++" -DBUILD_TEST=ON .. 2>&1 > /dev/null && LD_LIBRARY_PATH="/usr/local/lib" make -s -j8 2>&1 > /dev/null
+else
+	@cd server/cpp/build && cmake "-GUnix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DBUILD_TEST=ON .. 2>&1 > /dev/null && make -s -j8 2>&1 > /dev/null
+endif
 
 .PHONY: client-rust
 client-rust:
@@ -124,17 +136,16 @@ server-cpp-tests:
 client-cpp-tests:
 	@echo "Running C++ client tests with coverage"
 	@cd clients/cpp/build && make --no-print-directory -s client-test-coverage
-	#@find clients/cpp -name "*.profraw" | xargs rm -f #none generated at the moment!! :-(
+	# C++ client tests use gcov-style (.gcda) not profraw — no cleanup needed
 
 .PHONY: workspace-rust-tests
 workspace-rust-tests:
 	@echo "Running rust tests with coverage"
-	@RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE="anna-%p-%m.profraw" cargo --quiet test
+	@RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE="target/profraw/anna-%p-%m.profraw" cargo --quiet test
 	@echo "Gathering covering information"
 	@grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o rust_workspace.info
 	@lcov --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' -o rust_workspace.info --ignore-errors inconsistent,format,unused
-	@find clients/rust -name "*.profraw" | xargs rm -f # .profraw files from execution of rust client
-	@find . -name "*.profraw" | xargs rm -f # .profraw files from execution of cpp client & server via rust test execution
+	@rm -rf target/profraw # all profraw now directed to single directory
 
 .PHONY: docs
 docs:
