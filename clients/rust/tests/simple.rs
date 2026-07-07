@@ -13,9 +13,17 @@ fn normalize_sets(content: &str) -> String {
                 let inner = &trimmed[1..trimmed.len() - 1];
                 let elements: Vec<&str> = inner.split_whitespace().collect();
                 if !elements.is_empty() && elements.iter().all(|e| e.parse::<i32>().is_ok()) {
-                    let mut sorted = elements.clone();
+                    let mut sorted: Vec<i32> =
+                        elements.iter().filter_map(|e| e.parse().ok()).collect();
                     sorted.sort();
-                    return format!("{{ {} }}", sorted.join(" "));
+                    return format!(
+                        "{{ {} }}",
+                        sorted
+                            .iter()
+                            .map(|e| e.to_string())
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    );
                 }
             }
             line.to_string()
