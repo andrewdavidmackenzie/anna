@@ -1,11 +1,15 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.14 FATAL_ERROR)
+
+include(FetchContent)
+FetchContent_Declare(googletest
+  URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.tar.gz
+)
+FetchContent_MakeAvailable(googletest)
 
 IF(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
   INCLUDE(CodeCoverage.cmake)
   SETUP_TARGET_FOR_COVERAGE(client-test-coverage ctest client)
 ENDIF()
-
-FIND_PACKAGE(GTest CONFIG REQUIRED)
 
 SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/tests)
 
