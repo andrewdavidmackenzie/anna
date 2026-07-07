@@ -89,11 +89,14 @@ UNAME := $(shell uname)
 
 # zeromq-src vendor crate fails to build on Linux due to strlcpy conflict
 # between glibc (extern) and the vendored ZMQ (static). -fpermissive
-# downgrades the error to a warning with GCC.
+# downgrades the C++ error to a warning with GCC. --allow-multiple-definition
+# accepts the resulting duplicate symbol at link time.
 ifeq ($(UNAME), Linux)
 CARGO_ENV := CXXFLAGS="-fpermissive"
+RUST_LINK_ALLOW := -C link-args=-Wl,--allow-multiple-definition
 else
 CARGO_ENV :=
+RUST_LINK_ALLOW :=
 endif
 
 .PHONY: client-cpp
@@ -119,7 +122,7 @@ endif
 .PHONY: client-rust
 client-rust:
 	@echo "Building rust code in workspace into ./target"
-	@$(CARGO_ENV) cargo build --quiet
+	@$(CARGO_ENV) RUSTFLAGS="$(RUST_LINK_ALLOW)" cargo build --quiet
 
 .PHONY: client-python
 client-python:
@@ -150,7 +153,7 @@ client-cpp-tests:
 .PHONY: workspace-rust-tests
 workspace-rust-tests:
 	@echo "Running rust tests with coverage"
-	@$(CARGO_ENV) RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE="target/profraw/anna-%p-%m.profraw" cargo --quiet test
+	@$(CARGO_ENV) RUSTFLAGS="-C instrument-coverage $(RUST_LINK_ALLOW)" LLVM_PROFILE_FILE="target/profraw/anna-%p-%m.profraw" cargo --quiet test
 	@echo "Gathering covering information"
 	@grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o rust_workspace.info
 	@lcov --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' -o rust_workspace.info --ignore-errors inconsistent,format,unused
