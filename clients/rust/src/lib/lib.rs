@@ -4,7 +4,9 @@
 //! This is the rust `anna` Library for working with the `anna` key-value store. It is linked into
 //! the `anna` CLI binary but can also be used by others to create new binaries
 
+#[cfg(unix)]
 use nix::sys::signal::kill;
+#[cfg(unix)]
 use nix::unistd::Pid;
 use std::path::Path;
 use std::process::Command;
@@ -97,6 +99,7 @@ pub fn status() -> Result<Vec<(String, Vec<i32>)>> {
 /// `stop` function terminates the processes `anna-kvs`, `anna-monitor` and `anna-route`
 ///
 /// It returns a `Result<usize>` with the number of processes terminated
+#[cfg(unix)]
 pub fn stop() -> Result<usize> {
     let mut kill_count: usize = 0;
     for process_name in PROCESS_LIST.iter() {
@@ -108,6 +111,15 @@ pub fn stop() -> Result<usize> {
     }
 
     Ok(kill_count)
+}
+
+/// `stop` function terminates the processes `anna-kvs`, `anna-monitor` and `anna-route`
+///
+/// It returns a `Result<usize>` with the number of processes terminated
+#[cfg(windows)]
+pub fn stop() -> Result<usize> {
+    // Windows process termination not yet implemented
+    Ok(0)
 }
 
 #[cfg(test)]
