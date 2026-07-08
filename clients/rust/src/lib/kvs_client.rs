@@ -8,8 +8,8 @@ use crate::proto::kvs::KeyTuple;
 use crate::threads::{UserRoutingThread, UserThread};
 use crate::types::{Address, Key, ThreadID, TimePoint};
 use log::{debug, info};
-use rand::{Rng, SeedableRng};
-use rand_pcg::Pcg64;
+use rand::rngs::StdRng;
+use rand::{RngExt, SeedableRng};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
@@ -36,7 +36,7 @@ pub struct KVSClient {
     ut: UserThread,
     seed: u64,
     // A Random Number Generator
-    rng: Pcg64,
+    rng: StdRng,
     // the ZMQ context we use to create sockets
     context: Context,
     // cache for retrieved worker addresses organized by key
@@ -104,7 +104,7 @@ impl KVSClient {
 
         let seed = Self::generate_seed(config.get_user_ip(), tid);
         info!("Random seed is {}.", seed);
-        let rng = Pcg64::seed_from_u64(seed);
+        let rng = StdRng::seed_from_u64(seed);
 
         // socket_cache_(SocketCache(&context_, ZMQ_PUSH)),
         // key_address_puller_(zmq::socket_t(context_, ZMQ_PULL)),
@@ -356,7 +356,7 @@ impl KVSClient {
     #[allow(dead_code)] // TODO implement use of these functions
     fn get_routing_thread(&mut self) -> Address {
         // random index into threads array - from 0 upto but not including routing_threads.len()
-        self.routing_threads[self.rng.gen_range(0..self.routing_threads.len())]
+        self.routing_threads[self.rng.random_range(0..self.routing_threads.len())]
             .key_address_connect_address()
     }
 
