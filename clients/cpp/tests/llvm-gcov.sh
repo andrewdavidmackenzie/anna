@@ -14,10 +14,15 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-# Detect Homebrew prefix (Intel: /usr/local, ARM: /opt/homebrew)
-if [ -x /opt/homebrew/opt/llvm/bin/llvm-cov ]; then
+# On Linux the code is compiled with GCC, which needs gcov (from GCC).
+# On macOS the code is compiled with Clang, which needs llvm-cov gcov.
+if [ "$(uname -s)" = "Linux" ]; then
+    LLVM_COV="gcov"
+elif [ -x /opt/homebrew/opt/llvm/bin/llvm-cov ]; then
     LLVM_COV="/opt/homebrew/opt/llvm/bin/llvm-cov"
-else
+elif [ -x /usr/local/opt/llvm/bin/llvm-cov ]; then
     LLVM_COV="/usr/local/opt/llvm/bin/llvm-cov"
+else
+    LLVM_COV="gcov"
 fi
 exec "$LLVM_COV" gcov "$@"

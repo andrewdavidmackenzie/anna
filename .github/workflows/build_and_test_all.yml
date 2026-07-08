@@ -15,9 +15,9 @@ jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-          os: [ macos-latest ]
-          #os: [ macos-latest, ubuntu-latest ]
+          os: [ macos-latest, ubuntu-latest ]
           rust: [ stable ]
 
     steps:

@@ -4,10 +4,54 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::{env, fs, io};
 
+fn normalize_sets(content: &str) -> String {
+    content
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim();
+            if trimmed.starts_with('{') && trimmed.ends_with('}') {
+                let inner = &trimmed[1..trimmed.len() - 1];
+                let elements: Vec<&str> = inner.split_whitespace().collect();
+                if !elements.is_empty() && elements.iter().all(|e| e.parse::<i32>().is_ok()) {
+                    let mut sorted: Vec<i32> =
+                        elements.iter().filter_map(|e| e.parse().ok()).collect();
+                    sorted.sort();
+                    return format!(
+                        "{{ {} }}",
+                        sorted
+                            .iter()
+                            .map(|e| e.to_string())
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    );
+                }
+            }
+            line.to_string()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn compare_and_fail(expected_path: PathBuf, actual_path: PathBuf) {
     if expected_path.exists() {
+        let expected_content =
+            fs::read_to_string(&expected_path).expect("Could not read expected file");
+        let actual_content = fs::read_to_string(&actual_path).expect("Could not read actual file");
+
+        let expected_norm = normalize_sets(&expected_content);
+        let actual_norm = normalize_sets(&actual_content);
+
+        if expected_norm == actual_norm {
+            return;
+        }
+
+        let expected_tmp = expected_path.parent().unwrap().join("expected.norm");
+        let actual_tmp = expected_path.parent().unwrap().join("actual.norm");
+        fs::write(&expected_tmp, &expected_norm).expect("Could not write normalized expected");
+        fs::write(&actual_tmp, &actual_norm).expect("Could not write normalized actual");
+
         let diff = Command::new("diff")
-            .args(vec![&expected_path, &actual_path])
+            .args(vec![&expected_tmp, &actual_tmp])
             .stdin(Stdio::inherit())
             .stderr(Stdio::inherit())
             .stdout(Stdio::inherit())
@@ -16,14 +60,17 @@ fn compare_and_fail(expected_path: PathBuf, actual_path: PathBuf) {
         let output = diff
             .wait_with_output()
             .expect("Could not get child process output");
-        if output.status.success() {
-            return;
+
+        let _ = fs::remove_file(&expected_tmp);
+        let _ = fs::remove_file(&actual_tmp);
+
+        if !output.status.success() {
+            panic!(
+                "Contents of '{}' doesn't match the expected contents in '{}'",
+                actual_path.display(),
+                expected_path.display()
+            );
         }
-        panic!(
-            "Contents of '{}' doesn't match the expected contents in '{}'",
-            actual_path.display(),
-            expected_path.display()
-        );
     }
 }
 
