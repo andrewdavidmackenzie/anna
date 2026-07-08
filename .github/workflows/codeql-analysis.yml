@@ -60,7 +60,7 @@ jobs:
       if: matrix.language == 'cpp'
       run: |
         sudo apt-get update -qq
-        sudo apt-get install -y -qq cmake libzmq3-dev cppzmq-dev libprotobuf-dev protobuf-compiler libspdlog-dev libfmt-dev libyaml-cpp-dev libgtest-dev
+        sudo apt-get install -y -qq cmake libzmq3-dev cppzmq-dev libprotobuf-dev protobuf-compiler libspdlog-dev libfmt-dev libyaml-cpp-dev libgtest-dev lcov
 
     # Build for C++ (only build, don't run tests during CodeQL analysis)
     - name: Build

@@ -31,8 +31,6 @@ jobs:
       if: matrix.os == 'windows-latest'
       run: |
         choco install make cmake protoc --no-progress -y
-        cargo install mdbook grcov
-        rustup component add llvm-tools-preview
 
     - name: ConfigureCoverage
       if: matrix.os == 'macos-latest'

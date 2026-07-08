@@ -113,12 +113,11 @@ pub fn stop() -> Result<usize> {
     Ok(kill_count)
 }
 
-/// `stop` function terminates the processes `anna-kvs`, `anna-monitor` and `anna-route`
+/// `stop` is a no-op stub on Windows (process termination not yet implemented)
 ///
-/// It returns a `Result<usize>` with the number of processes terminated
+/// It always returns `Ok(0)`.
 #[cfg(windows)]
 pub fn stop() -> Result<usize> {
-    // Windows process termination not yet implemented
     Ok(0)
 }
 
