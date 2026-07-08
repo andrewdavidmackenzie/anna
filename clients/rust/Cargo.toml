@@ -35,7 +35,6 @@ serde_derive = "~1.0.150"
 serde = "~1.0.150"
 serde_yaml = "~0.9"
 rand = "0.10.2"
-rand_pcg = "0.3.1"
 prost = "0.14"
 
 [dev-dependencies]
