@@ -21,7 +21,15 @@ SET(LIBRARY_DEPENDENCIES
     anna-zmq
 )
 
+# The annalib client library: KVS operations (get/put/...) and process
+# management (start/stop/status), wrapping KvsClientInterface with no
+# dependency on stdin/stdout/argv. See issue #75.
+ADD_LIBRARY(anna-client-lib STATIC client_lib.cpp)
+TARGET_LINK_LIBRARIES(anna-client-lib spdlog::spdlog fmt::fmt ${yamlcpp_LIBRARY} ${ZeroMQ_LIBRARY} ${LIBRARY_DEPENDENCIES})
+TARGET_INCLUDE_DIRECTORIES(anna-client-lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+# anna-cli is an example CLI built on top of anna-client-lib.
 ADD_EXECUTABLE(anna-cli cli.cpp)
-TARGET_LINK_LIBRARIES(anna-cli spdlog::spdlog fmt::fmt ${yamlcpp_LIBRARY} ${ZeroMQ_LIBRARY} ${LIBRARY_DEPENDENCIES})
+TARGET_LINK_LIBRARIES(anna-cli anna-client-lib spdlog::spdlog fmt::fmt ${yamlcpp_LIBRARY} ${ZeroMQ_LIBRARY} ${LIBRARY_DEPENDENCIES})
 
 SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/cli)
