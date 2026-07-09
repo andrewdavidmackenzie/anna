@@ -15,250 +15,53 @@
 #include <fstream>
 #include <algorithm>
 #include <string>
-#include <stdio.h>
-#include <string.h>
 
-#include "kvs_client.hpp"
-#include "yaml-cpp/yaml.h"
+#include "client_lib.hpp"
 
-#include <assert.h>
+// This is an example CLI built on top of the annalib client library
+// (client_lib.hpp / kvs_client.hpp) -- it only handles argv/stdin parsing
+// and formatting output, all KVS/process-management logic lives in the
+// library. See issue #75.
 
-unsigned kRoutingThreadCount;
+namespace {
 
-ZmqUtil zmq_util;
-ZmqUtilInterface *kZmqUtil = &zmq_util;
-
-const char * const PROCESS_LIST[] = {"anna-monitor", "anna-route", "anna-kvs"};
-
-void print_set(set<string> set) {
+void print_set(const set<string>& values) {
   std::cout << "{ ";
-  for (const string &val : set) {
+  for (const string& val : values) {
     std::cout << val << " ";
   }
 
   std::cout << "}" << std::endl;
 }
 
-string get(KvsClientInterface *client, string key) {
-    client->get_async(key);
+void print_causal_value(const annalib::CausalValue& causal) {
+  for (const auto& pair : causal.vector_clock) {
+    std::cout << "{" << pair.first << " : " << std::to_string(pair.second)
+              << "}" << std::endl;
+  }
 
-    vector<kvs::KeyResponse> responses = client->receive_async();
-    while (responses.size() == 0) {
-      responses = client->receive_async();
+  for (const auto& dep_key_vc_pair : causal.dependencies) {
+    std::cout << dep_key_vc_pair.first << " : ";
+    for (const auto& vc_pair : dep_key_vc_pair.second) {
+      std::cout << "{" << vc_pair.first << " : "
+                << std::to_string(vc_pair.second) << "}" << std::endl;
     }
+  }
 
-    if (responses.size() > 1) {
-      std::cout << "Error: received more than one response" << std::endl;
-    }
-
-    assert(responses[0].tuples(0).lattice_type() == kvs::LatticeType::LWW);
-
-    LWWPairLattice<string> lww_lattice =
-        deserialize_lww(responses[0].tuples(0).payload());
-
-    return lww_lattice.reveal().value;
-}
-
-string get_causal(KvsClientInterface *client, string key) {
-    client->get_async(key);
-
-    vector<kvs::KeyResponse> responses = client->receive_async();
-    while (responses.size() == 0) {
-      responses = client->receive_async();
-    }
-
-    if (responses.size() > 1) {
-      std::cout << "Error: received more than one response" << std::endl;
-    }
-
-    assert(responses[0].tuples(0).lattice_type() == kvs::LatticeType::MULTI_CAUSAL);
-
-    MultiKeyCausalLattice<SetLattice<string>> mkcl =
-        MultiKeyCausalLattice<SetLattice<string>>(to_multi_key_causal_payload(
-            deserialize_multi_key_causal(responses[0].tuples(0).payload())));
-
-    for (const auto &pair : mkcl.reveal().vector_clock.reveal()) {
-      std::cout << "{" << pair.first << " : "
-                << std::to_string(pair.second.reveal()) << "}" << std::endl;
-    }
-
-    for (const auto &dep_key_vc_pair : mkcl.reveal().dependencies.reveal()) {
-      std::cout << dep_key_vc_pair.first << " : ";
-      for (const auto &vc_pair : dep_key_vc_pair.second.reveal()) {
-        std::cout << "{" << vc_pair.first << " : "
-                  << std::to_string(vc_pair.second.reveal()) << "}"
-                  << std::endl;
-      }
-    }
-
-    return *(mkcl.reveal().value.reveal().begin());
-}
-
-kvs::KeyResponse put(KvsClientInterface *client, string key, string value) {
-    LWWPairLattice<string> val(
-        TimestampValuePair<string>(generate_timestamp(0), value));
-
-    string rid = client->put_async(key, serialize(val), kvs::LatticeType::LWW);
-
-    vector<kvs::KeyResponse> responses = client->receive_async();
-    while (responses.size() == 0) {
-      responses = client->receive_async();
-    }
-
-    kvs::KeyResponse response = responses[0];
-
-    // TODO encode this error into the response
-    if (response.response_id() != rid) {
-      std::cout << "Invalid response: ID did not match request ID!"
-                << std::endl;
-    }
-
-    return response;
-}
-
-kvs::KeyResponse put_causal(KvsClientInterface *client, string key, string value) {
-    MultiKeyCausalPayload<SetLattice<string>> mkcp;
-    // construct a test client id - version pair
-    mkcp.vector_clock.insert("test", 1);
-
-    // construct one test dependencies
-    mkcp.dependencies.insert(
-        "dep1", VectorClock(map<string, MaxLattice<unsigned>>({{"test1", 1}})));
-
-    // populate the value
-    mkcp.value.insert(value);
-
-    MultiKeyCausalLattice<SetLattice<string>> mkcl(mkcp);
-
-    string rid = client->put_async(key, serialize(mkcl), kvs::LatticeType::MULTI_CAUSAL);
-
-    vector<kvs::KeyResponse> responses = client->receive_async();
-    while (responses.size() == 0) {
-      responses = client->receive_async();
-    }
-
-    kvs::KeyResponse response = responses[0];
-
-    // TODO encode this error into the response
-    if (response.response_id() != rid) {
-      std::cout << "Invalid response: ID did not match request ID!"
-                << std::endl;
-    }
-
-    return response;
-}
-
-kvs::KeyResponse put_set(KvsClientInterface *client, string key, set<string> set) {
-    string rid = client->put_async(key, serialize(SetLattice<string>(set)),
-                                   kvs::LatticeType::SET);
-
-    vector<kvs::KeyResponse> responses = client->receive_async();
-    while (responses.size() == 0) {
-      responses = client->receive_async();
-    }
-
-    kvs::KeyResponse response = responses[0];
-
-    // TODO encode this error into the response
-    if (response.response_id() != rid) {
-      std::cout << "Invalid response: ID did not match request ID!"
-                << std::endl;
-    }
-
-    return response;
-}
-
-set<string> get_set(KvsClientInterface *client, string key) {
-    client->get_async(key);
-    string serialized;
-
-    vector<kvs::KeyResponse> responses = client->receive_async();
-    while (responses.size() == 0) {
-      responses = client->receive_async();
-    }
-
-    SetLattice<string> latt = deserialize_set(responses[0].tuples(0).payload());
-    set<string> set_value = latt.reveal();
-
-    return set_value;
-}
-
-/*
-fn pids_from_name(name: &str) -> Vec<i32> {
-    let s = System::new_all();
-    s.processes_by_name(name)
-        .map(|process| process.pid().into())
-        .collect()
-}
-*/
-
-int start(string config_file_path) {
-    int process_count = 3; // TODO until implemented
-    for(const string &process_name : PROCESS_LIST) {
-    /*
-        let pids = pids_from_name(process_name);
-        if !pids.is_empty() {
-            bail!(
-                "Process '{}' is already running with pids = {:?}",
-                process_count,
-                pids
-            )
-        }
-
-        Command::new(process_name)
-            .args([
-                "--config",
-                config_file_path
-                    .to_str()
-                    .ok_or("Could not get config file path")?,
-            ])
-            .spawn()
-            .chain_err(|| format!("Failed to spawn process '{}'", process_name))?;
-
-        process_count += 1;
-    */
-    }
-
-    return process_count;
-}
-
-vector<string> status()  {
-    vector<string> status = {};
-
-    for(const string &process_name : PROCESS_LIST) {
-    /*
-        let pids = pids_from_name(process_name);
-        status.push((process_name.to_string(), pids));
-        */
-    }
-
-    return status;
-}
-
-int stop() {
-    int kill_count = 3; // TODO until we implement
-    for(const string &process_name : PROCESS_LIST) {
-    /*
-        for pid in pids_from_name(process_name) {
-            if kill(Pid::from_raw(pid), Some(nix::sys::signal::SIGTERM)).is_ok() {
-                kill_count += 1;
-            }
-        }
-        */
-    }
-
-    return kill_count;
+  std::cout << causal.value << std::endl;
 }
 
 string cli_usage() {
-    return "Valid commands are GET, GET_SET, PUT, PUT_SET, PUT_CAUSAL, GET_CAUSAL, START, STOP, STATUS, HELP and EXIT";
+  return "Valid commands are GET, GET_SET, PUT, PUT_SET, PUT_CAUSAL, "
+         "GET_CAUSAL, START, STOP, STATUS, HELP and EXIT";
 }
 
-void execute_cli_command(KvsClientInterface *client, string config_file, string input) {
+void execute_cli_command(KvsClientInterface* client, const string& config_file,
+                         const string& input) {
   vector<string> v;
   split(input, ' ', v);
 
-  if (v.size() == 0) { // EOF?
+  if (v.size() == 0) {  // EOF?
     std::exit(EXIT_SUCCESS);
   }
 
@@ -266,38 +69,40 @@ void execute_cli_command(KvsClientInterface *client, string config_file, string 
   std::transform(command.begin(), command.end(), command.begin(), ::toupper);
 
   if (command == "GET") {
-    std::cout << get(client, v[1]) << std::endl;
+    std::cout << annalib::get(client, v[1]) << std::endl;
   } else if (command == "GET_CAUSAL") {
-    std::cout << get_causal(client, v[1]) << std::endl;
+    print_causal_value(annalib::get_causal(client, v[1]));
   } else if (command == "PUT") {
-    kvs::KeyResponse response = put(client, v[1], v[2]);
+    kvs::KeyResponse response = annalib::put(client, v[1], v[2]);
     if (response.error() != kvs::AnnaError::NO_ERROR) {
       std::cout << "Failure!" << std::endl;
     }
   } else if (command == "PUT_CAUSAL") {
-    kvs::KeyResponse response = put_causal(client, v[1], v[2]);
+    kvs::KeyResponse response = annalib::put_causal(client, v[1], v[2]);
     if (response.error() != kvs::AnnaError::NO_ERROR) {
       std::cout << "Failure!" << std::endl;
     }
   } else if (command == "PUT_SET") {
-    set<string> set;
-    for (int i = 2; i < v.size(); i++) {
-      set.insert(v[i]);
+    set<string> values;
+    for (size_t i = 2; i < v.size(); i++) {
+      values.insert(v[i]);
     }
-    kvs::KeyResponse response = put_set(client, v[1], set);
+    kvs::KeyResponse response = annalib::put_set(client, v[1], values);
     if (response.error() != kvs::AnnaError::NO_ERROR) {
       std::cout << "Failure!" << std::endl;
     }
   } else if (command == "GET_SET") {
-    print_set(get_set(client, v[1]));
+    print_set(annalib::get_set(client, v[1]));
   } else if (command == "STATUS") {
-    for(const string &name : status()) {
-        std::cout << name << " process is running" << std::endl;
+    for (const string& name : annalib::status()) {
+      std::cout << name << " process is running" << std::endl;
     }
   } else if (command == "START") {
-    std::cout << start(config_file) << " anna processes were started" << std::endl;
+    std::cout << annalib::start(config_file) << " anna processes were started"
+              << std::endl;
   } else if (command == "STOP") {
-    std::cout << start(config_file) << " anna processes were stopped" << std::endl;
+    std::cout << annalib::stop() << " anna processes were stopped"
+              << std::endl;
   } else if (command == "HELP") {
     std::cout << cli_usage() << std::endl;
   } else if (command == "EXIT") {
@@ -309,7 +114,7 @@ void execute_cli_command(KvsClientInterface *client, string config_file, string 
 }
 
 // Read commands interactively from the terminal
-void cli_loop_interactive(KvsClientInterface *client, string config_file) {
+void cli_loop_interactive(KvsClientInterface* client, const string& config_file) {
   string input;
   while (true) {
     std::cout << "anna> ";
@@ -320,7 +125,8 @@ void cli_loop_interactive(KvsClientInterface *client, string config_file) {
 }
 
 // Read commands from `filename` until EOF
-void cli_loop_file(KvsClientInterface *client, string config_file, string filename) {
+void cli_loop_file(KvsClientInterface* client, const string& config_file,
+                   const string& filename) {
   string input;
   std::ifstream infile(filename);
 
@@ -329,12 +135,14 @@ void cli_loop_file(KvsClientInterface *client, string config_file, string filena
   }
 }
 
-string usage(string name) {
-    return name + " --config config-file command <CLI command file>\n" +
-    "Valid commands are help, start, stop, status, cli\n";
+string usage(const string& name) {
+  return name + " --config config-file command <CLI command file>\n" +
+         "Valid commands are help, start, stop, status, cli\n";
 }
 
-int main(int argc, char *argv[]) {
+}  // namespace
+
+int main(int argc, char* argv[]) {
   // There can be two or three options
   // #0 - binary name
   // #1 - "--config" directive
@@ -350,48 +158,26 @@ int main(int argc, char *argv[]) {
   string command = argv[3];
   std::transform(command.begin(), command.end(), command.begin(), ::toupper);
 
-  // read the YAML conf
-  YAML::Node conf = YAML::LoadFile(argv[2]);
-  kRoutingThreadCount = conf["threads"]["routing"].as<unsigned>();
-
-  YAML::Node user = conf["user"];
-  Address ip = user["ip"].as<Address>();
-
-  vector<Address> routing_ips;
-  if (YAML::Node elb = user["routing-elb"]) {
-    routing_ips.push_back(elb.as<string>());
-  } else {
-    YAML::Node routing = user["routing"];
-    for (const YAML::Node &node : routing) {
-      routing_ips.push_back(node.as<Address>());
-    }
-  }
-
-  vector<UserRoutingThread> threads;
-  for (Address addr : routing_ips) {
-    for (unsigned i = 0; i < kRoutingThreadCount; i++) {
-      threads.push_back(UserRoutingThread(addr, i));
-    }
-  }
-
-  KvsClient client(threads, ip, 0, 10000);
-
+  annalib::ClientConfig config = annalib::load_config(config_filename);
+  std::unique_ptr<KvsClient> client = annalib::make_client(config);
 
   if (command == "CLI") {
     if (argc == 4) {
-      cli_loop_interactive(&client, config_filename);
+      cli_loop_interactive(client.get(), config_filename);
     } else {
-      cli_loop_file(&client, argv[2], argv[4]);
+      cli_loop_file(client.get(), config_filename, argv[4]);
     }
   } else if (command == "START") {
-      std::cout << start(config_filename) << " anna processes were started" << std::endl;
-  } else if (command == "START") {
-      std::cout << start(config_filename) << " anna processes were stopped" << std::endl;
+    std::cout << annalib::start(config_filename) << " anna processes were started"
+              << std::endl;
+  } else if (command == "STOP") {
+    std::cout << annalib::stop() << " anna processes were stopped"
+              << std::endl;
   } else if (command == "STATUS") {
-    for(const string &name : status()) {
-        std::cout << name << " process is running" << std::endl;
+    for (const string& name : annalib::status()) {
+      std::cout << name << " process is running" << std::endl;
     }
   } else if (command == "HELP") {
-      std::cout << usage(my_name) << std::endl;
+    std::cout << usage(my_name) << std::endl;
   }
 }
