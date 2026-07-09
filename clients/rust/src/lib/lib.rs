@@ -10,7 +10,7 @@ use nix::sys::signal::kill;
 use nix::unistd::Pid;
 use std::path::Path;
 use std::process::Command;
-use sysinfo::{PidExt, ProcessExt, System, SystemExt};
+use sysinfo::System;
 
 /// `config` of anna - read from config file or created via API calls.
 pub mod config;
@@ -44,7 +44,7 @@ pub use errors::*;
 */
 fn pids_from_name(name: &str) -> Vec<i32> {
     let s = System::new_all();
-    s.processes_by_name(name)
+    s.processes_by_name(name.as_ref())
         .map(|process| process.pid().as_u32() as i32)
         .collect()
 }
