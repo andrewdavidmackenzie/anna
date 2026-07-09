@@ -61,6 +61,7 @@ jobs:
       if: matrix.os == 'macos-latest'
       with:
         files: rust_workspace.info,server/cpp/build/server.info,clients/cpp/build/client.info,clients/python/coverage.xml
+        token: ${{ secrets.CODECOV_TOKEN }}
 
     - name: docs
       if: matrix.os == 'macos-latest'
