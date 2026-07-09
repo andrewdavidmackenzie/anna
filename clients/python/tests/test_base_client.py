@@ -4,22 +4,26 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'anna'))
 
 from base_client import BaseAnnaClient
 from lattices import LWWPairLattice, SetLattice, PriorityLattice
+from kvs_pb2 import LWW, SET, PRIORITY
 
 
 class TestSerialize:
     def test_serialize_lww(self):
         l = LWWPairLattice(1, b"hello")
         data, typ = BaseAnnaClient._serialize(l)
+        assert typ == LWW
         assert data is not None
 
     def test_serialize_set(self):
         l = SetLattice({b"a", b"b"})
         data, typ = BaseAnnaClient._serialize(l)
+        assert typ == SET
         assert data is not None
 
     def test_serialize_priority(self):
         l = PriorityLattice(1.0, b"val")
         data, typ = BaseAnnaClient._serialize(l)
+        assert typ == PRIORITY
         assert data is not None
 
     def test_serialize_non_lattice(self):
@@ -97,3 +101,4 @@ class TestDeserialize:
         result = BaseAnnaClient._deserialize(tup)
         from lattices import OrderedSetLattice
         assert isinstance(result, OrderedSetLattice)
+        assert result.reveal() == [b"a", b"b"]

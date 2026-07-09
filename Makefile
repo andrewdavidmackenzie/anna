@@ -132,7 +132,7 @@ client-python:
 .PHONY: coverage
 coverage: test
 	@echo "Generating coverage report in ./coverage/index.html"
-	@genhtml -o coverage --quiet rust_workspace.info server/cpp/build/server.info clients/cpp/build/client.info clients/python/coverage.xml || true
+	@genhtml -o coverage --quiet rust_workspace.info server/cpp/build/server.info clients/cpp/build/client.info || true
 
 .PHONY: test
 test: server-cpp-tests client-cpp-tests client-python-tests workspace-rust-tests

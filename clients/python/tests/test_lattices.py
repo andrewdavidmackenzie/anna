@@ -453,7 +453,8 @@ class TestSingleKeyCausalLattice:
         vc = VectorClock({"a": MaxIntLattice(1)})
         l = SingleKeyCausalLattice(vc, SetLattice({b"data"}))
         pb, typ = l.serialize()
-        assert pb is not None
+        assert pb.vector_clock["a"] == 1
+        assert list(pb.values) == [b"data"]
 
 
 class TestMultiKeyCausalLattice:
