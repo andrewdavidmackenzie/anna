@@ -27,7 +27,7 @@ clap = "~4"
 log = "0.4.17"
 simplog = "~1.6"
 error-chain = "0.12.2"
-sysinfo = "0.29.0"
+sysinfo = "0.39.5"
 nix = { version = "0.31.3", default-features = false, features = ["signal", "process"] }
 rustyline = "18.0.1"
 zmq = "0.10.0"
