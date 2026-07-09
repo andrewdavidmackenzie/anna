@@ -22,7 +22,7 @@ from kvs_pb2 import (
 
 class Lattice:
     def __init__(self):
-        raise NotImplementedError
+        pass
 
     def __str__(self):
         return str(self.reveal())
@@ -130,10 +130,10 @@ class SetLattice(Lattice):
         new_set = set()
 
         for v in other.val:
-            new_set.insert(v)
+            new_set.add(v)
 
         for v in self.val:
-            new_set.insert(v)
+            new_set.add(v)
 
         return SetLattice(new_set)
 
@@ -225,7 +225,7 @@ class OrderedSetLattice(Lattice):
         # Note that reconstruction is faster than in-place merge.
         new_lst = []
 
-        other = other.reveal().lst
+        other = other.val.lst
         us = self.val.lst
         i, j = 0, 0  # Earliest unmerged indices.
         while i < len(us) or j < len(other):
@@ -302,11 +302,11 @@ class MapLattice(Lattice):
         self.mp = mp
 
     def merge(self, other):
-        if type(other) != MapLattice:
+        if not isinstance(other, MapLattice):
             raise ValueError('Cannot merge MapLattice with type ' +
                              str(type(other)) + '.')
 
-        for key in other.mp.keys:
+        for key in other.mp.keys():
             if key in self.mp:
                 if not isinstance(self.mp[key], Lattice) or not isinstance(other.mp[key], Lattice):
                     raise ValueError('Cannot merge a MapLattice with values' +
@@ -414,8 +414,8 @@ class SingleKeyCausalLattice(Lattice):
         self.vector_clock.serialize(single_key_causal_value.vector_clock)
 
         # Add the value(s) stored by this lattice.
-        for v in self.value:
-            single_key_causal_value.values.add(v)
+        for v in self.value.reveal():
+            single_key_causal_value.values.append(v)
 
         return single_key_causal_value, SINGLE_CAUSAL
 
@@ -481,8 +481,8 @@ class MultiKeyCausalLattice(Lattice):
             self.dependencies[key].serialize(kv.vector_clock)
 
         # Add the value(s) stored by this lattice.
-        for v in self.value:
-            multi_key_causal_value.values.add(v)
+        for v in self.value.reveal():
+            multi_key_causal_value.values.append(v)
 
         return multi_key_causal_value, MULTI_CAUSAL
 
@@ -500,7 +500,7 @@ class PriorityLattice(Lattice):
         return self.value
 
     def assign(self, value):
-        if type(value) != str:
+        if type(value) == str:
             value = bytes(value, 'utf-8')
 
         if type(value) != tuple or type(value[0]) != float or type(value[1]) != bytes:

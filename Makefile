@@ -132,10 +132,10 @@ client-python:
 .PHONY: coverage
 coverage: test
 	@echo "Generating coverage report in ./coverage/index.html"
-	@genhtml -o coverage --quiet rust_workspace.info server/cpp/build/server.info clients/cpp/build/client.info || true
+	@genhtml -o coverage --quiet rust_workspace.info server/cpp/build/server.info clients/cpp/build/client.info clients/python/coverage.xml || true
 
 .PHONY: test
-test: server-cpp-tests client-cpp-tests workspace-rust-tests
+test: server-cpp-tests client-cpp-tests client-python-tests workspace-rust-tests
 
 .PHONY: server-cpp-tests
 server-cpp-tests:
@@ -148,6 +148,15 @@ client-cpp-tests:
 	@echo "Running C++ client tests with coverage"
 	@cd clients/cpp/build && make --no-print-directory -s client-test-coverage
 	# C++ client tests use gcov-style (.gcda) not profraw — no cleanup needed
+
+.PHONY: client-python-dependencies
+client-python-dependencies:
+	@pip3 install --quiet --user protobuf pytest pytest-cov 2>/dev/null || pip3 install --quiet --break-system-packages protobuf pytest pytest-cov 2>/dev/null || true
+
+.PHONY: client-python-tests
+client-python-tests: client-python-dependencies
+	@echo "Running Python client tests with coverage"
+	@cd clients/python && python3 -m pytest tests/ --quiet --cov=anna --cov-report=xml:coverage.xml 2>&1
 
 .PHONY: workspace-rust-tests
 workspace-rust-tests:
