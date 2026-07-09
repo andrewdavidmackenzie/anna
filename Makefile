@@ -154,8 +154,8 @@ workspace-rust-tests:
 	@echo "Running rust tests with coverage"
 	@$(CARGO_ENV) RUSTFLAGS="-C instrument-coverage $(RUST_LINK_ALLOW)" LLVM_PROFILE_FILE="target/profraw/anna-%p-%m.profraw" cargo --quiet test
 	@echo "Gathering covering information"
-	@grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o rust_workspace.info
-	@lcov --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' -o rust_workspace.info --ignore-errors inconsistent,format,unused
+	@grcov target/profraw --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o rust_workspace.info
+	@lcov --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' '*/incremental/*' -o rust_workspace.info --ignore-errors inconsistent,format,unused
 	@rm -rf target/profraw # all profraw now directed to single directory
 
 .PHONY: docs

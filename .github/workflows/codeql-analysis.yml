@@ -38,11 +38,13 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v2
+      uses: github/codeql-action/init@v3
       with:
         languages: ${{ matrix.language }}
         # If you wish to specify custom queries, you can do so here or in a config file.
@@ -58,22 +60,12 @@ jobs:
       if: matrix.language == 'cpp'
       run: |
         sudo apt-get update -qq
-        sudo apt-get install -y -qq cmake libzmq3-dev cppzmq-dev libprotobuf-dev protobuf-compiler libspdlog-dev libfmt-dev libyaml-cpp-dev libgtest-dev
+        sudo apt-get install -y -qq cmake libzmq3-dev cppzmq-dev libprotobuf-dev protobuf-compiler libspdlog-dev libfmt-dev libyaml-cpp-dev libgtest-dev lcov
 
-    # Autobuild attempts to build any compiled languages  (C/C++, C#, or Java).
-    # If this step fails, then you should remove it and run the build manually (see below)
-    - name: Autobuild
-      uses: github/codeql-action/autobuild@v2
-
-    # ℹ️ Command-line programs to run using the OS shell.
-    # 📚 See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
-
-    #   If the Autobuild fails above, remove it and uncomment the following three lines. 
-    #   modify them (or add more) to build your code if your project, please refer to the EXAMPLE below for guidance.
-
-    # - run: |
-    #   echo "Run, Build Application using script"
-    #   ./location_of_script_within_repo/buildscript.sh
+    # Build for C++ (only build, don't run tests during CodeQL analysis)
+    - name: Build
+      if: matrix.language == 'cpp'
+      run: make build
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v2
+      uses: github/codeql-action/analyze@v3

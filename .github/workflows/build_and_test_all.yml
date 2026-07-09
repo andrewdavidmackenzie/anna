@@ -17,14 +17,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-          os: [ macos-latest, ubuntu-latest ]
+          os: [ macos-latest, ubuntu-latest, ubuntu-24.04-arm, windows-latest ]
           rust: [ stable ]
 
     steps:
     - uses: actions/checkout@v3
 
     - name: InstallDependencies
+      if: matrix.os != 'windows-latest'
       run: make dependencies
+
+    - name: InstallDependencies (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        choco install make cmake protoc --no-progress -y
 
     - name: ConfigureCoverage
       if: matrix.os == 'macos-latest'
@@ -36,12 +42,23 @@ jobs:
       run: make clippy
 
     - name: build
+      if: matrix.os != 'windows-latest'
       run: make build
 
+    - name: build-rust (Windows)
+      if: matrix.os == 'windows-latest'
+      run: cargo build --quiet
+
     - name: test
+      if: matrix.os != 'windows-latest'
       run: make test
 
+    - name: test-rust (Windows)
+      if: matrix.os == 'windows-latest'
+      run: cargo test
+
     - uses: codecov/codecov-action@v2
+      if: matrix.os == 'macos-latest'
       with:
         files: rust_workspace.info server/cpp/build/server.info clients/cpp/build/client.info
 

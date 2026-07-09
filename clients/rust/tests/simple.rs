@@ -227,6 +227,7 @@ fn test(name: &str) -> io::Result<()> {
 }
 
 #[test]
+#[cfg(unix)]
 fn simple_test() {
     test("simple").expect("simple_test failed");
 }
