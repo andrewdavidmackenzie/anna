@@ -209,6 +209,12 @@ set<string> get_set(KvsClientInterface* client, const string& key) {
     responses = client->receive_async();
   }
 
+  if (responses.size() > 1) {
+    std::cerr << "Error: received more than one response" << std::endl;
+  }
+
+  assert(responses[0].tuples(0).lattice_type() == kvs::LatticeType::SET);
+
   SetLattice<string> latt = deserialize_set(responses[0].tuples(0).payload());
 
   return latt.reveal();
