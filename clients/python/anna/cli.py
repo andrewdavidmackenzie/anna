@@ -52,7 +52,7 @@ def execute_command(client, config_path, line):
             print("Key not found")
     elif cmd == "PUT":
         import time
-        ts = int(time.time())
+        ts = time.time_ns()
         val = LWWPairLattice(ts, parts[2].encode("utf-8"))
         result = client.put(parts[1], val)
         if not result.get(parts[1], False):
@@ -61,7 +61,7 @@ def execute_command(client, config_path, line):
         result = client.get(parts[1])
         val = result.get(parts[1])
         if val is not None:
-            items = sorted(v.decode("utf-8") if isinstance(v, bytes) else str(v)
+            items = sorted(v.decode("utf-8", errors="replace") if isinstance(v, bytes) else str(v)
                            for v in val.reveal())
             print("{ " + " ".join(items) + " }")
         else:

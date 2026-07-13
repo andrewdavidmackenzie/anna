@@ -153,10 +153,10 @@ class TestCliSmoke:
             cwd=os.path.join(REPO_ROOT, "clients", "python"),
         )
 
-        actual = [normalize_set_line(l.rstrip()) for l in result.stdout.splitlines() if l.strip()]
+        actual = [normalize_set_line(line.rstrip()) for line in result.stdout.splitlines() if line.strip()]
 
         with open(EXPECTED_FILE) as f:
-            expected = [normalize_set_line(l.rstrip()) for l in f if l.strip()]
+            expected = [normalize_set_line(line.rstrip()) for line in f if line.strip()]
 
         assert actual == expected, (
             f"Output mismatch:\n"
