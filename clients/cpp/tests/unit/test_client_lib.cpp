@@ -146,6 +146,25 @@ TEST(ClientLibTest, PutCausalSendsRequest) {
   EXPECT_EQ(response.response_id(), "1");
 }
 
+TEST(ClientLibTest, MultipleKvsClientsShareLogger) {
+  spdlog::drop("client_log");
+
+  vector<UserRoutingThread> routing_threads;
+  routing_threads.push_back(UserRoutingThread("127.0.0.1", 0));
+
+  {
+    auto client1 = annalib::make_client(
+        annalib::ClientConfig{routing_threads, "127.0.0.1"}, 10, 1000);
+    ASSERT_NE(client1, nullptr);
+
+    auto client2 = annalib::make_client(
+        annalib::ClientConfig{routing_threads, "127.0.0.1"}, 11, 1000);
+    ASSERT_NE(client2, nullptr);
+  }
+
+  spdlog::drop("client_log");
+}
+
 // start()/stop()/status() are unimplemented stubs pending #103; these tests
 // just pin down the current (documented) stub behavior so a future change
 // is a deliberate decision, not an accidental regression.

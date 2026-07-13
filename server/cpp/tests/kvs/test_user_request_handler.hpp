@@ -492,6 +492,58 @@ TEST_F(ServerHandlerTest, UserPutAndGetCausalTest) {
   EXPECT_EQ(key_access_tracker[key].size(), 2);
 }
 
+TEST_F(ServerHandlerTest, UserPutMissingLatticeTypeTest) {
+  Key key = "key";
+  string put_request =
+      put_key_request(key, kvs::LatticeType::NONE, "", ip);
+
+  unsigned access_count = 0;
+  unsigned seed = 0;
+
+  user_request_handler(access_count, seed, put_request, log_, global_hash_rings,
+                       local_hash_rings, pending_requests, key_access_tracker,
+                       stored_key_map, key_replication_map, local_changeset, wt,
+                       serializers, pushers);
+
+  EXPECT_EQ(local_changeset.size(), 0);
+  EXPECT_EQ(stored_key_map.count(key), 0);
+}
+
+TEST_F(ServerHandlerTest, UserPutLatticeMismatchTest) {
+  Key key = "key";
+  string value = "value";
+
+  // First PUT with LWW type succeeds.
+  string put_lww =
+      put_key_request(key, kvs::LatticeType::LWW, serialize(0, value), ip);
+
+  unsigned access_count = 0;
+  unsigned seed = 0;
+
+  user_request_handler(access_count, seed, put_lww, log_, global_hash_rings,
+                       local_hash_rings, pending_requests, key_access_tracker,
+                       stored_key_map, key_replication_map, local_changeset, wt,
+                       serializers, pushers);
+
+  EXPECT_EQ(local_changeset.size(), 1);
+  EXPECT_EQ(stored_key_map[key].type_, kvs::LatticeType::LWW);
+
+  // Second PUT with SET type on the same key — lattice mismatch.
+  set<string> s = {"a"};
+  string put_set = put_key_request(key, kvs::LatticeType::SET,
+                                   serialize(SetLattice<string>(s)), ip);
+
+  local_changeset.clear();
+  user_request_handler(access_count, seed, put_set, log_, global_hash_rings,
+                       local_hash_rings, pending_requests, key_access_tracker,
+                       stored_key_map, key_replication_map, local_changeset, wt,
+                       serializers, pushers);
+
+  // The mismatched PUT should be silently skipped.
+  EXPECT_EQ(local_changeset.size(), 0);
+  EXPECT_EQ(stored_key_map[key].type_, kvs::LatticeType::LWW);
+}
+
 // TODO: Test key address cache invalidation
 // TODO: Test replication factor request and making the request pending
 // TODO: Test metadata operations -- does this matter?
