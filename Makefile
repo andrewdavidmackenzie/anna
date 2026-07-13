@@ -4,8 +4,6 @@ DNF := $(shell command -v dnf 2> /dev/null)
 YUM := $(shell command -v yum 2> /dev/null)
 CLANG := $(shell command -v clang 2> /dev/null)
 MDBOOK := $(shell command -v mdbook 2> /dev/null)
-GRCOV := $(shell command -v grcov 2> /dev/null)
-
 all: clean-start clippy build test coverage docs cleanup
 	@echo "SUCCESS!!"
 
@@ -33,7 +31,7 @@ ifneq ($(YUM),)
 	sudo yum install -y build-essential autoconf automake libtool curl cmake protobuf-compiler lcov llvm zeromq zeromq-devel
 endif
 	cargo install mdbook
-	cargo install grcov
+	cargo install cargo-llvm-cov
 	rustup component add llvm-tools-preview
 	# Skipping installing Python pre-requisites for now
 	# sudo apt-get install -y python3-pip
@@ -162,11 +160,9 @@ client-python-tests: client-python-dependencies
 .PHONY: workspace-rust-tests
 workspace-rust-tests:
 	@echo "Running rust tests with coverage"
-	@$(CARGO_ENV) RUSTFLAGS="-C instrument-coverage $(RUST_LINK_ALLOW)" LLVM_PROFILE_FILE="target/profraw/anna-%p-%m.profraw" cargo --quiet test
-	@echo "Gathering covering information"
-	@grcov target/profraw --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o rust_workspace.info
+	@find clients/cpp/build -name "*.gcda" -delete 2>/dev/null || true
+	@$(CARGO_ENV) cargo llvm-cov test --lcov --output-path rust_workspace.info
 	@lcov --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' '*/incremental/*' -o rust_workspace.info --ignore-errors inconsistent,format,unused
-	@rm -rf target/profraw # all profraw now directed to single directory
 
 .PHONY: docs
 docs:
