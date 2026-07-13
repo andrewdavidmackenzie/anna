@@ -58,7 +58,7 @@ void membership_handler(
     } else if (tier == Tier::ROUTING) {
       routing_ips.push_back(new_server_public_ip);
     } else {
-      log->error("Invalid tier: {}.", std::to_string(tier));
+       log->error("Invalid tier: {}. [{}:{}]", std::to_string(tier), __FILE__, __LINE__);
     }
 
     for (const auto &pair : global_hash_rings) {
@@ -95,7 +95,7 @@ void membership_handler(
         }
       }
     } else {
-      log->error("Invalid tier: {}.", std::to_string(tier));
+       log->error("Invalid tier: {}. [{}:{}]", std::to_string(tier), __FILE__, __LINE__);
     }
 
     for (const auto &pair : global_hash_rings) {

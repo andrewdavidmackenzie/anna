@@ -83,15 +83,16 @@ void user_request_handler(
           }
         } else if (request_type == kvs::RequestType::PUT) {
           if (tuple.lattice_type() == kvs::LatticeType::NONE) {
-            log->error("PUT request missing lattice type.");
+             log->error("PUT request missing lattice type. [{}:{}]", __FILE__, __LINE__);
           } else if (stored_key_map.find(key) != stored_key_map.end() &&
                      stored_key_map[key].type_ != kvs::LatticeType::NONE &&
                      stored_key_map[key].type_ != tuple.lattice_type()) {
-            log->error(
-                "Lattice type mismatch for key {}: query is {} but we expect "
-                "{}.",
-                key, LatticeType_Name(tuple.lattice_type()),
-                LatticeType_Name(stored_key_map[key].type_));
+             log->error(
+                 "Lattice type mismatch for key {}: query is {} but we expect "
+                 "{}. [{}:{}]",
+                 key, LatticeType_Name(tuple.lattice_type()),
+                 LatticeType_Name(stored_key_map[key].type_),
+                 __FILE__, __LINE__);
           } else {
             process_put(key, tuple.lattice_type(), payload,
                         serializers[tuple.lattice_type()], stored_key_map);
@@ -100,8 +101,7 @@ void user_request_handler(
             tp->set_lattice_type(tuple.lattice_type());
           }
         } else {
-          log->error("Unknown request type {} in user request handler.",
-                     kvs::RequestType_Name(request_type));
+           log->error("Unknown request type {} in user request handler. [{}:{}]", kvs::RequestType_Name(request_type), __FILE__, __LINE__);
         }
 
         if (tuple.address_cache_size() > 0 &&

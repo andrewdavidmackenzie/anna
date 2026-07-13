@@ -60,8 +60,8 @@ void replication_response_handler(
         local_hash_rings[Tier::MEMORY], pushers, seed);
     return;
   } else {
-    log->error("Unexpected error type {} in replication factor response.",
-               kvs::AnnaError_Name(error));
+    log->error("Unexpected error type {} in replication factor response. [{}:{}]",
+                                               kvs::AnnaError_Name(error), __FILE__, __LINE__);
     return;
   }
 
@@ -100,16 +100,17 @@ void replication_response_handler(
           // only put requests should fall into this category
           if (request.type_ == kvs::RequestType::PUT) {
             if (request.lattice_type_ == kvs::LatticeType::NONE) {
-              log->error("PUT request missing lattice type.");
+              log->error("PUT request missing lattice type. [{}:{}]", __FILE__, __LINE__);
             } else if (stored_key_map.find(key) != stored_key_map.end() &&
                        stored_key_map[key].type_ != kvs::LatticeType::NONE &&
                        stored_key_map[key].type_ != request.lattice_type_) {
 
               log->error(
                   "Lattice type mismatch for key {}: query is {} but we expect "
-                  "{}.",
+                  "{}. [{}:{}]",
                   key, LatticeType_Name(request.lattice_type_),
-                  LatticeType_Name(stored_key_map[key].type_));
+                  LatticeType_Name(stored_key_map[key].type_),
+                  __FILE__, __LINE__);
             } else {
               process_put(key, request.lattice_type_, request.payload_,
                           serializers[request.lattice_type_], stored_key_map);
@@ -119,7 +120,7 @@ void replication_response_handler(
               local_changeset.insert(key);
             }
           } else {
-            log->error("Received a GET request with no response address.");
+            log->error("Received a GET request with no response address. [{}:{}]", __FILE__, __LINE__);
           }
         } else if (responsible && request.addr_ != "") {
           kvs::KeyResponse response;
@@ -146,7 +147,7 @@ void replication_response_handler(
             }
           } else {
             if (request.lattice_type_ == kvs::LatticeType::NONE) {
-              log->error("PUT request missing lattice type.");
+              log->error("PUT request missing lattice type. [{}:{}]", __FILE__, __LINE__);
             } else if (stored_key_map.find(key) != stored_key_map.end() &&
                        stored_key_map[key].type_ != kvs::LatticeType::NONE &&
                        stored_key_map[key].type_ != request.lattice_type_) {
@@ -171,8 +172,7 @@ void replication_response_handler(
         }
       }
     } else {
-      log->error(
-          "Missing key replication factor in process pending request routine.");
+       log->error("Missing key replication factor in process pending request routine. [{}:{}]", __FILE__, __LINE__);
     }
 
     pending_requests.erase(key);
@@ -190,10 +190,10 @@ void replication_response_handler(
           if (stored_key_map.find(key) != stored_key_map.end() &&
               stored_key_map[key].type_ != kvs::LatticeType::NONE &&
               stored_key_map[key].type_ != gossip.lattice_type_) {
-            log->error("Lattice type mismatch for key {}: {} from query but {} "
-                       "expected.",
-                       key, LatticeType_Name(gossip.lattice_type_),
-                       LatticeType_Name(stored_key_map[key].type_));
+             log->error("Lattice type mismatch for key {}: {} from query but {} expected. [{}:{}]",
+                                                       key, LatticeType_Name(gossip.lattice_type_),
+                                                       LatticeType_Name(stored_key_map[key].type_),
+                                                       __FILE__, __LINE__);
           } else {
             process_put(key, gossip.lattice_type_, gossip.payload_,
                         serializers[gossip.lattice_type_], stored_key_map);
