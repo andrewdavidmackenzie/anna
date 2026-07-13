@@ -89,7 +89,7 @@ policy:
             [bin_path, "--config", test_config],
             stdout=open(log_file, "a"),
             stderr=subprocess.STDOUT,
-            preexec_fn=os.setpgrp
+            start_new_session=True
         )
         procs.append(proc)
         time.sleep(1)
