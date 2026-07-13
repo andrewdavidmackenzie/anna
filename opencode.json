@@ -1,39 +1,33 @@
 {
-  "commands": [
-    {
-      "name": "build",
-      "description": "Build all components (C++ server, C++ client, Rust client)",
-      "command": "make build"
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    "build": {
+      "template": "make build",
+      "description": "Build all components (C++ server, C++ client, Rust client)"
     },
-    {
-      "name": "test",
-      "description": "Run all tests (C++ server, C++ client, Rust)",
-      "command": "make test"
+    "test": {
+      "template": "make test",
+      "description": "Run all tests (C++ server, C++ client, Rust)"
     },
-    {
-      "name": "lint",
-      "description": "Run clippy on Rust code",
-      "command": "make clippy"
+    "lint": {
+      "template": "make clippy",
+      "description": "Run clippy on Rust code"
     },
-    {
-      "name": "fmt",
-      "description": "Format Rust code with cargo fmt",
-      "command": "make fmt"
+    "fmt": {
+      "template": "make fmt",
+      "description": "Format Rust code with cargo fmt"
     },
-    {
-      "name": "check",
-      "description": "Run lint + format check + test",
-      "command": "make clippy && make fmt && make test"
+    "check": {
+      "template": "make clippy && make fmt && make test",
+      "description": "Run lint + format check + test"
     },
-    {
-      "name": "docs",
-      "description": "Build documentation and book",
-      "command": "make docs"
+    "docs": {
+      "template": "make docs",
+      "description": "Build documentation and book"
     },
-    {
-      "name": "clean",
-      "description": "Clean all build artifacts",
-      "command": "make clean"
+    "clean": {
+      "template": "make clean",
+      "description": "Clean all build artifacts"
     }
-  ]
+  }
 }
