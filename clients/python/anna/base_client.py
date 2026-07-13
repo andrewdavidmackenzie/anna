@@ -12,14 +12,14 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-from causal_pb2 import CausalTuple
-from kvs_pb2 import (
+from .causal_pb2 import CausalTuple
+from .kvs_pb2 import (
     # Protobuf enum lattices types
     LWW, SET, ORDERED_SET, SINGLE_CAUSAL, MULTI_CAUSAL, PRIORITY,
     # Serialized lattice protobuf representations
     LWWValue, SetValue, SingleKeyCausalValue, MultiKeyCausalValue, PriorityValue
 )
-from lattices import (
+from .lattices import (
     Lattice,
     LWWPairLattice,
     ListBasedOrderedSet,

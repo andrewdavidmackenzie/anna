@@ -1,8 +1,4 @@
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'anna'))
-
-from lattices import (
+from anna.lattices import (
     LWWPairLattice, SetLattice, ListBasedOrderedSet, OrderedSetLattice,
     MaxIntLattice, MapLattice, VectorClock, SingleKeyCausalLattice,
     MultiKeyCausalLattice, PriorityLattice, Lattice

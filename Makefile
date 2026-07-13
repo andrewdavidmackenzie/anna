@@ -151,7 +151,7 @@ client-cpp-tests:
 
 .PHONY: client-python-dependencies
 client-python-dependencies:
-	@pip3 install --quiet --user protobuf pytest pytest-cov 2>/dev/null || pip3 install --quiet --break-system-packages protobuf pytest pytest-cov 2>/dev/null || true
+	@pip3 install --quiet --user protobuf pytest pytest-cov pyzmq pyyaml 2>/dev/null || pip3 install --quiet --break-system-packages protobuf pytest pytest-cov pyzmq pyyaml 2>/dev/null || true
 
 .PHONY: client-python-tests
 client-python-tests: client-python-dependencies

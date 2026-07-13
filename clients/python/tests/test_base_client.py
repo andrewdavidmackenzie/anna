@@ -1,13 +1,9 @@
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'anna'))
-
 import pytest
 
-from base_client import BaseAnnaClient
-from kvs_pb2 import LWW, ORDERED_SET, PRIORITY, SET
-from kvs_pb2 import KeyTuple, LWWValue, PriorityValue, SetValue
-from lattices import LWWPairLattice, OrderedSetLattice, PriorityLattice, SetLattice
+from anna.base_client import BaseAnnaClient
+from anna.kvs_pb2 import LWW, ORDERED_SET, PRIORITY, SET
+from anna.kvs_pb2 import KeyTuple, LWWValue, PriorityValue, SetValue
+from anna.lattices import LWWPairLattice, OrderedSetLattice, PriorityLattice, SetLattice
 
 
 class TestSerialize:

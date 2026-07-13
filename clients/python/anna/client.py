@@ -16,7 +16,7 @@ import random
 import socket
 import zmq
 
-from kvs_pb2 import (
+from .kvs_pb2 import (
     GET, PUT,  # Anna's request types
     NO_ERROR,  # Anna's error modes
     KeyAddressRequest,
@@ -24,9 +24,9 @@ from kvs_pb2 import (
     KeyResponse,
     KeyRequest
 )
-from base_client import BaseAnnaClient
-from common import UserThread
-from zmq_util import (
+from .base_client import BaseAnnaClient
+from .common import UserThread
+from .zmq_util import (
     recv_response,
     send_request,
     SocketCache
