@@ -111,3 +111,115 @@ class TestCliUsage:
         assert "GET" in usage
         assert "PUT" in usage
         assert "EXIT" in usage
+
+
+class TestExecuteCommand:
+    def test_empty_line_returns_true(self):
+        from anna.cli import execute_command
+        assert execute_command(None, None, "") is True
+        assert execute_command(None, None, "   ") is True
+
+    def test_exit_returns_false(self):
+        from anna.cli import execute_command
+        assert execute_command(None, None, "EXIT") is False
+        assert execute_command(None, None, "exit") is False
+
+    def test_help_prints_usage(self, capsys):
+        from anna.cli import execute_command
+        result = execute_command(None, None, "HELP")
+        assert result is True
+        assert "GET" in capsys.readouterr().out
+
+    def test_stop_prints_count(self, capsys):
+        from anna.cli import execute_command
+        result = execute_command(None, None, "STOP")
+        assert result is True
+        assert "anna processes were stopped" in capsys.readouterr().out
+
+    def test_start_prints_count(self, capsys, tmp_path):
+        from anna.cli import execute_command
+        config = tmp_path / "test.yml"
+        config.write_text("threads:\n  routing: 1\n")
+        result = execute_command(None, str(config), "START")
+        assert result is True
+        assert "anna processes were started" in capsys.readouterr().out
+
+    def test_status_with_nothing_running(self, capsys):
+        from anna.cli import execute_command
+        result = execute_command(None, None, "STATUS")
+        assert result is True
+        assert capsys.readouterr().out == ""
+
+    def test_unrecognized_command(self, capsys):
+        from anna.cli import execute_command
+        result = execute_command(None, None, "FOOBAR")
+        assert result is True
+        out = capsys.readouterr().out
+        assert "Unrecognized command: FOOBAR" in out
+        assert "GET" in out
+
+    def test_get_with_mock_client(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        from anna.lattices import LWWPairLattice
+
+        client = MagicMock()
+        client.get.return_value = {"mykey": LWWPairLattice(1, b"hello")}
+
+        result = execute_command(client, None, "GET mykey")
+        assert result is True
+        assert "hello" in capsys.readouterr().out
+
+    def test_get_key_not_found(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.get.return_value = {"mykey": None}
+
+        execute_command(client, None, "GET mykey")
+        assert "Key not found" in capsys.readouterr().out
+
+    def test_put_with_mock_client(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.put.return_value = {"mykey": True}
+
+        result = execute_command(client, None, "PUT mykey myvalue")
+        assert result is True
+        assert capsys.readouterr().out == ""
+
+    def test_put_failure(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.put.return_value = {"mykey": False}
+
+        execute_command(client, None, "PUT mykey myvalue")
+        assert "Failure!" in capsys.readouterr().out
+
+    def test_get_set_with_mock_client(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        from anna.lattices import SetLattice
+
+        client = MagicMock()
+        client.get.return_value = {"myset": SetLattice({b"x", b"y"})}
+
+        execute_command(client, None, "GET_SET myset")
+        out = capsys.readouterr().out.strip()
+        assert out.startswith("{") and out.endswith("}")
+
+    def test_put_set_with_mock_client(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.put.return_value = {"myset": True}
+
+        result = execute_command(client, None, "PUT_SET myset a b c")
+        assert result is True
+        assert capsys.readouterr().out == ""

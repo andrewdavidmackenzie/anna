@@ -7,8 +7,7 @@ from anna.lattices import LWWPairLattice, SetLattice
 
 def make_client():
     """Create an AnnaTcpClient with mocked ZMQ context and sockets."""
-    with patch("anna.client.zmq") as mock_zmq, \
-         patch("anna.base_client.BaseAnnaClient.__init__", lambda self: None):
+    with patch("anna.client.zmq") as mock_zmq:
         mock_ctx = MagicMock()
         mock_zmq.Context.return_value = mock_ctx
         mock_zmq.PULL = 7
@@ -27,8 +26,7 @@ class TestAnnaTcpClientConstructor:
         assert client.elb_ports == [6450]
 
     def test_non_local_ports(self):
-        with patch("anna.client.zmq") as mock_zmq, \
-             patch("anna.base_client.BaseAnnaClient.__init__", lambda self: None):
+        with patch("anna.client.zmq") as mock_zmq:
             mock_zmq.Context.return_value = MagicMock()
             mock_zmq.PULL = 7
             mock_zmq.PUSH = 8
@@ -38,8 +36,7 @@ class TestAnnaTcpClientConstructor:
 
     def test_ip_inference(self):
         with patch("anna.client.zmq") as mock_zmq, \
-             patch("anna.client.socket") as mock_socket, \
-             patch("anna.base_client.BaseAnnaClient.__init__", lambda self: None):
+             patch("anna.client.socket") as mock_socket:
             mock_zmq.Context.return_value = MagicMock()
             mock_zmq.PULL = 7
             mock_zmq.PUSH = 8
