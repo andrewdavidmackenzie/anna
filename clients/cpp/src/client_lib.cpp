@@ -15,6 +15,12 @@
 #include "client_lib.hpp"
 
 #include <cassert>
+#include <csignal>
+#include <cstdio>
+#include <cstdlib>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
 #include "yaml-cpp/yaml.h"
 
@@ -220,34 +226,109 @@ set<string> get_set(KvsClientInterface* client, const string& key) {
   return latt.reveal();
 }
 
-// start()/stop()/status() are not yet implemented -- see #103. These stubs
-// preserve the exact (non-)behavior that previously lived in cli.cpp.
+namespace {
+
+vector<int> pids_from_name(const string& name) {
+  vector<int> pids;
+  string uid = std::to_string(getuid());
+  string cmd = "pgrep -x -u " + uid + " " + name;
+  FILE* fp = popen(cmd.c_str(), "r");
+  if (!fp) return pids;
+
+  char buf[64];
+  while (fgets(buf, sizeof(buf), fp)) {
+    int pid = atoi(buf);
+    if (pid > 0) pids.push_back(pid);
+  }
+  pclose(fp);
+  return pids;
+}
+
+string find_binary(const string& name) {
+  const char* server_path = getenv("ANNA_SERVER_PATH");
+  if (server_path) {
+    string full = string(server_path) + "/" + name;
+    if (access(full.c_str(), X_OK) == 0) return full;
+  }
+  return name;
+}
+
+}  // namespace
+
 int start(const string& config_file_path) {
-  int process_count = 3;  // TODO until implemented
+  int started = 0;
+
   for (const string& process_name : kProcessList) {
-    (void)process_name;
+    vector<int> existing = pids_from_name(process_name);
+    if (!existing.empty()) continue;
+
+    string bin = find_binary(process_name);
+
+    pid_t pid = fork();
+    if (pid < 0) continue;
+
+    if (pid == 0) {
+      setsid();
+      int devnull_r = open("/dev/null", O_RDONLY);
+      int devnull_w = open("/dev/null", O_WRONLY);
+      if (devnull_r >= 0) { dup2(devnull_r, STDIN_FILENO); close(devnull_r); }
+      if (devnull_w >= 0) {
+        dup2(devnull_w, STDOUT_FILENO);
+        dup2(devnull_w, STDERR_FILENO);
+        close(devnull_w);
+      }
+      const char* args[] = {bin.c_str(), "--config",
+                            config_file_path.c_str(), nullptr};
+      execvp(args[0], const_cast<char* const*>(args));
+      _exit(127);
+    }
+
+    // Check if exec succeeded by waiting briefly for the child.
+    // If it exits immediately (127 = exec failed), don't count it.
+    usleep(50000);  // 50ms
+    int wstatus;
+    pid_t result = waitpid(pid, &wstatus, WNOHANG);
+    if (result == 0) {
+      started++;  // child still running — exec succeeded
+    }
+    // If result > 0, child already exited (exec failed) — don't count
   }
 
-  return process_count;
+  return started;
 }
 
 vector<string> status() {
-  vector<string> result = {};
+  vector<string> result;
 
   for (const string& process_name : kProcessList) {
-    (void)process_name;
+    vector<int> pids = pids_from_name(process_name);
+    if (!pids.empty()) {
+      result.push_back(process_name);
+    }
   }
 
   return result;
 }
 
 int stop() {
-  int kill_count = 3;  // TODO until we implement
+  int killed = 0;
+  vector<int> signaled_pids;
+
   for (const string& process_name : kProcessList) {
-    (void)process_name;
+    vector<int> pids = pids_from_name(process_name);
+    for (int pid : pids) {
+      if (kill(pid, SIGTERM) == 0) {
+        signaled_pids.push_back(pid);
+        killed++;
+      }
+    }
   }
 
-  return kill_count;
+  for (int pid : signaled_pids) {
+    waitpid(pid, nullptr, 0);
+  }
+
+  return killed;
 }
 
 }  // namespace annalib

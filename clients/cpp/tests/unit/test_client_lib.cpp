@@ -165,11 +165,10 @@ TEST(ClientLibTest, MultipleKvsClientsShareLogger) {
   spdlog::drop("client_log");
 }
 
-// start()/stop()/status() are unimplemented stubs pending #103; these tests
-// just pin down the current (documented) stub behavior so a future change
-// is a deliberate decision, not an accidental regression.
-TEST(ClientLibTest, StubProcessManagementFunctions) {
-  EXPECT_EQ(annalib::start("unused-config-path"), 3);
-  EXPECT_EQ(annalib::stop(), 3);
+TEST(ClientLibTest, StopWithNothingRunningReturnsZero) {
+  EXPECT_EQ(annalib::stop(), 0);
+}
+
+TEST(ClientLibTest, StatusWithNothingRunningReturnsEmpty) {
   EXPECT_TRUE(annalib::status().empty());
 }
