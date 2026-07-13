@@ -231,6 +231,7 @@ impl KVSClient {
             }
             None => {
                 warn!("Request timed out for key {}", key);
+                self.key_address_cache.remove(key);
                 None
             }
         }
@@ -280,9 +281,13 @@ impl KVSClient {
                 Some(LatticeType::Lww as i32),
                 Some(payload),
             )
-            .ok_or("Request failed or timed out")?;
+            .ok_or("PUT request failed or timed out")?;
 
-        if !response.tuples.is_empty() && response.tuples[0].error != AnnaError::NoError as i32 {
+        if response.tuples.is_empty() {
+            return Err("PUT response contained no tuples".into());
+        }
+
+        if response.tuples[0].error != AnnaError::NoError as i32 {
             return Err(format!("PUT error {}", response.tuples[0].error).into());
         }
 
@@ -331,9 +336,13 @@ impl KVSClient {
                 Some(LatticeType::Set as i32),
                 Some(payload),
             )
-            .ok_or("Request failed or timed out")?;
+            .ok_or("PUT_SET request failed or timed out")?;
 
-        if !response.tuples.is_empty() && response.tuples[0].error != AnnaError::NoError as i32 {
+        if response.tuples.is_empty() {
+            return Err("PUT_SET response contained no tuples".into());
+        }
+
+        if response.tuples[0].error != AnnaError::NoError as i32 {
             return Err(format!("PUT_SET error {}", response.tuples[0].error).into());
         }
 
@@ -344,14 +353,14 @@ impl KVSClient {
     #[cfg(feature = "causal")]
     pub fn get_causal<K: AsRef<str> + Display>(&mut self, key: K) -> Result<String> {
         debug!("GET_CAUSAL: {}", key);
-        unimplemented!("Causal operations require additional protocol support")
+        Err("Causal GET is not yet implemented".into())
     }
 
     /// Perform a blocking causal PUT (not yet implemented).
     #[cfg(feature = "causal")]
     pub fn put_causal<K: AsRef<str> + Display>(&mut self, key: K, value: &str) -> Result<()> {
         debug!("PUT_CAUSAL: {} <- {}", key, value);
-        unimplemented!("Causal operations require additional protocol support")
+        Err("Causal PUT is not yet implemented".into())
     }
 
     /// Clear the key-address cache.
@@ -465,5 +474,126 @@ mod tests {
         assert!(!client.key_address_cache.is_empty());
         client.clear_cache();
         assert!(client.key_address_cache.is_empty());
+    }
+
+    #[test]
+    fn get_worker_address_returns_cached() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .unwrap();
+        let mut client = KVSClient::new(&config, Some(96));
+        client.key_address_cache.insert(
+            "cached_key".into(),
+            ["tcp://127.0.0.1:6200".to_string()].into(),
+        );
+        let addr = client.get_worker_address("cached_key");
+        assert_eq!(addr, Some("tcp://127.0.0.1:6200".to_string()));
+    }
+
+    #[test]
+    fn get_worker_address_picks_from_multi_address_cache() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .unwrap();
+        let mut client = KVSClient::new(&config, Some(95));
+        let mut addrs = HashSet::new();
+        addrs.insert("tcp://10.0.0.1:6200".to_string());
+        addrs.insert("tcp://10.0.0.2:6200".to_string());
+        client.key_address_cache.insert("multi_key".into(), addrs);
+        let addr = client.get_worker_address("multi_key").unwrap();
+        assert!(
+            addr == "tcp://10.0.0.1:6200" || addr == "tcp://10.0.0.2:6200",
+            "unexpected addr: {}",
+            addr
+        );
+    }
+
+    #[test]
+    fn invalidate_cache_removes_key() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .unwrap();
+        let mut client = KVSClient::new(&config, Some(92));
+        client.key_address_cache.insert(
+            "evict_me".into(),
+            ["tcp://10.0.0.1:6200".to_string()].into(),
+        );
+        assert!(client.key_address_cache.contains_key("evict_me"));
+        client.key_address_cache.remove("evict_me");
+        assert!(!client.key_address_cache.contains_key("evict_me"));
+    }
+
+    #[test]
+    fn empty_set_value_roundtrip() {
+        let original = SetValue { values: vec![] };
+        let encoded = original.encode_to_vec();
+        let decoded = SetValue::decode(encoded.as_slice()).unwrap();
+        assert!(decoded.values.is_empty());
+    }
+
+    #[test]
+    fn lww_value_with_empty_payload() {
+        let original = LwwValue {
+            timestamp: 0,
+            value: vec![],
+        };
+        let encoded = original.encode_to_vec();
+        let decoded = LwwValue::decode(encoded.as_slice()).unwrap();
+        assert_eq!(decoded.timestamp, 0);
+        assert!(decoded.value.is_empty());
+    }
+
+    #[test]
+    fn request_id_format() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .unwrap();
+        let mut client = KVSClient::new(&config, Some(91));
+        let id = client.get_request_id();
+        // Format: ip:tid_rid
+        let parts: Vec<&str> = id.split(':').collect();
+        assert_eq!(parts.len(), 2);
+        assert!(parts[1].contains('_'));
+    }
+
+    #[test]
+    fn key_request_protobuf_roundtrip() {
+        let mut request = KeyRequest::default();
+        request.request_id = "test:0_1".to_string();
+        request.response_address = "tcp://127.0.0.1:6800".to_string();
+        request.r#type = RequestType::Put as i32;
+
+        let mut tuple = KeyTuple::default();
+        tuple.key = "mykey".to_string();
+        tuple.lattice_type = LatticeType::Lww as i32;
+        let lww = LwwValue {
+            timestamp: 100,
+            value: b"test".to_vec(),
+        };
+        tuple.payload = lww.encode_to_vec();
+        request.tuples.push(tuple);
+
+        let encoded = request.encode_to_vec();
+        let decoded = KeyRequest::decode(encoded.as_slice()).unwrap();
+        assert_eq!(decoded.request_id, "test:0_1");
+        assert_eq!(decoded.tuples[0].key, "mykey");
+        assert_eq!(decoded.tuples[0].lattice_type, LatticeType::Lww as i32);
+    }
+
+    #[test]
+    fn key_address_request_protobuf_roundtrip() {
+        let mut request = KeyAddressRequest::default();
+        request.request_id = "addr_req_1".to_string();
+        request.response_address = "tcp://127.0.0.1:6850".to_string();
+        request.keys.push("lookup_key".to_string());
+
+        let encoded = request.encode_to_vec();
+        let decoded = KeyAddressRequest::decode(encoded.as_slice()).unwrap();
+        assert_eq!(decoded.request_id, "addr_req_1");
+        assert_eq!(decoded.keys[0], "lookup_key");
     }
 }
