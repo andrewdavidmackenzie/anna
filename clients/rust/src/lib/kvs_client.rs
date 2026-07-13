@@ -359,3 +359,111 @@ impl KVSClient {
         self.key_address_cache.clear()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generate_seed_is_deterministic_for_same_inputs_at_same_time() {
+        let s1 = KVSClient::generate_seed(&"127.0.0.1".to_string(), 0);
+        let s2 = KVSClient::generate_seed(&"127.0.0.1".to_string(), 0);
+        // Seeds include current time so they won't be exactly equal,
+        // but they should be very close (within a few ms)
+        assert!((s1 as i64 - s2 as i64).unsigned_abs() < 100);
+    }
+
+    #[test]
+    fn generate_seed_differs_by_tid() {
+        let s1 = KVSClient::generate_seed(&"127.0.0.1".to_string(), 0);
+        let s2 = KVSClient::generate_seed(&"127.0.0.1".to_string(), 1);
+        assert_ne!(s1, s2);
+    }
+
+    #[test]
+    fn generate_seed_differs_by_ip() {
+        let s1 = KVSClient::generate_seed(&"127.0.0.1".to_string(), 0);
+        let s2 = KVSClient::generate_seed(&"10.0.0.1".to_string(), 0);
+        assert_ne!(s1, s2);
+    }
+
+    #[test]
+    fn generate_timestamp_is_positive() {
+        let ts = KVSClient::generate_timestamp();
+        assert!(ts > 0);
+    }
+
+    #[test]
+    fn generate_timestamp_increases() {
+        let ts1 = KVSClient::generate_timestamp();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        let ts2 = KVSClient::generate_timestamp();
+        assert!(ts2 > ts1);
+    }
+
+    #[test]
+    fn lww_value_roundtrip() {
+        let original = LwwValue {
+            timestamp: 12345,
+            value: b"hello world".to_vec(),
+        };
+        let encoded = original.encode_to_vec();
+        let decoded = LwwValue::decode(encoded.as_slice()).unwrap();
+        assert_eq!(decoded.timestamp, 12345);
+        assert_eq!(decoded.value, b"hello world");
+    }
+
+    #[test]
+    fn set_value_roundtrip() {
+        let original = SetValue {
+            values: vec![b"a".to_vec(), b"b".to_vec(), b"c".to_vec()],
+        };
+        let encoded = original.encode_to_vec();
+        let decoded = SetValue::decode(encoded.as_slice()).unwrap();
+        assert_eq!(decoded.values.len(), 3);
+        assert!(decoded.values.contains(&b"a".to_vec()));
+        assert!(decoded.values.contains(&b"b".to_vec()));
+        assert!(decoded.values.contains(&b"c".to_vec()));
+    }
+
+    #[test]
+    fn client_construction_and_request_id() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .unwrap();
+        let mut client = KVSClient::new(&config, Some(99));
+        let id1 = client.get_request_id();
+        let id2 = client.get_request_id();
+        assert!(id1.contains("127.0.0.1"));
+        assert!(id1.contains("99"));
+        assert_ne!(id1, id2);
+    }
+
+    #[test]
+    fn client_routing_thread_returns_address() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .unwrap();
+        let mut client = KVSClient::new(&config, Some(98));
+        let addr = client.get_routing_thread();
+        assert!(addr.starts_with("tcp://"), "addr was: {}", addr);
+        assert!(addr.contains("127.0.0.1"), "addr was: {}", addr);
+    }
+
+    #[test]
+    fn client_clear_cache() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .unwrap();
+        let mut client = KVSClient::new(&config, Some(97));
+        client
+            .key_address_cache
+            .insert("test_key".into(), ["addr1".to_string()].into());
+        assert!(!client.key_address_cache.is_empty());
+        client.clear_cache();
+        assert!(client.key_address_cache.is_empty());
+    }
+}
