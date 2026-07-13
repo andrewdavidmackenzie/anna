@@ -468,7 +468,7 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
               }
             }
           } else {
-             log->error("Missing key replication factor in gossip routine. [{}:{}]", __FILE__, __LINE__);
+            log->error("Missing key replication factor in gossip routine.");
           }
 
           // Get the caches that we need to gossip to.

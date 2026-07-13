@@ -109,10 +109,12 @@ void replication_change_handler(
             }
           }
         } else {
-          log->error("Missing key replication factor in rep factor change routine. [{}:{}]", __FILE__, __LINE__);
+          log->error(
+              "Missing key replication factor in rep factor change routine.");
         }
       } else {
-         log->error("Missing key replication factor in rep factor change routine. [{}:{}]", __FILE__, __LINE__);
+        log->error(
+            "Missing key replication factor in rep factor change routine.");
 
         // just update the replication factor
         for (const auto &global : key_rep.global()) {
