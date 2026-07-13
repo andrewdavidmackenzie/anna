@@ -4,28 +4,47 @@ import os
 import sys
 import shutil
 import socket
+import signal
+import re
 
-def run_system_tests():
+def normalize_set_line(line):
+    """Sort tokens inside { ... } so set iteration order doesn't matter."""
+    m = re.match(r'^(\{ )(.+)( \})$', line)
+    if m:
+        tokens = m.group(2).split()
+        return m.group(1) + ' '.join(sorted(tokens)) + m.group(3)
+    return line
+
+def run_cli_smoke_test():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.normpath(os.path.join(script_dir, "..", "..", "..", ".."))
 
-    # Find the server binaries. Check ANNA_SERVER_PATH env var first, then
-    # try to locate them relative to this script's location in the repo.
     server_dir = os.environ.get("ANNA_SERVER_PATH")
     if not server_dir:
         server_dir = os.path.join(repo_root, "server", "cpp", "build", "target", "kvs")
+
+    cli_binary = os.environ.get("ANNA_CLI_PATH")
+    if not cli_binary:
+        cli_binary = os.path.join(repo_root, "clients", "cpp", "build", "cli", "anna-cli")
 
     if not os.path.exists(server_dir):
         print(f"Error: Server directory {server_dir} not found.")
         print("Build the server first or set ANNA_SERVER_PATH.")
         sys.exit(1)
 
+    if not os.path.exists(cli_binary):
+        print(f"Error: CLI binary {cli_binary} not found.")
+        print("Build the client first or set ANNA_CLI_PATH.")
+        sys.exit(1)
+
+    input_file = os.path.join(script_dir, "input")
+    expected_file = os.path.join(script_dir, "expected")
     test_config = "test_config.yml"
     test_data = "test_data"
     log_file = "server.log"
+    output_file = "test.output"
+    err_file = "test.err"
 
-    # Create a config with all sections required by anna-kvs, anna-monitor,
-    # anna-route, and the C++ client library.
     with open(test_config, "w") as f:
         f.write("""
 monitoring:
@@ -73,7 +92,6 @@ policy:
     if not os.path.exists(test_data):
         os.makedirs(test_data)
 
-    # Start in dependency order: monitor first, then route, then kvs.
     binaries = ["anna-monitor", "anna-route", "anna-kvs"]
     procs = []
 
@@ -95,9 +113,6 @@ policy:
         time.sleep(1)
 
     try:
-        # Wait for the routing tier to be ready by probing its ZMQ TCP port.
-        # kKeyAddressPort (6450) is the port the routing thread binds for
-        # key-address lookups from clients.
         routing_port = 6450
         print(f"Waiting for routing tier on port {routing_port}...")
         timeout = 30
@@ -127,60 +142,65 @@ policy:
                 print(lf.read())
             sys.exit(1)
 
-        # Allow time for the KVS server to register with the routing tier
-        # and for the hash ring to stabilize.
         print("Waiting for cluster to stabilize...")
         time.sleep(3)
 
-        # Run the system tests
-        print("Running system tests...")
-        # Search for the system_tests binary in several likely locations.
-        candidates = [
-            "./system_tests",
-            os.path.join(script_dir, "system_tests"),
-            os.path.join(repo_root, "clients", "cpp", "build", "tests", "system_tests"),
-        ]
-        system_tests_path = None
-        for path in candidates:
-            if os.path.exists(path):
-                system_tests_path = path
-                break
+        print(f"Running CLI smoke test: {cli_binary} --config {test_config} cli {input_file}")
+        with open(output_file, "w") as out_f, open(err_file, "w") as err_f:
+            result = subprocess.run(
+                [cli_binary, "--config", test_config, "cli", input_file],
+                stdout=out_f,
+                stderr=err_f,
+                timeout=60
+            )
 
-        if system_tests_path is None:
-            print("Error: system_tests binary not found. Searched:")
-            for path in candidates:
-                print(f"  {path}")
+        if os.path.exists(err_file) and os.path.getsize(err_file) > 0:
+            with open(err_file, "r") as f:
+                stderr_content = f.read()
+            if stderr_content.strip():
+                print("--- CLI stderr ---")
+                print(stderr_content)
+
+        with open(output_file, "r") as f:
+            actual_lines = [normalize_set_line(line.rstrip()) for line in f if line.strip()]
+
+        with open(expected_file, "r") as f:
+            expected_lines = [normalize_set_line(line.rstrip()) for line in f if line.strip()]
+
+        if actual_lines == expected_lines:
+            print("CLI smoke test PASSED!")
+        else:
+            print("CLI smoke test FAILED!")
+            print(f"\nExpected ({len(expected_lines)} lines):")
+            for line in expected_lines:
+                print(f"  {line}")
+            print(f"\nActual ({len(actual_lines)} lines):")
+            for line in actual_lines:
+                print(f"  {line}")
+
+            print("\nDifferences:")
+            max_lines = max(len(expected_lines), len(actual_lines))
+            for i in range(max_lines):
+                exp = expected_lines[i] if i < len(expected_lines) else "<missing>"
+                act = actual_lines[i] if i < len(actual_lines) else "<missing>"
+                if exp != act:
+                    print(f"  Line {i+1}: expected '{exp}' got '{act}'")
+
             sys.exit(1)
 
-        result = subprocess.run([system_tests_path], capture_output=True, text=True)
-        
-        print("--- Test Output ---")
-        print(result.stdout)
-        if result.stderr:
-            print("--- Error Output ---")
-            print(result.stderr)
-        
-        if result.returncode == 0:
-            print("System tests PASSED!")
-        else:
-            print(f"System tests FAILED with return code {result.returncode}")
-            sys.exit(result.returncode)
-
     finally:
-        # Kill the server process group
         print("Cleaning up...")
         for proc in procs:
             try:
-                os.killpg(os.getpgid(proc.pid), subprocess.signal.SIGTERM)
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
             except Exception as e:
                 print(f"Error killing process {proc.pid}: {e}")
-        
-        if os.path.exists(test_config):
-            os.remove(test_config)
-        if os.path.exists(log_file):
-            os.remove(log_file)
+
+        for f in [test_config, log_file, output_file, err_file, "client_log.txt"]:
+            if os.path.exists(f):
+                os.remove(f)
         if os.path.exists(test_data):
             shutil.rmtree(test_data)
 
 if __name__ == "__main__":
-    run_system_tests()
+    run_cli_smoke_test()
