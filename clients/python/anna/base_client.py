@@ -35,7 +35,7 @@ from .lattices import (
 
 class BaseAnnaClient:
     def __init__(self):
-        raise NotImplementedError
+        pass
 
     def get(self, keys):
         """

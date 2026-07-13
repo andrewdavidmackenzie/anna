@@ -43,13 +43,17 @@ def execute_command(client, config_path, line):
         result = client.get(parts[1])
         val = result.get(parts[1])
         if val is not None:
-            print(val.reveal())
+            revealed = val.reveal()
+            if isinstance(revealed, bytes):
+                print(revealed.decode("utf-8", errors="replace"))
+            else:
+                print(revealed)
         else:
             print("Key not found")
     elif cmd == "PUT":
         import time
         ts = int(time.time())
-        val = LWWPairLattice(ts, parts[2])
+        val = LWWPairLattice(ts, parts[2].encode("utf-8"))
         result = client.put(parts[1], val)
         if not result.get(parts[1], False):
             print("Failure!")
@@ -57,12 +61,13 @@ def execute_command(client, config_path, line):
         result = client.get(parts[1])
         val = result.get(parts[1])
         if val is not None:
-            items = sorted(val.reveal())
+            items = sorted(v.decode("utf-8") if isinstance(v, bytes) else str(v)
+                           for v in val.reveal())
             print("{ " + " ".join(items) + " }")
         else:
             print("Key not found")
     elif cmd == "PUT_SET":
-        values = set(parts[2:])
+        values = set(v.encode("utf-8") for v in parts[2:])
         val = SetLattice(values)
         result = client.put(parts[1], val)
         if not result.get(parts[1], False):
