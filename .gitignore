@@ -90,3 +90,5 @@ tags
 *.out
 *.app
 CMakeFiles/
+CMakeCache.txt
+clients/cpp/tests/system/system_tests
