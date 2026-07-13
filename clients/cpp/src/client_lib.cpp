@@ -230,7 +230,8 @@ namespace {
 
 vector<int> pids_from_name(const string& name) {
   vector<int> pids;
-  string cmd = "pgrep -x " + name;
+  string uid = std::to_string(getuid());
+  string cmd = "pgrep -x -u " + uid + " " + name;
   FILE* fp = popen(cmd.c_str(), "r");
   if (!fp) return pids;
 
@@ -268,11 +269,13 @@ int start(const string& config_file_path) {
 
     if (pid == 0) {
       setsid();
-      int devnull = open("/dev/null", O_WRONLY);
-      if (devnull >= 0) {
-        dup2(devnull, STDOUT_FILENO);
-        dup2(devnull, STDERR_FILENO);
-        close(devnull);
+      int devnull_r = open("/dev/null", O_RDONLY);
+      int devnull_w = open("/dev/null", O_WRONLY);
+      if (devnull_r >= 0) { dup2(devnull_r, STDIN_FILENO); close(devnull_r); }
+      if (devnull_w >= 0) {
+        dup2(devnull_w, STDOUT_FILENO);
+        dup2(devnull_w, STDERR_FILENO);
+        close(devnull_w);
       }
       const char* args[] = {bin.c_str(), "--config",
                             config_file_path.c_str(), nullptr};
@@ -280,7 +283,15 @@ int start(const string& config_file_path) {
       _exit(127);
     }
 
-    started++;
+    // Check if exec succeeded by waiting briefly for the child.
+    // If it exits immediately (127 = exec failed), don't count it.
+    usleep(50000);  // 50ms
+    int wstatus;
+    pid_t result = waitpid(pid, &wstatus, WNOHANG);
+    if (result == 0) {
+      started++;  // child still running — exec succeeded
+    }
+    // If result > 0, child already exited (exec failed) — don't count
   }
 
   return started;
@@ -301,14 +312,20 @@ vector<string> status() {
 
 int stop() {
   int killed = 0;
+  vector<int> signaled_pids;
 
   for (const string& process_name : kProcessList) {
     vector<int> pids = pids_from_name(process_name);
     for (int pid : pids) {
       if (kill(pid, SIGTERM) == 0) {
+        signaled_pids.push_back(pid);
         killed++;
       }
     }
+  }
+
+  for (int pid : signaled_pids) {
+    waitpid(pid, nullptr, 0);
   }
 
   return killed;

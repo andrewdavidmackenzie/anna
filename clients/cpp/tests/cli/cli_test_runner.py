@@ -143,14 +143,16 @@ policy:
             sys.exit(1)
 
     finally:
-        # Ensure anna processes are cleaned up even if the test fails
         print("Cleaning up...")
-        subprocess.run(
-            [cli_binary, "--config", test_config, "stop"],
-            env=env,
-            capture_output=True,
-            timeout=10
-        )
+        try:
+            subprocess.run(
+                [cli_binary, "--config", test_config, "stop"],
+                env=env,
+                capture_output=True,
+                timeout=10
+            )
+        except Exception:
+            pass
 
         for f in [test_config, output_file, err_file, "client_log.txt"]:
             if os.path.exists(f):
