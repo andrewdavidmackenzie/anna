@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-from kvs_pb2 import (
+from .kvs_pb2 import (
     # Anna's lattice types as an enum
     LWW, SET, ORDERED_SET, SINGLE_CAUSAL, MULTI_CAUSAL, PRIORITY,
     # Serialized representations of Anna's lattices

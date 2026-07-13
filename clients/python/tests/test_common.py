@@ -1,8 +1,4 @@
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'anna'))
-
-from common import Thread, UserThread, REQUEST_PULLING_BASE_PORT, KEY_ADDRESS_BASE_PORT
+from anna.common import Thread, UserThread, REQUEST_PULLING_BASE_PORT, KEY_ADDRESS_BASE_PORT
 
 
 class TestThread:

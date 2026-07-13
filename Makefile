@@ -128,6 +128,7 @@ client-rust:
 client-python:
 	@echo "Compiling python client"
 	@cd clients/python/anna && protoc -I=../../../server/protobuf/ --python_out=. kvs.proto shared.proto causal.proto
+	@cd clients/python/anna && sed -i.bak 's/^import shared_pb2/from . import shared_pb2/;s/^import kvs_pb2/from . import kvs_pb2/' causal_pb2.py kvs_pb2.py && rm -f causal_pb2.py.bak kvs_pb2.py.bak
 
 .PHONY: coverage
 coverage: test
@@ -151,7 +152,7 @@ client-cpp-tests:
 
 .PHONY: client-python-dependencies
 client-python-dependencies:
-	@pip3 install --quiet --user protobuf pytest pytest-cov 2>/dev/null || pip3 install --quiet --break-system-packages protobuf pytest pytest-cov 2>/dev/null || true
+	@pip3 install --quiet --user protobuf pytest pytest-cov pyzmq pyyaml 2>/dev/null || pip3 install --quiet --break-system-packages protobuf pytest pytest-cov pyzmq pyyaml 2>/dev/null || true
 
 .PHONY: client-python-tests
 client-python-tests: client-python-dependencies
