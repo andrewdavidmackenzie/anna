@@ -79,17 +79,15 @@ set<string> get_set(KvsClientInterface* client, const string& key);
 extern const vector<string> kProcessList;
 
 // Start the anna server processes described by the config file at
-// `config_file_path`. Returns the number of processes started.
-// NOTE: not yet implemented -- see #103.
+// `config_file_path`. Skips processes that are already running.
+// Returns the number of processes started.
 int start(const string& config_file_path);
 
-// Return the running status of each process in kProcessList.
-// NOTE: not yet implemented -- see #103.
+// Return the names of currently running anna server processes.
 vector<string> status();
 
-// Stop all running anna server processes. Returns the number of processes
-// killed.
-// NOTE: not yet implemented -- see #103.
+// Stop all running anna server processes via SIGTERM.
+// Returns the number of processes killed.
 int stop();
 
 }  // namespace annalib
