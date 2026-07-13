@@ -21,7 +21,7 @@ jobs:
           rust: [ stable ]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: InstallDependencies
       if: matrix.os != 'windows-latest'
@@ -56,14 +56,3 @@ jobs:
       with:
         files: rust_workspace.info,server/cpp/build/server.info,clients/cpp/build/client.info,clients/python/coverage.xml
         token: ${{ secrets.CODECOV_TOKEN }}
-
-    - name: docs
-      if: matrix.os == 'macos-latest'
-      run: make docs
-
-    - name: DeployDocsToGHPages
-      uses: JamesIves/github-pages-deploy-action@4.1.4
-      if: matrix.os == 'macos-latest' && github.ref == 'refs/heads/master'
-      with:
-        branch: gh-pages
-        folder: target/html
