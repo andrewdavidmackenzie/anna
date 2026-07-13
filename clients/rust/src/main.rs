@@ -163,7 +163,7 @@ fn print_status(status: Vec<(String, Vec<i32>)>) -> String {
     status_string
 }
 
-fn execute_command(client: &KVSClient, line: &str, config_file_path: &Path) -> Result<()> {
+fn execute_command(client: &mut KVSClient, line: &str, config_file_path: &Path) -> Result<()> {
     let split = line.trim().split(' ').collect::<Vec<&str>>();
 
     match split[0].to_ascii_uppercase().as_str() {
@@ -172,9 +172,12 @@ fn execute_command(client: &KVSClient, line: &str, config_file_path: &Path) -> R
         #[cfg(feature = "causal")]
         "GET_CAUSAL" if split.len() == 2 => println!("{}", client.get_causal(split[1])?),
         #[cfg(feature = "causal")]
-        "PUT_CAUSAL" if split.len() == 3 => client.put_causal(split[1], split[1])?,
+        "PUT_CAUSAL" if split.len() == 3 => client.put_causal(split[1], split[2])?,
         #[cfg(feature = "set")]
-        "GET_SET" if split.len() == 2 => println!("{}", client.get_set(split[1])?),
+        "GET_SET" if split.len() == 2 => {
+            let values = client.get_set(split[1])?;
+            println!("{{ {} }}", values.join(" "));
+        },
         #[cfg(feature = "set")]
         "PUT_SET" if split.len() >= 3 => client.put_set(split[1], &split[2..])?,
         "START" => println!("{} anna processes were started", start(config_file_path)?),
@@ -227,8 +230,7 @@ fn cli_usage() -> String {
 /*
     Enter a loop of command/response for the CLI and interact with the server processes for each
 */
-fn cli_loop_interactive(client: KVSClient, config_file_path: PathBuf) -> Result<&'static str> {
-    // `()` can be used when no completer is required
+fn cli_loop_interactive(mut client: KVSClient, config_file_path: PathBuf) -> Result<&'static str> {
     let mut rl = DefaultEditor::new()?;
     if rl.load_history(ANNA_HISTORY_FILENAME).is_err() {
         println!(
@@ -239,7 +241,7 @@ fn cli_loop_interactive(client: KVSClient, config_file_path: PathBuf) -> Result<
 
     while let Ok(line) = rl.readline("anna> ") {
         let _ = rl.add_history_entry(&line);
-        if let Err(e) = execute_command(&client, &line, &config_file_path) {
+        if let Err(e) = execute_command(&mut client, &line, &config_file_path) {
             error!("{}", e);
         }
     }
@@ -253,7 +255,7 @@ fn cli_loop_interactive(client: KVSClient, config_file_path: PathBuf) -> Result<
     Enter a loop of command/response for the CLI and interact with the server processes for each
 */
 fn cli_loop_file(
-    client: KVSClient,
+    mut client: KVSClient,
     filename: &str,
     config_file_path: PathBuf,
 ) -> Result<&'static str> {
@@ -262,7 +264,7 @@ fn cli_loop_file(
     let reader = BufReader::new(file);
 
     for line in reader.lines().flatten() {
-        if let Err(e) = execute_command(&client, &line, &config_file_path) {
+        if let Err(e) = execute_command(&mut client, &line, &config_file_path) {
             error!("Error while executing command line: '{}'\n{}", line, e);
         }
     }

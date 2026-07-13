@@ -1,13 +1,13 @@
-// #include "kvs.pb.h"
-// #include "common.hpp"
-// #include "requests.hpp"
-
 use crate::config::Config;
 use crate::errors::*;
-use crate::proto::kvs::KeyTuple;
+use crate::proto::kvs::{
+    AnnaError, KeyAddressRequest, KeyAddressResponse, KeyRequest, KeyResponse, KeyTuple,
+    LatticeType, LwwValue, RequestType, SetValue,
+};
 use crate::threads::{UserRoutingThread, UserThread};
-use crate::types::{Address, Key, ThreadID, TimePoint};
-use log::{debug, info};
+use crate::types::{Address, Key, ThreadID};
+use log::{debug, error, info, warn};
+use prost::Message;
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use std::collections::hash_map::DefaultHasher;
@@ -17,80 +17,26 @@ use std::hash::{Hash, Hasher};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use zmq::Context;
 
-#[allow(dead_code)] // TODO implement use of PendingRequest
-struct PendingRequest {
-    tp: TimePoint,
-    worker_addr: Address,
-    // request:    KeyRequest
-}
-
-#[allow(dead_code)] // TODO implement use of KVS Client
-/// `KVSClient` struct holds all the information necessary to allow a client to perform operations
-/// against the Key-Value-Store server
+/// `KVSClient` provides operations against the Anna Key-Value Store server.
+/// It communicates with the routing tier to discover worker addresses and
+/// sends GET/PUT requests directly to worker nodes via ZMQ.
 pub struct KVSClient {
-    // the set of routing addresses outside the cluster
     routing_threads: Vec<UserRoutingThread>,
-    // the current request id
     rid: usize,
-    // the IP and port functions for this thread
     ut: UserThread,
+    #[allow(dead_code)]
     seed: u64,
-    // A Random Number Generator
     rng: StdRng,
-    // the ZMQ context we use to create sockets
     context: Context,
-    // cache for retrieved worker addresses organized by key
     key_address_cache: HashMap<Key, HashSet<Address>>,
-    // GC timeout
-    timeout: usize,
-    //     // cache for opened sockets
-    //     socket_cache: SocketCache,
-    //
-    //     // ZMQ receiving sockets
-    //     key_address_puller: zmq::socket_t,
-    //     response_puller: zmq::socket_t,
-    //
-    //     pollitems: Vec<zmq::pollitem_t>,
-    //
-    //     // keeps track of pending requests due to missing worker address
-    //     pending_request_map: Map<Key, (TimePoint, Vec<KeyRequest>)>,
-    //
-    //     // keeps track of pending get responses
-    //     pending_get_response_map: Map<Key, PendingRequest>,
-    //
-    //     // keeps track of pending put responses
-    //     pending_put_response_map: Map<Key, Map<string, PendingRequest>>
+    timeout: i64,
+    socket_cache: HashMap<Address, zmq::Socket>,
+    key_address_puller: zmq::Socket,
+    response_puller: zmq::Socket,
 }
-
-//     /*
-//         addrs A vector of routing addresses.
-//         routing_thread_count The number of threads one ach routing node
-//         ip My node's IP address
-//         tid My client's thread ID
-//         timeout Length of request timeouts in ms
-//     */
-//     pub fn new(
-//             routing_threads: Vec<UserRoutingThread>,
-//             ip: String,
-//             tid: Option<usize>,
-//             timeout: Option<usize>) -> Self {
-//
-//         let key_address_puller = zmq::socket_t(context, ZMQ_PULL);
-//         let response_puller = zmq::socket_t(context, ZMQ_PULL);
-//
-//         pollitems = {
-// //         {static_cast<void*>(key_address_puller_), 0, ZMQ_POLLIN, 0},
-// //         {static_cast<void*>(response_puller_), 0, ZMQ_POLLIN, 0},
-//         };
-//
-
-//
-//
-//
-//     }
 
 impl KVSClient {
-    /// Create a new `KVSClient` from a provided `Config` and optional thread id
+    /// Create a new `KVSClient` from a `Config` and optional thread id.
     pub fn new(config: &Config, tid: Option<ThreadID>) -> Self {
         let tid = tid.unwrap_or(0);
         let thread_count = config.get_routing_thread_count();
@@ -106,638 +52,548 @@ impl KVSClient {
         info!("Random seed is {}.", seed);
         let rng = StdRng::seed_from_u64(seed);
 
-        // socket_cache_(SocketCache(&context_, ZMQ_PUSH)),
-        // key_address_puller_(zmq::socket_t(context_, ZMQ_PULL)),
-        // response_puller_(zmq::socket_t(context_, ZMQ_PULL)),
-        //
-        // // bind the two sockets we listen on
-        // key_address_puller_.bind(ut_.key_address_bind_address());
-        // response_puller_.bind(ut_.response_bind_address());
-        //
-        // pollitems_ = {
-        // {static_cast<void*>(key_address_puller_), 0, ZMQ_POLLIN, 0},
-        // {static_cast<void*>(response_puller_), 0, ZMQ_POLLIN, 0},
-        // };
+        let context = Context::new();
 
-        let client = KVSClient {
+        let key_address_puller = context.socket(zmq::PULL).expect("Failed to create ZMQ PULL socket");
+        let response_puller = context.socket(zmq::PULL).expect("Failed to create ZMQ PULL socket");
+
+        let ut = UserThread::new(config.get_user_ip(), tid);
+        key_address_puller
+            .bind(&ut.key_address_bind_address())
+            .expect("Failed to bind key address puller");
+        response_puller
+            .bind(&ut.response_bind_address())
+            .expect("Failed to bind response puller");
+
+        KVSClient {
             routing_threads,
             rid: 0,
-            ut: UserThread::new(config.get_user_ip(), tid),
+            ut,
             seed,
             rng,
-            context: Context::new(),
+            context,
             key_address_cache: HashMap::new(),
             timeout: 10000,
-        };
-
-        //         let client = KVSClient {
-        //             socket_cache: SocketCache(&context_, ZMQ_PUSH),
-        //             key_address_puller,
-        //             response_puller,
-        //             pending_request_map: (),
-        //             pending_get_response_map: (),
-        //             pollitems,
-        //             seed,
-        //             pending_put_response_map: ()
-        //         };
-
-        // bind the two sockets we listen on
-        //         key_address_puller.bind(ut.key_address_bind_address());
-        //         response_puller.bind(ut.response_bind_address());
-
-        client
+            socket_cache: HashMap::new(),
+            key_address_puller,
+            response_puller,
+        }
     }
 
-    /*
-       Generate a random u64 seed from the time, ip address and thread id
-    */
     fn generate_seed(ip: &Address, tid: ThreadID) -> u64 {
-        // Get the system time in ms since epoch as a u64 and initialize the seed with that
         let start = SystemTime::now();
         let since_the_epoch = start
             .duration_since(UNIX_EPOCH)
             .unwrap_or(Duration::from_micros(42));
         let mut seed =
             since_the_epoch.as_secs() * 1000 + since_the_epoch.subsec_nanos() as u64 / 1_000_000;
-
-        // Hash the string IP Address down to a u64
         let mut hasher = DefaultHasher::new();
         ip.hash(&mut hasher);
-        // And add it to the seed
         seed += hasher.finish();
-        // Add the thread id also
         seed += tid as u64;
-
         seed
     }
 
-    /// Perform a `GET` operation against the KVS for value with key = `key`
-    pub fn get<K: AsRef<str> + Display>(&self, key: K) -> Result<String> {
-        debug!("GET: {}", key);
-        //     client->get_async(key);
-        //     vector<KeyResponse> responses = client->receive_async();
-        //     while (responses.size() == 0) {
-        //       responses = client->receive_async();
-        //     }
-        //
-        //     if (responses.size() > 1) {
-        //       std::cout << "Error: received more than one response" << std::endl;
-        //     }
-        //
-        //     assert(responses[0].tuples(0).lattice_type() == LatticeType::LWW);
-        //
-        //     LWWPairLattice<string> lww_lattice =
-        //         deserialize_lww(responses[0].tuples(0).payload());
-        //     Ok( lww_lattice.reveal().value )
-        unimplemented!()
-    }
-
-    /// Perform a `PUT` operation against the KVS
-    pub fn put<K: AsRef<str> + Display>(&self, key: K, value: &str) -> Result<()> {
-        debug!("PUT: {} <- {}", key, value);
-        unimplemented!()
-
-        //     LWWPairLattice<string> val(
-        //         TimestampValuePair<string>(generate_timestamp(0), value));
-        //
-        //     string rid = client->put_async(key, serialize(val), LatticeType::LWW);
-        //
-        //     vector<KeyResponse> responses = client->receive_async();
-        //     while (responses.size() == 0) {
-        //       responses = client->receive_async();
-        //     }
-        //
-        //     KeyResponse response = responses[0];
-        //
-        //     if (response.response_id() != rid) {
-        //       std::cout << "Invalid response: ID did not match request ID!"
-        //                 << std::endl;
-        //     }
-    }
-
-    /// Perform a causal `GET` operation against the KVS
-    #[cfg(feature = "causal")]
-    pub fn get_causal<K: AsRef<str> + Display>(&self, key: K) -> Result<String> {
-        debug!("GET_CAUSAL: {}", key);
-        unimplemented!()
-    }
-    //     vector<KeyResponse> responses = client->receive_async();
-    //     while (responses.size() == 0) {
-    //       responses = client->receive_async();
-    //     }
-    //
-    //     if (responses.size() > 1) {
-    //       std::cout << "Error: received more than one response" << std::endl;
-    //     }
-    //
-    //     assert(responses[0].tuples(0).lattice_type() == LatticeType::MULTI_CAUSAL);
-    //
-    //     MultiKeyCausalLattice<SetLattice<string>> mkcl =
-    //         MultiKeyCausalLattice<SetLattice<string>>(to_multi_key_causal_payload(
-    //             deserialize_multi_key_causal(responses[0].tuples(0).payload())));
-    //
-    //     for (const auto &pair : mkcl.reveal().vector_clock.reveal()) {
-    //       std::cout << "{" << pair.first << " : "
-    //                 << std::to_string(pair.second.reveal()) << "}" << std::endl;
-    //     }
-    //
-    //     for (const auto &dep_key_vc_pair : mkcl.reveal().dependencies.reveal()) {
-    //       std::cout << dep_key_vc_pair.first << " : ";
-    //       for (const auto &vc_pair : dep_key_vc_pair.second.reveal()) {
-    //         std::cout << "{" << vc_pair.first << " : "
-    //                   << std::to_string(vc_pair.second.reveal()) << "}"
-    //                   << std::endl;
-    //       }
-    //     }
-    //
-    //     Ok( *(mkcl.reveal().value.reveal().begin()) )
-
-    /// Perform a causal `PUT` operation against the KVS
-    #[cfg(feature = "causal")]
-    pub fn put_causal<K: AsRef<str> + Display>(&self, key: K, value: &str) -> Result<()> {
-        debug!("PUT_CAUSAL: {} <- {}", key, value);
-        unimplemented!()
-
-        //     MultiKeyCausalPayload<SetLattice<string>> mkcp;
-        //     // construct a test client id - version pair
-        //     mkcp.vector_clock.insert("test", 1);
-        //
-        //     // construct one test dependencies
-        //     mkcp.dependencies.insert(
-        //         "dep1", VectorClock(map<string, MaxLattice<unsigned>>({{"test1", 1}})));
-        //
-        //     // populate the value
-        //     mkcp.value.insert(value);
-        //
-        //     MultiKeyCausalLattice<SetLattice<string>> mkcl(mkcp);
-        //
-        //     string rid = client->put_async(key, serialize(mkcl), LatticeType::MULTI_CAUSAL);
-        //
-        //     vector<KeyResponse> responses = client->receive_async();
-        //     while (responses.size() == 0) {
-        //       responses = client->receive_async();
-        //     }
-        //
-        //     KeyResponse response = responses[0];
-        //
-        //     if (response.response_id() != rid) {
-        //       std::cout << "Invalid response: ID did not match request ID!"
-        //                 << std::endl;
-        //     }
-    }
-
-    /// Perform a `GET` operation for a set of values against the KVS
-    #[cfg(feature = "set")]
-    pub fn get_set<K: AsRef<str> + Display>(&self, key: K) -> Result<String> {
-        debug!("GET SET: {}", key);
-        unimplemented!()
-
-        //     string serialized;
-        //
-        //     vector<KeyResponse> responses = client->receive_async();
-        //     while (responses.size() == 0) {
-        //       responses = client->receive_async();
-        //     }
-        //
-        //     SetLattice<string> latt = deserialize_set(responses[0].tuples(0).payload());
-        //     Ok( latt.reveal() )    // set
-    }
-
-    /// Perform a `PUT` operation for a set of values against the KVS
-    #[cfg(feature = "set")]
-    pub fn put_set<K: AsRef<str> + Display>(&self, key: K, set: &[&str]) -> Result<()> {
-        debug!("PUT SET: {} <- {:?}", key, set);
-        unimplemented!()
-
-        //     set<string> set;
-        //     for (int i = 2; i < v.size(); i++) {
-        //       set.insert(v[i]);
-        //     }
-        //
-        //     string rid = client->put_async(v[1], serialize(SetLattice<string>(set)),
-        //                                    LatticeType::SET);
-        //
-        //     vector<KeyResponse> responses =client->receive_async();
-        //     while (responses.size() == 0) {
-        //       responses = client->receive_async();
-        //     }
-        //
-        //     KeyResponse response = responses[0];
-        //
-        //     if (response.response_id() != rid) {
-        //       std::cout << "Invalid response: ID did not match request ID!"
-        //                 << std::endl;
-        //     }
-    }
-
-    /*
-       Clears the key address cache held by this client.
-    */
-    #[allow(dead_code)] // TODO implement use of these functions
-    fn clear_cache(&mut self) {
-        self.key_address_cache.clear()
-    }
-
-    /*
-      Generates a unique request ID. usize will overflow and start counting from
-      zero again when MAX_INT is reached.
-    */
-    #[allow(dead_code)] // TODO implement use of these functions
     fn get_request_id(&mut self) -> String {
         self.rid += 1;
         format!("{}:{}_{}", self.ut.ip(), self.ut.tid(), self.rid)
     }
 
-    /*
-      Returns one random routing thread's key address connection address. If the
-      client is running outside of the cluster (ie, it is querying the ELB),
-      there's only one address to choose from.
-    */
-    #[allow(dead_code)] // TODO implement use of these functions
     fn get_routing_thread(&mut self) -> Address {
-        // random index into threads array - from 0 upto but not including routing_threads.len()
         self.routing_threads[self.rng.random_range(0..self.routing_threads.len())]
             .key_address_connect_address()
     }
 
-    /*
-     * When a server thread tells us to invalidate the cache for a key it's
-     * because we likely have out of date information for that key; it sends us
-     * the updated information for that key, and update our cache with that
-     * information.
-     */
-    #[allow(dead_code)] // TODO implement use of these functions
-    fn invalidate_cache_for_key(&mut self, key: &Key, _tuple: &KeyTuple) {
-        self.key_address_cache.remove(key);
+    fn get_socket(&mut self, addr: &str) -> &zmq::Socket {
+        if !self.socket_cache.contains_key(addr) {
+            let sock = self.context.socket(zmq::PUSH).expect("Failed to create PUSH socket");
+            sock.connect(addr).expect("Failed to connect PUSH socket");
+            self.socket_cache.insert(addr.to_string(), sock);
+        }
+        &self.socket_cache[addr]
+    }
+
+    fn send_request(&mut self, msg: &[u8], addr: &str) {
+        let sock = self.get_socket(addr);
+        sock.send(msg, 0).expect("Failed to send ZMQ message");
+    }
+
+    fn recv_response(&self, sock: &zmq::Socket) -> Option<Vec<u8>> {
+        let mut items = [sock.as_poll_item(zmq::POLLIN)];
+        zmq::poll(&mut items, self.timeout).ok()?;
+        if items[0].is_readable() {
+            sock.recv_bytes(0).ok()
+        } else {
+            None
+        }
+    }
+
+    fn query_routing(&mut self, key: &str) -> Vec<Address> {
+        let mut request = KeyAddressRequest::default();
+        request.request_id = self.get_request_id();
+        request.response_address = self.ut.key_address_connect_address();
+        request.keys.push(key.to_string());
+
+        let rt_thread = self.get_routing_thread();
+        let encoded = request.encode_to_vec();
+        self.send_request(&encoded, &rt_thread);
+
+        match self.recv_response(&self.key_address_puller) {
+            Some(data) => {
+                match KeyAddressResponse::decode(data.as_slice()) {
+                    Ok(response) => {
+                        if response.error != AnnaError::NoError as i32 {
+                            warn!("Routing query returned error {}", response.error);
+                            return vec![];
+                        }
+                        let mut addrs = vec![];
+                        for addr in &response.addresses {
+                            if addr.key == key {
+                                for ip in &addr.ips {
+                                    addrs.push(ip.clone());
+                                }
+                            }
+                        }
+                        addrs
+                    }
+                    Err(e) => {
+                        error!("Failed to decode routing response: {}", e);
+                        vec![]
+                    }
+                }
+            }
+            None => {
+                warn!("Routing query timed out for key {}", key);
+                vec![]
+            }
+        }
+    }
+
+    fn get_worker_address(&mut self, key: &str) -> Option<Address> {
+        if !self.key_address_cache.contains_key(key)
+            || self.key_address_cache[key].is_empty()
+        {
+            let addrs = self.query_routing(key);
+            if addrs.is_empty() {
+                return None;
+            }
+            self.key_address_cache
+                .insert(key.to_string(), addrs.into_iter().collect());
+        }
+
+        let addrs: Vec<&Address> = self.key_address_cache[key].iter().collect();
+        if addrs.is_empty() {
+            None
+        } else {
+            let idx = self.rng.random_range(0..addrs.len());
+            Some(addrs[idx].clone())
+        }
+    }
+
+    fn send_data_request(&mut self, key: &str, req_type: i32, lattice_type: Option<i32>, payload: Option<Vec<u8>>) -> Option<KeyResponse> {
+        let worker = self.get_worker_address(key)?;
+
+        let mut request = KeyRequest::default();
+        request.request_id = self.get_request_id();
+        request.response_address = self.ut.response_connect_address();
+        request.r#type = req_type;
+
+        let mut tuple = KeyTuple::default();
+        tuple.key = key.to_string();
+        if let Some(lt) = lattice_type {
+            tuple.lattice_type = lt;
+        }
+        if let Some(p) = payload {
+            tuple.payload = p;
+        }
+        if let Some(cache) = self.key_address_cache.get(key) {
+            tuple.address_cache_size = cache.len() as u32;
+        }
+        request.tuples.push(tuple);
+
+        let encoded = request.encode_to_vec();
+        self.send_request(&encoded, &worker);
+
+        match self.recv_response(&self.response_puller) {
+            Some(data) => {
+                match KeyResponse::decode(data.as_slice()) {
+                    Ok(response) => {
+                        if !response.tuples.is_empty() && response.tuples[0].invalidate {
+                            self.key_address_cache.remove(key);
+                        }
+                        Some(response)
+                    }
+                    Err(e) => {
+                        error!("Failed to decode response: {}", e);
+                        None
+                    }
+                }
+            }
+            None => {
+                warn!("Request timed out for key {}", key);
+                self.key_address_cache.remove(key);
+                None
+            }
+        }
+    }
+
+    fn generate_timestamp() -> u64 {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or(Duration::from_secs(0));
+        now.as_millis() as u64 * 10
+    }
+
+    /// Perform a blocking GET for a LWW key, returning the value as a String.
+    pub fn get<K: AsRef<str> + Display>(&mut self, key: K) -> Result<String> {
+        debug!("GET: {}", key);
+        let response = self
+            .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
+            .ok_or("Request failed or timed out")?;
+
+        if response.tuples.is_empty() {
+            return Err("No tuples in response".into());
+        }
+
+        let tuple = &response.tuples[0];
+        if tuple.error != AnnaError::NoError as i32 {
+            return Err(format!("Error {}", tuple.error).into());
+        }
+
+        let lww = LwwValue::decode(tuple.payload.as_slice())
+            .map_err(|e| format!("Failed to decode LWW value: {}", e))?;
+        Ok(String::from_utf8_lossy(&lww.value).to_string())
+    }
+
+    /// Perform a blocking PUT of a LWW key-value pair.
+    pub fn put<K: AsRef<str> + Display>(&mut self, key: K, value: &str) -> Result<()> {
+        debug!("PUT: {} <- {}", key, value);
+        let lww = LwwValue {
+            timestamp: Self::generate_timestamp(),
+            value: value.as_bytes().to_vec(),
+        };
+        let payload = lww.encode_to_vec();
+
+        let response = self
+            .send_data_request(
+                key.as_ref(),
+                RequestType::Put as i32,
+                Some(LatticeType::Lww as i32),
+                Some(payload),
+            )
+            .ok_or("PUT request failed or timed out")?;
+
+        if response.tuples.is_empty() {
+            return Err("PUT response contained no tuples".into());
+        }
+
+        if response.tuples[0].error != AnnaError::NoError as i32 {
+            return Err(format!("PUT error {}", response.tuples[0].error).into());
+        }
+
+        Ok(())
+    }
+
+    /// Perform a blocking GET for a Set key, returning the values.
+    #[cfg(feature = "set")]
+    pub fn get_set<K: AsRef<str> + Display>(&mut self, key: K) -> Result<Vec<String>> {
+        debug!("GET SET: {}", key);
+        let response = self
+            .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
+            .ok_or("Request failed or timed out")?;
+
+        if response.tuples.is_empty() {
+            return Err("No tuples in response".into());
+        }
+
+        let tuple = &response.tuples[0];
+        if tuple.error != AnnaError::NoError as i32 {
+            return Err(format!("Error {}", tuple.error).into());
+        }
+
+        let set_val = SetValue::decode(tuple.payload.as_slice())
+            .map_err(|e| format!("Failed to decode Set value: {}", e))?;
+        Ok(set_val
+            .values
+            .iter()
+            .map(|v| String::from_utf8_lossy(v).to_string())
+            .collect())
+    }
+
+    /// Perform a blocking PUT of a Set key with the given values.
+    #[cfg(feature = "set")]
+    pub fn put_set<K: AsRef<str> + Display>(&mut self, key: K, set: &[&str]) -> Result<()> {
+        debug!("PUT SET: {} <- {:?}", key, set);
+        let set_val = SetValue {
+            values: set.iter().map(|s| s.as_bytes().to_vec()).collect(),
+        };
+        let payload = set_val.encode_to_vec();
+
+        let response = self
+            .send_data_request(
+                key.as_ref(),
+                RequestType::Put as i32,
+                Some(LatticeType::Set as i32),
+                Some(payload),
+            )
+            .ok_or("PUT_SET request failed or timed out")?;
+
+        if response.tuples.is_empty() {
+            return Err("PUT_SET response contained no tuples".into());
+        }
+
+        if response.tuples[0].error != AnnaError::NoError as i32 {
+            return Err(format!("PUT_SET error {}", response.tuples[0].error).into());
+        }
+
+        Ok(())
+    }
+
+    /// Perform a blocking causal GET (not yet implemented).
+    #[cfg(feature = "causal")]
+    pub fn get_causal<K: AsRef<str> + Display>(&mut self, key: K) -> Result<String> {
+        debug!("GET_CAUSAL: {}", key);
+        Err("Causal GET is not yet implemented".into())
+    }
+
+    /// Perform a blocking causal PUT (not yet implemented).
+    #[cfg(feature = "causal")]
+    pub fn put_causal<K: AsRef<str> + Display>(&mut self, key: K, value: &str) -> Result<()> {
+        debug!("PUT_CAUSAL: {} <- {}", key, value);
+        Err("Causal PUT is not yet implemented".into())
+    }
+
+    /// Clear the key-address cache.
+    pub fn clear_cache(&mut self) {
+        self.key_address_cache.clear()
     }
 }
 
-// //
-// //   /**
-// //    * Issue an async PUT request to the KVS for a certain lattice typed value.
-// //    */
-// //   string put_async(const Key& key, const string& payload,
-// //                    LatticeType lattice_type) {
-// //     KeyRequest request;
-// //     KeyTuple* tuple = prepare_data_request(request, key);
-// //     request.set_type(RequestType::PUT);
-// //     tuple->set_lattice_type(lattice_type);
-// //     tuple->set_payload(payload);
-// //
-// //     try_request(request);
-// //     return request.request_id();
-// //   }
-// //
-// //   /**
-// //    * Issue an async GET request to the KVS.
-// //    */
-// //   void get_async(const Key& key) {
-// //     // we issue GET only when it is not in the pending map
-// //     if (pending_get_response_map_.find(key) ==
-// //         pending_get_response_map_.end()) {
-// //       KeyRequest request;
-// //       prepare_data_request(request, key);
-// //       request.set_type(RequestType::GET);
-// //
-// //       try_request(request);
-// //     }
-// //   }
-// //
-// //   vector<KeyResponse> receive_async() {
-// //     vector<KeyResponse> result;
-// //     kZmqUtil->poll(&pollitems_, std::chrono::milliseconds{0});
-// //
-// //     if (pollitems_[0].revents & ZMQ_POLLIN) {
-// //       string serialized = kZmqUtil->recv_string(&key_address_puller_);
-// //       KeyAddressResponse response;
-// //       response.ParseFromString(serialized);
-// //       Key key = response.addresses(0).key();
-// //
-// //       if (pending_request_map_.find(key) != pending_request_map_.end()) {
-// //         if (response.error() == AnnaError::NO_SERVERS) {
-// //           log_->error(
-// //               "No servers have joined the cluster yet. Retrying request.");
-// //           pending_request_map_[key].first = std::chrono::system_clock::now();
-// //
-// //           query_routing_async(key);
-// //         } else {
-// //           // populate cache
-// //           for (const Address& ip : response.addresses(0).ips()) {
-// //             key_address_cache_[key].insert(ip);
-// //           }
-// //
-// //           // handle stuff in pending request map
-// //           for (auto& req : pending_request_map_[key].second) {
-// //             try_request(req);
-// //           }
-// //
-// //           // GC the pending request map
-// //           pending_request_map_.erase(key);
-// //         }
-// //       }
-// //     }
-// //
-// //     if (pollitems_[1].revents & ZMQ_POLLIN) {
-// //       string serialized = kZmqUtil->recv_string(&response_puller_);
-// //       KeyResponse response;
-// //       response.ParseFromString(serialized);
-// //       Key key = response.tuples(0).key();
-// //
-// //       if (response.type() == RequestType::GET) {
-// //         if (pending_get_response_map_.find(key) !=
-// //             pending_get_response_map_.end()) {
-// //           if (check_tuple(response.tuples(0))) {
-// //             // error no == 2, so re-issue request
-// //             pending_get_response_map_[key].tp_ =
-// //                 std::chrono::system_clock::now();
-// //
-// //             try_request(pending_get_response_map_[key].request_);
-// //           } else {
-// //             // error no == 0 or 1
-// //             result.push_back(response);
-// //             pending_get_response_map_.erase(key);
-// //           }
-// //         }
-// //       } else {
-// //         if (pending_put_response_map_.find(key) !=
-// //                 pending_put_response_map_.end() &&
-// //             pending_put_response_map_[key].find(response.response_id()) !=
-// //                 pending_put_response_map_[key].end()) {
-// //           if (check_tuple(response.tuples(0))) {
-// //             // error no == 2, so re-issue request
-// //             pending_put_response_map_[key][response.response_id()].tp_ =
-// //                 std::chrono::system_clock::now();
-// //
-// //             try_request(pending_put_response_map_[key][response.response_id()]
-// //                             .request_);
-// //           } else {
-// //             // error no == 0
-// //             result.push_back(response);
-// //             pending_put_response_map_[key].erase(response.response_id());
-// //
-// //             if (pending_put_response_map_[key].size() == 0) {
-// //               pending_put_response_map_.erase(key);
-// //             }
-// //           }
-// //         }
-// //       }
-// //     }
-// //
-// //     // GC the pending request map
-// //     set<Key> to_remove;
-// //     for (const auto& pair : pending_request_map_) {
-// //       if (std::chrono::duration_cast<std::chrono::milliseconds>(
-// //               std::chrono::system_clock::now() - pair.second.first)
-// //               .count() > timeout_) {
-// //         // query to the routing tier timed out
-// //         for (const auto& req : pair.second.second) {
-// //           result.push_back(generate_bad_response(req));
-// //         }
-// //
-// //         to_remove.insert(pair.first);
-// //       }
-// //     }
-// //
-// //     for (const Key& key : to_remove) {
-// //       pending_request_map_.erase(key);
-// //     }
-// //
-// //     // GC the pending get response map
-// //     to_remove.clear();
-// //     for (const auto& pair : pending_get_response_map_) {
-// //       if (std::chrono::duration_cast<std::chrono::milliseconds>(
-// //               std::chrono::system_clock::now() - pair.second.tp_)
-// //               .count() > timeout_) {
-// //         // query to server timed out
-// //         result.push_back(generate_bad_response(pair.second.request_));
-// //         to_remove.insert(pair.first);
-// //         invalidate_cache_for_worker(pair.second.worker_addr_);
-// //       }
-// //     }
-// //
-// //     for (const Key& key : to_remove) {
-// //       pending_get_response_map_.erase(key);
-// //     }
-// //
-// //     // GC the pending put response map
-// //     map<Key, set<string>> to_remove_put;
-// //     for (const auto& key_map_pair : pending_put_response_map_) {
-// //       for (const auto& id_map_pair :
-// //            pending_put_response_map_[key_map_pair.first]) {
-// //         if (std::chrono::duration_cast<std::chrono::milliseconds>(
-// //                 std::chrono::system_clock::now() -
-// //                 pending_put_response_map_[key_map_pair.first][id_map_pair.first]
-// //                     .tp_)
-// //                 .count() > timeout_) {
-// //           result.push_back(generate_bad_response(id_map_pair.second.request_));
-// //           to_remove_put[key_map_pair.first].insert(id_map_pair.first);
-// //           invalidate_cache_for_worker(id_map_pair.second.worker_addr_);
-// //         }
-// //       }
-// //     }
-// //
-// //     for (const auto& key_set_pair : to_remove_put) {
-// //       for (const auto& id : key_set_pair.second) {
-// //         pending_put_response_map_[key_set_pair.first].erase(id);
-// //       }
-// //     }
-// //
-// //     return result;
-// //   }
-// //
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//
-// //   /**
-// //    * A recursive helper method for the get and put implementations that tries
-// //    * to issue a request at most trial_limit times before giving up. It  checks
-// //    * for the default failure modes (timeout, errno == 2, and cache
-// //    * invalidation). If there are no issues, it returns the set of responses to
-// //    * the respective implementations for them to deal with. This is the same as
-// //    * the above implementation of try_multi_request, except it only operates on
-// //    * a single request.
-// //    */
-// //   void try_request(KeyRequest& request) {
-// //     // we only get NULL back for the worker thread if the query to the routing
-// //     // tier timed out, which should never happen.
-// //     Key key = request.tuples(0).key();
-// //     Address worker = get_worker_thread(key);
-// //     if (worker.length() == 0) {
-// //       // this means a key addr request is issued asynchronously
-// //       if (pending_request_map_.find(key) == pending_request_map_.end()) {
-// //         pending_request_map_[key].first = std::chrono::system_clock::now();
-// //       }
-// //       pending_request_map_[key].second.push_back(request);
-// //       return;
-// //     }
-// //
-// //     request.mutable_tuples(0)->set_address_cache_size(
-// //         key_address_cache_[key].size());
-// //
-// //     send_request<KeyRequest>(request, socket_cache_[worker]);
-// //
-// //     if (request.type() == RequestType::GET) {
-// //       if (pending_get_response_map_.find(key) ==
-// //           pending_get_response_map_.end()) {
-// //         pending_get_response_map_[key].tp_ = std::chrono::system_clock::now();
-// //         pending_get_response_map_[key].request_ = request;
-// //       }
-// //
-// //       pending_get_response_map_[key].worker_addr_ = worker;
-// //     } else {
-// //       if (pending_put_response_map_[key].find(request.request_id()) ==
-// //           pending_put_response_map_[key].end()) {
-// //         pending_put_response_map_[key][request.request_id()].tp_ =
-// //             std::chrono::system_clock::now();
-// //         pending_put_response_map_[key][request.request_id()].request_ = request;
-// //       }
-// //       pending_put_response_map_[key][request.request_id()].worker_addr_ =
-// //           worker;
-// //     }
-// //   }
-// //
-// //   /**
-// //    * A helper method to check for the default failure modes for a request that
-// //    * retrieves a response. It returns true if the caller method should reissue
-// //    * the request (this happens if errno == 2). Otherwise, it returns false. It
-// //    * invalidates the local cache if the information is out of date.
-// //    */
-// //   bool check_tuple(const KeyTuple& tuple) {
-// //     Key key = tuple.key();
-// //     if (tuple.error() == 2) {
-// //       log_->info(
-// //           "Server ordered invalidation of key address cache for key {}. "
-// //           "Retrying request.",
-// //           key);
-// //
-// //       invalidate_cache_for_key(key, tuple);
-// //       return true;
-// //     }
-// //
-// //     if (tuple.invalidate()) {
-// //       invalidate_cache_for_key(key, tuple);
-// //
-// //       log_->info("Server ordered invalidation of key address cache for key {}",
-// //                  key);
-// //     }
-// //
-// //     return false;
-// //   }
-// //
+    #[test]
+    fn generate_seed_is_deterministic_for_same_inputs_at_same_time() {
+        let s1 = KVSClient::generate_seed(&"127.0.0.1".to_string(), 0);
+        let s2 = KVSClient::generate_seed(&"127.0.0.1".to_string(), 0);
+        // Seeds include current time so they won't be exactly equal,
+        // but they should be very close (within a few ms)
+        assert!((s1 as i64 - s2 as i64).unsigned_abs() < 100);
+    }
 
-//
-// //
-// //   /**
-// //    * Invalidate the key caches for any key that previously had this worker in
-// //    * its cache. The underlying assumption is that if the worker timed out, it
-// //    * might have failed, and so we don't want to rely on it being alive for both
-// //    * the key we were querying and any other key.
-// //    */
-// //   void invalidate_cache_for_worker(const Address& worker) {
-// //     vector<string> tokens;
-// //     split(worker, ':', tokens);
-// //     string signature = tokens[1];
-// //     set<Key> remove_set;
-// //
-// //     for (const auto& key_pair : key_address_cache_) {
-// //       for (const string& address : key_pair.second) {
-// //         vector<string> v;
-// //         split(address, ':', v);
-// //
-// //         if (v[1] == signature) {
-// //           remove_set.insert(key_pair.first);
-// //         }
-// //       }
-// //     }
-// //
-// //     for (const string& key : remove_set) {
-// //       key_address_cache_.erase(key);
-// //     }
-// //   }
-// //
-// //   /**
-// //    * Prepare a data request object by populating the request ID, the key for
-// //    * the request, and the response address. This method modifies the passed-in
-// //    * KeyRequest and also returns a pointer to the KeyTuple contained by this
-// //    * request.
-// //    */
-// //   KeyTuple* prepare_data_request(KeyRequest& request, const Key& key) {
-// //     request.set_request_id(get_request_id());
-// //     request.set_response_address(ut_.response_connect_address());
-// //
-// //     KeyTuple* tp = request.add_tuples();
-// //     tp->set_key(key);
-// //
-// //     return tp;
-// //   }
-// //
-// //   /**
-// //    * returns all the worker threads for the key queried. If there are no cached
-// //    * threads, a request is sent to the routing tier. If the query times out,
-// //    * NULL is returned.
-// //    */
-// //   set<Address> get_all_worker_threads(const Key& key) {
-// //     if (key_address_cache_.find(key) == key_address_cache_.end() ||
-// //         key_address_cache_[key].size() == 0) {
-// //       if (pending_request_map_.find(key) == pending_request_map_.end()) {
-// //         query_routing_async(key);
-// //       }
-// //       return set<Address>();
-// //     } else {
-// //       return key_address_cache_[key];
-// //     }
-// //   }
-// //
-// //   /**
-// //    * Similar to the previous method, but only returns one (randomly chosen)
-// //    * worker address instead of all of them.
-// //    */
-// //   Address get_worker_thread(const Key& key) {
-// //     set<Address> local_cache = get_all_worker_threads(key);
-// //
-// //     // This will be empty if the worker threads are not cached locally
-// //     if (local_cache.size() == 0) {
-// //       return "";
-// //     }
-// //
-// //     return *(next(begin(local_cache), rand_r(&seed_) % local_cache.size()));
-// //   }
-// //
-// //
-// //   /**
-// //    * Send a query to the routing tier asynchronously.
-// //    */
-// //   void query_routing_async(const Key& key) {
-// //     // define protobuf request objects
-// //     KeyAddressRequest request;
-// //
-// //     // populate request with response address, request id, etc.
-// //     request.set_request_id(get_request_id());
-// //     request.set_response_address(ut_.key_address_connect_address());
-// //     request.add_keys(key);
-// //
-// //     Address rt_thread = get_routing_thread();
-// //     send_request<KeyAddressRequest>(request, socket_cache_[rt_thread]);
-// //   }
-// //
-//
-// //
-// //   KeyResponse generate_bad_response(const KeyRequest& req) {
-// //     KeyResponse resp;
-// //
-// //     resp.set_type(req.type());
-// //     resp.set_response_id(req.request_id());
-// //     resp.set_error(AnnaError::TIMEOUT);
-// //
-// //     KeyTuple* tp = resp.add_tuples();
-// //     tp->set_key(req.tuples(0).key());
-// //
-// //     if (req.type() == RequestType::PUT) {
-// //       tp->set_lattice_type(req.tuples(0).lattice_type());
-// //       tp->set_payload(req.tuples(0).payload());
-// //     }
-// //
-// //     return resp;
-// //   }
-// //
-// // };
-// }
+    #[test]
+    fn generate_seed_differs_by_tid() {
+        let s1 = KVSClient::generate_seed(&"127.0.0.1".to_string(), 0);
+        let s2 = KVSClient::generate_seed(&"127.0.0.1".to_string(), 1);
+        assert_ne!(s1, s2);
+    }
+
+    #[test]
+    fn generate_seed_differs_by_ip() {
+        let s1 = KVSClient::generate_seed(&"127.0.0.1".to_string(), 0);
+        let s2 = KVSClient::generate_seed(&"10.0.0.1".to_string(), 0);
+        assert_ne!(s1, s2);
+    }
+
+    #[test]
+    fn generate_timestamp_is_positive() {
+        let ts = KVSClient::generate_timestamp();
+        assert!(ts > 0);
+    }
+
+    #[test]
+    fn generate_timestamp_increases() {
+        let ts1 = KVSClient::generate_timestamp();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        let ts2 = KVSClient::generate_timestamp();
+        assert!(ts2 > ts1);
+    }
+
+    #[test]
+    fn lww_value_roundtrip() {
+        let original = LwwValue {
+            timestamp: 12345,
+            value: b"hello world".to_vec(),
+        };
+        let encoded = original.encode_to_vec();
+        let decoded = LwwValue::decode(encoded.as_slice()).unwrap();
+        assert_eq!(decoded.timestamp, 12345);
+        assert_eq!(decoded.value, b"hello world");
+    }
+
+    #[test]
+    fn set_value_roundtrip() {
+        let original = SetValue {
+            values: vec![b"a".to_vec(), b"b".to_vec(), b"c".to_vec()],
+        };
+        let encoded = original.encode_to_vec();
+        let decoded = SetValue::decode(encoded.as_slice()).unwrap();
+        assert_eq!(decoded.values.len(), 3);
+        assert!(decoded.values.contains(&b"a".to_vec()));
+        assert!(decoded.values.contains(&b"b".to_vec()));
+        assert!(decoded.values.contains(&b"c".to_vec()));
+    }
+
+    #[test]
+    fn client_construction_and_request_id() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .unwrap();
+        let mut client = KVSClient::new(&config, Some(99));
+        let id1 = client.get_request_id();
+        let id2 = client.get_request_id();
+        assert!(id1.contains("127.0.0.1"));
+        assert!(id1.contains("99"));
+        assert_ne!(id1, id2);
+    }
+
+    #[test]
+    fn client_routing_thread_returns_address() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .unwrap();
+        let mut client = KVSClient::new(&config, Some(98));
+        let addr = client.get_routing_thread();
+        assert!(addr.starts_with("tcp://"), "addr was: {}", addr);
+        assert!(addr.contains("127.0.0.1"), "addr was: {}", addr);
+    }
+
+    #[test]
+    fn client_clear_cache() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .unwrap();
+        let mut client = KVSClient::new(&config, Some(97));
+        client
+            .key_address_cache
+            .insert("test_key".into(), ["addr1".to_string()].into());
+        assert!(!client.key_address_cache.is_empty());
+        client.clear_cache();
+        assert!(client.key_address_cache.is_empty());
+    }
+
+    #[test]
+    fn get_worker_address_returns_cached() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .unwrap();
+        let mut client = KVSClient::new(&config, Some(96));
+        client.key_address_cache.insert(
+            "cached_key".into(),
+            ["tcp://127.0.0.1:6200".to_string()].into(),
+        );
+        let addr = client.get_worker_address("cached_key");
+        assert_eq!(addr, Some("tcp://127.0.0.1:6200".to_string()));
+    }
+
+    #[test]
+    fn get_worker_address_picks_from_multi_address_cache() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .unwrap();
+        let mut client = KVSClient::new(&config, Some(95));
+        let mut addrs = HashSet::new();
+        addrs.insert("tcp://10.0.0.1:6200".to_string());
+        addrs.insert("tcp://10.0.0.2:6200".to_string());
+        client.key_address_cache.insert("multi_key".into(), addrs);
+        let addr = client.get_worker_address("multi_key").unwrap();
+        assert!(
+            addr == "tcp://10.0.0.1:6200" || addr == "tcp://10.0.0.2:6200",
+            "unexpected addr: {}",
+            addr
+        );
+    }
+
+    #[test]
+    fn invalidate_cache_removes_key() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .unwrap();
+        let mut client = KVSClient::new(&config, Some(92));
+        client.key_address_cache.insert(
+            "evict_me".into(),
+            ["tcp://10.0.0.1:6200".to_string()].into(),
+        );
+        assert!(client.key_address_cache.contains_key("evict_me"));
+        client.key_address_cache.remove("evict_me");
+        assert!(!client.key_address_cache.contains_key("evict_me"));
+    }
+
+    #[test]
+    fn empty_set_value_roundtrip() {
+        let original = SetValue { values: vec![] };
+        let encoded = original.encode_to_vec();
+        let decoded = SetValue::decode(encoded.as_slice()).unwrap();
+        assert!(decoded.values.is_empty());
+    }
+
+    #[test]
+    fn lww_value_with_empty_payload() {
+        let original = LwwValue {
+            timestamp: 0,
+            value: vec![],
+        };
+        let encoded = original.encode_to_vec();
+        let decoded = LwwValue::decode(encoded.as_slice()).unwrap();
+        assert_eq!(decoded.timestamp, 0);
+        assert!(decoded.value.is_empty());
+    }
+
+    #[test]
+    fn request_id_format() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .unwrap();
+        let mut client = KVSClient::new(&config, Some(91));
+        let id = client.get_request_id();
+        // Format: ip:tid_rid
+        let parts: Vec<&str> = id.split(':').collect();
+        assert_eq!(parts.len(), 2);
+        assert!(parts[1].contains('_'));
+    }
+
+    #[test]
+    fn key_request_protobuf_roundtrip() {
+        let mut request = KeyRequest::default();
+        request.request_id = "test:0_1".to_string();
+        request.response_address = "tcp://127.0.0.1:6800".to_string();
+        request.r#type = RequestType::Put as i32;
+
+        let mut tuple = KeyTuple::default();
+        tuple.key = "mykey".to_string();
+        tuple.lattice_type = LatticeType::Lww as i32;
+        let lww = LwwValue {
+            timestamp: 100,
+            value: b"test".to_vec(),
+        };
+        tuple.payload = lww.encode_to_vec();
+        request.tuples.push(tuple);
+
+        let encoded = request.encode_to_vec();
+        let decoded = KeyRequest::decode(encoded.as_slice()).unwrap();
+        assert_eq!(decoded.request_id, "test:0_1");
+        assert_eq!(decoded.tuples[0].key, "mykey");
+        assert_eq!(decoded.tuples[0].lattice_type, LatticeType::Lww as i32);
+    }
+
+    #[test]
+    fn key_address_request_protobuf_roundtrip() {
+        let mut request = KeyAddressRequest::default();
+        request.request_id = "addr_req_1".to_string();
+        request.response_address = "tcp://127.0.0.1:6850".to_string();
+        request.keys.push("lookup_key".to_string());
+
+        let encoded = request.encode_to_vec();
+        let decoded = KeyAddressRequest::decode(encoded.as_slice()).unwrap();
+        assert_eq!(decoded.request_id, "addr_req_1");
+        assert_eq!(decoded.keys[0], "lookup_key");
+    }
+}
