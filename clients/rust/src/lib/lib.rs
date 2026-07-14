@@ -12,6 +12,8 @@ use std::path::Path;
 use std::process::Command;
 use sysinfo::System;
 
+/// Tab-completion for the anna CLI.
+pub mod completer;
 /// `config` of anna - read from config file or created via API calls.
 pub mod config;
 /// put all error types and methods into an `errors` module
