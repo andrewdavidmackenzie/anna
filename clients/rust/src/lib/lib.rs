@@ -123,12 +123,34 @@ pub fn stop() -> Result<usize> {
 mod test {
     #[test]
     fn no_such_process_to_stop() {
-        let _ = super::stop();
+        assert_eq!(super::stop().expect("stop failed"), 0);
+    }
 
-        assert_eq!(
-            super::stop().expect("Expected zero processes killed"),
-            0,
-            "Expected zero processes killed"
-        );
+    #[test]
+    fn status_with_nothing_running() {
+        let status = super::status().expect("status failed");
+        assert_eq!(status.len(), 3);
+        for (name, pids) in &status {
+            assert!(
+                pids.is_empty(),
+                "Expected no pids for '{}', got {:?}",
+                name, pids
+            );
+        }
+    }
+
+    #[test]
+    fn status_returns_process_names() {
+        let status = super::status().expect("status failed");
+        let names: Vec<&str> = status.iter().map(|(n, _)| n.as_str()).collect();
+        assert!(names.contains(&"anna-monitor"));
+        assert!(names.contains(&"anna-route"));
+        assert!(names.contains(&"anna-kvs"));
+    }
+
+    #[test]
+    fn pids_from_name_nonexistent() {
+        let pids = super::pids_from_name("nonexistent_process_xyz_12345");
+        assert!(pids.is_empty());
     }
 }

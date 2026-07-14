@@ -163,4 +163,24 @@ mod test {
             .expect("Could not read the 'test_config.yml' config file");
         assert_eq!(config.get_routing_thread_count(), 1);
     }
+
+    #[test]
+    fn config_file_not_found() {
+        let result = Config::read(&PathBuf::from("nonexistent_file.yml"));
+        assert!(result.is_err());
+        match result {
+            Err(e) => assert!(e.to_string().contains("nonexistent_file.yml"), "err was: {}", e),
+            Ok(_) => panic!("expected error"),
+        }
+    }
+
+    #[test]
+    fn config_from_default_file() {
+        let config = Config::read(
+            &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .expect("Could not read default-config.yml");
+        assert_eq!(config.get_user_ip(), "127.0.0.1");
+        assert!(!config.get_routing_ips().is_empty());
+    }
 }
