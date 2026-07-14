@@ -4,7 +4,10 @@ PUT b 2
 GET b
 PUT a 10
 GET a
-PUT_SET set 1 2 3
-GET_SET set
-PUT_SET set 1 2 4
-GET_SET set
+PUT c hello_world
+GET c
+PUT_SET myset x y z
+GET_SET myset
+PUT_SET myset x y w
+GET_SET myset
+HELP
