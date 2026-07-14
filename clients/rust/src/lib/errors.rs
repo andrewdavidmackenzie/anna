@@ -5,10 +5,6 @@ pub enum Error {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 
-    /// YAML config parsing error
-    #[error("Config parse error: {0}")]
-    ConfigParse(#[from] serde_yaml::Error),
-
     /// Config file could not be loaded
     #[error("Could not load config from '{path}': {detail}")]
     ConfigFile {
