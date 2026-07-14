@@ -166,8 +166,24 @@ fn test(name: &str) -> io::Result<()> {
     ctl_anna_processes("start", &path, &config_file)
         .expect("Could not start anna processes");
 
-    // Give servers time to start
-    std::thread::sleep(std::time::Duration::from_secs(3));
+    // Wait for routing tier to be ready (port 6450)
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        if std::net::TcpStream::connect_timeout(
+            &"127.0.0.1:6450".parse().unwrap(),
+            std::time::Duration::from_secs(1),
+        )
+        .is_ok()
+        {
+            break;
+        }
+        if std::time::Instant::now() > deadline {
+            panic!("Routing tier did not start within 30 seconds");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    // Brief settle time for hash ring registration
+    std::thread::sleep(std::time::Duration::from_secs(1));
 
     let test_run = run_test(&test_dir, &path, &config_file);
 
