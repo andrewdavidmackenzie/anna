@@ -1,7 +1,6 @@
 use crate::types::Address;
 
 // The port on which clients send key address requests to routing nodes.
-#[allow(dead_code)]
 const K_KEY_ADDRESS_PORT: usize = 6450;
 
 // The port on which clients receive responses from the KVS.
@@ -68,8 +67,26 @@ impl UserThread {
     }
 }
 
-/// `UserRoutingThread` - is a special case of a `UserThread` that is used for routing
-pub type UserRoutingThread = UserThread;
+/// `UserRoutingThread` connects to the routing tier on port 6450 (not 6850).
+pub struct UserRoutingThread {
+    ip_base: Address,
+    tid: usize,
+}
+
+impl UserRoutingThread {
+    /// Create a new routing thread reference.
+    pub fn new(ip: &Address, tid: usize) -> Self {
+        UserRoutingThread {
+            ip_base: format!("tcp://{}:", ip),
+            tid,
+        }
+    }
+
+    /// The address to connect to for sending key address requests to the routing tier.
+    pub fn key_address_connect_address(&self) -> Address {
+        format!("{}{}", self.ip_base, self.tid + K_KEY_ADDRESS_PORT)
+    }
+}
 
 /// `CacheThread` extends `Thread` with a number of methods
 pub type CacheThread = Thread;
@@ -159,5 +176,17 @@ mod tests {
         let ct = UserThread::new(&"10.0.0.1".into(), 1);
         assert_eq!(ct.cache_update_bind_address(), "tcp://*:7151");
         assert_eq!(ct.cache_update_connect_address(), "tcp://10.0.0.1:7151");
+    }
+
+    #[test]
+    fn routing_thread_uses_port_6450() {
+        let rt = super::UserRoutingThread::new(&"10.0.0.1".into(), 0);
+        assert_eq!(rt.key_address_connect_address(), "tcp://10.0.0.1:6450");
+    }
+
+    #[test]
+    fn routing_thread_with_offset() {
+        let rt = super::UserRoutingThread::new(&"10.0.0.1".into(), 2);
+        assert_eq!(rt.key_address_connect_address(), "tcp://10.0.0.1:6452");
     }
 }

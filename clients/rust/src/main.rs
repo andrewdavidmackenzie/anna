@@ -77,13 +77,6 @@ fn get_config_path(args: &ArgMatches) -> Result<PathBuf> {
     }
 }
 
-fn get_client(matches: &ArgMatches) -> Result<KVSClient> {
-    let config_file_path = get_config_path(matches)?;
-    let config = Config::read(&config_file_path)?;
-    info!("Using config file: {}", config_file_path.display());
-    Ok(KVSClient::new(&config, None))
-}
-
 fn run() -> Result<String> {
     let app = get_app();
     let matches = app.get_matches();
@@ -108,12 +101,12 @@ fn run() -> Result<String> {
         )),
         ("status", _) => Ok(print_status(status()?)),
         ("stop", _) => Ok(format!("{} anna processes were terminated", stop()?)),
-        ("cli", arg_matches) => Ok(cli(
-            get_client(arg_matches)?,
-            arg_matches,
-            get_config_path(&matches)?,
-        )?
-        .into()),
+        ("cli", arg_matches) => {
+            let config_path = get_config_path(&matches)?;
+            let config = Config::read(&config_path)?;
+            let client = KVSClient::new(&config, None);
+            Ok(cli(client, arg_matches, config_path)?.into())
+        }
         (_, _) => Ok("No command executed".into()),
     }
 }

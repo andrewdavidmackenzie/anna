@@ -140,6 +140,7 @@ impl KVSClient {
 
         match self.recv_response(&self.key_address_puller) {
             Some(data) => {
+                debug!("Routing response: {} bytes, hex: {:02x?}", data.len(), &data[..std::cmp::min(data.len(), 64)]);
                 match KeyAddressResponse::decode(data.as_slice()) {
                     Ok(response) => {
                         if response.error != AnnaError::NoError as i32 {
