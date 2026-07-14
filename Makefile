@@ -3,7 +3,6 @@ BREW := $(shell command -v brew 2> /dev/null)
 DNF := $(shell command -v dnf 2> /dev/null)
 YUM := $(shell command -v yum 2> /dev/null)
 CLANG := $(shell command -v clang 2> /dev/null)
-MDBOOK := $(shell command -v mdbook 2> /dev/null)
 all: clean-start clippy build test coverage docs cleanup
 	@echo "SUCCESS!!"
 
@@ -22,7 +21,7 @@ clean-start:
 dependencies: clang
 	@echo "Installing build-tools"
 ifneq ($(BREW),)
-	brew install autoconf automake libtool pkg-config cmake protobuf curl lcov zmq cppzmq spdlog yaml-cpp googletest llvm lychee
+	brew install autoconf automake libtool pkg-config cmake protobuf curl lcov zmq cppzmq spdlog yaml-cpp googletest llvm
 endif
 ifneq ($(APTGET),)
 	sudo apt-get -y install build-essential autoconf automake libtool curl unzip pkg-config cmake libc++-dev libc++abi-dev protobuf-compiler libprotobuf-dev lcov llvm libzmq3-dev cppzmq-dev libspdlog-dev libfmt-dev libyaml-cpp-dev libgtest-dev
@@ -30,7 +29,6 @@ endif
 ifneq ($(YUM),)
 	sudo yum install -y build-essential autoconf automake libtool curl cmake protobuf-compiler lcov llvm zeromq zeromq-devel
 endif
-	cargo install mdbook
 	cargo install cargo-llvm-cov
 	rustup component add llvm-tools-preview
 	# Skipping installing Python pre-requisites for now
