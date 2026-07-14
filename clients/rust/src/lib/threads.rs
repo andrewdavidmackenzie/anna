@@ -105,3 +105,52 @@ impl CacheThread {
         format!("{}{}", self.ip_base, self.tid + K_CACHE_UPDATE_PORT)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn user_thread_accessors() {
+        let ut = UserThread::new(&"10.0.0.1".into(), 3);
+        assert_eq!(ut.ip(), "10.0.0.1");
+        assert_eq!(ut.tid(), 3);
+    }
+
+    #[test]
+    fn user_thread_response_addresses() {
+        let ut = UserThread::new(&"10.0.0.1".into(), 0);
+        assert_eq!(ut.response_bind_address(), "tcp://*:6800");
+        assert_eq!(ut.response_connect_address(), "tcp://10.0.0.1:6800");
+    }
+
+    #[test]
+    fn user_thread_response_with_offset() {
+        let ut = UserThread::new(&"10.0.0.1".into(), 2);
+        assert_eq!(ut.response_bind_address(), "tcp://*:6802");
+        assert_eq!(ut.response_connect_address(), "tcp://10.0.0.1:6802");
+    }
+
+    #[test]
+    fn user_thread_key_addresses() {
+        let ut = UserThread::new(&"10.0.0.1".into(), 0);
+        assert_eq!(ut.key_address_bind_address(), "tcp://*:6850");
+        assert_eq!(ut.key_address_connect_address(), "tcp://10.0.0.1:6850");
+    }
+
+    #[test]
+    fn cache_thread_static_addresses() {
+        let ct = UserThread::new(&"10.0.0.1".into(), 0);
+        assert_eq!(ct.cache_get_bind_address(), "ipc:///requests/get");
+        assert_eq!(ct.cache_get_connect_address(), "ipc:///requests/get");
+        assert_eq!(ct.cache_put_bind_address(), "ipc:///requests/put");
+        assert_eq!(ct.cache_put_connect_address(), "ipc:///requests/put");
+    }
+
+    #[test]
+    fn cache_thread_update_addresses() {
+        let ct = UserThread::new(&"10.0.0.1".into(), 1);
+        assert_eq!(ct.cache_update_bind_address(), "tcp://*:7151");
+        assert_eq!(ct.cache_update_connect_address(), "tcp://10.0.0.1:7151");
+    }
+}
