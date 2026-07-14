@@ -15,8 +15,9 @@ jobs:
 
     - name: Install dependencies
       run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq protobuf-compiler lychee
         cargo install mdbook
-        rustup component add llvm-tools-preview
 
     - name: Build docs
       run: make docs
