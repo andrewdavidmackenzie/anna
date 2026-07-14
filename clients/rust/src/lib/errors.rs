@@ -1,23 +1,31 @@
-#![allow(missing_docs)]
+/// Errors returned by the anna client library.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// I/O error (file, network, etc.)
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
 
-pub use error_chain::bail;
-use error_chain::error_chain;
+    /// YAML config parsing error
+    #[error("Config parse error: {0}")]
+    ConfigParse(#[from] serde_yaml::Error),
 
-error_chain! {
-    types {
-        Error, ErrorKind, ResultExt, Result;
-    }
+    /// Config file could not be loaded
+    #[error("Could not load config from '{path}': {detail}")]
+    ConfigFile {
+        /// Path to the config file
+        path: String,
+        /// What went wrong
+        detail: String,
+    },
 
-    foreign_links {
-        Io(std::io::Error);
-        Serde(serde_yaml::Error);
-    }
+    /// A KVS operation failed
+    #[error("KVS error: {0}")]
+    Kvs(String),
+
+    /// Process management error
+    #[error("Process error: {0}")]
+    Process(String),
 }
 
-// We'll put our errors in an `errors` module, and other modules in this crate will
-// `use crate::errors::*;` to get access to everything `error_chain!` creates.
-//#[doc(hidden)]
-//pub mod errors {
-// Create the Error, ErrorKind, ResultExt, and Result types
-//    error_chain! {}
-//}
+/// Convenience alias for `std::result::Result<T, Error>`.
+pub type Result<T> = std::result::Result<T, Error>;

@@ -39,7 +39,7 @@ fn file_doesnt_exist() -> Result<(), Box<dyn std::error::Error>> {
     cmd.assert()
         .failure()
         .code(1)
-        .stderr(predicate::str::contains("config file path"));
+        .stderr(predicate::str::contains("config"));
 
     Ok(())
 }

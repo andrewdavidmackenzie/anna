@@ -37,7 +37,7 @@ const PROCESS_LIST: [&str; 3] = [
     ANNA_KVS_PROCESS_NAME,
 ];
 
-pub use errors::*;
+pub use errors::{Error, Result};
 
 /*
    Gather a list of pids that are running for a process using the process name
@@ -57,22 +57,20 @@ pub fn start(config_file_path: &Path) -> Result<usize> {
     for process_name in PROCESS_LIST.iter() {
         let pids = pids_from_name(process_name);
         if !pids.is_empty() {
-            bail!(
+            return Err(Error::Process(format!(
                 "Process '{}' is already running with pids = {:?}",
-                process_count,
-                pids
-            )
+                process_name, pids
+            )));
         }
 
+        let config_str = config_file_path
+            .to_str()
+            .ok_or_else(|| Error::Process("Could not get config file path".into()))?;
+
         Command::new(process_name)
-            .args([
-                "--config",
-                config_file_path
-                    .to_str()
-                    .ok_or("Could not get config file path")?,
-            ])
+            .args(["--config", config_str])
             .spawn()
-            .chain_err(|| format!("Failed to spawn process '{}'", process_name))?;
+            .map_err(|e| Error::Process(format!("Failed to spawn '{}': {}", process_name, e)))?;
 
         process_count += 1;
     }

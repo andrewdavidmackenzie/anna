@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::errors::*;
+use crate::errors::{Error, Result};
 use crate::proto::kvs::{
     AnnaError, KeyAddressRequest, KeyAddressResponse, KeyRequest, KeyResponse, KeyTuple,
     LatticeType, LwwValue, RequestType, SetValue,
@@ -249,19 +249,19 @@ impl KVSClient {
         debug!("GET: {}", key);
         let response = self
             .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
-            .ok_or("Request failed or timed out")?;
+            .ok_or_else(|| Error::Kvs("Request failed or timed out".into()))?;
 
         if response.tuples.is_empty() {
-            return Err("No tuples in response".into());
+            return Err(Error::Kvs("No tuples in response".into()));
         }
 
         let tuple = &response.tuples[0];
         if tuple.error != AnnaError::NoError as i32 {
-            return Err(format!("Error {}", tuple.error).into());
+            return Err(Error::Kvs(format!("Error {}", tuple.error)));
         }
 
         let lww = LwwValue::decode(tuple.payload.as_slice())
-            .map_err(|e| format!("Failed to decode LWW value: {}", e))?;
+            .map_err(|e| Error::Kvs(format!("Failed to decode LWW value: {}", e)))?;
         Ok(String::from_utf8_lossy(&lww.value).to_string())
     }
 
@@ -281,14 +281,14 @@ impl KVSClient {
                 Some(LatticeType::Lww as i32),
                 Some(payload),
             )
-            .ok_or("PUT request failed or timed out")?;
+            .ok_or_else(|| Error::Kvs("PUT request failed or timed out".into()))?;
 
         if response.tuples.is_empty() {
-            return Err("PUT response contained no tuples".into());
+            return Err(Error::Kvs("PUT response contained no tuples".into()));
         }
 
         if response.tuples[0].error != AnnaError::NoError as i32 {
-            return Err(format!("PUT error {}", response.tuples[0].error).into());
+            return Err(Error::Kvs(format!("PUT error {}", response.tuples[0].error)));
         }
 
         Ok(())
@@ -300,19 +300,19 @@ impl KVSClient {
         debug!("GET SET: {}", key);
         let response = self
             .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
-            .ok_or("Request failed or timed out")?;
+            .ok_or_else(|| Error::Kvs("Request failed or timed out".into()))?;
 
         if response.tuples.is_empty() {
-            return Err("No tuples in response".into());
+            return Err(Error::Kvs("No tuples in response".into()));
         }
 
         let tuple = &response.tuples[0];
         if tuple.error != AnnaError::NoError as i32 {
-            return Err(format!("Error {}", tuple.error).into());
+            return Err(Error::Kvs(format!("Error {}", tuple.error)));
         }
 
         let set_val = SetValue::decode(tuple.payload.as_slice())
-            .map_err(|e| format!("Failed to decode Set value: {}", e))?;
+            .map_err(|e| Error::Kvs(format!("Failed to decode Set value: {}", e)))?;
         Ok(set_val
             .values
             .iter()
@@ -336,14 +336,14 @@ impl KVSClient {
                 Some(LatticeType::Set as i32),
                 Some(payload),
             )
-            .ok_or("PUT_SET request failed or timed out")?;
+            .ok_or_else(|| Error::Kvs("PUT_SET request failed or timed out".into()))?;
 
         if response.tuples.is_empty() {
-            return Err("PUT_SET response contained no tuples".into());
+            return Err(Error::Kvs("PUT_SET response contained no tuples".into()));
         }
 
         if response.tuples[0].error != AnnaError::NoError as i32 {
-            return Err(format!("PUT_SET error {}", response.tuples[0].error).into());
+            return Err(Error::Kvs(format!("PUT_SET error {}", response.tuples[0].error)));
         }
 
         Ok(())
@@ -353,14 +353,14 @@ impl KVSClient {
     #[cfg(feature = "causal")]
     pub fn get_causal<K: AsRef<str> + Display>(&mut self, key: K) -> Result<String> {
         debug!("GET_CAUSAL: {}", key);
-        Err("Causal GET is not yet implemented".into())
+        Err(Error::Kvs("Causal GET is not yet implemented".into()))
     }
 
     /// Perform a blocking causal PUT (not yet implemented).
     #[cfg(feature = "causal")]
     pub fn put_causal<K: AsRef<str> + Display>(&mut self, key: K, value: &str) -> Result<()> {
         debug!("PUT_CAUSAL: {} <- {}", key, value);
-        Err("Causal PUT is not yet implemented".into())
+        Err(Error::Kvs("Causal PUT is not yet implemented".into()))
     }
 
     /// Clear the key-address cache.
