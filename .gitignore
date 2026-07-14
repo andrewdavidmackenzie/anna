@@ -21,6 +21,9 @@ pids
 **/.anna_history
 rust_workspace.info
 coverage
+coverage.xml
+__pycache__/
+.coverage
 
 # ignore compiled byte code
 target
@@ -86,3 +89,6 @@ tags
 *.exe
 *.out
 *.app
+CMakeFiles/
+CMakeCache.txt
+clients/cpp/tests/system/system_tests

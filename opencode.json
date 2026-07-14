@@ -1,0 +1,33 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    "build": {
+      "template": "make build",
+      "description": "Build all components (C++ server, C++ client, Rust client)"
+    },
+    "test": {
+      "template": "make test",
+      "description": "Run all tests (C++ server, C++ client, Rust)"
+    },
+    "lint": {
+      "template": "make clippy",
+      "description": "Run clippy on Rust code"
+    },
+    "fmt": {
+      "template": "make fmt",
+      "description": "Format Rust code with cargo fmt"
+    },
+    "check": {
+      "template": "make clippy && make fmt && make test",
+      "description": "Run lint + format check + test"
+    },
+    "docs": {
+      "template": "make docs",
+      "description": "Build documentation and book"
+    },
+    "clean": {
+      "template": "make clean",
+      "description": "Clean all build artifacts"
+    }
+  }
+}
