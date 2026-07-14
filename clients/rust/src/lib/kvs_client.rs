@@ -15,7 +15,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use zmq::Context;
+use zeromq::{PullSocket, PushSocket, Socket, SocketRecv, SocketSend};
 
 /// `KVSClient` provides operations against the Anna Key-Value Store server.
 /// It communicates with the routing tier to discover worker addresses and
@@ -27,17 +27,16 @@ pub struct KVSClient {
     #[allow(dead_code)]
     seed: u64,
     rng: StdRng,
-    context: Context,
     key_address_cache: HashMap<Key, HashSet<Address>>,
-    timeout: i64,
-    socket_cache: HashMap<Address, zmq::Socket>,
-    key_address_puller: zmq::Socket,
-    response_puller: zmq::Socket,
+    timeout: Duration,
+    socket_cache: HashMap<Address, PushSocket>,
+    key_address_puller: PullSocket,
+    response_puller: PullSocket,
 }
 
 impl KVSClient {
     /// Create a new `KVSClient` from a `Config` and optional thread id.
-    pub fn new(config: &Config, tid: Option<ThreadID>) -> Self {
+    pub async fn new(config: &Config, tid: Option<ThreadID>) -> Self {
         let tid = tid.unwrap_or(0);
         let thread_count = config.get_routing_thread_count();
         let routing_ips = config.get_routing_ips();
@@ -52,17 +51,18 @@ impl KVSClient {
         info!("Random seed is {}.", seed);
         let rng = StdRng::seed_from_u64(seed);
 
-        let context = Context::new();
-
-        let key_address_puller = context.socket(zmq::PULL).expect("Failed to create ZMQ PULL socket");
-        let response_puller = context.socket(zmq::PULL).expect("Failed to create ZMQ PULL socket");
-
         let ut = UserThread::new(config.get_user_ip(), tid);
+
+        let mut key_address_puller = PullSocket::new();
         key_address_puller
             .bind(&ut.key_address_bind_address())
+            .await
             .expect("Failed to bind key address puller");
+
+        let mut response_puller = PullSocket::new();
         response_puller
             .bind(&ut.response_bind_address())
+            .await
             .expect("Failed to bind response puller");
 
         KVSClient {
@@ -71,9 +71,8 @@ impl KVSClient {
             ut,
             seed,
             rng,
-            context,
             key_address_cache: HashMap::new(),
-            timeout: 10000,
+            timeout: Duration::from_secs(10),
             socket_cache: HashMap::new(),
             key_address_puller,
             response_puller,
@@ -104,31 +103,42 @@ impl KVSClient {
             .key_address_connect_address()
     }
 
-    fn get_socket(&mut self, addr: &str) -> &zmq::Socket {
+    async fn get_socket(&mut self, addr: &str) -> &mut PushSocket {
         if !self.socket_cache.contains_key(addr) {
-            let sock = self.context.socket(zmq::PUSH).expect("Failed to create PUSH socket");
-            sock.connect(addr).expect("Failed to connect PUSH socket");
+            let mut sock = PushSocket::new();
+            sock.connect(addr)
+                .await
+                .expect("Failed to connect PUSH socket");
             self.socket_cache.insert(addr.to_string(), sock);
         }
-        &self.socket_cache[addr]
+        self.socket_cache.get_mut(addr).expect("socket just inserted")
     }
 
-    fn send_request(&mut self, msg: &[u8], addr: &str) {
-        let sock = self.get_socket(addr);
-        sock.send(msg, 0).expect("Failed to send ZMQ message");
+    async fn send_request(&mut self, msg: &[u8], addr: &str) {
+        let sock = self.get_socket(addr).await;
+        sock.send(msg.to_vec().into())
+            .await
+            .expect("Failed to send ZMQ message");
     }
 
-    fn recv_response(&self, sock: &zmq::Socket) -> Option<Vec<u8>> {
-        let mut items = [sock.as_poll_item(zmq::POLLIN)];
-        zmq::poll(&mut items, self.timeout).ok()?;
-        if items[0].is_readable() {
-            sock.recv_bytes(0).ok()
+    async fn recv_response(&mut self, use_key_address: bool) -> Option<Vec<u8>> {
+        let sock = if use_key_address {
+            &mut self.key_address_puller
         } else {
-            None
+            &mut self.response_puller
+        };
+
+        match tokio::time::timeout(self.timeout, sock.recv()).await {
+            Ok(Ok(msg)) => msg.into_vec().pop().map(|b| b.to_vec()),
+            Ok(Err(e)) => {
+                error!("ZMQ recv error: {}", e);
+                None
+            }
+            Err(_) => None,
         }
     }
 
-    fn query_routing(&mut self, key: &str) -> Vec<Address> {
+    async fn query_routing(&mut self, key: &str) -> Vec<Address> {
         let mut request = KeyAddressRequest::default();
         request.request_id = self.get_request_id();
         request.response_address = self.ut.key_address_connect_address();
@@ -136,11 +146,15 @@ impl KVSClient {
 
         let rt_thread = self.get_routing_thread();
         let encoded = request.encode_to_vec();
-        self.send_request(&encoded, &rt_thread);
+        self.send_request(&encoded, &rt_thread).await;
 
-        match self.recv_response(&self.key_address_puller) {
+        match self.recv_response(true).await {
             Some(data) => {
-                debug!("Routing response: {} bytes, hex: {:02x?}", data.len(), &data[..std::cmp::min(data.len(), 64)]);
+                debug!(
+                    "Routing response: {} bytes, hex: {:02x?}",
+                    data.len(),
+                    &data[..std::cmp::min(data.len(), 64)]
+                );
                 match KeyAddressResponse::decode(data.as_slice()) {
                     Ok(response) => {
                         if response.error != AnnaError::NoError as i32 {
@@ -170,11 +184,11 @@ impl KVSClient {
         }
     }
 
-    fn get_worker_address(&mut self, key: &str) -> Option<Address> {
+    async fn get_worker_address(&mut self, key: &str) -> Option<Address> {
         if !self.key_address_cache.contains_key(key)
             || self.key_address_cache[key].is_empty()
         {
-            let addrs = self.query_routing(key);
+            let addrs = self.query_routing(key).await;
             if addrs.is_empty() {
                 return None;
             }
@@ -191,8 +205,14 @@ impl KVSClient {
         }
     }
 
-    fn send_data_request(&mut self, key: &str, req_type: i32, lattice_type: Option<i32>, payload: Option<Vec<u8>>) -> Option<KeyResponse> {
-        let worker = self.get_worker_address(key)?;
+    async fn send_data_request(
+        &mut self,
+        key: &str,
+        req_type: i32,
+        lattice_type: Option<i32>,
+        payload: Option<Vec<u8>>,
+    ) -> Option<KeyResponse> {
+        let worker = self.get_worker_address(key).await?;
 
         let mut request = KeyRequest::default();
         request.request_id = self.get_request_id();
@@ -213,23 +233,21 @@ impl KVSClient {
         request.tuples.push(tuple);
 
         let encoded = request.encode_to_vec();
-        self.send_request(&encoded, &worker);
+        self.send_request(&encoded, &worker).await;
 
-        match self.recv_response(&self.response_puller) {
-            Some(data) => {
-                match KeyResponse::decode(data.as_slice()) {
-                    Ok(response) => {
-                        if !response.tuples.is_empty() && response.tuples[0].invalidate {
-                            self.key_address_cache.remove(key);
-                        }
-                        Some(response)
+        match self.recv_response(false).await {
+            Some(data) => match KeyResponse::decode(data.as_slice()) {
+                Ok(response) => {
+                    if !response.tuples.is_empty() && response.tuples[0].invalidate {
+                        self.key_address_cache.remove(key);
                     }
-                    Err(e) => {
-                        error!("Failed to decode response: {}", e);
-                        None
-                    }
+                    Some(response)
                 }
-            }
+                Err(e) => {
+                    error!("Failed to decode response: {}", e);
+                    None
+                }
+            },
             None => {
                 warn!("Request timed out for key {}", key);
                 self.key_address_cache.remove(key);
@@ -273,10 +291,11 @@ impl KVSClient {
     }
 
     /// Perform a blocking GET for a LWW key, returning the value as a String.
-    pub fn get<K: AsRef<str> + Display>(&mut self, key: K) -> Result<String> {
+    pub async fn get<K: AsRef<str> + Display>(&mut self, key: K) -> Result<String> {
         debug!("GET: {}", key);
         let response = self
             .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
+            .await
             .ok_or_else(|| Error::Kvs("GET: request failed or timed out".into()))?;
 
         let tuple = Self::validate_response(&response, "GET")?;
@@ -287,7 +306,7 @@ impl KVSClient {
     }
 
     /// Perform a blocking PUT of a LWW key-value pair.
-    pub fn put<K: AsRef<str> + Display>(&mut self, key: K, value: &str) -> Result<()> {
+    pub async fn put<K: AsRef<str> + Display>(&mut self, key: K, value: &str) -> Result<()> {
         debug!("PUT: {} <- {}", key, value);
         let lww = LwwValue {
             timestamp: Self::generate_timestamp(),
@@ -302,6 +321,7 @@ impl KVSClient {
                 Some(LatticeType::Lww as i32),
                 Some(payload),
             )
+            .await
             .ok_or_else(|| Error::Kvs("PUT: request failed or timed out".into()))?;
 
         Self::validate_response(&response, "PUT")?;
@@ -310,10 +330,11 @@ impl KVSClient {
 
     /// Perform a blocking GET for a Set key, returning the values.
     #[cfg(feature = "set")]
-    pub fn get_set<K: AsRef<str> + Display>(&mut self, key: K) -> Result<Vec<String>> {
+    pub async fn get_set<K: AsRef<str> + Display>(&mut self, key: K) -> Result<Vec<String>> {
         debug!("GET SET: {}", key);
         let response = self
             .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
+            .await
             .ok_or_else(|| Error::Kvs("GET_SET: request failed or timed out".into()))?;
 
         let tuple = Self::validate_response(&response, "GET_SET")?;
@@ -329,7 +350,11 @@ impl KVSClient {
 
     /// Perform a blocking PUT of a Set key with the given values.
     #[cfg(feature = "set")]
-    pub fn put_set<K: AsRef<str> + Display>(&mut self, key: K, set: &[&str]) -> Result<()> {
+    pub async fn put_set<K: AsRef<str> + Display>(
+        &mut self,
+        key: K,
+        set: &[&str],
+    ) -> Result<()> {
         debug!("PUT SET: {} <- {:?}", key, set);
         let set_val = SetValue {
             values: set.iter().map(|s| s.as_bytes().to_vec()).collect(),
@@ -343,6 +368,7 @@ impl KVSClient {
                 Some(LatticeType::Set as i32),
                 Some(payload),
             )
+            .await
             .ok_or_else(|| Error::Kvs("PUT_SET: request failed or timed out".into()))?;
 
         Self::validate_response(&response, "PUT_SET")?;
@@ -351,14 +377,18 @@ impl KVSClient {
 
     /// Perform a blocking causal GET (not yet implemented).
     #[cfg(feature = "causal")]
-    pub fn get_causal<K: AsRef<str> + Display>(&mut self, key: K) -> Result<String> {
+    pub async fn get_causal<K: AsRef<str> + Display>(&mut self, key: K) -> Result<String> {
         debug!("GET_CAUSAL: {}", key);
         Err(Error::Kvs("Causal GET is not yet implemented".into()))
     }
 
     /// Perform a blocking causal PUT (not yet implemented).
     #[cfg(feature = "causal")]
-    pub fn put_causal<K: AsRef<str> + Display>(&mut self, key: K, value: &str) -> Result<()> {
+    pub async fn put_causal<K: AsRef<str> + Display>(
+        &mut self,
+        key: K,
+        value: &str,
+    ) -> Result<()> {
         debug!("PUT_CAUSAL: {} <- {}", key, value);
         Err(Error::Kvs("Causal PUT is not yet implemented".into()))
     }
@@ -377,8 +407,6 @@ mod tests {
     fn generate_seed_is_deterministic_for_same_inputs_at_same_time() {
         let s1 = KVSClient::generate_seed(&"127.0.0.1".to_string(), 0);
         let s2 = KVSClient::generate_seed(&"127.0.0.1".to_string(), 0);
-        // Seeds include current time so they won't be exactly equal,
-        // but they should be very close (within a few ms)
         assert!((s1 as i64 - s2 as i64).unsigned_abs() < 100);
     }
 
@@ -435,13 +463,13 @@ mod tests {
         assert!(decoded.values.contains(&b"c".to_vec()));
     }
 
-    #[test]
-    fn client_construction_and_request_id() {
+    #[tokio::test]
+    async fn client_construction_and_request_id() {
         let config = Config::read(
             &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
         )
         .unwrap();
-        let mut client = KVSClient::new(&config, Some(99));
+        let mut client = KVSClient::new(&config, Some(99)).await;
         let id1 = client.get_request_id();
         let id2 = client.get_request_id();
         assert!(id1.contains("127.0.0.1"));
@@ -449,25 +477,25 @@ mod tests {
         assert_ne!(id1, id2);
     }
 
-    #[test]
-    fn client_routing_thread_returns_address() {
+    #[tokio::test]
+    async fn client_routing_thread_returns_address() {
         let config = Config::read(
             &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
         )
         .unwrap();
-        let mut client = KVSClient::new(&config, Some(98));
+        let mut client = KVSClient::new(&config, Some(98)).await;
         let addr = client.get_routing_thread();
         assert!(addr.starts_with("tcp://"), "addr was: {}", addr);
         assert!(addr.contains("127.0.0.1"), "addr was: {}", addr);
     }
 
-    #[test]
-    fn client_clear_cache() {
+    #[tokio::test]
+    async fn client_clear_cache() {
         let config = Config::read(
             &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
         )
         .unwrap();
-        let mut client = KVSClient::new(&config, Some(97));
+        let mut client = KVSClient::new(&config, Some(97)).await;
         client
             .key_address_cache
             .insert("test_key".into(), ["addr1".to_string()].into());
@@ -476,33 +504,33 @@ mod tests {
         assert!(client.key_address_cache.is_empty());
     }
 
-    #[test]
-    fn get_worker_address_returns_cached() {
+    #[tokio::test]
+    async fn get_worker_address_returns_cached() {
         let config = Config::read(
             &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
         )
         .unwrap();
-        let mut client = KVSClient::new(&config, Some(96));
+        let mut client = KVSClient::new(&config, Some(96)).await;
         client.key_address_cache.insert(
             "cached_key".into(),
             ["tcp://127.0.0.1:6200".to_string()].into(),
         );
-        let addr = client.get_worker_address("cached_key");
+        let addr = client.get_worker_address("cached_key").await;
         assert_eq!(addr, Some("tcp://127.0.0.1:6200".to_string()));
     }
 
-    #[test]
-    fn get_worker_address_picks_from_multi_address_cache() {
+    #[tokio::test]
+    async fn get_worker_address_picks_from_multi_address_cache() {
         let config = Config::read(
             &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
         )
         .unwrap();
-        let mut client = KVSClient::new(&config, Some(95));
+        let mut client = KVSClient::new(&config, Some(95)).await;
         let mut addrs = HashSet::new();
         addrs.insert("tcp://10.0.0.1:6200".to_string());
         addrs.insert("tcp://10.0.0.2:6200".to_string());
         client.key_address_cache.insert("multi_key".into(), addrs);
-        let addr = client.get_worker_address("multi_key").unwrap();
+        let addr = client.get_worker_address("multi_key").await.unwrap();
         assert!(
             addr == "tcp://10.0.0.1:6200" || addr == "tcp://10.0.0.2:6200",
             "unexpected addr: {}",
@@ -510,13 +538,13 @@ mod tests {
         );
     }
 
-    #[test]
-    fn invalidate_cache_removes_key() {
+    #[tokio::test]
+    async fn invalidate_cache_removes_key() {
         let config = Config::read(
             &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
         )
         .unwrap();
-        let mut client = KVSClient::new(&config, Some(92));
+        let mut client = KVSClient::new(&config, Some(92)).await;
         client.key_address_cache.insert(
             "evict_me".into(),
             ["tcp://10.0.0.1:6200".to_string()].into(),
@@ -546,55 +574,17 @@ mod tests {
         assert!(decoded.value.is_empty());
     }
 
-    #[test]
-    fn request_id_format() {
+    #[tokio::test]
+    async fn request_id_format() {
         let config = Config::read(
             &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
         )
         .unwrap();
-        let mut client = KVSClient::new(&config, Some(91));
+        let mut client = KVSClient::new(&config, Some(91)).await;
         let id = client.get_request_id();
-        // Format: ip:tid_rid
         let parts: Vec<&str> = id.split(':').collect();
         assert_eq!(parts.len(), 2);
         assert!(parts[1].contains('_'));
-    }
-
-    #[test]
-    fn key_request_protobuf_roundtrip() {
-        let mut request = KeyRequest::default();
-        request.request_id = "test:0_1".to_string();
-        request.response_address = "tcp://127.0.0.1:6800".to_string();
-        request.r#type = RequestType::Put as i32;
-
-        let mut tuple = KeyTuple::default();
-        tuple.key = "mykey".to_string();
-        tuple.lattice_type = LatticeType::Lww as i32;
-        let lww = LwwValue {
-            timestamp: 100,
-            value: b"test".to_vec(),
-        };
-        tuple.payload = lww.encode_to_vec();
-        request.tuples.push(tuple);
-
-        let encoded = request.encode_to_vec();
-        let decoded = KeyRequest::decode(encoded.as_slice()).unwrap();
-        assert_eq!(decoded.request_id, "test:0_1");
-        assert_eq!(decoded.tuples[0].key, "mykey");
-        assert_eq!(decoded.tuples[0].lattice_type, LatticeType::Lww as i32);
-    }
-
-    #[test]
-    fn key_address_request_protobuf_roundtrip() {
-        let mut request = KeyAddressRequest::default();
-        request.request_id = "addr_req_1".to_string();
-        request.response_address = "tcp://127.0.0.1:6850".to_string();
-        request.keys.push("lookup_key".to_string());
-
-        let encoded = request.encode_to_vec();
-        let decoded = KeyAddressRequest::decode(encoded.as_slice()).unwrap();
-        assert_eq!(decoded.request_id, "addr_req_1");
-        assert_eq!(decoded.keys[0], "lookup_key");
     }
 
     #[test]
@@ -636,5 +626,42 @@ mod tests {
         let result = KVSClient::validate_response(&response, "TEST");
         assert!(result.is_ok());
         assert_eq!(result.unwrap().key, "mykey");
+    }
+
+    #[test]
+    fn key_request_protobuf_roundtrip() {
+        let mut request = KeyRequest::default();
+        request.request_id = "test:0_1".to_string();
+        request.response_address = "tcp://127.0.0.1:6800".to_string();
+        request.r#type = RequestType::Put as i32;
+
+        let mut tuple = KeyTuple::default();
+        tuple.key = "mykey".to_string();
+        tuple.lattice_type = LatticeType::Lww as i32;
+        let lww = LwwValue {
+            timestamp: 100,
+            value: b"test".to_vec(),
+        };
+        tuple.payload = lww.encode_to_vec();
+        request.tuples.push(tuple);
+
+        let encoded = request.encode_to_vec();
+        let decoded = KeyRequest::decode(encoded.as_slice()).unwrap();
+        assert_eq!(decoded.request_id, "test:0_1");
+        assert_eq!(decoded.tuples[0].key, "mykey");
+        assert_eq!(decoded.tuples[0].lattice_type, LatticeType::Lww as i32);
+    }
+
+    #[test]
+    fn key_address_request_protobuf_roundtrip() {
+        let mut request = KeyAddressRequest::default();
+        request.request_id = "addr_req_1".to_string();
+        request.response_address = "tcp://127.0.0.1:6850".to_string();
+        request.keys.push("lookup_key".to_string());
+
+        let encoded = request.encode_to_vec();
+        let decoded = KeyAddressRequest::decode(encoded.as_slice()).unwrap();
+        assert_eq!(decoded.request_id, "addr_req_1");
+        assert_eq!(decoded.keys[0], "lookup_key");
     }
 }

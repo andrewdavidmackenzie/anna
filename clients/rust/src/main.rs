@@ -44,8 +44,9 @@ enum CliError {
 
 type Result<T> = std::result::Result<T, CliError>;
 
-fn main() {
-    match run() {
+#[tokio::main]
+async fn main() {
+    match run().await {
         Err(ref e) => {
             eprintln!("error: {}", e);
             exit(1);
@@ -77,7 +78,7 @@ fn get_config_path(args: &ArgMatches) -> Result<PathBuf> {
     }
 }
 
-fn run() -> Result<String> {
+async fn run() -> Result<String> {
     let app = get_app();
     let matches = app.get_matches();
 
@@ -104,8 +105,8 @@ fn run() -> Result<String> {
         ("cli", arg_matches) => {
             let config_path = get_config_path(&matches)?;
             let config = Config::read(&config_path)?;
-            let client = KVSClient::new(&config, None);
-            Ok(cli(client, arg_matches, config_path)?.into())
+            let client = KVSClient::new(&config, None).await;
+            Ok(cli(client, arg_matches, config_path).await?.into())
         }
         (_, _) => Ok("No command executed".into()),
     }
@@ -129,33 +130,39 @@ fn print_status(status: Vec<(String, Vec<i32>)>) -> String {
     status_string
 }
 
-fn execute_command(client: &mut KVSClient, line: &str, config_file_path: &Path) -> Result<()> {
+async fn execute_command(
+    client: &mut KVSClient,
+    line: &str,
+    config_file_path: &Path,
+) -> Result<()> {
     let split = line.trim().split(' ').collect::<Vec<&str>>();
 
     match split[0].to_ascii_uppercase().as_str() {
-        "GET" if split.len() == 2 => println!("{}", client.get(split[1])?),
-        "PUT" if split.len() == 3 => client.put(split[1], split[2])?,
+        "GET" if split.len() == 2 => println!("{}", client.get(split[1]).await?),
+        "PUT" if split.len() == 3 => client.put(split[1], split[2]).await?,
         #[cfg(feature = "causal")]
-        "GET_CAUSAL" if split.len() == 2 => println!("{}", client.get_causal(split[1])?),
+        "GET_CAUSAL" if split.len() == 2 => println!("{}", client.get_causal(split[1]).await?),
         #[cfg(feature = "causal")]
-        "PUT_CAUSAL" if split.len() == 3 => client.put_causal(split[1], split[2])?,
+        "PUT_CAUSAL" if split.len() == 3 => client.put_causal(split[1], split[2]).await?,
         #[cfg(feature = "set")]
         "GET_SET" if split.len() == 2 => {
-            let values = client.get_set(split[1])?;
+            let values = client.get_set(split[1]).await?;
             println!("{{ {} }}", values.join(" "));
         }
         #[cfg(feature = "set")]
-        "PUT_SET" if split.len() >= 3 => client.put_set(split[1], &split[2..])?,
+        "PUT_SET" if split.len() >= 3 => client.put_set(split[1], &split[2..]).await?,
         "START" => println!("{} anna processes were started", start(config_file_path)?),
         "STOP" => println!("{} anna processes were terminated", stop()?),
         "STATUS" => println!("{}", print_status(status()?)),
         "HELP" => println!("{}", cli_usage()),
         "EXIT" => exit(0),
-        _ => return Err(CliError::Other(format!(
-            "Invalid anna command line: '{}'\n{}",
-            line,
-            cli_usage()
-        ))),
+        _ => {
+            return Err(CliError::Other(format!(
+                "Invalid anna command line: '{}'\n{}",
+                line,
+                cli_usage()
+            )))
+        }
     }
 
     Ok(())
@@ -197,7 +204,10 @@ fn cli_usage() -> String {
     usage
 }
 
-fn cli_loop_interactive(mut client: KVSClient, config_file_path: PathBuf) -> Result<&'static str> {
+async fn cli_loop_interactive(
+    mut client: KVSClient,
+    config_file_path: PathBuf,
+) -> Result<&'static str> {
     let mut rl = Editor::new()?;
     rl.set_helper(Some(AnnaCompleter));
     if rl.load_history(ANNA_HISTORY_FILENAME).is_err() {
@@ -207,29 +217,42 @@ fn cli_loop_interactive(mut client: KVSClient, config_file_path: PathBuf) -> Res
         );
     }
 
-    while let Ok(line) = rl.readline("anna> ") {
-        let _ = rl.add_history_entry(&line);
-        if let Err(e) = execute_command(&mut client, &line, &config_file_path) {
-            error!("{}", e);
+    loop {
+        let line = tokio::task::spawn_blocking({
+            let mut rl_clone = Editor::<AnnaCompleter, rustyline::history::DefaultHistory>::new()
+                .expect("Failed to create editor");
+            move || rl_clone.readline("anna> ")
+        })
+        .await
+        .map_err(|e| CliError::Other(format!("readline task failed: {}", e)))?;
+
+        match line {
+            Ok(line) => {
+                let _ = rl.add_history_entry(&line);
+                if let Err(e) = execute_command(&mut client, &line, &config_file_path).await {
+                    error!("{}", e);
+                }
+            }
+            Err(_) => break,
         }
     }
 
     rl.save_history(ANNA_HISTORY_FILENAME)?;
-
     Ok("History saved. Exiting")
 }
 
-fn cli_loop_file(
+async fn cli_loop_file(
     mut client: KVSClient,
     filename: &str,
     config_file_path: PathBuf,
 ) -> Result<&'static str> {
-    let file = File::open(filename)
-        .map_err(|e| CliError::Other(format!("Could not open command file '{}': {}", filename, e)))?;
+    let file = File::open(filename).map_err(|e| {
+        CliError::Other(format!("Could not open command file '{}': {}", filename, e))
+    })?;
     let reader = BufReader::new(file);
 
     for line in reader.lines().flatten() {
-        if let Err(e) = execute_command(&mut client, &line, &config_file_path) {
+        if let Err(e) = execute_command(&mut client, &line, &config_file_path).await {
             error!("Error while executing command line: '{}'\n{}", line, e);
         }
     }
@@ -237,10 +260,14 @@ fn cli_loop_file(
     Ok("")
 }
 
-fn cli(client: KVSClient, args: &ArgMatches, config_file_path: PathBuf) -> Result<&'static str> {
+async fn cli(
+    client: KVSClient,
+    args: &ArgMatches,
+    config_file_path: PathBuf,
+) -> Result<&'static str> {
     match args.get_one::<String>("command_file").map(|s| s.as_str()) {
-        None => cli_loop_interactive(client, config_file_path),
-        Some(filename) => cli_loop_file(client, filename, config_file_path),
+        None => cli_loop_interactive(client, config_file_path).await,
+        Some(filename) => cli_loop_file(client, filename, config_file_path).await,
     }
 }
 
