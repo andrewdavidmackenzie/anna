@@ -139,6 +139,13 @@ mod tests {
     }
 
     #[test]
+    fn user_thread_key_addresses_with_offset() {
+        let ut = UserThread::new(&"10.0.0.1".into(), 3);
+        assert_eq!(ut.key_address_bind_address(), "tcp://*:6853");
+        assert_eq!(ut.key_address_connect_address(), "tcp://10.0.0.1:6853");
+    }
+
+    #[test]
     fn cache_thread_static_addresses() {
         let ct = UserThread::new(&"10.0.0.1".into(), 0);
         assert_eq!(ct.cache_get_bind_address(), "ipc:///requests/get");

@@ -176,8 +176,10 @@ mod test {
 
     #[test]
     fn config_from_default_file() {
-        let config = Config::read(&PathBuf::from("default-config.yml"))
-            .expect("Could not read default-config.yml");
+        let config = Config::read(
+            &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .expect("Could not read default-config.yml");
         assert_eq!(config.get_user_ip(), "127.0.0.1");
         assert!(!config.get_routing_ips().is_empty());
     }
