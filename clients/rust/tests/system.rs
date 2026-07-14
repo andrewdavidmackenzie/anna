@@ -15,12 +15,12 @@ fn system_test_kvs_client() {
 
     start_servers(&path, &config_path);
     let _guard = ServerGuard {
-        path: path.clone(),
-        config: config_path.clone(),
+        path,
+        config: config_path,
     };
 
     let config =
-        Config::read(&std::path::PathBuf::from(&config_path)).expect("Failed to read config");
+        Config::read(&std::path::PathBuf::from(&_guard.config)).expect("Failed to read config");
     let mut client = KVSClient::new(&config, Some(50));
 
     // PUT and GET a LWW value
