@@ -5,7 +5,7 @@ description = "A guide to 'anna'"
 src = "."
 
 [build]
-build-dir = "target"
+build-dir = "target/html"
 create-missing = false
 use-default-preprocessors = false
 
