@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::errors::*;
+use crate::errors::{Error, Result};
 use crate::proto::kvs::{
     AnnaError, KeyAddressRequest, KeyAddressResponse, KeyRequest, KeyResponse, KeyTuple,
     LatticeType, LwwValue, RequestType, SetValue,
@@ -244,24 +244,44 @@ impl KVSClient {
         now.as_millis() as u64 * 10
     }
 
+    fn anna_error_name(code: i32) -> &'static str {
+        match code {
+            0 => "NO_ERROR",
+            1 => "KEY_DNE",
+            2 => "WRONG_THREAD",
+            3 => "TIMEOUT",
+            4 => "LATTICE",
+            5 => "NO_SERVERS",
+            _ => "UNKNOWN",
+        }
+    }
+
+    fn validate_response<'a>(response: &'a KeyResponse, op: &str) -> Result<&'a KeyTuple> {
+        if response.tuples.is_empty() {
+            return Err(Error::Kvs(format!("{}: no tuples in response", op)));
+        }
+        let tuple = &response.tuples[0];
+        if tuple.error != AnnaError::NoError as i32 {
+            return Err(Error::Kvs(format!(
+                "{}: {}",
+                op,
+                Self::anna_error_name(tuple.error)
+            )));
+        }
+        Ok(tuple)
+    }
+
     /// Perform a blocking GET for a LWW key, returning the value as a String.
     pub fn get<K: AsRef<str> + Display>(&mut self, key: K) -> Result<String> {
         debug!("GET: {}", key);
         let response = self
             .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
-            .ok_or("Request failed or timed out")?;
+            .ok_or_else(|| Error::Kvs("GET: request failed or timed out".into()))?;
 
-        if response.tuples.is_empty() {
-            return Err("No tuples in response".into());
-        }
-
-        let tuple = &response.tuples[0];
-        if tuple.error != AnnaError::NoError as i32 {
-            return Err(format!("Error {}", tuple.error).into());
-        }
+        let tuple = Self::validate_response(&response, "GET")?;
 
         let lww = LwwValue::decode(tuple.payload.as_slice())
-            .map_err(|e| format!("Failed to decode LWW value: {}", e))?;
+            .map_err(|e| Error::Kvs(format!("GET: failed to decode LWW value: {}", e)))?;
         Ok(String::from_utf8_lossy(&lww.value).to_string())
     }
 
@@ -281,16 +301,9 @@ impl KVSClient {
                 Some(LatticeType::Lww as i32),
                 Some(payload),
             )
-            .ok_or("PUT request failed or timed out")?;
+            .ok_or_else(|| Error::Kvs("PUT: request failed or timed out".into()))?;
 
-        if response.tuples.is_empty() {
-            return Err("PUT response contained no tuples".into());
-        }
-
-        if response.tuples[0].error != AnnaError::NoError as i32 {
-            return Err(format!("PUT error {}", response.tuples[0].error).into());
-        }
-
+        Self::validate_response(&response, "PUT")?;
         Ok(())
     }
 
@@ -300,19 +313,12 @@ impl KVSClient {
         debug!("GET SET: {}", key);
         let response = self
             .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
-            .ok_or("Request failed or timed out")?;
+            .ok_or_else(|| Error::Kvs("GET_SET: request failed or timed out".into()))?;
 
-        if response.tuples.is_empty() {
-            return Err("No tuples in response".into());
-        }
-
-        let tuple = &response.tuples[0];
-        if tuple.error != AnnaError::NoError as i32 {
-            return Err(format!("Error {}", tuple.error).into());
-        }
+        let tuple = Self::validate_response(&response, "GET_SET")?;
 
         let set_val = SetValue::decode(tuple.payload.as_slice())
-            .map_err(|e| format!("Failed to decode Set value: {}", e))?;
+            .map_err(|e| Error::Kvs(format!("GET_SET: failed to decode Set value: {}", e)))?;
         Ok(set_val
             .values
             .iter()
@@ -336,16 +342,9 @@ impl KVSClient {
                 Some(LatticeType::Set as i32),
                 Some(payload),
             )
-            .ok_or("PUT_SET request failed or timed out")?;
+            .ok_or_else(|| Error::Kvs("PUT_SET: request failed or timed out".into()))?;
 
-        if response.tuples.is_empty() {
-            return Err("PUT_SET response contained no tuples".into());
-        }
-
-        if response.tuples[0].error != AnnaError::NoError as i32 {
-            return Err(format!("PUT_SET error {}", response.tuples[0].error).into());
-        }
-
+        Self::validate_response(&response, "PUT_SET")?;
         Ok(())
     }
 
@@ -353,14 +352,14 @@ impl KVSClient {
     #[cfg(feature = "causal")]
     pub fn get_causal<K: AsRef<str> + Display>(&mut self, key: K) -> Result<String> {
         debug!("GET_CAUSAL: {}", key);
-        Err("Causal GET is not yet implemented".into())
+        Err(Error::Kvs("Causal GET is not yet implemented".into()))
     }
 
     /// Perform a blocking causal PUT (not yet implemented).
     #[cfg(feature = "causal")]
     pub fn put_causal<K: AsRef<str> + Display>(&mut self, key: K, value: &str) -> Result<()> {
         debug!("PUT_CAUSAL: {} <- {}", key, value);
-        Err("Causal PUT is not yet implemented".into())
+        Err(Error::Kvs("Causal PUT is not yet implemented".into()))
     }
 
     /// Clear the key-address cache.
@@ -595,5 +594,46 @@ mod tests {
         let decoded = KeyAddressRequest::decode(encoded.as_slice()).unwrap();
         assert_eq!(decoded.request_id, "addr_req_1");
         assert_eq!(decoded.keys[0], "lookup_key");
+    }
+
+    #[test]
+    fn anna_error_name_known_codes() {
+        assert_eq!(KVSClient::anna_error_name(0), "NO_ERROR");
+        assert_eq!(KVSClient::anna_error_name(1), "KEY_DNE");
+        assert_eq!(KVSClient::anna_error_name(2), "WRONG_THREAD");
+        assert_eq!(KVSClient::anna_error_name(3), "TIMEOUT");
+        assert_eq!(KVSClient::anna_error_name(5), "NO_SERVERS");
+        assert_eq!(KVSClient::anna_error_name(99), "UNKNOWN");
+    }
+
+    #[test]
+    fn validate_response_empty_tuples() {
+        let response = KeyResponse::default();
+        let result = KVSClient::validate_response(&response, "TEST");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("no tuples"));
+    }
+
+    #[test]
+    fn validate_response_error_code() {
+        let mut response = KeyResponse::default();
+        let mut tuple = KeyTuple::default();
+        tuple.error = AnnaError::KeyDne as i32;
+        response.tuples.push(tuple);
+        let result = KVSClient::validate_response(&response, "TEST");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("KEY_DNE"));
+    }
+
+    #[test]
+    fn validate_response_success() {
+        let mut response = KeyResponse::default();
+        let mut tuple = KeyTuple::default();
+        tuple.error = AnnaError::NoError as i32;
+        tuple.key = "mykey".into();
+        response.tuples.push(tuple);
+        let result = KVSClient::validate_response(&response, "TEST");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().key, "mykey");
     }
 }

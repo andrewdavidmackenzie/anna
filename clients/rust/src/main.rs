@@ -4,9 +4,6 @@
 //! Execute `anna` or `anna --help` or `anna -h` at the comment line for a
 //! description of the command line options.
 
-#[macro_use]
-extern crate error_chain;
-
 use std::env;
 use std::process::exit;
 
@@ -28,47 +25,29 @@ const DEFAULT_CONFIG_FILENAME: &str = "default-config.yml";
 /// 2 - Command line arguments error (from clap)
 const SUCCESS: i32 = 0;
 
-// We'll put our errors in an `errors` module, and other modules in this crate will
-// `use crate::errors::*;` to get access to everything `error_chain!` creates.
-#[doc(hidden)]
-pub mod errors {
-    // Create the Error, ErrorKind, ResultExt, and Result types
-    error_chain! {}
+/// CLI-specific errors wrapping library and external errors.
+#[derive(Debug, thiserror::Error)]
+enum CliError {
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
+    #[error("{0}")]
+    Clap(#[from] clap::Error),
+    #[error("{0}")]
+    Anna(#[from] annalib::Error),
+    #[error("{0}")]
+    RustyLine(#[from] rustyline::error::ReadlineError),
+    #[error("Problem loading config from file: '{path}'\n{detail}")]
+    ConfigFile { path: String, detail: String },
+    #[error("{0}")]
+    Other(String),
 }
 
-error_chain! {
-    foreign_links {
-        Io(::std::io::Error);
-        Clap(clap::Error);
-        Anna(annalib::Error);
-        RustyLine(rustyline::error::ReadlineError);
-    }
-
-    errors {
-        ConfigFileError(p: String, m: String) {
-            description("Config file error")
-            display("Problem loading config from file: '{}'\n{}", p, m)
-        }
-    }
-}
-
-use crate::ErrorKind::ConfigFileError;
-pub use errors::*;
+type Result<T> = std::result::Result<T, CliError>;
 
 fn main() {
     match run() {
         Err(ref e) => {
             eprintln!("error: {}", e);
-
-            for e in e.iter().skip(1) {
-                eprintln!("caused by: {}", e);
-            }
-
-            // The backtrace is generated if env var `RUST_BACKTRACE` is set to `1` or `full`
-            if let Some(backtrace) = e.backtrace() {
-                eprintln!("backtrace: {:?}", backtrace);
-            }
-
             exit(1);
         }
         Ok(msg) => {
@@ -82,20 +61,18 @@ fn main() {
 
 fn get_config_path(args: &ArgMatches) -> Result<PathBuf> {
     match args.get_one::<String>("config").map(|s| s.as_str()) {
-        Some(config_file) => PathBuf::from(config_file).canonicalize().chain_err(|| {
-            ConfigFileError(
-                config_file.into(),
-                "Could not canonicalize config file path".into(),
-            )
-        }),
+        Some(config_file) => PathBuf::from(config_file)
+            .canonicalize()
+            .map_err(|e| CliError::ConfigFile {
+                path: config_file.into(),
+                detail: format!("Could not canonicalize: {}", e),
+            }),
         None => PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join(DEFAULT_CONFIG_FILENAME)
             .canonicalize()
-            .chain_err(|| {
-                ConfigFileError(
-                    DEFAULT_CONFIG_FILENAME.into(),
-                    "Could not canonicalize default config file path".into(),
-                )
+            .map_err(|e| CliError::ConfigFile {
+                path: DEFAULT_CONFIG_FILENAME.into(),
+                detail: format!("Could not canonicalize default config: {}", e),
             }),
     }
 }
@@ -107,14 +84,10 @@ fn get_client(matches: &ArgMatches) -> Result<KVSClient> {
     Ok(KVSClient::new(&config, None))
 }
 
-/*
-    run the cli using clap to interpret commands and options
-*/
 fn run() -> Result<String> {
     let app = get_app();
     let matches = app.get_matches();
 
-    // Initialize the logger with the level of verbosity requested via option (or the default)
     let verbosity = matches.get_one::<String>("verbosity").map(|s| s.as_str());
     SimpleLogger::init_prefix(verbosity, false);
 
@@ -127,7 +100,7 @@ fn run() -> Result<String> {
 
     match matches
         .subcommand()
-        .ok_or("Could not find valid subcommand")?
+        .ok_or_else(|| CliError::Other("Could not find valid subcommand".into()))?
     {
         ("start", _) => Ok(format!(
             "{} anna processes were started",
@@ -177,7 +150,7 @@ fn execute_command(client: &mut KVSClient, line: &str, config_file_path: &Path) 
         "GET_SET" if split.len() == 2 => {
             let values = client.get_set(split[1])?;
             println!("{{ {} }}", values.join(" "));
-        },
+        }
         #[cfg(feature = "set")]
         "PUT_SET" if split.len() >= 3 => client.put_set(split[1], &split[2..])?,
         "START" => println!("{} anna processes were started", start(config_file_path)?),
@@ -185,7 +158,11 @@ fn execute_command(client: &mut KVSClient, line: &str, config_file_path: &Path) 
         "STATUS" => println!("{}", print_status(status()?)),
         "HELP" => println!("{}", cli_usage()),
         "EXIT" => exit(0),
-        _ => bail!("Invalid anna command line: '{}'\n{}", line, cli_usage()),
+        _ => return Err(CliError::Other(format!(
+            "Invalid anna command line: '{}'\n{}",
+            line,
+            cli_usage()
+        ))),
     }
 
     Ok(())
@@ -227,9 +204,6 @@ fn cli_usage() -> String {
     usage
 }
 
-/*
-    Enter a loop of command/response for the CLI and interact with the server processes for each
-*/
 fn cli_loop_interactive(mut client: KVSClient, config_file_path: PathBuf) -> Result<&'static str> {
     let mut rl = DefaultEditor::new()?;
     if rl.load_history(ANNA_HISTORY_FILENAME).is_err() {
@@ -251,16 +225,13 @@ fn cli_loop_interactive(mut client: KVSClient, config_file_path: PathBuf) -> Res
     Ok("History saved. Exiting")
 }
 
-/*
-    Enter a loop of command/response for the CLI and interact with the server processes for each
-*/
 fn cli_loop_file(
     mut client: KVSClient,
     filename: &str,
     config_file_path: PathBuf,
 ) -> Result<&'static str> {
     let file = File::open(filename)
-        .chain_err(|| format!("Could not open the command_file: {}", filename))?;
+        .map_err(|e| CliError::Other(format!("Could not open command file '{}': {}", filename, e)))?;
     let reader = BufReader::new(file);
 
     for line in reader.lines().flatten() {
@@ -272,9 +243,6 @@ fn cli_loop_file(
     Ok("")
 }
 
-/*
-   Try to parse and then open a command_file of anna commands
-*/
 fn cli(client: KVSClient, args: &ArgMatches, config_file_path: PathBuf) -> Result<&'static str> {
     match args.get_one::<String>("command_file").map(|s| s.as_str()) {
         None => cli_loop_interactive(client, config_file_path),
@@ -282,46 +250,36 @@ fn cli(client: KVSClient, args: &ArgMatches, config_file_path: PathBuf) -> Resul
     }
 }
 
-/*
-    Create the clap app with the desired options and sub commands
-*/
 fn get_app() -> Command {
-    let app = Command::new(env!("CARGO_PKG_NAME")).version(env!("CARGO_PKG_VERSION"));
-
-    app.arg(
-        Arg::new("verbosity")
-            .short('v')
-            .long("verbosity")
-            .num_args(0..1)
-            .number_of_values(1)
-            .value_name("VERBOSITY_LEVEL")
-            .help("Set verbosity level for output (trace, debug, info, warn, error (default))"),
-    )
-    .arg(
-        Arg::new("config")
-            .short('c')
-            .long("config")
-            .num_args(1)
-            .number_of_values(1)
-            .value_name("CONFIG_FILE")
-            .help("Specify the config file to be used"),
-    )
-    .subcommand(
-        Command::new("cli")
-            .about("Start anna CLI (interactive or specify file to read commands from)")
-            .arg(
-                Arg::new("command_file")
-                    .index(1)
-                    .help("A file where anna commands are read from"),
-            ),
-    )
-    .subcommand(
-        Command::new("start").about("Start anna processes (monitor, route and kvs) in background"),
-    )
-    .subcommand(
-        Command::new("stop").about("Stop any running anna processes (monitor, route and kvs)"),
-    )
-    .subcommand(
-        Command::new("status").about("Show the status of anna processes (monitor, route and kvs)"),
-    )
+    Command::new(env!("CARGO_PKG_NAME"))
+        .version(env!("CARGO_PKG_VERSION"))
+        .about(env!("CARGO_PKG_DESCRIPTION"))
+        .arg(
+            Arg::new("verbosity")
+                .short('v')
+                .long("verbosity")
+                .num_args(1)
+                .value_name("VERBOSITY_LEVEL")
+                .help("Set verbosity level for output (trace, debug, info, warn, error (default))"),
+        )
+        .arg(
+            Arg::new("config")
+                .short('c')
+                .long("config")
+                .num_args(1)
+                .value_name("CONFIG_FILE")
+                .help("Specify a config file to use"),
+        )
+        .subcommand(
+            Command::new("cli")
+                .about("Enter the CLI to interact with anna")
+                .arg(
+                    Arg::new("command_file")
+                        .index(1)
+                        .help("An optional file of commands to run"),
+                ),
+        )
+        .subcommand(Command::new("start").about("Start the KVS server processes"))
+        .subcommand(Command::new("stop").about("Stop the KVS server processes"))
+        .subcommand(Command::new("status").about("Report status of KVS server processes"))
 }

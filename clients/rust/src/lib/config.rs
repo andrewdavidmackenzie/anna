@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use serde_derive::Deserialize;
 
-use super::errors::*;
+use super::errors::{Error, Result};
 use crate::types::Address;
 
 /// `Config` structure containing the configuration read from the yaml config file
@@ -103,16 +103,19 @@ impl Config {
     /// Read the `Config` from a yaml config file and return it or Error
     /// The `config_file_path` should be already an absolute/canonicalized path
     pub fn read(config_file_path: &PathBuf) -> Result<Config> {
-        let mut file = File::open(config_file_path)
-            .chain_err(|| format!("Could not open file '{:?}'", config_file_path))?;
+        let path_str = config_file_path.display().to_string();
+        let mut file = File::open(config_file_path).map_err(|e| Error::ConfigFile {
+            path: path_str.clone(),
+            detail: format!("Could not open: {}", e),
+        })?;
         let mut content = String::new();
-        file.read_to_string(&mut content)
-            .chain_err(|| format!("Could not read content from '{:?}'", config_file_path))?;
-        serde_yaml::from_str(&content).chain_err(|| {
-            format!(
-                "Error deserializing Yaml config from: '{}'",
-                config_file_path.display()
-            )
+        file.read_to_string(&mut content).map_err(|e| Error::ConfigFile {
+            path: path_str.clone(),
+            detail: format!("Could not read: {}", e),
+        })?;
+        serde_yaml::from_str(&content).map_err(|e| Error::ConfigFile {
+            path: path_str,
+            detail: format!("YAML parse error: {}", e),
         })
     }
 
