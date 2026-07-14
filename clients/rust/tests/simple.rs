@@ -1,3 +1,6 @@
+mod common;
+
+use common::{anna_binary, config_file, server_path, start_servers, stop_servers, ServerGuard};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -79,51 +82,15 @@ fn check_test_output(test_dir: &Path) {
     compare_and_fail(test_dir.join("expected"), test_dir.join("test.output"));
 }
 
-fn anna_binary() -> PathBuf {
-    let mut path = env::current_exe()
-        .expect("Could not get test executable path");
-    // test binary is in target/debug/deps/ — anna binary is in target/debug/
-    path.pop(); // remove binary name
-    if path.ends_with("deps") {
-        path.pop(); // remove deps/
-    }
-    path.join("anna")
-}
-
-fn server_path() -> String {
-    let mut root_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    root_dir = root_dir.parent().unwrap(); // clients
-    root_dir = root_dir.parent().unwrap(); // project root
-
-    let server_dir = root_dir.join("server/cpp/build/target/kvs");
-    format!(
-        "{}:{}",
-        env::var("PATH").unwrap(),
-        server_dir.to_string_lossy(),
-    )
-}
-
-fn get_config_file() -> String {
-    let mut root_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    root_dir = root_dir.parent().unwrap();
-    root_dir = root_dir.parent().unwrap();
-
-    let config_file = root_dir.join("conf/anna-config.yml");
-    config_file.to_string_lossy().to_string()
-}
-
 fn run_test(test_dir: &Path, path: &str, config_file: &str) -> io::Result<Output> {
     let _ = fs::remove_file(test_dir.join("test.err"));
     let _ = fs::remove_file(test_dir.join("test.output"));
-
-    println!("Running test: {:?}", test_dir);
 
     let input = test_dir.join("input");
     let output = File::create(test_dir.join("test.output"))?;
     let error = File::create(test_dir.join("test.err"))?;
 
     let anna = anna_binary();
-    println!("Using anna binary: {}", anna.display());
 
     Command::new(&anna)
         .args(["--config", config_file, "cli", input.to_str().unwrap()])
@@ -135,61 +102,21 @@ fn run_test(test_dir: &Path, path: &str, config_file: &str) -> io::Result<Output
         .output()
 }
 
-fn ctl_anna_processes(anna_command: &str, path: &str, config_file: &str) -> Result<(), String> {
-    println!("Controlling anna processes: '{}'", anna_command);
-
-    let anna = anna_binary();
-    let status = Command::new(&anna)
-        .args(["--config", config_file, anna_command])
-        .env("PATH", path)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map_err(|e| format!("Failed to run anna: {}", e))?;
-
-    if !status.success() {
-        return Err(format!("'anna {}' exited with {}", anna_command, status));
-    }
-    Ok(())
-}
-
 fn test(name: &str) -> io::Result<()> {
-    println!("CWD = {}", env::current_dir()?.display());
-
     let test_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
         .join(name);
 
-    let config_file = get_config_file();
+    let config = config_file();
     let path = server_path();
 
-    ctl_anna_processes("start", &path, &config_file)
-        .expect("Could not start anna processes");
+    start_servers(&path, &config);
+    let _guard = ServerGuard {
+        path: path.clone(),
+        config: config.clone(),
+    };
 
-    // Wait for routing tier to be ready (port 6450)
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
-    loop {
-        if std::net::TcpStream::connect_timeout(
-            &"127.0.0.1:6450".parse().unwrap(),
-            std::time::Duration::from_secs(1),
-        )
-        .is_ok()
-        {
-            break;
-        }
-        if std::time::Instant::now() > deadline {
-            panic!("Routing tier did not start within 30 seconds");
-        }
-        std::thread::sleep(std::time::Duration::from_millis(500));
-    }
-    // Brief settle time for hash ring registration
-    std::thread::sleep(std::time::Duration::from_secs(1));
-
-    let test_run = run_test(&test_dir, &path, &config_file);
-
-    ctl_anna_processes("stop", &path, &config_file)
-        .expect("Could not stop anna processes");
-
+    let test_run = run_test(&test_dir, &path, &config);
     test_run?;
 
     check_test_output(&test_dir);
