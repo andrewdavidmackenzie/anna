@@ -77,8 +77,8 @@ fn get_config_path(args: &ArgMatches) -> Result<PathBuf> {
     }
 }
 
-fn get_client(matches: &ArgMatches) -> Result<KVSClient> {
-    let config_file_path = get_config_path(matches)?;
+fn get_client(root_matches: &ArgMatches) -> Result<KVSClient> {
+    let config_file_path = get_config_path(root_matches)?;
     let config = Config::read(&config_file_path)?;
     info!("Using config file: {}", config_file_path.display());
     Ok(KVSClient::new(&config, None))
@@ -109,7 +109,7 @@ fn run() -> Result<String> {
         ("status", _) => Ok(print_status(status()?)),
         ("stop", _) => Ok(format!("{} anna processes were terminated", stop()?)),
         ("cli", arg_matches) => Ok(cli(
-            get_client(arg_matches)?,
+            get_client(&matches)?,
             arg_matches,
             get_config_path(&matches)?,
         )?
