@@ -1,6 +1,6 @@
 mod common;
 
-use common::{anna_binary, config_file, server_path, start_servers, stop_servers, ServerGuard};
+use common::{anna_binary, config_file, server_path, start_servers, ServerGuard};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -13,19 +13,10 @@ fn normalize_sets(content: &str) -> String {
             let trimmed = line.trim();
             if trimmed.starts_with('{') && trimmed.ends_with('}') {
                 let inner = &trimmed[1..trimmed.len() - 1];
-                let elements: Vec<&str> = inner.split_whitespace().collect();
-                if !elements.is_empty() && elements.iter().all(|e| e.parse::<i32>().is_ok()) {
-                    let mut sorted: Vec<i32> =
-                        elements.iter().filter_map(|e| e.parse().ok()).collect();
-                    sorted.sort();
-                    return format!(
-                        "{{ {} }}",
-                        sorted
-                            .iter()
-                            .map(|e| e.to_string())
-                            .collect::<Vec<_>>()
-                            .join(" ")
-                    );
+                let mut elements: Vec<&str> = inner.split_whitespace().collect();
+                if !elements.is_empty() {
+                    elements.sort();
+                    return format!("{{ {} }}", elements.join(" "));
                 }
             }
             line.to_string()
@@ -58,8 +49,8 @@ fn compare_and_fail(expected_path: PathBuf, actual_path: PathBuf) {
     }
 }
 
-fn check_test_output(test_dir: &Path) {
-    let error_output = test_dir.join("test.err");
+fn check_test_output(golden_dir: &Path, work_dir: &Path) {
+    let error_output = work_dir.join("test.err");
     if error_output.exists() {
         let contents =
             fs::read_to_string(&error_output).expect("Could not read from 'test.err' file");
@@ -73,40 +64,40 @@ fn check_test_output(test_dir: &Path) {
         if !non_profiling.trim().is_empty() {
             panic!(
                 "Test {} produced output to STDERR:\n{}",
-                test_dir.display(),
+                work_dir.display(),
                 non_profiling
             );
         }
     }
 
-    compare_and_fail(test_dir.join("expected"), test_dir.join("test.output"));
+    compare_and_fail(golden_dir.join("expected"), work_dir.join("test.output"));
 }
 
-fn run_test(test_dir: &Path, path: &str, config_file: &str) -> io::Result<Output> {
-    let _ = fs::remove_file(test_dir.join("test.err"));
-    let _ = fs::remove_file(test_dir.join("test.output"));
+fn run_test(
+    input_file: &Path,
+    work_dir: &Path,
+    path: &str,
+    config_file: &str,
+) -> io::Result<Output> {
+    let _ = fs::remove_file(work_dir.join("test.err"));
+    let _ = fs::remove_file(work_dir.join("test.output"));
 
-    let input = test_dir.join("input");
-    let output = File::create(test_dir.join("test.output"))?;
-    let error = File::create(test_dir.join("test.err"))?;
+    let output = File::create(work_dir.join("test.output"))?;
+    let error = File::create(work_dir.join("test.err"))?;
 
     let anna = anna_binary();
 
     Command::new(&anna)
-        .args(["--config", config_file, "cli", input.to_str().unwrap()])
+        .args(["--config", config_file, "cli", input_file.to_str().unwrap()])
         .env("PATH", path)
-        .current_dir(test_dir)
+        .current_dir(work_dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::from(output))
         .stderr(Stdio::from(error))
         .output()
 }
 
-fn test(name: &str) -> io::Result<()> {
-    let test_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join(name);
-
+fn run_golden_test(input_dir: &Path, work_dir: &Path) -> io::Result<()> {
     let config = config_file();
     let path = server_path();
 
@@ -116,22 +107,42 @@ fn test(name: &str) -> io::Result<()> {
         config: config.clone(),
     };
 
-    let test_run = run_test(&test_dir, &path, &config);
-    test_run?;
+    let input_file = input_dir.join("input");
+    run_test(&input_file, work_dir, &path, &config)?;
 
-    check_test_output(&test_dir);
+    check_test_output(input_dir, work_dir);
 
-    let _ = fs::remove_file(test_dir.join("test.err"));
-    let _ = fs::remove_file(test_dir.join("test.output"));
-    let _ = fs::remove_file(test_dir.join("client_log.txt"));
-    let _ = fs::remove_file(test_dir.join("log.txt"));
-    let _ = fs::remove_file(test_dir.join("log_0.txt"));
+    let _ = fs::remove_file(work_dir.join("test.err"));
+    let _ = fs::remove_file(work_dir.join("test.output"));
+    let _ = fs::remove_file(work_dir.join("client_log.txt"));
+    let _ = fs::remove_file(work_dir.join("log.txt"));
+    let _ = fs::remove_file(work_dir.join("log_0.txt"));
 
     Ok(())
+}
+
+fn repo_root() -> PathBuf {
+    let mut root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    root.pop(); // clients
+    root.pop(); // repo root
+    root
 }
 
 #[test]
 #[cfg(unix)]
 fn simple_test() {
-    test("simple").expect("simple_test failed");
+    let test_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("simple");
+    run_golden_test(&test_dir, &test_dir).expect("simple_test failed");
+}
+
+#[test]
+#[cfg(unix)]
+fn shared_cli_test() {
+    let shared_dir = repo_root().join("tests").join("shared").join("cli");
+    let work_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("simple");
+    run_golden_test(&shared_dir, &work_dir).expect("shared_cli_test failed");
 }

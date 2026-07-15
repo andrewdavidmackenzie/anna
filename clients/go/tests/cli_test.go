@@ -35,8 +35,9 @@ func TestCLISmokeTest(t *testing.T) {
 	}
 
 	config := configFile()
-	inputFile := filepath.Join("cli", "input")
-	expectedFile := filepath.Join("cli", "expected")
+	repoRoot := filepath.Join("..", "..", "..")
+	inputFile := filepath.Join(repoRoot, "tests", "shared", "cli", "input")
+	expectedFile := filepath.Join(repoRoot, "tests", "shared", "cli", "expected")
 
 	cmd := exec.Command(binary, "--config", config, "cli", inputFile)
 	cmd.Env = append(os.Environ(), "PATH="+os.Getenv("PATH")+":"+serverBinaryDir())

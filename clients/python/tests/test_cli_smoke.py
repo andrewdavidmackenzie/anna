@@ -10,8 +10,9 @@ import pytest
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.normpath(os.path.join(SCRIPT_DIR, "..", "..", ".."))
-INPUT_FILE = os.path.join(SCRIPT_DIR, "cli", "input")
-EXPECTED_FILE = os.path.join(SCRIPT_DIR, "cli", "expected")
+SHARED_DIR = os.path.join(REPO_ROOT, "tests", "shared", "cli")
+INPUT_FILE = os.path.join(SHARED_DIR, "input")
+EXPECTED_FILE = os.path.join(SHARED_DIR, "expected")
 
 
 def find_server_dir():

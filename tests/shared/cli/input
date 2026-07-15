@@ -1,0 +1,12 @@
+PUT a 1
+GET a
+PUT b 2
+GET b
+PUT a 10
+GET a
+PUT c hello_world
+GET c
+PUT_SET myset x y z
+GET_SET myset
+PUT_SET myset x y w
+GET_SET myset

@@ -37,8 +37,9 @@ def run_cli_smoke_test():
         print("Build the server first or set ANNA_SERVER_PATH.")
         sys.exit(1)
 
-    input_file = os.path.join(script_dir, "input")
-    expected_file = os.path.join(script_dir, "expected")
+    shared_dir = os.path.join(repo_root, "tests", "shared", "cli")
+    input_file = os.path.join(shared_dir, "input")
+    expected_file = os.path.join(shared_dir, "expected")
     test_config = "test_config.yml"
     test_data = "test_data"
     output_file = "test.output"
@@ -91,13 +92,39 @@ policy:
     if not os.path.exists(test_data):
         os.makedirs(test_data)
 
-    # The input file contains start/stop commands that the CLI will execute
-    # via annalib::start()/stop(), so we don't manage server processes here.
-    # We just need ANNA_SERVER_PATH set so the library can find the binaries.
     env = os.environ.copy()
-    env["ANNA_SERVER_PATH"] = server_dir
+    env["PATH"] = server_dir + ":" + env.get("PATH", "")
 
+    procs = []
     try:
+        for name in ["anna-monitor", "anna-route", "anna-kvs"]:
+            bin_path = os.path.join(server_dir, name)
+            proc = subprocess.Popen(
+                [bin_path, "--config", test_config],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            procs.append(proc)
+            time.sleep(1)
+
+        timeout_secs = 30
+        start_time = time.time()
+        while time.time() - start_time < timeout_secs:
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(1.0)
+                    if s.connect_ex(("127.0.0.1", 6450)) == 0:
+                        break
+            except Exception:
+                pass
+            time.sleep(1)
+        else:
+            print("Error: Routing tier did not start within 30 seconds")
+            sys.exit(1)
+
+        time.sleep(3)
+
         print(f"Running CLI smoke test: {cli_binary} --config {test_config} cli {input_file}")
         with open(output_file, "w") as out_f, open(err_file, "w") as err_f:
             result = subprocess.run(
@@ -144,15 +171,11 @@ policy:
 
     finally:
         print("Cleaning up...")
-        try:
-            subprocess.run(
-                [cli_binary, "--config", test_config, "stop"],
-                env=env,
-                capture_output=True,
-                timeout=10
-            )
-        except Exception:
-            pass
+        for proc in procs:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            except Exception:
+                pass
 
         for f in [test_config, output_file, err_file, "client_log.txt"]:
             if os.path.exists(f):
