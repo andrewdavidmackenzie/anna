@@ -138,7 +138,7 @@ client-go:
 .PHONY: client-go-tests
 client-go-tests:
 	@echo "Running Go client tests with coverage"
-	@cd clients/go/annalib && go test -v -coverprofile=coverage.out ./... 2>&1
+	@cd clients/go/annalib && go test -v -coverprofile=coverage.out -coverpkg=github.com/andrewdavidmackenzie/anna/clients/go/annalib ./... 2>&1
 
 .PHONY: coverage
 coverage: test
