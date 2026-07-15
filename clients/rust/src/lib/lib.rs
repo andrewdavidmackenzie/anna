@@ -155,7 +155,7 @@ pub fn status() -> Result<Vec<(String, Vec<i32>)>> {
 ///
 /// Returns the number of processes terminated.
 ///
-/// ```rust
+/// ```rust,no_run
 /// let count = annalib::stop()?;
 /// println!("{} processes stopped", count);
 /// # Ok::<(), annalib::Error>(())

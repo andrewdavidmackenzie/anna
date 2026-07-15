@@ -100,7 +100,7 @@ async fn run() -> Result<String> {
             "{} anna processes were started",
             start(&get_config_path(&matches)?)?
         )),
-        ("status", _) => Ok(print_status(status()?)),
+        ("status", _) => Ok(format_status(status()?)),
         ("stop", _) => Ok(format!("{} anna processes were terminated", stop()?)),
         ("cli", arg_matches) => {
             let config_path = get_config_path(&matches)?;
@@ -112,7 +112,7 @@ async fn run() -> Result<String> {
     }
 }
 
-fn print_status(status: Vec<(String, Vec<i32>)>) -> String {
+fn format_status(status: Vec<(String, Vec<i32>)>) -> String {
     let mut status_string = String::new();
     for (process_name, pids) in status {
         if pids.is_empty() {
@@ -153,7 +153,7 @@ async fn execute_command(
         "PUT_SET" if split.len() >= 3 => client.put_set(split[1], &split[2..]).await?,
         "START" => println!("{} anna processes were started", start(config_file_path)?),
         "STOP" => println!("{} anna processes were terminated", stop()?),
-        "STATUS" => println!("{}", print_status(status()?)),
+        "STATUS" => println!("{}", format_status(status()?)),
         "HELP" => println!("{}", cli_usage()),
         "EXIT" => exit(0),
         _ => {
@@ -208,29 +208,34 @@ async fn cli_loop_interactive(
     mut client: KVSClient,
     config_file_path: PathBuf,
 ) -> Result<&'static str> {
-    let mut rl = Editor::new()?;
-    rl.set_helper(Some(AnnaCompleter));
-    if rl.load_history(ANNA_HISTORY_FILENAME).is_err() {
-        println!(
-            "No previous history. Saving new history in {}",
-            ANNA_HISTORY_FILENAME
-        );
-    }
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(1);
 
-    loop {
-        let readline = rl.readline("anna> ");
-        match readline {
-            Ok(line) => {
-                let _ = rl.add_history_entry(&line);
-                if let Err(e) = execute_command(&mut client, &line, &config_file_path).await {
-                    error!("{}", e);
-                }
+    std::thread::spawn(move || {
+        let mut rl = Editor::new().expect("Failed to create editor");
+        rl.set_helper(Some(AnnaCompleter));
+        if rl.load_history(ANNA_HISTORY_FILENAME).is_err() {
+            println!(
+                "No previous history. Saving new history in {}",
+                ANNA_HISTORY_FILENAME
+            );
+        }
+
+        while let Ok(line) = rl.readline("anna> ") {
+            let _ = rl.add_history_entry(&line);
+            if tx.blocking_send(line).is_err() {
+                break;
             }
-            Err(_) => break,
+        }
+
+        let _ = rl.save_history(ANNA_HISTORY_FILENAME);
+    });
+
+    while let Some(line) = rx.recv().await {
+        if let Err(e) = execute_command(&mut client, &line, &config_file_path).await {
+            error!("{}", e);
         }
     }
 
-    rl.save_history(ANNA_HISTORY_FILENAME)?;
     Ok("History saved. Exiting")
 }
 
