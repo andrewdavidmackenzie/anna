@@ -194,12 +194,8 @@ func TestRequestIDFormat(t *testing.T) {
 }
 
 func TestGetRoutingThread(t *testing.T) {
-	config := DefaultConfig()
-	client, err := NewKVSClient(config, 503)
-	if err != nil {
-		t.Fatalf("NewKVSClient failed: %v", err)
-	}
-	defer client.Close()
+	tp := &mockTransport{}
+	client := newTestClient(tp)
 
 	addr := client.getRoutingThread()
 	if addr != "tcp://127.0.0.1:6450" {
@@ -208,12 +204,8 @@ func TestGetRoutingThread(t *testing.T) {
 }
 
 func TestGetWorkerAddressFromCache(t *testing.T) {
-	config := DefaultConfig()
-	client, err := NewKVSClient(config, 504)
-	if err != nil {
-		t.Fatalf("NewKVSClient failed: %v", err)
-	}
-	defer client.Close()
+	tp := &mockTransport{}
+	client := newTestClient(tp)
 
 	client.keyAddressCache["cached_key"] = []string{"tcp://10.0.0.1:6800"}
 	addr, ok := client.getWorkerAddress("cached_key")

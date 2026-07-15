@@ -52,7 +52,9 @@ func TestRoutingIPsWithELB(t *testing.T) {
 
 func TestReadConfigInvalidYAML(t *testing.T) {
 	tmpFile := t.TempDir() + "/bad.yml"
-	os.WriteFile(tmpFile, []byte("{{invalid yaml"), 0644)
+	if err := os.WriteFile(tmpFile, []byte("{{invalid yaml"), 0644); err != nil {
+		t.Fatalf("failed to write test fixture: %v", err)
+	}
 	_, err := ReadConfig(tmpFile)
 	if err == nil {
 		t.Error("expected error for invalid YAML")
