@@ -8,6 +8,10 @@ import (
 	"syscall"
 )
 
+func detachedProcessAttr() *syscall.SysProcAttr {
+	return &syscall.SysProcAttr{Setsid: true}
+}
+
 var processList = []string{"anna-monitor", "anna-route", "anna-kvs"}
 
 // Start starts the anna server processes.
@@ -22,6 +26,7 @@ func Start(configFilePath string) (int, error) {
 		}
 
 		cmd := exec.Command(name, "--config", configFilePath)
+		cmd.SysProcAttr = detachedProcessAttr()
 		if err := cmd.Start(); err != nil {
 			return started, &ProcessError{
 				Message: fmt.Sprintf("failed to spawn '%s': %v", name, err),

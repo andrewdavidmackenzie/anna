@@ -132,6 +132,7 @@ client-go:
 	@echo "Building Go client library"
 	@cd clients/go/annalib && go build ./...
 	@echo "Building Go CLI"
+	@mkdir -p target
 	@cd clients/go/cmd/anna-go && go build -o ../../../../target/anna-go .
 
 .PHONY: client-go-tests

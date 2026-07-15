@@ -215,7 +215,7 @@ func cliFile(client *annalib.KVSClient, filename, configFilePath string) error {
 		line := scanner.Text()
 		exit, err := executeCommand(client, line, configFilePath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			return fmt.Errorf("error executing '%s': %w", line, err)
 		}
 		if exit {
 			return nil

@@ -30,8 +30,14 @@ type KVSClient struct {
 
 // NewKVSClient creates a new KVS client from config and thread ID.
 func NewKVSClient(config *Config, tid int) (*KVSClient, error) {
+	if config == nil {
+		return nil, fmt.Errorf("config must not be nil")
+	}
 	routingIPs := config.GetRoutingIPs()
 	threadCount := config.GetRoutingThreadCount()
+	if len(routingIPs) == 0 || threadCount <= 0 {
+		return nil, fmt.Errorf("config must have at least one routing IP and positive thread count")
+	}
 	routingThreads := make([]*UserRoutingThread, 0, len(routingIPs)*threadCount)
 	for _, ip := range routingIPs {
 		for i := 0; i < threadCount; i++ {
