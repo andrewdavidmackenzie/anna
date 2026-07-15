@@ -92,3 +92,4 @@ tags
 CMakeFiles/
 CMakeCache.txt
 clients/cpp/tests/system/system_tests
+clients/go/cmd/anna-go/anna-go

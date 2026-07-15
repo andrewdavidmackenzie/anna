@@ -26,6 +26,12 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Set up Go
+      if: matrix.os != 'windows-latest'
+      uses: actions/setup-go@v5
+      with:
+        go-version: 'stable'
+
     - name: InstallDependencies
       if: matrix.os != 'windows-latest'
       run: make dependencies

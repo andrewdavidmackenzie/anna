@@ -31,6 +31,7 @@ ifneq ($(YUM),)
 endif
 	cargo install cargo-llvm-cov
 	rustup component add llvm-tools-preview
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	# Skipping installing Python pre-requisites for now
 	# sudo apt-get install -y python3-pip
 	# brew install python
@@ -79,7 +80,7 @@ fmt:
 
 # Debug build, use "-DCMAKE_BUILD_TYPE=Release" for a Release build
 .PHONY: build
-build: client-cpp server-cpp client-rust client-python
+build: client-cpp server-cpp client-rust client-python client-go
 
 UNAME := $(shell uname)
 
@@ -126,13 +127,25 @@ client-python:
 	@cd clients/python/anna && protoc -I=../../../server/protobuf/ --python_out=. kvs.proto shared.proto causal.proto
 	@cd clients/python/anna && sed -i.bak 's/^import shared_pb2/from . import shared_pb2/;s/^import kvs_pb2/from . import kvs_pb2/' causal_pb2.py kvs_pb2.py && rm -f causal_pb2.py.bak kvs_pb2.py.bak
 
+.PHONY: client-go
+client-go:
+	@echo "Building Go client library"
+	@cd clients/go/annalib && go build ./...
+	@echo "Building Go CLI"
+	@cd clients/go/cmd/anna-go && go build -o ../../../../target/anna-go .
+
+.PHONY: client-go-tests
+client-go-tests:
+	@echo "Running Go client tests"
+	@cd clients/go/annalib && go test -v ./... 2>&1
+
 .PHONY: coverage
 coverage: test
 	@echo "Generating coverage report in ./coverage/index.html"
 	@genhtml -o coverage --quiet rust_workspace.info server/cpp/build/server.info clients/cpp/build/client.info || true
 
 .PHONY: test
-test: server-cpp-tests client-cpp-tests client-python-tests workspace-rust-tests
+test: server-cpp-tests client-cpp-tests client-python-tests workspace-rust-tests client-go-tests
 
 .PHONY: server-cpp-tests
 server-cpp-tests:
