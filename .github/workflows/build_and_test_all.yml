@@ -62,7 +62,8 @@ jobs:
 
     - name: Upload coverage
       if: matrix.os == 'macos-latest'
-      uses: codecov/codecov-action@v2
+      uses: codecov/codecov-action@v6
       with:
         files: rust_workspace.info,server/cpp/build/server.info,clients/cpp/build/client.info,clients/python/coverage.xml,clients/go/annalib/coverage.out
         token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: true
