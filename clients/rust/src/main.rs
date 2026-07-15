@@ -9,7 +9,7 @@ use std::process::exit;
 
 use annalib::{completer::AnnaCompleter, config::Config, info, kvs_client::KVSClient, start, status, stop};
 use clap::{Arg, ArgMatches, Command};
-use log::{debug, error, info, warn};
+use log::{debug, error};
 use rustyline::Editor;
 use simplog::SimpleLogger;
 use std::fs::File;
@@ -106,7 +106,11 @@ async fn run() -> Result<String> {
             let config_path = get_config_path(&matches)?;
             let config = Config::read(&config_path)?;
             let client = KVSClient::new(&config, None).await;
-            Ok(cli(client, arg_matches, config_path).await?.into())
+            Ok(match arg_matches.get_one::<String>("command_file").map(|s| s.as_str()) {
+                None => cli_loop_interactive(client, config_path).await?,
+                Some(filename) => cli_loop_file(client, filename, config_path).await?,
+            }
+            .into())
         }
         (_, _) => Ok("No command executed".into()),
     }
@@ -130,11 +134,12 @@ fn format_status(status: Vec<(String, Vec<i32>)>) -> String {
     status_string
 }
 
+/// Returns `true` if the user requested exit.
 async fn execute_command(
     client: &mut KVSClient,
     line: &str,
     config_file_path: &Path,
-) -> Result<()> {
+) -> Result<bool> {
     let split = line.trim().split(' ').collect::<Vec<&str>>();
 
     match split[0].to_ascii_uppercase().as_str() {
@@ -155,7 +160,7 @@ async fn execute_command(
         "STOP" => println!("{} anna processes were terminated", stop()?),
         "STATUS" => println!("{}", format_status(status()?)),
         "HELP" => println!("{}", cli_usage()),
-        "EXIT" => exit(0),
+        "EXIT" => return Ok(true),
         _ => {
             return Err(CliError::Other(format!(
                 "Invalid anna command line: '{}'\n{}",
@@ -165,7 +170,7 @@ async fn execute_command(
         }
     }
 
-    Ok(())
+    Ok(false)
 }
 
 fn cli_usage() -> String {
@@ -231,12 +236,14 @@ async fn cli_loop_interactive(
     });
 
     while let Some(line) = rx.recv().await {
-        if let Err(e) = execute_command(&mut client, &line, &config_file_path).await {
-            error!("{}", e);
+        match execute_command(&mut client, &line, &config_file_path).await {
+            Ok(true) => break,
+            Err(e) => error!("{}", e),
+            _ => {}
         }
     }
 
-    Ok("History saved. Exiting")
+    Ok("")
 }
 
 async fn cli_loop_file(
@@ -249,25 +256,17 @@ async fn cli_loop_file(
     })?;
     let reader = BufReader::new(file);
 
-    for line in reader.lines().flatten() {
-        if let Err(e) = execute_command(&mut client, &line, &config_file_path).await {
-            error!("Error while executing command line: '{}'\n{}", line, e);
+    for line in reader.lines().map_while(|l| l.ok()) {
+        match execute_command(&mut client, &line, &config_file_path).await {
+            Ok(true) => break,
+            Err(e) => error!("Error while executing command line: '{}'\n{}", line, e),
+            _ => {}
         }
     }
 
     Ok("")
 }
 
-async fn cli(
-    client: KVSClient,
-    args: &ArgMatches,
-    config_file_path: PathBuf,
-) -> Result<&'static str> {
-    match args.get_one::<String>("command_file").map(|s| s.as_str()) {
-        None => cli_loop_interactive(client, config_file_path).await,
-        Some(filename) => cli_loop_file(client, filename, config_file_path).await,
-    }
-}
 
 fn get_app() -> Command {
     Command::new(env!("CARGO_PKG_NAME"))

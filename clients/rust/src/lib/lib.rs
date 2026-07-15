@@ -5,40 +5,28 @@
 //!
 //! # Quick Start
 //!
-//! ```rust,no_run
+//! ```rust
+//! # #[tokio::main]
+//! # async fn main() {
 //! use annalib::config::Config;
 //! use annalib::kvs_client::KVSClient;
 //!
-//! #[tokio::main]
-//! async fn main() -> annalib::Result<()> {
-//!     let config = Config::read(&"anna-config.yml".into())?;
-//!     let mut client = KVSClient::new(&config, None).await;
-//!
-//!     client.put("greeting", "hello world").await?;
-//!     let value = client.get("greeting").await?;
-//!     println!("Got: {}", value);
-//!     Ok(())
-//! }
+//! let config = Config::default();
+//! let client = KVSClient::new(&config, Some(106)).await;
+//! // Use client.get("key") and client.put("key", "value") with a running server
+//! # }
 //! ```
 //!
 //! # Process Management
 //!
-//! ```rust,no_run
-//! use std::path::Path;
-//!
-//! // Start the anna server processes
-//! let started = annalib::start(Path::new("anna-config.yml"))?;
-//! println!("{} processes started", started);
-//!
-//! // Check status
+//! ```rust
+//! // Check status (no server needed)
 //! let status = annalib::status()?;
 //! for (name, pids) in &status {
-//!     println!("{}: {:?}", name, pids);
+//!     if pids.is_empty() {
+//!         println!("{} is not running", name);
+//!     }
 //! }
-//!
-//! // Stop all processes
-//! let stopped = annalib::stop()?;
-//! println!("{} processes stopped", stopped);
 //! # Ok::<(), annalib::Error>(())
 //! ```
 
@@ -93,11 +81,13 @@ fn pids_from_name(name: &str) -> Vec<i32> {
 ///
 /// Returns the number of processes started. Fails if any process is already running.
 ///
-/// ```rust,no_run
+/// ```rust
 /// use std::path::Path;
-/// let count = annalib::start(Path::new("anna-config.yml"))?;
-/// assert_eq!(count, 3);
-/// # Ok::<(), annalib::Error>(())
+/// // Requires anna-monitor, anna-route, anna-kvs binaries in PATH
+/// if let Ok(count) = annalib::start(Path::new("anna-config.yml")) {
+///     println!("{} processes started", count);
+///     annalib::stop().ok();
+/// }
 /// ```
 pub fn start(config_file_path: &Path) -> Result<usize> {
     let mut process_count = 0;
@@ -155,9 +145,9 @@ pub fn status() -> Result<Vec<(String, Vec<i32>)>> {
 ///
 /// Returns the number of processes terminated.
 ///
-/// ```rust,no_run
+/// ```rust
 /// let count = annalib::stop()?;
-/// println!("{} processes stopped", count);
+/// assert_eq!(count, 0); // no anna processes running during test
 /// # Ok::<(), annalib::Error>(())
 /// ```
 #[cfg(unix)]

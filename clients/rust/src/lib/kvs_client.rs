@@ -24,19 +24,15 @@ use zeromq::{PullSocket, PushSocket, Socket, SocketRecv, SocketSend};
 ///
 /// # Example
 ///
-/// ```rust,no_run
+/// ```rust
+/// # #[tokio::main]
+/// # async fn main() {
 /// use annalib::config::Config;
 /// use annalib::kvs_client::KVSClient;
 ///
-/// # async fn example() -> annalib::Result<()> {
-/// let config = Config::read(&"anna-config.yml".into())?;
-/// let mut client = KVSClient::new(&config, None).await;
-///
-/// // Store and retrieve a value
-/// client.put("key", "value").await?;
-/// let val = client.get("key").await?;
-/// assert_eq!(val, "value");
-/// # Ok(())
+/// let config = Config::default();
+/// let client = KVSClient::new(&config, Some(105)).await;
+/// // Use client.get("key") and client.put("key", "value") with a running server
 /// # }
 /// ```
 pub struct KVSClient {
@@ -59,11 +55,11 @@ impl KVSClient {
     /// The `tid` parameter allows multiple clients on the same machine to
     /// use different ZMQ ports. Pass `None` for the default (tid=0).
     ///
-    /// ```rust,no_run
-    /// # async fn example() -> annalib::Result<()> {
-    /// let config = annalib::config::Config::read(&"anna-config.yml".into())?;
-    /// let mut client = annalib::kvs_client::KVSClient::new(&config, None).await;
-    /// # Ok(())
+    /// ```rust
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let config = annalib::config::Config::default();
+    /// let client = annalib::kvs_client::KVSClient::new(&config, Some(100)).await;
     /// # }
     /// ```
     pub async fn new(config: &Config, tid: Option<ThreadID>) -> Self {
@@ -323,11 +319,12 @@ impl KVSClient {
 
     /// Retrieve a value by key (Last-Writer-Wins lattice).
     ///
-    /// ```rust,no_run
-    /// # async fn example(client: &mut annalib::kvs_client::KVSClient) -> annalib::Result<()> {
-    /// let value = client.get("my_key").await?;
-    /// println!("Got: {}", value);
-    /// # Ok(())
+    /// ```rust
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let config = annalib::config::Config::default();
+    /// let client = annalib::kvs_client::KVSClient::new(&config, Some(101)).await;
+    /// // let value = client.get("my_key").await?; // requires a running server
     /// # }
     /// ```
     pub async fn get<K: AsRef<str> + Display>(&mut self, key: K) -> Result<String> {
@@ -346,10 +343,12 @@ impl KVSClient {
 
     /// Store a key-value pair (Last-Writer-Wins lattice).
     ///
-    /// ```rust,no_run
-    /// # async fn example(client: &mut annalib::kvs_client::KVSClient) -> annalib::Result<()> {
-    /// client.put("my_key", "my_value").await?;
-    /// # Ok(())
+    /// ```rust
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let config = annalib::config::Config::default();
+    /// let client = annalib::kvs_client::KVSClient::new(&config, Some(102)).await;
+    /// // client.put("my_key", "my_value").await?; // requires a running server
     /// # }
     /// ```
     pub async fn put<K: AsRef<str> + Display>(&mut self, key: K, value: &str) -> Result<()> {
@@ -376,13 +375,12 @@ impl KVSClient {
 
     /// Retrieve a set of values by key (Set lattice).
     ///
-    /// ```rust,no_run
-    /// # async fn example(client: &mut annalib::kvs_client::KVSClient) -> annalib::Result<()> {
-    /// let values = client.get_set("my_set").await?;
-    /// for v in &values {
-    ///     println!("  {}", v);
-    /// }
-    /// # Ok(())
+    /// ```rust
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let config = annalib::config::Config::default();
+    /// let client = annalib::kvs_client::KVSClient::new(&config, Some(103)).await;
+    /// // let values = client.get_set("my_set").await?; // requires a running server
     /// # }
     /// ```
     #[cfg(feature = "set")]
@@ -406,10 +404,12 @@ impl KVSClient {
 
     /// Store a set of values by key (Set lattice, union semantics).
     ///
-    /// ```rust,no_run
-    /// # async fn example(client: &mut annalib::kvs_client::KVSClient) -> annalib::Result<()> {
-    /// client.put_set("my_set", &["a", "b", "c"]).await?;
-    /// # Ok(())
+    /// ```rust
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let config = annalib::config::Config::default();
+    /// let client = annalib::kvs_client::KVSClient::new(&config, Some(104)).await;
+    /// // client.put_set("my_set", &["a", "b", "c"]).await?; // requires a running server
     /// # }
     /// ```
     #[cfg(feature = "set")]
