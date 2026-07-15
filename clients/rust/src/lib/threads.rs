@@ -12,7 +12,7 @@ const K_USER_KEY_ADDRESS_PORT: usize = 6850;
 // The port on which cache nodes listen for updates from the KVS.
 const K_CACHE_UPDATE_PORT: usize = 7150;
 
-const K_BIND_BASE: &str = "tcp://*:";
+const K_BIND_BASE: &str = "tcp://0.0.0.0:";
 
 /// `Thread` is a base type for a number of other thread types
 pub struct Thread {
@@ -137,28 +137,28 @@ mod tests {
     #[test]
     fn user_thread_response_addresses() {
         let ut = UserThread::new(&"10.0.0.1".into(), 0);
-        assert_eq!(ut.response_bind_address(), "tcp://*:6800");
+        assert_eq!(ut.response_bind_address(), "tcp://0.0.0.0:6800");
         assert_eq!(ut.response_connect_address(), "tcp://10.0.0.1:6800");
     }
 
     #[test]
     fn user_thread_response_with_offset() {
         let ut = UserThread::new(&"10.0.0.1".into(), 2);
-        assert_eq!(ut.response_bind_address(), "tcp://*:6802");
+        assert_eq!(ut.response_bind_address(), "tcp://0.0.0.0:6802");
         assert_eq!(ut.response_connect_address(), "tcp://10.0.0.1:6802");
     }
 
     #[test]
     fn user_thread_key_addresses() {
         let ut = UserThread::new(&"10.0.0.1".into(), 0);
-        assert_eq!(ut.key_address_bind_address(), "tcp://*:6850");
+        assert_eq!(ut.key_address_bind_address(), "tcp://0.0.0.0:6850");
         assert_eq!(ut.key_address_connect_address(), "tcp://10.0.0.1:6850");
     }
 
     #[test]
     fn user_thread_key_addresses_with_offset() {
         let ut = UserThread::new(&"10.0.0.1".into(), 3);
-        assert_eq!(ut.key_address_bind_address(), "tcp://*:6853");
+        assert_eq!(ut.key_address_bind_address(), "tcp://0.0.0.0:6853");
         assert_eq!(ut.key_address_connect_address(), "tcp://10.0.0.1:6853");
     }
 
@@ -174,7 +174,7 @@ mod tests {
     #[test]
     fn cache_thread_update_addresses() {
         let ct = UserThread::new(&"10.0.0.1".into(), 1);
-        assert_eq!(ct.cache_update_bind_address(), "tcp://*:7151");
+        assert_eq!(ct.cache_update_bind_address(), "tcp://0.0.0.0:7151");
         assert_eq!(ct.cache_update_connect_address(), "tcp://10.0.0.1:7151");
     }
 

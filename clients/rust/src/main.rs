@@ -9,7 +9,7 @@ use std::process::exit;
 
 use annalib::{completer::AnnaCompleter, config::Config, info, kvs_client::KVSClient, start, status, stop};
 use clap::{Arg, ArgMatches, Command};
-use log::{debug, error, info, warn};
+use log::{debug, error};
 use rustyline::Editor;
 use simplog::SimpleLogger;
 use std::fs::File;
@@ -44,8 +44,9 @@ enum CliError {
 
 type Result<T> = std::result::Result<T, CliError>;
 
-fn main() {
-    match run() {
+#[tokio::main]
+async fn main() {
+    match run().await {
         Err(ref e) => {
             eprintln!("error: {}", e);
             exit(1);
@@ -77,7 +78,7 @@ fn get_config_path(args: &ArgMatches) -> Result<PathBuf> {
     }
 }
 
-fn run() -> Result<String> {
+async fn run() -> Result<String> {
     let app = get_app();
     let matches = app.get_matches();
 
@@ -99,19 +100,23 @@ fn run() -> Result<String> {
             "{} anna processes were started",
             start(&get_config_path(&matches)?)?
         )),
-        ("status", _) => Ok(print_status(status()?)),
+        ("status", _) => Ok(format_status(status()?)),
         ("stop", _) => Ok(format!("{} anna processes were terminated", stop()?)),
         ("cli", arg_matches) => {
             let config_path = get_config_path(&matches)?;
             let config = Config::read(&config_path)?;
-            let client = KVSClient::new(&config, None);
-            Ok(cli(client, arg_matches, config_path)?.into())
+            let client = KVSClient::new(&config, None).await;
+            Ok(match arg_matches.get_one::<String>("command_file").map(|s| s.as_str()) {
+                None => cli_loop_interactive(client, config_path).await?,
+                Some(filename) => cli_loop_file(client, filename, config_path).await?,
+            }
+            .into())
         }
         (_, _) => Ok("No command executed".into()),
     }
 }
 
-fn print_status(status: Vec<(String, Vec<i32>)>) -> String {
+fn format_status(status: Vec<(String, Vec<i32>)>) -> String {
     let mut status_string = String::new();
     for (process_name, pids) in status {
         if pids.is_empty() {
@@ -129,36 +134,43 @@ fn print_status(status: Vec<(String, Vec<i32>)>) -> String {
     status_string
 }
 
-fn execute_command(client: &mut KVSClient, line: &str, config_file_path: &Path) -> Result<()> {
+/// Returns `true` if the user requested exit.
+async fn execute_command(
+    client: &mut KVSClient,
+    line: &str,
+    config_file_path: &Path,
+) -> Result<bool> {
     let split = line.trim().split(' ').collect::<Vec<&str>>();
 
     match split[0].to_ascii_uppercase().as_str() {
-        "GET" if split.len() == 2 => println!("{}", client.get(split[1])?),
-        "PUT" if split.len() == 3 => client.put(split[1], split[2])?,
+        "GET" if split.len() == 2 => println!("{}", client.get(split[1]).await?),
+        "PUT" if split.len() == 3 => client.put(split[1], split[2]).await?,
         #[cfg(feature = "causal")]
-        "GET_CAUSAL" if split.len() == 2 => println!("{}", client.get_causal(split[1])?),
+        "GET_CAUSAL" if split.len() == 2 => println!("{}", client.get_causal(split[1]).await?),
         #[cfg(feature = "causal")]
-        "PUT_CAUSAL" if split.len() == 3 => client.put_causal(split[1], split[2])?,
+        "PUT_CAUSAL" if split.len() == 3 => client.put_causal(split[1], split[2]).await?,
         #[cfg(feature = "set")]
         "GET_SET" if split.len() == 2 => {
-            let values = client.get_set(split[1])?;
+            let values = client.get_set(split[1]).await?;
             println!("{{ {} }}", values.join(" "));
         }
         #[cfg(feature = "set")]
-        "PUT_SET" if split.len() >= 3 => client.put_set(split[1], &split[2..])?,
+        "PUT_SET" if split.len() >= 3 => client.put_set(split[1], &split[2..]).await?,
         "START" => println!("{} anna processes were started", start(config_file_path)?),
         "STOP" => println!("{} anna processes were terminated", stop()?),
-        "STATUS" => println!("{}", print_status(status()?)),
+        "STATUS" => println!("{}", format_status(status()?)),
         "HELP" => println!("{}", cli_usage()),
-        "EXIT" => exit(0),
-        _ => return Err(CliError::Other(format!(
-            "Invalid anna command line: '{}'\n{}",
-            line,
-            cli_usage()
-        ))),
+        "EXIT" => return Ok(true),
+        _ => {
+            return Err(CliError::Other(format!(
+                "Invalid anna command line: '{}'\n{}",
+                line,
+                cli_usage()
+            )))
+        }
     }
 
-    Ok(())
+    Ok(false)
 }
 
 fn cli_usage() -> String {
@@ -197,52 +209,64 @@ fn cli_usage() -> String {
     usage
 }
 
-fn cli_loop_interactive(mut client: KVSClient, config_file_path: PathBuf) -> Result<&'static str> {
-    let mut rl = Editor::new()?;
-    rl.set_helper(Some(AnnaCompleter));
-    if rl.load_history(ANNA_HISTORY_FILENAME).is_err() {
-        println!(
-            "No previous history. Saving new history in {}",
-            ANNA_HISTORY_FILENAME
-        );
-    }
-
-    while let Ok(line) = rl.readline("anna> ") {
-        let _ = rl.add_history_entry(&line);
-        if let Err(e) = execute_command(&mut client, &line, &config_file_path) {
-            error!("{}", e);
-        }
-    }
-
-    rl.save_history(ANNA_HISTORY_FILENAME)?;
-
-    Ok("History saved. Exiting")
-}
-
-fn cli_loop_file(
+async fn cli_loop_interactive(
     mut client: KVSClient,
-    filename: &str,
     config_file_path: PathBuf,
 ) -> Result<&'static str> {
-    let file = File::open(filename)
-        .map_err(|e| CliError::Other(format!("Could not open command file '{}': {}", filename, e)))?;
-    let reader = BufReader::new(file);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(1);
 
-    for line in reader.lines().flatten() {
-        if let Err(e) = execute_command(&mut client, &line, &config_file_path) {
-            error!("Error while executing command line: '{}'\n{}", line, e);
+    std::thread::spawn(move || {
+        let mut rl = Editor::new().expect("Failed to create editor");
+        rl.set_helper(Some(AnnaCompleter));
+        if rl.load_history(ANNA_HISTORY_FILENAME).is_err() {
+            println!(
+                "No previous history. Saving new history in {}",
+                ANNA_HISTORY_FILENAME
+            );
+        }
+
+        while let Ok(line) = rl.readline("anna> ") {
+            let _ = rl.add_history_entry(&line);
+            if tx.blocking_send(line).is_err() {
+                break;
+            }
+        }
+
+        let _ = rl.save_history(ANNA_HISTORY_FILENAME);
+    });
+
+    while let Some(line) = rx.recv().await {
+        match execute_command(&mut client, &line, &config_file_path).await {
+            Ok(true) => break,
+            Err(e) => error!("{}", e),
+            _ => {}
         }
     }
 
     Ok("")
 }
 
-fn cli(client: KVSClient, args: &ArgMatches, config_file_path: PathBuf) -> Result<&'static str> {
-    match args.get_one::<String>("command_file").map(|s| s.as_str()) {
-        None => cli_loop_interactive(client, config_file_path),
-        Some(filename) => cli_loop_file(client, filename, config_file_path),
+async fn cli_loop_file(
+    mut client: KVSClient,
+    filename: &str,
+    config_file_path: PathBuf,
+) -> Result<&'static str> {
+    let file = File::open(filename).map_err(|e| {
+        CliError::Other(format!("Could not open command file '{}': {}", filename, e))
+    })?;
+    let reader = BufReader::new(file);
+
+    for line in reader.lines().map_while(|l| l.ok()) {
+        match execute_command(&mut client, &line, &config_file_path).await {
+            Ok(true) => break,
+            Err(e) => error!("Error while executing command line: '{}'\n{}", line, e),
+            _ => {}
+        }
     }
+
+    Ok("")
 }
+
 
 fn get_app() -> Command {
     Command::new(env!("CARGO_PKG_NAME"))
@@ -276,4 +300,40 @@ fn get_app() -> Command {
         .subcommand(Command::new("start").about("Start the KVS server processes"))
         .subcommand(Command::new("stop").about("Stop the KVS server processes"))
         .subcommand(Command::new("status").about("Report status of KVS server processes"))
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn format_status_no_processes() {
+        let status = vec![
+            ("anna-monitor".into(), vec![]),
+            ("anna-route".into(), vec![]),
+        ];
+        let output = format_status(status);
+        assert!(output.contains("anna-monitor"));
+        assert!(output.contains("is not running"));
+    }
+
+    #[test]
+    fn format_status_with_pids() {
+        let status = vec![("anna-kvs".into(), vec![1234, 5678])];
+        let output = format_status(status);
+        assert!(output.contains("anna-kvs"));
+        assert!(output.contains("1234"));
+        assert!(output.contains("5678"));
+    }
+
+    #[test]
+    fn cli_usage_contains_commands() {
+        let usage = cli_usage();
+        assert!(usage.contains("get"));
+        assert!(usage.contains("put"));
+        assert!(usage.contains("start"));
+        assert!(usage.contains("stop"));
+        assert!(usage.contains("status"));
+        assert!(usage.contains("exit"));
+    }
 }

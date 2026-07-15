@@ -98,10 +98,67 @@ struct Replication {
     local: usize,
 }
 
-/// `Config` Contains the Anna configuration deserialized form Yaml config file
+impl Default for Config {
+    fn default() -> Self {
+        let localhost = "127.0.0.1".to_string();
+        Config {
+            monitoring: Monitoring {
+                mgmt_ip: localhost.clone(),
+                ip: localhost.clone(),
+            },
+            routing: Routing {
+                monitoring: vec![localhost.clone()],
+                ip: localhost.clone(),
+            },
+            user: User {
+                monitoring: vec![localhost.clone()],
+                routing: vec![localhost.clone()],
+                ip: localhost.clone(),
+            },
+            routing_elb: None,
+            server: Server {
+                monitoring: vec![localhost.clone()],
+                routing: vec![localhost.clone()],
+                seed_ip: localhost.clone(),
+                public_ip: localhost.clone(),
+                private_ip: localhost.clone(),
+                mgmt_ip: localhost.clone(),
+            },
+            policy: Policy {
+                elasticity: false,
+                selective_rep: false,
+                tiering: false,
+            },
+            ebs: Ebs(String::new()),
+            capacities: Capacities {
+                memory_cap: 256,
+                ebs_cap: 256,
+            },
+            threads: Threads {
+                memory: 1,
+                ebs: 1,
+                routing: 1,
+                benchmark: 1,
+            },
+            replication: Replication {
+                memory: 1,
+                ebs: 1,
+                minimum: 1,
+                local: 1,
+            },
+        }
+    }
+}
+
+/// Anna configuration, deserialized from a YAML config file.
 impl Config {
-    /// Read the `Config` from a yaml config file and return it or Error
-    /// The `config_file_path` should be already an absolute/canonicalized path
+    /// Read configuration from a YAML file.
+    ///
+    /// ```rust
+    /// let config = annalib::config::Config::default();
+    /// assert_eq!(config.get_user_ip(), "127.0.0.1");
+    /// assert_eq!(config.get_routing_thread_count(), 1);
+    /// ```
     pub fn read(config_file_path: &PathBuf) -> Result<Config> {
         let path_str = config_file_path.display().to_string();
         let mut file = File::open(config_file_path).map_err(|e| Error::ConfigFile {
@@ -142,6 +199,14 @@ impl Config {
 mod test {
     use super::Config;
     use std::path::PathBuf;
+
+    #[test]
+    fn default_config() {
+        let config = Config::default();
+        assert_eq!(config.get_user_ip(), "127.0.0.1");
+        assert_eq!(config.get_routing_thread_count(), 1);
+        assert_eq!(config.get_routing_ips(), &vec!["127.0.0.1".to_string()]);
+    }
 
     #[test]
     fn routing_ips_no_elb() {
