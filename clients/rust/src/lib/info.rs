@@ -2,11 +2,12 @@
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// return the version number of the library as a string of the form "M.m.p"
+/// Return the version number of the `annalib` library.
 ///
-/// - M is a one or two digit Major version number
-/// - m is a one or two digit Minor version number
-/// - p is a one or two digit Patch version number
+/// ```rust
+/// let version = annalib::info::version();
+/// assert!(!version.is_empty());
+/// ```
 pub fn version() -> &'static str {
     VERSION
 }

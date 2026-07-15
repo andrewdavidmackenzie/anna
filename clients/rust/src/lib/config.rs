@@ -98,10 +98,16 @@ struct Replication {
     local: usize,
 }
 
-/// `Config` Contains the Anna configuration deserialized form Yaml config file
+/// Anna configuration, deserialized from a YAML config file.
 impl Config {
-    /// Read the `Config` from a yaml config file and return it or Error
-    /// The `config_file_path` should be already an absolute/canonicalized path
+    /// Read configuration from a YAML file.
+    ///
+    /// ```rust,no_run
+    /// let config = annalib::config::Config::read(&"anna-config.yml".into())?;
+    /// println!("User IP: {}", config.get_user_ip());
+    /// println!("Routing threads: {}", config.get_routing_thread_count());
+    /// # Ok::<(), annalib::Error>(())
+    /// ```
     pub fn read(config_file_path: &PathBuf) -> Result<Config> {
         let path_str = config_file_path.display().to_string();
         let mut file = File::open(config_file_path).map_err(|e| Error::ConfigFile {

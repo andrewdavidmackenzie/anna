@@ -1,8 +1,46 @@
 #![warn(clippy::unwrap_used)]
 #![deny(missing_docs)]
 
-//! This is the rust `anna` Library for working with the `anna` key-value store. It is linked into
-//! the `anna` CLI binary but can also be used by others to create new binaries
+//! The `annalib` crate provides a Rust client for the Anna key-value store.
+//!
+//! # Quick Start
+//!
+//! ```rust,no_run
+//! use annalib::config::Config;
+//! use annalib::kvs_client::KVSClient;
+//!
+//! #[tokio::main]
+//! async fn main() -> annalib::Result<()> {
+//!     let config = Config::read(&"anna-config.yml".into())?;
+//!     let mut client = KVSClient::new(&config, None).await;
+//!
+//!     client.put("greeting", "hello world").await?;
+//!     let value = client.get("greeting").await?;
+//!     println!("Got: {}", value);
+//!     Ok(())
+//! }
+//! ```
+//!
+//! # Process Management
+//!
+//! ```rust,no_run
+//! use std::path::Path;
+//!
+//! // Start the anna server processes
+//! let started = annalib::start(Path::new("anna-config.yml"))?;
+//! println!("{} processes started", started);
+//!
+//! // Check status
+//! let status = annalib::status()?;
+//! for (name, pids) in &status {
+//!     println!("{}: {:?}", name, pids);
+//! }
+//!
+//! // Stop all processes
+//! let stopped = annalib::stop()?;
+//! println!("{} processes stopped", stopped);
+//! # Ok::<(), annalib::Error>(())
+//! ```
 
 #[cfg(unix)]
 use nix::sys::signal::kill;
@@ -51,9 +89,16 @@ fn pids_from_name(name: &str) -> Vec<i32> {
         .collect()
 }
 
-/// `start` function starts the processes `anna-kvs`, `anna-monitor` and `anna-route`
+/// Start the anna server processes (`anna-monitor`, `anna-route`, `anna-kvs`).
 ///
-/// It returns a `Result<usize>` with the number of processes started
+/// Returns the number of processes started. Fails if any process is already running.
+///
+/// ```rust,no_run
+/// use std::path::Path;
+/// let count = annalib::start(Path::new("anna-config.yml"))?;
+/// assert_eq!(count, 3);
+/// # Ok::<(), annalib::Error>(())
+/// ```
 pub fn start(config_file_path: &Path) -> Result<usize> {
     let mut process_count = 0;
     for process_name in PROCESS_LIST.iter() {
@@ -80,11 +125,21 @@ pub fn start(config_file_path: &Path) -> Result<usize> {
     Ok(process_count)
 }
 
-/// `status` - get the status of the various anna processes that maybe running
+/// Get the running status of each anna server process.
 ///
-/// Return a `Vec<(String, Vec<i32>)>` representing the status of the anna processes
-/// where `String` is the process name and `Vec<i32>` is a vector of pids of processes with
-/// that name
+/// Returns a list of `(process_name, pids)` tuples.
+///
+/// ```rust
+/// let status = annalib::status()?;
+/// for (name, pids) in &status {
+///     if pids.is_empty() {
+///         println!("{} is not running", name);
+///     } else {
+///         println!("{} running with pids {:?}", name, pids);
+///     }
+/// }
+/// # Ok::<(), annalib::Error>(())
+/// ```
 pub fn status() -> Result<Vec<(String, Vec<i32>)>> {
     let mut status = vec![];
 
@@ -96,9 +151,15 @@ pub fn status() -> Result<Vec<(String, Vec<i32>)>> {
     Ok(status)
 }
 
-/// `stop` function terminates the processes `anna-kvs`, `anna-monitor` and `anna-route`
+/// Stop all running anna server processes via SIGTERM.
 ///
-/// It returns a `Result<usize>` with the number of processes terminated
+/// Returns the number of processes terminated.
+///
+/// ```rust
+/// let count = annalib::stop()?;
+/// println!("{} processes stopped", count);
+/// # Ok::<(), annalib::Error>(())
+/// ```
 #[cfg(unix)]
 pub fn stop() -> Result<usize> {
     let mut kill_count: usize = 0;

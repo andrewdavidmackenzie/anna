@@ -17,9 +17,28 @@ use std::hash::{Hash, Hasher};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use zeromq::{PullSocket, PushSocket, Socket, SocketRecv, SocketSend};
 
-/// `KVSClient` provides operations against the Anna Key-Value Store server.
-/// It communicates with the routing tier to discover worker addresses and
-/// sends GET/PUT requests directly to worker nodes via ZMQ.
+/// Async client for the Anna Key-Value Store.
+///
+/// Communicates with the routing tier to discover worker addresses and
+/// sends GET/PUT requests directly to worker nodes via ZeroMQ.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use annalib::config::Config;
+/// use annalib::kvs_client::KVSClient;
+///
+/// # async fn example() -> annalib::Result<()> {
+/// let config = Config::read(&"anna-config.yml".into())?;
+/// let mut client = KVSClient::new(&config, None).await;
+///
+/// // Store and retrieve a value
+/// client.put("key", "value").await?;
+/// let val = client.get("key").await?;
+/// assert_eq!(val, "value");
+/// # Ok(())
+/// # }
+/// ```
 pub struct KVSClient {
     routing_threads: Vec<UserRoutingThread>,
     rid: usize,
@@ -36,6 +55,17 @@ pub struct KVSClient {
 
 impl KVSClient {
     /// Create a new `KVSClient` from a `Config` and optional thread id.
+    ///
+    /// The `tid` parameter allows multiple clients on the same machine to
+    /// use different ZMQ ports. Pass `None` for the default (tid=0).
+    ///
+    /// ```rust,no_run
+    /// # async fn example() -> annalib::Result<()> {
+    /// let config = annalib::config::Config::read(&"anna-config.yml".into())?;
+    /// let mut client = annalib::kvs_client::KVSClient::new(&config, None).await;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn new(config: &Config, tid: Option<ThreadID>) -> Self {
         let tid = tid.unwrap_or(0);
         let thread_count = config.get_routing_thread_count();
@@ -291,7 +321,15 @@ impl KVSClient {
         Ok(tuple)
     }
 
-    /// Perform a blocking GET for a LWW key, returning the value as a String.
+    /// Retrieve a value by key (Last-Writer-Wins lattice).
+    ///
+    /// ```rust,no_run
+    /// # async fn example(client: &mut annalib::kvs_client::KVSClient) -> annalib::Result<()> {
+    /// let value = client.get("my_key").await?;
+    /// println!("Got: {}", value);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn get<K: AsRef<str> + Display>(&mut self, key: K) -> Result<String> {
         debug!("GET: {}", key);
         let response = self
@@ -306,7 +344,14 @@ impl KVSClient {
         Ok(String::from_utf8_lossy(&lww.value).to_string())
     }
 
-    /// Perform a blocking PUT of a LWW key-value pair.
+    /// Store a key-value pair (Last-Writer-Wins lattice).
+    ///
+    /// ```rust,no_run
+    /// # async fn example(client: &mut annalib::kvs_client::KVSClient) -> annalib::Result<()> {
+    /// client.put("my_key", "my_value").await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn put<K: AsRef<str> + Display>(&mut self, key: K, value: &str) -> Result<()> {
         debug!("PUT: {} <- {}", key, value);
         let lww = LwwValue {
@@ -329,7 +374,17 @@ impl KVSClient {
         Ok(())
     }
 
-    /// Perform a blocking GET for a Set key, returning the values.
+    /// Retrieve a set of values by key (Set lattice).
+    ///
+    /// ```rust,no_run
+    /// # async fn example(client: &mut annalib::kvs_client::KVSClient) -> annalib::Result<()> {
+    /// let values = client.get_set("my_set").await?;
+    /// for v in &values {
+    ///     println!("  {}", v);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     #[cfg(feature = "set")]
     pub async fn get_set<K: AsRef<str> + Display>(&mut self, key: K) -> Result<Vec<String>> {
         debug!("GET SET: {}", key);
@@ -349,7 +404,14 @@ impl KVSClient {
             .collect())
     }
 
-    /// Perform a blocking PUT of a Set key with the given values.
+    /// Store a set of values by key (Set lattice, union semantics).
+    ///
+    /// ```rust,no_run
+    /// # async fn example(client: &mut annalib::kvs_client::KVSClient) -> annalib::Result<()> {
+    /// client.put_set("my_set", &["a", "b", "c"]).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     #[cfg(feature = "set")]
     pub async fn put_set<K: AsRef<str> + Display>(
         &mut self,
