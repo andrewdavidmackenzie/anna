@@ -218,15 +218,8 @@ async fn cli_loop_interactive(
     }
 
     loop {
-        let line = tokio::task::spawn_blocking({
-            let mut rl_clone = Editor::<AnnaCompleter, rustyline::history::DefaultHistory>::new()
-                .expect("Failed to create editor");
-            move || rl_clone.readline("anna> ")
-        })
-        .await
-        .map_err(|e| CliError::Other(format!("readline task failed: {}", e)))?;
-
-        match line {
+        let readline = rl.readline("anna> ");
+        match readline {
             Ok(line) => {
                 let _ = rl.add_history_entry(&line);
                 if let Err(e) = execute_command(&mut client, &line, &config_file_path).await {

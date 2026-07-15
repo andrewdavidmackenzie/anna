@@ -103,22 +103,23 @@ impl KVSClient {
             .key_address_connect_address()
     }
 
-    async fn get_socket(&mut self, addr: &str) -> &mut PushSocket {
+    async fn get_socket(&mut self, addr: &str) -> Result<&mut PushSocket> {
         if !self.socket_cache.contains_key(addr) {
             let mut sock = PushSocket::new();
             sock.connect(addr)
                 .await
-                .expect("Failed to connect PUSH socket");
+                .map_err(|e| Error::Kvs(format!("Failed to connect to {}: {}", addr, e)))?;
             self.socket_cache.insert(addr.to_string(), sock);
         }
-        self.socket_cache.get_mut(addr).expect("socket just inserted")
+        Ok(self.socket_cache.get_mut(addr).expect("socket just inserted"))
     }
 
-    async fn send_request(&mut self, msg: &[u8], addr: &str) {
-        let sock = self.get_socket(addr).await;
+    async fn send_request(&mut self, msg: &[u8], addr: &str) -> Result<()> {
+        let sock = self.get_socket(addr).await?;
         sock.send(msg.to_vec().into())
             .await
-            .expect("Failed to send ZMQ message");
+            .map_err(|e| Error::Kvs(format!("Failed to send: {}", e)))?;
+        Ok(())
     }
 
     async fn recv_response(&mut self, use_key_address: bool) -> Option<Vec<u8>> {
@@ -146,7 +147,7 @@ impl KVSClient {
 
         let rt_thread = self.get_routing_thread();
         let encoded = request.encode_to_vec();
-        self.send_request(&encoded, &rt_thread).await;
+        self.send_request(&encoded, &rt_thread).await.ok();
 
         match self.recv_response(true).await {
             Some(data) => {
@@ -233,7 +234,7 @@ impl KVSClient {
         request.tuples.push(tuple);
 
         let encoded = request.encode_to_vec();
-        self.send_request(&encoded, &worker).await;
+        if self.send_request(&encoded, &worker).await.is_err() { return None; }
 
         match self.recv_response(false).await {
             Some(data) => match KeyResponse::decode(data.as_slice()) {
