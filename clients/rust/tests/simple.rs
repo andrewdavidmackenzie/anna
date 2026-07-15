@@ -1,9 +1,15 @@
-mod common;
-
-use common::anna_binary;
 use std::env;
 use std::path::PathBuf;
 use std::process::Command;
+
+fn anna_binary() -> PathBuf {
+    let mut path = env::current_exe().expect("Could not get test executable path");
+    path.pop();
+    if path.ends_with("deps") {
+        path.pop();
+    }
+    path.join("anna")
+}
 
 fn repo_root() -> PathBuf {
     let mut root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
