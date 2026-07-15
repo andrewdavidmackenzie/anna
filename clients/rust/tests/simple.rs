@@ -97,30 +97,6 @@ fn run_test(
         .output()
 }
 
-fn run_golden_test(input_dir: &Path, work_dir: &Path) -> io::Result<()> {
-    let config = config_file();
-    let path = server_path();
-
-    start_servers(&path, &config);
-    let _guard = ServerGuard {
-        path: path.clone(),
-        config: config.clone(),
-    };
-
-    let input_file = input_dir.join("input");
-    run_test(&input_file, work_dir, &path, &config)?;
-
-    check_test_output(input_dir, work_dir);
-
-    let _ = fs::remove_file(work_dir.join("test.err"));
-    let _ = fs::remove_file(work_dir.join("test.output"));
-    let _ = fs::remove_file(work_dir.join("client_log.txt"));
-    let _ = fs::remove_file(work_dir.join("log.txt"));
-    let _ = fs::remove_file(work_dir.join("log_0.txt"));
-
-    Ok(())
-}
-
 fn repo_root() -> PathBuf {
     let mut root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     root.pop(); // clients
@@ -130,19 +106,34 @@ fn repo_root() -> PathBuf {
 
 #[test]
 #[cfg(unix)]
-fn simple_test() {
+fn cli_golden_tests() {
     let test_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
         .join("simple");
-    run_golden_test(&test_dir, &test_dir).expect("simple_test failed");
-}
-
-#[test]
-#[cfg(unix)]
-fn shared_cli_test() {
     let shared_dir = repo_root().join("tests").join("shared").join("cli");
-    let work_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("simple");
-    run_golden_test(&shared_dir, &work_dir).expect("shared_cli_test failed");
+
+    let config = config_file();
+    let path = server_path();
+
+    start_servers(&path, &config);
+    let _guard = ServerGuard {
+        path: path.clone(),
+        config: config.clone(),
+    };
+
+    // Run shared golden test
+    let input_file = shared_dir.join("input");
+    run_test(&input_file, &test_dir, &path, &config).expect("shared cli test run failed");
+    check_test_output(&shared_dir, &test_dir);
+
+    // Run client-specific golden test
+    let input_file = test_dir.join("input");
+    run_test(&input_file, &test_dir, &path, &config).expect("simple test run failed");
+    check_test_output(&test_dir, &test_dir);
+
+    let _ = fs::remove_file(test_dir.join("test.err"));
+    let _ = fs::remove_file(test_dir.join("test.output"));
+    let _ = fs::remove_file(test_dir.join("client_log.txt"));
+    let _ = fs::remove_file(test_dir.join("log.txt"));
+    let _ = fs::remove_file(test_dir.join("log_0.txt"));
 }
