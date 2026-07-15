@@ -5,3 +5,44 @@ ignore:
   - "**/test_*.cpp"
   - "**/*_test.go"
   - "**/*.pb.go"
+
+comment:
+  layout: "header, diff, components"
+
+component_management:
+  default_rules:
+    statuses:
+      - type: project
+        target: auto
+      - type: patch
+        target: auto
+  individual_components:
+    - component_id: rust-client
+      name: Rust Client
+      paths:
+        - clients/rust/
+    - component_id: cpp-client
+      name: C++ Client
+      paths:
+        - clients/cpp/
+    - component_id: cpp-server
+      name: C++ Server
+      paths:
+        - server/cpp/
+    - component_id: python-client
+      name: Python Client
+      paths:
+        - clients/python/
+    - component_id: go-client
+      name: Go Client
+      paths:
+        - clients/go/
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+    patch:
+      default:
+        target: auto
