@@ -37,6 +37,7 @@ func startServers(t *testing.T) {
 		cmd := exec.Command(proc, "--config", config)
 		cmd.Env = append(os.Environ(), "PATH="+path)
 		if err := cmd.Start(); err != nil {
+			stopServers()
 			t.Fatalf("Failed to start %s: %v", proc, err)
 		}
 		time.Sleep(time.Second)
@@ -50,6 +51,7 @@ func startServers(t *testing.T) {
 			break
 		}
 		if time.Now().After(deadline) {
+			stopServers()
 			t.Fatal("Routing tier did not start within 30 seconds")
 		}
 		time.Sleep(500 * time.Millisecond)
@@ -142,11 +144,13 @@ func TestSystemKVSClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET_SET after union failed: %v", err)
 	}
-	if len(setVal) < 3 {
-		t.Errorf("Expected at least 3 elements, got %d", len(setVal))
+	for _, expected := range []string{"w", "x", "y", "z"} {
+		if !contains(setVal, expected) {
+			t.Errorf("GET_SET after union missing %q, got %v", expected, setVal)
+		}
 	}
-	if !contains(setVal, "x") || !contains(setVal, "w") {
-		t.Errorf("GET_SET after union missing expected values, got %v", setVal)
+	if len(setVal) != 4 {
+		t.Errorf("Expected 4 elements after union, got %d: %v", len(setVal), setVal)
 	}
 }
 
