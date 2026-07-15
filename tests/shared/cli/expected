@@ -4,3 +4,6 @@
 hello_world
 { x y z }
 { w x y z }
+{test : 1}
+dep1 : {test1 : 1}
+hello

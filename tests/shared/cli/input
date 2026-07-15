@@ -10,3 +10,5 @@ PUT_SET myset x y z
 GET_SET myset
 PUT_SET myset x y w
 GET_SET myset
+PUT_CAUSAL d hello
+GET_CAUSAL d

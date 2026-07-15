@@ -26,6 +26,12 @@ from .kvs_pb2 import (
 )
 from .base_client import BaseAnnaClient
 from .common import UserThread
+from .lattices import (
+    MultiKeyCausalLattice,
+    SetLattice,
+    MapLattice,
+    VectorClock,
+)
 from .zmq_util import (
     recv_response,
     send_request,
@@ -258,6 +264,18 @@ class AnnaTcpClient(BaseAnnaClient):
     # the client that its cache is out of date.
     def _invalidate_cache(self, key):
         del self.address_cache[key]
+
+    def get_causal(self, key):
+        result = self.get([key])
+        return result.get(key)
+
+    def put_causal(self, key, value):
+        vc = VectorClock({"test": 1}, True)
+        dep_vc = VectorClock({"test1": 1}, True)
+        deps = MapLattice({"dep1": dep_vc})
+        val = SetLattice({value.encode() if isinstance(value, str) else value})
+        lattice = MultiKeyCausalLattice(vc, deps, val)
+        return self.put(key, lattice)
 
     # Returns and increments a request ID. Loops back after 10,000 requests.
     def _get_request_id(self):

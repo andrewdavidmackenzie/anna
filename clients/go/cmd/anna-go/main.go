@@ -143,6 +143,33 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 			return false, err
 		}
 
+	case "GET_CAUSAL":
+		if len(parts) != 2 {
+			return false, fmt.Errorf("usage: GET_CAUSAL <key>")
+		}
+		cv, err := client.GetCausal(parts[1])
+		if err != nil {
+			return false, err
+		}
+		for k, v := range cv.VectorClock {
+			fmt.Printf("{%s : %d}\n", k, v)
+		}
+		for depKey, vc := range cv.Dependencies {
+			fmt.Printf("%s : ", depKey)
+			for k, v := range vc {
+				fmt.Printf("{%s : %d}\n", k, v)
+			}
+		}
+		fmt.Println(cv.Value)
+
+	case "PUT_CAUSAL":
+		if len(parts) != 3 {
+			return false, fmt.Errorf("usage: PUT_CAUSAL <key> <value>")
+		}
+		if err := client.PutCausal(parts[1], parts[2]); err != nil {
+			return false, err
+		}
+
 	case "START":
 		count, err := annalib.Start(configFilePath)
 		if err != nil {
@@ -179,6 +206,8 @@ func cliUsage() string {
 	put {key} {value} 		- set entry with key = {key} in the KVS to have value = {value}
 	get_set {key} 			- get the value of the set with key = {key} in the KVS
 	put_set {key} {set} 		- set the value of the set with key = {key} in the KVS
+	get_causal {key} 		- causal get of value with key = {key} in the KVS
+	put_causal {key} {value} 	- causal set of value with key = {key} in the KVS
 	start 				- start anna processes
 	stop 				- stop running anna processes
 	status 				- print the status of anna processes

@@ -72,6 +72,25 @@ def execute_command(client, config_path, line):
         result = client.put(parts[1], val)
         if not result.get(parts[1], False):
             print("Failure!")
+    elif cmd == "GET_CAUSAL":
+        val = client.get_causal(parts[1])
+        if val is not None:
+            for k, v in val.vector_clock.reveal().items():
+                print("{" + f"{k} : {v.reveal()}" + "}")
+            for dep_key, vc in val.dependencies.reveal().items():
+                dep_str = ""
+                for k, v in vc.reveal().items():
+                    dep_str = "{" + f"{k} : {v.reveal()}" + "}"
+                print(f"{dep_key} : {dep_str}")
+            values = val.value.reveal()
+            for v in values:
+                print(v.decode("utf-8") if isinstance(v, bytes) else str(v))
+        else:
+            print("Key not found")
+    elif cmd == "PUT_CAUSAL":
+        result = client.put_causal(parts[1], parts[2])
+        if not result.get(parts[1], False):
+            print("Failure!")
     elif cmd == "START":
         count = start(config_path)
         print(f"{count} anna processes were started")

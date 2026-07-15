@@ -7,7 +7,9 @@
 use std::env;
 use std::process::exit;
 
-use annalib::{completer::AnnaCompleter, config::Config, info, kvs_client::KVSClient, start, status, stop};
+use annalib::{
+    completer::AnnaCompleter, config::Config, info, kvs_client::KVSClient, start, status, stop,
+};
 use clap::{Arg, ArgMatches, Command};
 use log::{debug, error};
 use rustyline::Editor;
@@ -62,12 +64,14 @@ async fn main() {
 
 fn get_config_path(args: &ArgMatches) -> Result<PathBuf> {
     match args.get_one::<String>("config").map(|s| s.as_str()) {
-        Some(config_file) => PathBuf::from(config_file)
-            .canonicalize()
-            .map_err(|e| CliError::ConfigFile {
-                path: config_file.into(),
-                detail: format!("Could not canonicalize: {}", e),
-            }),
+        Some(config_file) => {
+            PathBuf::from(config_file)
+                .canonicalize()
+                .map_err(|e| CliError::ConfigFile {
+                    path: config_file.into(),
+                    detail: format!("Could not canonicalize: {}", e),
+                })
+        }
         None => PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join(DEFAULT_CONFIG_FILENAME)
             .canonicalize()
@@ -106,7 +110,10 @@ async fn run() -> Result<String> {
             let config_path = get_config_path(&matches)?;
             let config = Config::read(&config_path)?;
             let client = KVSClient::new(&config, None).await;
-            Ok(match arg_matches.get_one::<String>("command_file").map(|s| s.as_str()) {
+            Ok(match arg_matches
+                .get_one::<String>("command_file")
+                .map(|s| s.as_str())
+            {
                 None => cli_loop_interactive(client, config_path).await?,
                 Some(filename) => cli_loop_file(client, filename, config_path).await?,
             }
@@ -146,7 +153,19 @@ async fn execute_command(
         "GET" if split.len() == 2 => println!("{}", client.get(split[1]).await?),
         "PUT" if split.len() == 3 => client.put(split[1], split[2]).await?,
         #[cfg(feature = "causal")]
-        "GET_CAUSAL" if split.len() == 2 => println!("{}", client.get_causal(split[1]).await?),
+        "GET_CAUSAL" if split.len() == 2 => {
+            let (vc, deps, value) = client.get_causal(split[1]).await?;
+            for (k, v) in &vc {
+                println!("{{{} : {}}}", k, v);
+            }
+            for (dep_key, dep_vc) in &deps {
+                for (k, v) in dep_vc {
+                    print!("{} : ", dep_key);
+                    println!("{{{} : {}}}", k, v);
+                }
+            }
+            println!("{}", value);
+        }
         #[cfg(feature = "causal")]
         "PUT_CAUSAL" if split.len() == 3 => client.put_causal(split[1], split[2]).await?,
         #[cfg(feature = "set")]
@@ -266,7 +285,6 @@ async fn cli_loop_file(
 
     Ok("")
 }
-
 
 fn get_app() -> Command {
     Command::new(env!("CARGO_PKG_NAME"))
