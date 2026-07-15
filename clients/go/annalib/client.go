@@ -14,13 +14,23 @@ import (
 	kvspb "github.com/andrewdavidmackenzie/anna/clients/go/annalib/proto/kvs"
 )
 
+type transport interface {
+	sendRequest(msg []byte, addr string) error
+	recvResponse(useKeyAddress bool) ([]byte, error)
+	close() error
+}
+
 // KVSClient communicates with the Anna KVS via ZeroMQ.
 type KVSClient struct {
-	routingThreads   []*UserRoutingThread
-	rid              int
-	ut               *UserThread
-	rng              *rand.Rand
-	keyAddressCache  map[string][]string
+	routingThreads  []*UserRoutingThread
+	rid             int
+	ut              *UserThread
+	rng             *rand.Rand
+	keyAddressCache map[string][]string
+	tp              transport
+}
+
+type zmqTransport struct {
 	timeout          time.Duration
 	socketCache      map[string]zmq4.Socket
 	keyAddressPuller zmq4.Socket
@@ -62,27 +72,35 @@ func NewKVSClient(config *Config, tid int) (*KVSClient, error) {
 		return nil, fmt.Errorf("failed to bind response puller: %w", err)
 	}
 
-	return &KVSClient{
-		routingThreads:   routingThreads,
-		rid:              0,
-		ut:               ut,
-		rng:              rng,
-		keyAddressCache:  make(map[string][]string),
+	tp := &zmqTransport{
 		timeout:          10 * time.Second,
 		socketCache:      make(map[string]zmq4.Socket),
 		keyAddressPuller: keyAddressPuller,
 		responsePuller:   responsePuller,
 		ctx:              ctx,
+	}
+
+	return &KVSClient{
+		routingThreads:  routingThreads,
+		rid:             0,
+		ut:              ut,
+		rng:             rng,
+		keyAddressCache: make(map[string][]string),
+		tp:              tp,
 	}, nil
 }
 
 // Close tears down all ZMQ sockets.
 func (c *KVSClient) Close() error {
-	for _, sock := range c.socketCache {
+	return c.tp.close()
+}
+
+func (t *zmqTransport) close() error {
+	for _, sock := range t.socketCache {
 		_ = sock.Close()
 	}
-	_ = c.keyAddressPuller.Close()
-	return c.responsePuller.Close()
+	_ = t.keyAddressPuller.Close()
+	return t.responsePuller.Close()
 }
 
 func generateSeed(ip string, tid int) int64 {
@@ -105,33 +123,33 @@ func (c *KVSClient) getRoutingThread() string {
 	return c.routingThreads[idx].KeyAddressConnectAddress()
 }
 
-func (c *KVSClient) getSocket(addr string) (zmq4.Socket, error) {
-	if sock, ok := c.socketCache[addr]; ok {
+func (t *zmqTransport) getSocket(addr string) (zmq4.Socket, error) {
+	if sock, ok := t.socketCache[addr]; ok {
 		return sock, nil
 	}
-	sock := zmq4.NewPush(c.ctx)
+	sock := zmq4.NewPush(t.ctx)
 	if err := sock.Dial(addr); err != nil {
 		return nil, &KVSError{Message: fmt.Sprintf("failed to connect to %s: %v", addr, err)}
 	}
-	c.socketCache[addr] = sock
+	t.socketCache[addr] = sock
 	return sock, nil
 }
 
-func (c *KVSClient) sendRequest(msg []byte, addr string) error {
-	sock, err := c.getSocket(addr)
+func (t *zmqTransport) sendRequest(msg []byte, addr string) error {
+	sock, err := t.getSocket(addr)
 	if err != nil {
 		return err
 	}
 	return sock.Send(zmq4.NewMsg(msg))
 }
 
-func (c *KVSClient) recvResponse(useKeyAddress bool) ([]byte, error) {
-	sock := c.responsePuller
+func (t *zmqTransport) recvResponse(useKeyAddress bool) ([]byte, error) {
+	sock := t.responsePuller
 	if useKeyAddress {
-		sock = c.keyAddressPuller
+		sock = t.keyAddressPuller
 	}
 
-	ctx, cancel := context.WithTimeout(c.ctx, c.timeout)
+	ctx, cancel := context.WithTimeout(t.ctx, t.timeout)
 	defer cancel()
 
 	done := make(chan struct{})
@@ -157,40 +175,23 @@ func (c *KVSClient) recvResponse(useKeyAddress bool) ([]byte, error) {
 	}
 }
 
-func (c *KVSClient) queryRouting(key string) []string {
+func buildRoutingRequest(requestID, responseAddr, key string) ([]byte, error) {
 	request := &kvspb.KeyAddressRequest{
-		RequestId:       c.getRequestID(),
-		ResponseAddress: c.ut.KeyAddressConnectAddress(),
+		RequestId:       requestID,
+		ResponseAddress: responseAddr,
 		Keys:            []string{key},
 	}
+	return proto.Marshal(request)
+}
 
-	encoded, err := proto.Marshal(request)
-	if err != nil {
-		log.Printf("failed to encode routing request: %v", err)
-		return nil
-	}
-
-	rtThread := c.getRoutingThread()
-	if err := c.sendRequest(encoded, rtThread); err != nil {
-		log.Printf("failed to send routing request: %v", err)
-		return nil
-	}
-
-	data, err := c.recvResponse(true)
-	if err != nil || data == nil {
-		log.Printf("routing query timed out for key %s", key)
-		return nil
-	}
-
+func parseRoutingResponse(data []byte, key string) ([]string, error) {
 	var response kvspb.KeyAddressResponse
 	if err := proto.Unmarshal(data, &response); err != nil {
-		log.Printf("failed to decode routing response: %v", err)
-		return nil
+		return nil, fmt.Errorf("failed to decode routing response: %w", err)
 	}
 
 	if response.Error != kvspb.AnnaError_NO_ERROR {
-		log.Printf("routing query returned error %d", response.Error)
-		return nil
+		return nil, fmt.Errorf("routing query returned error %d", response.Error)
 	}
 
 	var addrs []string
@@ -198,6 +199,33 @@ func (c *KVSClient) queryRouting(key string) []string {
 		if addr.Key == key {
 			addrs = append(addrs, addr.Ips...)
 		}
+	}
+	return addrs, nil
+}
+
+func (c *KVSClient) queryRouting(key string) []string {
+	encoded, err := buildRoutingRequest(c.getRequestID(), c.ut.KeyAddressConnectAddress(), key)
+	if err != nil {
+		log.Printf("failed to encode routing request: %v", err)
+		return nil
+	}
+
+	rtThread := c.getRoutingThread()
+	if err := c.tp.sendRequest(encoded, rtThread); err != nil {
+		log.Printf("failed to send routing request: %v", err)
+		return nil
+	}
+
+	data, err := c.tp.recvResponse(true)
+	if err != nil || data == nil {
+		log.Printf("routing query timed out for key %s", key)
+		return nil
+	}
+
+	addrs, err := parseRoutingResponse(data, key)
+	if err != nil {
+		log.Printf("%v", err)
+		return nil
 	}
 	return addrs
 }
@@ -216,38 +244,91 @@ func (c *KVSClient) getWorkerAddress(key string) (string, bool) {
 	return addrs[idx], true
 }
 
+func buildDataRequest(requestID, responseAddr, key string, reqType kvspb.RequestType, latticeType kvspb.LatticeType, payload []byte, cacheSize uint32) ([]byte, error) {
+	tuple := &kvspb.KeyTuple{
+		Key:              key,
+		LatticeType:      latticeType,
+		Payload:          payload,
+		AddressCacheSize: cacheSize,
+	}
+
+	request := &kvspb.KeyRequest{
+		RequestId:       requestID,
+		ResponseAddress: responseAddr,
+		Type:            reqType,
+		Tuples:          []*kvspb.KeyTuple{tuple},
+	}
+
+	return proto.Marshal(request)
+}
+
+func parseDataResponse(data []byte) (*kvspb.KeyResponse, error) {
+	var response kvspb.KeyResponse
+	if err := proto.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return &response, nil
+}
+
+func buildLWWPayload(value string) ([]byte, error) {
+	lww := &kvspb.LWWValue{
+		Timestamp: generateTimestamp(),
+		Value:     []byte(value),
+	}
+	return proto.Marshal(lww)
+}
+
+func parseLWWPayload(payload []byte) (string, error) {
+	var lww kvspb.LWWValue
+	if err := proto.Unmarshal(payload, &lww); err != nil {
+		return "", fmt.Errorf("failed to decode LWW value: %w", err)
+	}
+	return string(lww.Value), nil
+}
+
+func buildSetPayload(values []string) ([]byte, error) {
+	setVal := &kvspb.SetValue{
+		Values: make([][]byte, len(values)),
+	}
+	for i, v := range values {
+		setVal.Values[i] = []byte(v)
+	}
+	return proto.Marshal(setVal)
+}
+
+func parseSetPayload(payload []byte) ([]string, error) {
+	var setVal kvspb.SetValue
+	if err := proto.Unmarshal(payload, &setVal); err != nil {
+		return nil, fmt.Errorf("failed to decode Set value: %w", err)
+	}
+	values := make([]string, len(setVal.Values))
+	for i, v := range setVal.Values {
+		values[i] = string(v)
+	}
+	return values, nil
+}
+
 func (c *KVSClient) sendDataRequest(key string, reqType kvspb.RequestType, latticeType kvspb.LatticeType, payload []byte) (*kvspb.KeyResponse, error) {
 	worker, ok := c.getWorkerAddress(key)
 	if !ok {
 		return nil, &KVSError{Message: fmt.Sprintf("no worker address for key %s", key)}
 	}
 
-	tuple := &kvspb.KeyTuple{
-		Key:         key,
-		LatticeType: latticeType,
-		Payload:     payload,
-	}
+	var cacheSize uint32
 	if cached, ok := c.keyAddressCache[key]; ok {
-		tuple.AddressCacheSize = uint32(len(cached))
+		cacheSize = uint32(len(cached))
 	}
 
-	request := &kvspb.KeyRequest{
-		RequestId:       c.getRequestID(),
-		ResponseAddress: c.ut.ResponseConnectAddress(),
-		Type:            reqType,
-		Tuples:          []*kvspb.KeyTuple{tuple},
-	}
-
-	encoded, err := proto.Marshal(request)
+	encoded, err := buildDataRequest(c.getRequestID(), c.ut.ResponseConnectAddress(), key, reqType, latticeType, payload, cacheSize)
 	if err != nil {
 		return nil, &KVSError{Message: fmt.Sprintf("failed to encode request: %v", err)}
 	}
 
-	if err := c.sendRequest(encoded, worker); err != nil {
+	if err := c.tp.sendRequest(encoded, worker); err != nil {
 		return nil, err
 	}
 
-	data, err := c.recvResponse(false)
+	data, err := c.tp.recvResponse(false)
 	if err != nil {
 		return nil, &KVSError{Message: fmt.Sprintf("failed to receive response: %v", err)}
 	}
@@ -256,16 +337,16 @@ func (c *KVSClient) sendDataRequest(key string, reqType kvspb.RequestType, latti
 		return nil, &KVSError{Message: fmt.Sprintf("%s: request timed out", key)}
 	}
 
-	var response kvspb.KeyResponse
-	if err := proto.Unmarshal(data, &response); err != nil {
-		return nil, &KVSError{Message: fmt.Sprintf("failed to decode response: %v", err)}
+	response, err := parseDataResponse(data)
+	if err != nil {
+		return nil, &KVSError{Message: err.Error()}
 	}
 
 	if len(response.Tuples) > 0 && response.Tuples[0].Invalidate {
 		delete(c.keyAddressCache, key)
 	}
 
-	return &response, nil
+	return response, nil
 }
 
 func generateTimestamp() uint64 {
@@ -314,22 +395,14 @@ func (c *KVSClient) Get(key string) (string, error) {
 		return "", err
 	}
 
-	var lww kvspb.LWWValue
-	if err := proto.Unmarshal(tuple.Payload, &lww); err != nil {
-		return "", &KVSError{Message: fmt.Sprintf("GET: failed to decode LWW value: %v", err)}
-	}
-	return string(lww.Value), nil
+	return parseLWWPayload(tuple.Payload)
 }
 
 // Put stores a key-value pair (LWW lattice).
 func (c *KVSClient) Put(key, value string) error {
-	lww := &kvspb.LWWValue{
-		Timestamp: generateTimestamp(),
-		Value:     []byte(value),
-	}
-	payload, err := proto.Marshal(lww)
+	payload, err := buildLWWPayload(value)
 	if err != nil {
-		return &KVSError{Message: fmt.Sprintf("PUT: failed to encode LWW value: %v", err)}
+		return &KVSError{Message: fmt.Sprintf("PUT: %v", err)}
 	}
 
 	response, err := c.sendDataRequest(key, kvspb.RequestType_PUT, kvspb.LatticeType_LWW, payload)
@@ -353,29 +426,14 @@ func (c *KVSClient) GetSet(key string) ([]string, error) {
 		return nil, err
 	}
 
-	var setVal kvspb.SetValue
-	if err := proto.Unmarshal(tuple.Payload, &setVal); err != nil {
-		return nil, &KVSError{Message: fmt.Sprintf("GET_SET: failed to decode Set value: %v", err)}
-	}
-
-	values := make([]string, len(setVal.Values))
-	for i, v := range setVal.Values {
-		values[i] = string(v)
-	}
-	return values, nil
+	return parseSetPayload(tuple.Payload)
 }
 
 // PutSet stores a set of values by key (Set lattice, union semantics).
 func (c *KVSClient) PutSet(key string, values []string) error {
-	setVal := &kvspb.SetValue{
-		Values: make([][]byte, len(values)),
-	}
-	for i, v := range values {
-		setVal.Values[i] = []byte(v)
-	}
-	payload, err := proto.Marshal(setVal)
+	payload, err := buildSetPayload(values)
 	if err != nil {
-		return &KVSError{Message: fmt.Sprintf("PUT_SET: failed to encode Set value: %v", err)}
+		return &KVSError{Message: fmt.Sprintf("PUT_SET: %v", err)}
 	}
 
 	response, err := c.sendDataRequest(key, kvspb.RequestType_PUT, kvspb.LatticeType_SET, payload)
