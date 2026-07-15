@@ -201,6 +201,14 @@ mod test {
     use std::path::PathBuf;
 
     #[test]
+    fn default_config() {
+        let config = Config::default();
+        assert_eq!(config.get_user_ip(), "127.0.0.1");
+        assert_eq!(config.get_routing_thread_count(), 1);
+        assert_eq!(config.get_routing_ips(), &vec!["127.0.0.1".to_string()]);
+    }
+
+    #[test]
     fn routing_ips_no_elb() {
         let config = Config::read(&PathBuf::from("src/lib/test_config.yml"))
             .expect("Could not read the 'test_config.yml' config file");

@@ -301,3 +301,39 @@ fn get_app() -> Command {
         .subcommand(Command::new("stop").about("Stop the KVS server processes"))
         .subcommand(Command::new("status").about("Report status of KVS server processes"))
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn format_status_no_processes() {
+        let status = vec![
+            ("anna-monitor".into(), vec![]),
+            ("anna-route".into(), vec![]),
+        ];
+        let output = format_status(status);
+        assert!(output.contains("anna-monitor"));
+        assert!(output.contains("is not running"));
+    }
+
+    #[test]
+    fn format_status_with_pids() {
+        let status = vec![("anna-kvs".into(), vec![1234, 5678])];
+        let output = format_status(status);
+        assert!(output.contains("anna-kvs"));
+        assert!(output.contains("1234"));
+        assert!(output.contains("5678"));
+    }
+
+    #[test]
+    fn cli_usage_contains_commands() {
+        let usage = cli_usage();
+        assert!(usage.contains("get"));
+        assert!(usage.contains("put"));
+        assert!(usage.contains("start"));
+        assert!(usage.contains("stop"));
+        assert!(usage.contains("status"));
+        assert!(usage.contains("exit"));
+    }
+}
