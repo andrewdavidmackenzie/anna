@@ -475,10 +475,10 @@ class MultiKeyCausalLattice(Lattice):
 
         # Serialize the vector clocks for each of the keys this lattice depends
         # on.
-        for key in self.dependencies:
-            kv = multi_key_causal_value.add_dependences()
+        for key, vc in self.dependencies.reveal().items():
+            kv = multi_key_causal_value.dependencies.add()
             kv.key = key
-            self.dependencies[key].serialize(kv.vector_clock)
+            vc.serialize(kv.vector_clock)
 
         # Add the value(s) stored by this lattice.
         for v in self.value.reveal():
