@@ -155,14 +155,21 @@ async fn execute_command(
         #[cfg(feature = "causal")]
         "GET_CAUSAL" if split.len() == 2 => {
             let (vc, deps, value) = client.get_causal(split[1]).await?;
-            for (k, v) in &vc {
+            let mut sorted_vc: Vec<_> = vc.iter().collect();
+            sorted_vc.sort_by_key(|(k, _)| k.clone());
+            for (k, v) in &sorted_vc {
                 println!("{{{} : {}}}", k, v);
             }
-            for (dep_key, dep_vc) in &deps {
-                for (k, v) in dep_vc {
-                    print!("{} : ", dep_key);
-                    println!("{{{} : {}}}", k, v);
-                }
+            let mut sorted_deps = deps.clone();
+            sorted_deps.sort_by(|(a, _), (b, _)| a.cmp(b));
+            for (dep_key, dep_vc) in &sorted_deps {
+                let mut sorted_dep_vc: Vec<_> = dep_vc.iter().collect();
+                sorted_dep_vc.sort_by_key(|(k, _)| k.clone());
+                let vc_str: Vec<String> = sorted_dep_vc
+                    .iter()
+                    .map(|(k, v)| format!("{{{} : {}}}", k, v))
+                    .collect();
+                println!("{} : {}", dep_key, vc_str.join(" "));
             }
             println!("{}", value);
         }

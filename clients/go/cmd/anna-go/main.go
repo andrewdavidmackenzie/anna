@@ -5,10 +5,29 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	annalib "github.com/andrewdavidmackenzie/anna/clients/go/annalib"
 )
+
+func sortedKeys(m map[string]uint32) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedStringKeys(m map[string]map[string]uint32) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
 
 func main() {
 	configFile := "default-config.yml"
@@ -151,14 +170,18 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 		if err != nil {
 			return false, err
 		}
-		for k, v := range cv.VectorClock {
-			fmt.Printf("{%s : %d}\n", k, v)
+		vcKeys := sortedKeys(cv.VectorClock)
+		for _, k := range vcKeys {
+			fmt.Printf("{%s : %d}\n", k, cv.VectorClock[k])
 		}
-		for depKey, vc := range cv.Dependencies {
-			fmt.Printf("%s : ", depKey)
-			for k, v := range vc {
-				fmt.Printf("{%s : %d}\n", k, v)
+		depKeys := sortedStringKeys(cv.Dependencies)
+		for _, depKey := range depKeys {
+			vc := cv.Dependencies[depKey]
+			var vcParts []string
+			for _, k := range sortedKeys(vc) {
+				vcParts = append(vcParts, fmt.Sprintf("{%s : %d}", k, vc[k]))
 			}
+			fmt.Printf("%s : %s\n", depKey, strings.Join(vcParts, " "))
 		}
 		fmt.Println(cv.Value)
 

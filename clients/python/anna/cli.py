@@ -75,13 +75,14 @@ def execute_command(client, config_path, line):
     elif cmd == "GET_CAUSAL":
         val = client.get_causal(parts[1])
         if val is not None:
-            for k, v in val.vector_clock.reveal().items():
+            for k, v in sorted(val.vector_clock.reveal().items()):
                 print("{" + f"{k} : {v.reveal()}" + "}")
-            for dep_key, vc in val.dependencies.reveal().items():
-                dep_str = ""
-                for k, v in vc.reveal().items():
-                    dep_str = "{" + f"{k} : {v.reveal()}" + "}"
-                print(f"{dep_key} : {dep_str}")
+            for dep_key, vc in sorted(val.dependencies.reveal().items()):
+                vc_parts = " ".join(
+                    "{" + f"{k} : {v.reveal()}" + "}"
+                    for k, v in sorted(vc.reveal().items())
+                )
+                print(f"{dep_key} : {vc_parts}")
             values = val.value.reveal()
             for v in values:
                 print(v.decode("utf-8") if isinstance(v, bytes) else str(v))
