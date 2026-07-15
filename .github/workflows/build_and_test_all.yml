@@ -63,5 +63,5 @@ jobs:
     - uses: codecov/codecov-action@v2
       if: matrix.os == 'macos-latest'
       with:
-        files: rust_workspace.info,server/cpp/build/server.info,clients/cpp/build/client.info,clients/python/coverage.xml
+        files: rust_workspace.info,server/cpp/build/server.info,clients/cpp/build/client.info,clients/python/coverage.xml,clients/go/annalib/coverage.out
         token: ${{ secrets.CODECOV_TOKEN }}
