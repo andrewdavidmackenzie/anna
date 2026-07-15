@@ -101,7 +101,7 @@ class BaseAnnaClient:
             # Deserialize the vector_clock stored in the Protobuf into a
             # MapLattice, where each value is a MaxIntLattice of the VC
             # counter.
-            vc = VectorClock(val.vector_clock, True)
+            vc = VectorClock(dict(val.vector_clock), True)
 
             # Deserialize the set of dependencies of this key into a MapLattice
             # where the keys are names of other KVS keys and the values are
@@ -109,11 +109,11 @@ class BaseAnnaClient:
             dep_map = {}
             for kv in val.dependencies:
                 key = kv.key
-                dep_map[key] = VectorClock(kv.vector_clock, True)
+                dep_map[key] = VectorClock(dict(kv.vector_clock), True)
 
             # Create a SetLattice with the value(s) stored by this lattice.
             values = set()
-            for v in val.values():
+            for v in val.values:
                 values.add(v)
 
             dependencies = MapLattice(dep_map)
@@ -156,11 +156,11 @@ class BaseAnnaClient:
             # Deserialize the vector_clock stored in the Protobuf into a
             # MapLattice, where each value is a MaxIntLattice of the VC
             # counter.
-            vc = VectorClock(val.vector_clock, True)
+            vc = VectorClock(dict(val.vector_clock), True)
 
             # Create a SetLattice with the value(s) stored by this lattice.
             values = set()
-            for v in val.values():
+            for v in val.values:
                 values.add(v)
 
             return SingleKeyCausalLattice(vc, SetLattice(values))
@@ -173,7 +173,7 @@ class BaseAnnaClient:
             # Deserialize the vector_clock stored in the Protobuf into a
             # MapLattice, where each value is a MaxIntLattice of the VC
             # counter.
-            vc = VectorClock(val.vector_clock, True)
+            vc = VectorClock(dict(val.vector_clock), True)
 
             # Deserialize the set of dependencies of this key into a MapLattice
             # where the keys are names of other KVS keys and the values are
@@ -181,11 +181,11 @@ class BaseAnnaClient:
             dep_map = {}
             for kv in val.dependencies:
                 key = kv.key
-                dep_map[key] = VectorClock(kv.vector_clock, True)
+                dep_map[key] = VectorClock(dict(kv.vector_clock), True)
 
             # Create a SetLattice with the value(s) stored by this lattice.
             values = set()
-            for v in val.values():
+            for v in val.values:
                 values.add(v)
 
             dependencies = MapLattice(dep_map)
