@@ -1,6 +1,8 @@
 package annalib
 
 import (
+	"fmt"
+	"math/rand"
 	"testing"
 
 	"google.golang.org/protobuf/proto"
@@ -188,5 +190,543 @@ func TestRequestIDFormat(t *testing.T) {
 	id2 := client.getRequestID()
 	if id2 != "127.0.0.1:502_2" {
 		t.Errorf("unexpected second request ID: %s", id2)
+	}
+}
+
+func TestGetRoutingThread(t *testing.T) {
+	tp := &mockTransport{}
+	client := newTestClient(tp)
+
+	addr := client.getRoutingThread()
+	if addr != "tcp://127.0.0.1:6450" {
+		t.Errorf("expected routing thread address tcp://127.0.0.1:6450, got %s", addr)
+	}
+}
+
+func TestGetWorkerAddressFromCache(t *testing.T) {
+	tp := &mockTransport{}
+	client := newTestClient(tp)
+
+	client.keyAddressCache["cached_key"] = []string{"tcp://10.0.0.1:6800"}
+	addr, ok := client.getWorkerAddress("cached_key")
+	if !ok {
+		t.Fatal("expected to find cached address")
+	}
+	if addr != "tcp://10.0.0.1:6800" {
+		t.Errorf("unexpected address: %s", addr)
+	}
+}
+
+func TestGetWorkerAddressCacheMiss(t *testing.T) {
+	// No cache, queryRouting returns nil (mock has no data), should return false
+	tp := &mockTransport{recvData: map[bool][]byte{true: nil}}
+	client := newTestClient(tp)
+
+	_, ok := client.getWorkerAddress("missing_key")
+	if ok {
+		t.Error("expected cache miss with no routing response to return false")
+	}
+}
+
+func TestBuildRoutingRequest(t *testing.T) {
+	data, err := buildRoutingRequest("req_1", "tcp://127.0.0.1:6850", "test_key")
+	if err != nil {
+		t.Fatalf("buildRoutingRequest failed: %v", err)
+	}
+
+	var req kvspb.KeyAddressRequest
+	if err := proto.Unmarshal(data, &req); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if req.RequestId != "req_1" {
+		t.Errorf("request ID: got %s, want req_1", req.RequestId)
+	}
+	if req.ResponseAddress != "tcp://127.0.0.1:6850" {
+		t.Errorf("response address: got %s", req.ResponseAddress)
+	}
+	if len(req.Keys) != 1 || req.Keys[0] != "test_key" {
+		t.Errorf("keys: got %v", req.Keys)
+	}
+}
+
+func TestParseRoutingResponse(t *testing.T) {
+	response := &kvspb.KeyAddressResponse{
+		Error: kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{
+			{
+				Key: "my_key",
+				Ips: []string{"tcp://10.0.0.1:6800", "tcp://10.0.0.2:6800"},
+			},
+		},
+	}
+	data, _ := proto.Marshal(response)
+
+	addrs, err := parseRoutingResponse(data, "my_key")
+	if err != nil {
+		t.Fatalf("parseRoutingResponse failed: %v", err)
+	}
+	if len(addrs) != 2 {
+		t.Fatalf("expected 2 addresses, got %d", len(addrs))
+	}
+	if addrs[0] != "tcp://10.0.0.1:6800" {
+		t.Errorf("unexpected first address: %s", addrs[0])
+	}
+}
+
+func TestParseRoutingResponseError(t *testing.T) {
+	response := &kvspb.KeyAddressResponse{
+		Error: kvspb.AnnaError_NO_SERVERS,
+	}
+	data, _ := proto.Marshal(response)
+
+	_, err := parseRoutingResponse(data, "key")
+	if err == nil {
+		t.Error("expected error for NO_SERVERS response")
+	}
+}
+
+func TestParseRoutingResponseWrongKey(t *testing.T) {
+	response := &kvspb.KeyAddressResponse{
+		Error: kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{
+			{Key: "other_key", Ips: []string{"tcp://10.0.0.1:6800"}},
+		},
+	}
+	data, _ := proto.Marshal(response)
+
+	addrs, err := parseRoutingResponse(data, "my_key")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(addrs) != 0 {
+		t.Errorf("expected 0 addresses for wrong key, got %d", len(addrs))
+	}
+}
+
+func TestParseRoutingResponseInvalidData(t *testing.T) {
+	_, err := parseRoutingResponse([]byte{0xff, 0xff}, "key")
+	if err == nil {
+		t.Error("expected error for invalid protobuf data")
+	}
+}
+
+func TestBuildDataRequest(t *testing.T) {
+	data, err := buildDataRequest("req_2", "tcp://127.0.0.1:6800", "key1",
+		kvspb.RequestType_PUT, kvspb.LatticeType_LWW, []byte("payload"), 3)
+	if err != nil {
+		t.Fatalf("buildDataRequest failed: %v", err)
+	}
+
+	var req kvspb.KeyRequest
+	if err := proto.Unmarshal(data, &req); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if req.RequestId != "req_2" {
+		t.Errorf("request ID: got %s", req.RequestId)
+	}
+	if req.Type != kvspb.RequestType_PUT {
+		t.Errorf("request type: got %v", req.Type)
+	}
+	if len(req.Tuples) != 1 {
+		t.Fatalf("expected 1 tuple, got %d", len(req.Tuples))
+	}
+	if req.Tuples[0].Key != "key1" {
+		t.Errorf("tuple key: got %s", req.Tuples[0].Key)
+	}
+	if req.Tuples[0].AddressCacheSize != 3 {
+		t.Errorf("cache size: got %d", req.Tuples[0].AddressCacheSize)
+	}
+}
+
+func TestParseDataResponse(t *testing.T) {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{
+			{Key: "k", Error: kvspb.AnnaError_NO_ERROR, Payload: []byte("data")},
+		},
+	}
+	data, _ := proto.Marshal(response)
+
+	parsed, err := parseDataResponse(data)
+	if err != nil {
+		t.Fatalf("parseDataResponse failed: %v", err)
+	}
+	if len(parsed.Tuples) != 1 || parsed.Tuples[0].Key != "k" {
+		t.Errorf("unexpected parsed response: %v", parsed)
+	}
+}
+
+func TestParseDataResponseInvalid(t *testing.T) {
+	_, err := parseDataResponse([]byte{0xff, 0xff})
+	if err == nil {
+		t.Error("expected error for invalid data")
+	}
+}
+
+func TestBuildAndParseLWWPayload(t *testing.T) {
+	payload, err := buildLWWPayload("hello world")
+	if err != nil {
+		t.Fatalf("buildLWWPayload failed: %v", err)
+	}
+
+	val, err := parseLWWPayload(payload)
+	if err != nil {
+		t.Fatalf("parseLWWPayload failed: %v", err)
+	}
+	if val != "hello world" {
+		t.Errorf("expected 'hello world', got '%s'", val)
+	}
+}
+
+func TestParseLWWPayloadInvalid(t *testing.T) {
+	_, err := parseLWWPayload([]byte{0xff, 0xff})
+	if err == nil {
+		t.Error("expected error for invalid LWW payload")
+	}
+}
+
+func TestBuildAndParseSetPayload(t *testing.T) {
+	payload, err := buildSetPayload([]string{"a", "b", "c"})
+	if err != nil {
+		t.Fatalf("buildSetPayload failed: %v", err)
+	}
+
+	values, err := parseSetPayload(payload)
+	if err != nil {
+		t.Fatalf("parseSetPayload failed: %v", err)
+	}
+	if len(values) != 3 || values[0] != "a" || values[1] != "b" || values[2] != "c" {
+		t.Errorf("unexpected values: %v", values)
+	}
+}
+
+func TestParseSetPayloadInvalid(t *testing.T) {
+	_, err := parseSetPayload([]byte{0xff, 0xff})
+	if err == nil {
+		t.Error("expected error for invalid Set payload")
+	}
+}
+
+// mockTransport implements transport for testing without ZMQ.
+type mockTransport struct {
+	sentMessages []sentMsg
+	recvData     map[bool][]byte // useKeyAddress -> response data
+	recvErr      error
+	sendErr      error
+}
+
+type sentMsg struct {
+	data []byte
+	addr string
+}
+
+func (m *mockTransport) sendRequest(msg []byte, addr string) error {
+	if m.sendErr != nil {
+		return m.sendErr
+	}
+	m.sentMessages = append(m.sentMessages, sentMsg{data: msg, addr: addr})
+	return nil
+}
+
+func (m *mockTransport) recvResponse(useKeyAddress bool) ([]byte, error) {
+	if m.recvErr != nil {
+		return nil, m.recvErr
+	}
+	return m.recvData[useKeyAddress], nil
+}
+
+func (m *mockTransport) close() error { return nil }
+
+func newTestClient(tp transport) *KVSClient {
+	return &KVSClient{
+		routingThreads:  []*UserRoutingThread{NewUserRoutingThread("127.0.0.1", 0)},
+		rid:             0,
+		ut:              NewUserThread("127.0.0.1", 0),
+		rng:             rand.New(rand.NewSource(42)),
+		keyAddressCache: make(map[string][]string),
+		tp:              tp,
+	}
+}
+
+func TestGetWithMock(t *testing.T) {
+	lww := &kvspb.LWWValue{Timestamp: 100, Value: []byte("test_value")}
+	lwwBytes, _ := proto.Marshal(lww)
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "k", Error: kvspb.AnnaError_NO_ERROR, Payload: lwwBytes}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	// Build routing response for address lookup
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "k", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	val, err := client.Get("k")
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	if val != "test_value" {
+		t.Errorf("Get returned %q, want %q", val, "test_value")
+	}
+}
+
+func TestPutWithMock(t *testing.T) {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "k", Error: kvspb.AnnaError_NO_ERROR}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "k", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	err := client.Put("k", "some_value")
+	if err != nil {
+		t.Fatalf("Put failed: %v", err)
+	}
+	if len(tp.sentMessages) != 2 {
+		t.Errorf("expected 2 sent messages (routing + data), got %d", len(tp.sentMessages))
+	}
+}
+
+func TestGetSetWithMock(t *testing.T) {
+	setVal := &kvspb.SetValue{Values: [][]byte{[]byte("a"), []byte("b")}}
+	setBytes, _ := proto.Marshal(setVal)
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "s", Error: kvspb.AnnaError_NO_ERROR, Payload: setBytes}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "s", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	vals, err := client.GetSet("s")
+	if err != nil {
+		t.Fatalf("GetSet failed: %v", err)
+	}
+	if len(vals) != 2 || vals[0] != "a" || vals[1] != "b" {
+		t.Errorf("GetSet returned %v, want [a b]", vals)
+	}
+}
+
+func TestPutSetWithMock(t *testing.T) {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "s", Error: kvspb.AnnaError_NO_ERROR}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "s", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	err := client.PutSet("s", []string{"x", "y"})
+	if err != nil {
+		t.Fatalf("PutSet failed: %v", err)
+	}
+}
+
+func TestGetErrorResponse(t *testing.T) {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "k", Error: kvspb.AnnaError_KEY_DNE}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "k", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	_, err := client.Get("k")
+	if err == nil {
+		t.Fatal("expected error for KEY_DNE")
+	}
+}
+
+func TestGetTimeout(t *testing.T) {
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "k", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	// No data response → simulates timeout (nil)
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: nil}}
+	client := newTestClient(tp)
+
+	_, err := client.Get("k")
+	if err == nil {
+		t.Fatal("expected error for timeout")
+	}
+}
+
+func TestSendRequestError(t *testing.T) {
+	tp := &mockTransport{sendErr: fmt.Errorf("connection refused")}
+	client := newTestClient(tp)
+
+	// Pre-populate cache to skip routing
+	client.keyAddressCache["k"] = []string{"tcp://10.0.0.1:6800"}
+	_, err := client.Get("k")
+	if err == nil {
+		t.Fatal("expected error for send failure")
+	}
+}
+
+func TestInvalidateCacheOnResponse(t *testing.T) {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "k", Error: kvspb.AnnaError_NO_ERROR, Invalidate: true}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	tp := &mockTransport{recvData: map[bool][]byte{false: respBytes}}
+	client := newTestClient(tp)
+	client.keyAddressCache["k"] = []string{"tcp://10.0.0.1:6800"}
+
+	// Put will succeed but cache should be invalidated
+	err := client.Put("k", "val")
+	if err != nil {
+		t.Fatalf("Put failed: %v", err)
+	}
+	if _, ok := client.keyAddressCache["k"]; ok {
+		t.Error("expected cache to be invalidated")
+	}
+}
+
+func TestQueryRoutingWithMock(t *testing.T) {
+	routingResp := &kvspb.KeyAddressResponse{
+		Error: kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{
+			{Key: "test_key", Ips: []string{"tcp://10.0.0.1:6800", "tcp://10.0.0.2:6800"}},
+		},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes}}
+	client := newTestClient(tp)
+
+	addrs := client.queryRouting("test_key")
+	if len(addrs) != 2 {
+		t.Fatalf("expected 2 addresses, got %d", len(addrs))
+	}
+}
+
+func TestQueryRoutingSendError(t *testing.T) {
+	tp := &mockTransport{sendErr: fmt.Errorf("send failed")}
+	client := newTestClient(tp)
+
+	addrs := client.queryRouting("key")
+	if addrs != nil {
+		t.Errorf("expected nil addresses on send error, got %v", addrs)
+	}
+}
+
+func TestQueryRoutingTimeout(t *testing.T) {
+	tp := &mockTransport{recvData: map[bool][]byte{true: nil}}
+	client := newTestClient(tp)
+
+	addrs := client.queryRouting("key")
+	if addrs != nil {
+		t.Errorf("expected nil addresses on timeout, got %v", addrs)
+	}
+}
+
+func TestRecvResponseError(t *testing.T) {
+	tp := &mockTransport{recvErr: fmt.Errorf("recv error")}
+	client := newTestClient(tp)
+	client.keyAddressCache["k"] = []string{"tcp://10.0.0.1:6800"}
+
+	_, err := client.Get("k")
+	if err == nil {
+		t.Fatal("expected error for recv failure")
+	}
+}
+
+func TestGetNoWorkerAddress(t *testing.T) {
+	tp := &mockTransport{recvData: map[bool][]byte{true: nil}}
+	client := newTestClient(tp)
+
+	_, err := client.Get("nonexistent")
+	if err == nil {
+		t.Fatal("expected error when no worker found")
+	}
+}
+
+func TestPutSetEmptyValues(t *testing.T) {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "s", Error: kvspb.AnnaError_NO_ERROR}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "s", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	err := client.PutSet("s", []string{})
+	if err != nil {
+		t.Fatalf("PutSet with empty values failed: %v", err)
+	}
+}
+
+func TestNewKVSClientNilConfig(t *testing.T) {
+	_, err := NewKVSClient(nil, 0)
+	if err == nil {
+		t.Error("expected error for nil config")
+	}
+}
+
+func TestNewKVSClientEmptyRouting(t *testing.T) {
+	config := DefaultConfig()
+	config.User.Routing = nil
+	_, err := NewKVSClient(config, 0)
+	if err == nil {
+		t.Error("expected error for empty routing IPs")
+	}
+}
+
+func TestNewKVSClientZeroThreads(t *testing.T) {
+	config := DefaultConfig()
+	config.Threads.Routing = 0
+	_, err := NewKVSClient(config, 0)
+	if err == nil {
+		t.Error("expected error for zero routing threads")
+	}
+}
+
+func TestCloseClient(t *testing.T) {
+	config := DefaultConfig()
+	client, err := NewKVSClient(config, 506)
+	if err != nil {
+		t.Fatalf("NewKVSClient failed: %v", err)
+	}
+	if err := client.Close(); err != nil {
+		t.Errorf("Close failed: %v", err)
 	}
 }

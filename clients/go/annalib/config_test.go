@@ -1,6 +1,7 @@
 package annalib
 
 import (
+	"os"
 	"testing"
 )
 
@@ -46,6 +47,24 @@ func TestRoutingIPsWithELB(t *testing.T) {
 	ips := config.GetRoutingIPs()
 	if len(ips) != 2 || ips[0] != "10.0.0.1" {
 		t.Errorf("expected routing IPs from ELB, got %v", ips)
+	}
+}
+
+func TestReadConfigInvalidYAML(t *testing.T) {
+	tmpFile := t.TempDir() + "/bad.yml"
+	if err := os.WriteFile(tmpFile, []byte("{{invalid yaml"), 0644); err != nil {
+		t.Fatalf("failed to write test fixture: %v", err)
+	}
+	_, err := ReadConfig(tmpFile)
+	if err == nil {
+		t.Error("expected error for invalid YAML")
+	}
+	cfgErr, ok := err.(*ConfigFileError)
+	if !ok {
+		t.Fatalf("expected ConfigFileError, got %T", err)
+	}
+	if cfgErr.Path != tmpFile {
+		t.Errorf("expected path %s in error", tmpFile)
 	}
 }
 
