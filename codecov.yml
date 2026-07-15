@@ -3,3 +3,5 @@ ignore:
   - "*/tests/**"
   - "**/test_*.py"
   - "**/test_*.cpp"
+  - "**/*_test.go"
+  - "**/*.pb.go"

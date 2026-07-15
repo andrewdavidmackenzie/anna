@@ -22,6 +22,7 @@ pids
 rust_workspace.info
 coverage
 coverage.xml
+coverage.out
 __pycache__/
 .coverage
 
@@ -77,6 +78,7 @@ tags
 
 # Fortran module files
 *.mod
+!go.mod
 *.smod
 
 # Compiled Static libraries
@@ -92,3 +94,4 @@ tags
 CMakeFiles/
 CMakeCache.txt
 clients/cpp/tests/system/system_tests
+clients/go/cmd/anna-go/anna-go
