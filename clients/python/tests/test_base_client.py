@@ -87,6 +87,71 @@ class TestDeserialize:
         assert result.reveal() == [b"a", b"b"]
 
 
+class TestOrderedSetDeserialization:
+    def test_ordered_set_roundtrip(self):
+        from anna.lattices import OrderedSetLattice, ListBasedOrderedSet
+        from anna.base_client import BaseAnnaClient
+        from anna.kvs_pb2 import KeyTuple, ORDERED_SET
+
+        oset = ListBasedOrderedSet([b"alpha", b"beta", b"gamma"])
+        lattice = OrderedSetLattice(oset)
+
+        pb, typ = lattice.serialize()
+        assert typ == ORDERED_SET
+
+        tup = KeyTuple()
+        tup.lattice_type = ORDERED_SET
+        tup.payload = pb.SerializeToString()
+
+        result = BaseAnnaClient._deserialize(tup)
+        assert isinstance(result, OrderedSetLattice)
+        assert result.reveal() == [b"alpha", b"beta", b"gamma"]
+
+
+class TestSingleCausalDeserialization:
+    def test_single_causal_roundtrip(self):
+        from anna.lattices import SingleKeyCausalLattice, SetLattice, VectorClock
+        from anna.base_client import BaseAnnaClient
+        from anna.kvs_pb2 import KeyTuple, SINGLE_CAUSAL
+
+        vc = VectorClock({"node1": 3}, True)
+        val = SetLattice({b"value1"})
+        lattice = SingleKeyCausalLattice(vc, val)
+
+        pb, typ = lattice.serialize()
+        assert typ == SINGLE_CAUSAL
+
+        tup = KeyTuple()
+        tup.lattice_type = SINGLE_CAUSAL
+        tup.payload = pb.SerializeToString()
+
+        result = BaseAnnaClient._deserialize(tup)
+        assert isinstance(result, SingleKeyCausalLattice)
+        assert b"value1" in result.value.reveal()
+        assert result.vector_clock.reveal()["node1"].reveal() == 3
+
+
+class TestPriorityDeserialization:
+    def test_priority_roundtrip(self):
+        from anna.lattices import PriorityLattice
+        from anna.base_client import BaseAnnaClient
+        from anna.kvs_pb2 import KeyTuple, PRIORITY
+
+        lattice = PriorityLattice(5.0, b"high-pri")
+
+        pb, typ = lattice.serialize()
+        assert typ == PRIORITY
+
+        tup = KeyTuple()
+        tup.lattice_type = PRIORITY
+        tup.payload = pb.SerializeToString()
+
+        result = BaseAnnaClient._deserialize(tup)
+        assert isinstance(result, PriorityLattice)
+        assert result.reveal() == b"high-pri"
+        assert result.priority == 5.0
+
+
 class TestCausalDeserialization:
     def test_multi_causal_roundtrip(self):
         from anna.lattices import MultiKeyCausalLattice, SetLattice, MapLattice, VectorClock

@@ -12,3 +12,12 @@ PUT_SET myset x y w
 GET_SET myset
 PUT_CAUSAL d hello
 GET_CAUSAL d
+PUT_ORDERED_SET myoset alpha beta gamma
+GET_ORDERED_SET myoset
+PUT_SINGLE_CAUSAL e world
+GET_SINGLE_CAUSAL e
+PUT_PRIORITY f 1.5 important
+GET_PRIORITY f
+PUT g deleteme
+GET g
+DELETE g

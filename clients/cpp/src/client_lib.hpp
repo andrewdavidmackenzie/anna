@@ -55,13 +55,32 @@ struct CausalValue {
   map<string, vector<pair<string, unsigned>>> dependencies;
 };
 
+// The result of a single-key-causal GET: the value plus the vector clock
+// (no dependencies, unlike multi-key-causal).
+struct SingleCausalValue {
+  vector<string> values;
+  vector<pair<string, unsigned>> vector_clock;
+};
+
+// The result of a priority GET: the value plus its priority.
+struct PriorityResult {
+  double priority;
+  string value;
+};
+
 // Issue a blocking GET for `key` under the multi-key-causal lattice type.
 CausalValue get_causal(KvsClientInterface* client, const string& key);
+
+// Delete a key by writing an empty LWW value with a dominating timestamp.
+kvs::KeyResponse del(KvsClientInterface* client, const string& key);
 
 // Issue a blocking PUT of `value` for `key` under the default (LWW) lattice
 // type.
 kvs::KeyResponse put(KvsClientInterface* client, const string& key,
                      const string& value);
+
+// Delete a key by writing an empty LWW value with a dominating timestamp.
+kvs::KeyResponse del(KvsClientInterface* client, const string& key);
 
 // Issue a blocking PUT of `value` for `key` under the multi-key-causal
 // lattice type.
@@ -74,6 +93,37 @@ kvs::KeyResponse put_set(KvsClientInterface* client, const string& key,
 
 // Issue a blocking GET for `key` under the set lattice type.
 set<string> get_set(KvsClientInterface* client, const string& key);
+
+// Issue a blocking PUT of `values` for `key` under the ordered-set lattice
+// type. Same serialization as SET, but the server preserves insertion order.
+kvs::KeyResponse put_ordered_set(KvsClientInterface* client, const string& key,
+                                 const set<string>& values);
+
+// Issue a blocking GET for `key` under the ordered-set lattice type.
+vector<string> get_ordered_set(KvsClientInterface* client, const string& key);
+
+// Delete a key by writing an empty LWW value with a dominating timestamp.
+kvs::KeyResponse del(KvsClientInterface* client, const string& key);
+
+// Issue a blocking PUT of `value` for `key` under the single-key-causal
+// lattice type.
+kvs::KeyResponse put_single_causal(KvsClientInterface* client,
+                                   const string& key, const string& value);
+
+// Issue a blocking GET for `key` under the single-key-causal lattice type.
+SingleCausalValue get_single_causal(KvsClientInterface* client,
+                                    const string& key);
+
+// Delete a key by writing an empty LWW value with a dominating timestamp.
+kvs::KeyResponse del(KvsClientInterface* client, const string& key);
+
+// Issue a blocking PUT of `value` with `priority` for `key` under the
+// priority lattice type (lower priority value wins).
+kvs::KeyResponse put_priority(KvsClientInterface* client, const string& key,
+                              double priority, const string& value);
+
+// Issue a blocking GET for `key` under the priority lattice type.
+PriorityResult get_priority(KvsClientInterface* client, const string& key);
 
 // The anna server processes managed by start()/stop()/status().
 extern const vector<string> kProcessList;

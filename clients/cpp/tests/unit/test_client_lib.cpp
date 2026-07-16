@@ -49,6 +49,43 @@ kvs::KeyResponse make_set_response(const set<string>& values) {
   return response;
 }
 
+kvs::KeyResponse make_ordered_set_response(const set<string>& values) {
+  kvs::KeyResponse response;
+
+  kvs::KeyTuple* tuple = response.add_tuples();
+  tuple->set_lattice_type(kvs::LatticeType::ORDERED_SET);
+  tuple->set_payload(serialize(values));
+
+  return response;
+}
+
+kvs::KeyResponse make_single_causal_response(const string& value) {
+  VectorClockValuePair<SetLattice<string>> p;
+  p.vector_clock.insert("client1", 1);
+  p.value.insert(value);
+
+  SingleKeyCausalLattice<SetLattice<string>> lattice(p);
+
+  kvs::KeyResponse response;
+  kvs::KeyTuple* tuple = response.add_tuples();
+  tuple->set_lattice_type(kvs::LatticeType::SINGLE_CAUSAL);
+  tuple->set_payload(serialize(lattice));
+
+  return response;
+}
+
+kvs::KeyResponse make_priority_response(double priority, const string& value) {
+  PriorityLattice<double, string> lattice(
+      PriorityValuePair<double, string>(priority, value));
+
+  kvs::KeyResponse response;
+  kvs::KeyTuple* tuple = response.add_tuples();
+  tuple->set_lattice_type(kvs::LatticeType::PRIORITY);
+  tuple->set_payload(serialize(lattice));
+
+  return response;
+}
+
 kvs::KeyResponse make_causal_response(const string& value) {
   MultiKeyCausalPayload<SetLattice<string>> payload;
   payload.vector_clock.insert("client1", 1);
@@ -148,6 +185,16 @@ TEST(ClientLibTest, PutCausalSendsRequest) {
   EXPECT_EQ(response.response_id(), "1");
 }
 
+
+TEST(ClientLibTest, DeleteSendsEmptyPut) {
+  MockKvsClient client;
+  client.responses_.push_back(make_lww_response("1", "unused"));
+
+  kvs::KeyResponse response = annalib::del(&client, "my_key");
+
+  ASSERT_EQ(client.keys_put_.size(), 1u);
+  EXPECT_EQ(client.keys_put_[0], "my_key");
+}
 TEST(ClientLibTest, LoadConfigParsesYaml) {
   // Write a minimal config file
   const char* config = R"(
@@ -226,6 +273,83 @@ TEST(ClientLibTest, MultipleKvsClientsShareLogger) {
   }
 
   spdlog::drop("client_log");
+}
+
+TEST(ClientLibTest, GetOrderedSetReturnsAllValues) {
+  MockKvsClient client;
+  set<string> input = {"a", "b", "c"};
+  client.responses_.push_back(make_ordered_set_response(input));
+
+  vector<string> result = annalib::get_ordered_set(&client, "my_ordered_key");
+
+  EXPECT_EQ(result.size(), 3u);
+  ASSERT_EQ(client.keys_get_.size(), 1u);
+  EXPECT_EQ(client.keys_get_[0], "my_ordered_key");
+}
+
+TEST(ClientLibTest, PutOrderedSetSendsRequest) {
+  MockKvsClient client;
+  client.responses_.push_back(make_lww_response("1", "unused"));
+
+  kvs::KeyResponse response =
+      annalib::put_ordered_set(&client, "my_ordered_key", {"x", "y"});
+
+  ASSERT_EQ(client.keys_put_.size(), 1u);
+  EXPECT_EQ(client.keys_put_[0], "my_ordered_key");
+  EXPECT_EQ(response.response_id(), "1");
+}
+
+TEST(ClientLibTest, GetSingleCausalReturnsValueAndVectorClock) {
+  MockKvsClient client;
+  client.responses_.push_back(make_single_causal_response("sc_value"));
+
+  annalib::SingleCausalValue result =
+      annalib::get_single_causal(&client, "my_sc_key");
+
+  ASSERT_EQ(result.values.size(), 1u);
+  EXPECT_EQ(result.values[0], "sc_value");
+
+  ASSERT_EQ(result.vector_clock.size(), 1u);
+  EXPECT_EQ(result.vector_clock[0].first, "client1");
+  EXPECT_EQ(result.vector_clock[0].second, 1u);
+}
+
+TEST(ClientLibTest, PutSingleCausalSendsRequest) {
+  MockKvsClient client;
+  client.responses_.push_back(make_lww_response("1", "unused"));
+
+  kvs::KeyResponse response =
+      annalib::put_single_causal(&client, "my_sc_key", "some_value");
+
+  ASSERT_EQ(client.keys_put_.size(), 1u);
+  EXPECT_EQ(client.keys_put_[0], "my_sc_key");
+  EXPECT_EQ(response.response_id(), "1");
+}
+
+TEST(ClientLibTest, GetPriorityReturnsValueAndPriority) {
+  MockKvsClient client;
+  client.responses_.push_back(make_priority_response(3.14, "priority_value"));
+
+  annalib::PriorityResult result =
+      annalib::get_priority(&client, "my_priority_key");
+
+  EXPECT_DOUBLE_EQ(result.priority, 3.14);
+  EXPECT_EQ(result.value, "priority_value");
+
+  ASSERT_EQ(client.keys_get_.size(), 1u);
+  EXPECT_EQ(client.keys_get_[0], "my_priority_key");
+}
+
+TEST(ClientLibTest, PutPrioritySendsRequest) {
+  MockKvsClient client;
+  client.responses_.push_back(make_lww_response("1", "unused"));
+
+  kvs::KeyResponse response =
+      annalib::put_priority(&client, "my_priority_key", 1.5, "pval");
+
+  ASSERT_EQ(client.keys_put_.size(), 1u);
+  EXPECT_EQ(client.keys_put_[0], "my_priority_key");
+  EXPECT_EQ(response.response_id(), "1");
 }
 
 TEST(ClientLibTest, StopWithNothingRunningReturnsZero) {

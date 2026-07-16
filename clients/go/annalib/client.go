@@ -518,6 +518,179 @@ func (c *KVSClient) PutCausal(key, value string) error {
 	return err
 }
 
+// --- Ordered Set helpers and methods ---
+
+func buildOrderedSetPayload(values []string) ([]byte, error) {
+	setVal := &kvspb.SetValue{
+		Values: make([][]byte, len(values)),
+	}
+	for i, v := range values {
+		setVal.Values[i] = []byte(v)
+	}
+	return proto.Marshal(setVal)
+}
+
+func parseOrderedSetPayload(payload []byte) ([]string, error) {
+	var setVal kvspb.SetValue
+	if err := proto.Unmarshal(payload, &setVal); err != nil {
+		return nil, fmt.Errorf("failed to decode OrderedSet value: %w", err)
+	}
+	values := make([]string, len(setVal.Values))
+	for i, v := range setVal.Values {
+		values[i] = string(v)
+	}
+	return values, nil
+}
+
+// GetOrderedSet retrieves an ordered set of values by key (OrderedSet lattice).
+func (c *KVSClient) GetOrderedSet(key string) ([]string, error) {
+	response, err := c.sendDataRequest(key, kvspb.RequestType_GET, kvspb.LatticeType_NONE, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	tuple, err := validateResponse(response, "GET_ORDERED_SET")
+	if err != nil {
+		return nil, err
+	}
+
+	return parseOrderedSetPayload(tuple.Payload)
+}
+
+// PutOrderedSet stores an ordered set of values by key (OrderedSet lattice).
+func (c *KVSClient) PutOrderedSet(key string, values []string) error {
+	payload, err := buildOrderedSetPayload(values)
+	if err != nil {
+		return &KVSError{Message: fmt.Sprintf("PUT_ORDERED_SET: %v", err)}
+	}
+
+	response, err := c.sendDataRequest(key, kvspb.RequestType_PUT, kvspb.LatticeType_ORDERED_SET, payload)
+	if err != nil {
+		return err
+	}
+
+	_, err = validateResponse(response, "PUT_ORDERED_SET")
+	return err
+}
+
+// --- Single Causal helpers and methods ---
+
+// SingleCausalValue holds the result of a single-key causal GET.
+type SingleCausalValue struct {
+	VectorClock map[string]uint32
+	Values      []string
+}
+
+func buildSingleCausalPayload(value string) ([]byte, error) {
+	skc := &kvspb.SingleKeyCausalValue{
+		VectorClock: map[string]uint32{"test": 1},
+		Values:      [][]byte{[]byte(value)},
+	}
+	return proto.Marshal(skc)
+}
+
+func parseSingleCausalPayload(payload []byte) (*SingleCausalValue, error) {
+	var skc kvspb.SingleKeyCausalValue
+	if err := proto.Unmarshal(payload, &skc); err != nil {
+		return nil, fmt.Errorf("failed to decode single causal value: %w", err)
+	}
+
+	values := make([]string, len(skc.Values))
+	for i, v := range skc.Values {
+		values[i] = string(v)
+	}
+
+	return &SingleCausalValue{
+		VectorClock: skc.VectorClock,
+		Values:      values,
+	}, nil
+}
+
+// GetSingleCausal retrieves a value by key (Single-Key Causal lattice).
+func (c *KVSClient) GetSingleCausal(key string) (*SingleCausalValue, error) {
+	response, err := c.sendDataRequest(key, kvspb.RequestType_GET, kvspb.LatticeType_NONE, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	tuple, err := validateResponse(response, "GET_SINGLE_CAUSAL")
+	if err != nil {
+		return nil, err
+	}
+
+	return parseSingleCausalPayload(tuple.Payload)
+}
+
+// PutSingleCausal stores a value by key (Single-Key Causal lattice).
+func (c *KVSClient) PutSingleCausal(key, value string) error {
+	payload, err := buildSingleCausalPayload(value)
+	if err != nil {
+		return &KVSError{Message: fmt.Sprintf("PUT_SINGLE_CAUSAL: %v", err)}
+	}
+
+	response, err := c.sendDataRequest(key, kvspb.RequestType_PUT, kvspb.LatticeType_SINGLE_CAUSAL, payload)
+	if err != nil {
+		return err
+	}
+
+	_, err = validateResponse(response, "PUT_SINGLE_CAUSAL")
+	return err
+}
+
+// --- Priority helpers and methods ---
+
+func buildPriorityPayload(priority float64, value string) ([]byte, error) {
+	pv := &kvspb.PriorityValue{
+		Priority: priority,
+		Value:    []byte(value),
+	}
+	return proto.Marshal(pv)
+}
+
+func parsePriorityPayload(payload []byte) (float64, string, error) {
+	var pv kvspb.PriorityValue
+	if err := proto.Unmarshal(payload, &pv); err != nil {
+		return 0, "", fmt.Errorf("failed to decode priority value: %w", err)
+	}
+	return pv.Priority, string(pv.Value), nil
+}
+
+// GetPriority retrieves a priority value by key (Priority lattice).
+func (c *KVSClient) GetPriority(key string) (float64, string, error) {
+	response, err := c.sendDataRequest(key, kvspb.RequestType_GET, kvspb.LatticeType_NONE, nil)
+	if err != nil {
+		return 0, "", err
+	}
+
+	tuple, err := validateResponse(response, "GET_PRIORITY")
+	if err != nil {
+		return 0, "", err
+	}
+
+	return parsePriorityPayload(tuple.Payload)
+}
+
+// PutPriority stores a priority value by key (Priority lattice).
+func (c *KVSClient) PutPriority(key string, priority float64, value string) error {
+	payload, err := buildPriorityPayload(priority, value)
+	if err != nil {
+		return &KVSError{Message: fmt.Sprintf("PUT_PRIORITY: %v", err)}
+	}
+
+	response, err := c.sendDataRequest(key, kvspb.RequestType_PUT, kvspb.LatticeType_PRIORITY, payload)
+	if err != nil {
+		return err
+	}
+
+	_, err = validateResponse(response, "PUT_PRIORITY")
+	return err
+}
+
+
+// Delete removes a key by writing an empty LWW value with a dominating timestamp.
+func (c *KVSClient) Delete(key string) error {
+	return c.Put(key, "")
+}
 // ClearCache clears the key-address cache.
 func (c *KVSClient) ClearCache() {
 	c.keyAddressCache = make(map[string][]string)

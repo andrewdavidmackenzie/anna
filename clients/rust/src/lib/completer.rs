@@ -8,8 +8,24 @@ use rustyline::{Context, Helper};
 
 /// Commands available in the anna interactive CLI.
 pub const ANNA_COMMANDS: &[&str] = &[
-    "GET", "PUT", "GET_SET", "PUT_SET", "GET_CAUSAL", "PUT_CAUSAL", "START", "STOP", "STATUS",
-    "HELP", "EXIT",
+    "GET",
+    "PUT",
+    "GET_SET",
+    "PUT_SET",
+    "GET_ORDERED_SET",
+    "PUT_ORDERED_SET",
+    "GET_CAUSAL",
+    "PUT_CAUSAL",
+    "GET_SINGLE_CAUSAL",
+    "PUT_SINGLE_CAUSAL",
+    "GET_PRIORITY",
+    "PUT_PRIORITY",
+    "START",
+    "STOP",
+    "STATUS",
+    "HELP",
+    "DELETE",
+    "EXIT",
 ];
 
 /// Provides tab-completion for anna CLI commands.
