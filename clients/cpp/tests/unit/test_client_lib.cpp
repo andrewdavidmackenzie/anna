@@ -14,6 +14,8 @@
 
 #include "gtest/gtest.h"
 
+#include <fstream>
+
 #include "client_lib.hpp"
 #include "mock_kvs_client.hpp"
 
@@ -144,6 +146,66 @@ TEST(ClientLibTest, PutCausalSendsRequest) {
   ASSERT_EQ(client.keys_put_.size(), 1u);
   EXPECT_EQ(client.keys_put_[0], "my_causal_key");
   EXPECT_EQ(response.response_id(), "1");
+}
+
+TEST(ClientLibTest, LoadConfigParsesYaml) {
+  // Write a minimal config file
+  const char* config = R"(
+monitoring:
+  mgmt_ip: 127.0.0.1
+  ip: 127.0.0.1
+routing:
+  monitoring:
+    - 127.0.0.1
+  ip: 127.0.0.1
+user:
+  monitoring:
+    - 127.0.0.1
+  routing:
+    - 10.0.0.1
+    - 10.0.0.2
+  ip: 192.168.1.1
+server:
+  monitoring:
+    - 127.0.0.1
+  routing:
+    - 127.0.0.1
+  seed_ip: 127.0.0.1
+  public_ip: 127.0.0.1
+  private_ip: 127.0.0.1
+  mgmt_ip: 127.0.0.1
+ebs: test_data
+capacities:
+  memory-cap: 1
+  ebs-cap: 0
+threads:
+  memory: 1
+  ebs: 1
+  routing: 2
+  benchmark: 1
+replication:
+  memory: 1
+  ebs: 0
+  minimum: 1
+  local: 1
+policy:
+  elasticity: false
+  selective-rep: false
+  tiering: false
+)";
+
+  std::string path = "/tmp/anna_test_config.yml";
+  std::ofstream f(path);
+  f << config;
+  f.close();
+
+  annalib::ClientConfig cfg = annalib::load_config(path);
+
+  EXPECT_EQ(cfg.ip, "192.168.1.1");
+  // 2 routing IPs * 2 threads = 4 routing threads
+  EXPECT_EQ(cfg.routing_threads.size(), 4u);
+
+  std::remove(path.c_str());
 }
 
 TEST(ClientLibTest, MultipleKvsClientsShareLogger) {

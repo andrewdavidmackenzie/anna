@@ -223,3 +223,53 @@ class TestExecuteCommand:
         result = execute_command(client, None, "PUT_SET myset a b c")
         assert result is True
         assert capsys.readouterr().out == ""
+
+
+class TestCausalFormatting:
+    def test_format_causal_output(self):
+        """Test the causal output formatting logic from cli.py execute_command."""
+        from anna.lattices import (
+            MultiKeyCausalLattice, SetLattice, MapLattice, VectorClock,
+        )
+        from unittest.mock import MagicMock
+        from io import StringIO
+        import sys
+
+        # Build a causal lattice as if returned by get_causal
+        vc = VectorClock({"test": 1}, True)
+        dep_vc = VectorClock({"test1": 1}, True)
+        deps = MapLattice({"dep1": dep_vc})
+        val = SetLattice({b"hello"})
+        lattice = MultiKeyCausalLattice(vc, deps, val)
+
+        # Mock client
+        client = MagicMock()
+        client.get_causal.return_value = lattice
+
+        # Capture stdout
+        captured = StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured
+
+        from anna.cli import execute_command
+        execute_command(client, "/dev/null", "GET_CAUSAL mykey")
+
+        sys.stdout = old_stdout
+        output = captured.getvalue()
+
+        assert "{test : 1}" in output
+        assert "dep1 : {test1 : 1}" in output
+        assert "hello" in output
+
+    def test_put_causal_command(self):
+        """Test PUT_CAUSAL CLI dispatch."""
+        from unittest.mock import MagicMock
+
+        client = MagicMock()
+        client.put_causal.return_value = {"k": True}
+
+        from anna.cli import execute_command
+        result = execute_command(client, "/dev/null", "PUT_CAUSAL k hello")
+
+        assert result is True
+        client.put_causal.assert_called_once_with("k", "hello")
