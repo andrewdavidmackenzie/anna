@@ -578,7 +578,7 @@ func (c *KVSClient) PutOrderedSet(key string, values []string) error {
 // SingleCausalValue holds the result of a single-key causal GET.
 type SingleCausalValue struct {
 	VectorClock map[string]uint32
-	Value       string
+	Values      []string
 }
 
 func buildSingleCausalPayload(value string) ([]byte, error) {
@@ -595,14 +595,14 @@ func parseSingleCausalPayload(payload []byte) (*SingleCausalValue, error) {
 		return nil, fmt.Errorf("failed to decode single causal value: %w", err)
 	}
 
-	val := ""
-	if len(skc.Values) > 0 {
-		val = string(skc.Values[0])
+	values := make([]string, len(skc.Values))
+	for i, v := range skc.Values {
+		values[i] = string(v)
 	}
 
 	return &SingleCausalValue{
 		VectorClock: skc.VectorClock,
-		Value:       val,
+		Values:      values,
 	}, nil
 }
 

@@ -183,7 +183,9 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 			}
 			fmt.Printf("%s : %s\n", depKey, strings.Join(vcParts, " "))
 		}
-		fmt.Println(cv.Value)
+		for _, v := range cv.Values {
+			fmt.Println(v)
+		}
 
 	case "PUT_CAUSAL":
 		if len(parts) != 3 {

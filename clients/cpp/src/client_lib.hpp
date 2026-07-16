@@ -58,7 +58,7 @@ struct CausalValue {
 // The result of a single-key-causal GET: the value plus the vector clock
 // (no dependencies, unlike multi-key-causal).
 struct SingleCausalValue {
-  string value;
+  vector<string> values;
   vector<pair<string, unsigned>> vector_clock;
 };
 
@@ -100,7 +100,7 @@ kvs::KeyResponse put_ordered_set(KvsClientInterface* client, const string& key,
                                  const set<string>& values);
 
 // Issue a blocking GET for `key` under the ordered-set lattice type.
-set<string> get_ordered_set(KvsClientInterface* client, const string& key);
+vector<string> get_ordered_set(KvsClientInterface* client, const string& key);
 
 // Delete a key by writing an empty LWW value with a dominating timestamp.
 kvs::KeyResponse del(KvsClientInterface* client, const string& key);

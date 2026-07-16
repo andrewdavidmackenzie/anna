@@ -280,7 +280,7 @@ TEST(ClientLibTest, GetOrderedSetReturnsAllValues) {
   set<string> expected = {"a", "b", "c"};
   client.responses_.push_back(make_ordered_set_response(expected));
 
-  set<string> result = annalib::get_ordered_set(&client, "my_ordered_key");
+  vector<string> result = annalib::get_ordered_set(&client, "my_ordered_key");
 
   EXPECT_EQ(result, expected);
   ASSERT_EQ(client.keys_get_.size(), 1u);

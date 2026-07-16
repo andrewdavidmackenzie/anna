@@ -705,7 +705,7 @@ func TestBuildAndParseCausalPayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseCausalPayload failed: %v", err)
 	}
-	if cv.Value != "hello" {
+	if len(cv.Values) != 1 || cv.Values[0] != "hello" {
 		t.Errorf("expected value 'hello', got '%s'", cv.Value)
 	}
 	if cv.VectorClock["test"] != 1 {
@@ -747,7 +747,7 @@ func TestGetCausalWithMock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetCausal failed: %v", err)
 	}
-	if cv.Value != "causal_value" {
+	if len(cv.Values) != 1 || cv.Values[0] != "causal_value" {
 		t.Errorf("expected 'causal_value', got '%s'", cv.Value)
 	}
 }
@@ -897,7 +897,7 @@ func TestBuildAndParseSingleCausalPayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseSingleCausalPayload failed: %v", err)
 	}
-	if scv.Value != "hello" {
+	if slen(cv.Values) != 1 || cv.Values[0] != "hello" {
 		t.Errorf("expected value 'hello', got '%s'", scv.Value)
 	}
 	if scv.VectorClock["test"] != 1 {

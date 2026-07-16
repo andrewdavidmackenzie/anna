@@ -597,7 +597,7 @@ impl KVSClient {
     pub async fn get_single_causal<K: AsRef<str> + Display>(
         &mut self,
         key: K,
-    ) -> Result<(HashMap<String, u32>, String)> {
+    ) -> Result<(HashMap<String, u32>, Vec<String>)> {
         debug!("GET_SINGLE_CAUSAL: {}", key);
         let response = self
             .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
@@ -612,13 +612,13 @@ impl KVSClient {
             .map_err(|e| Error::Kvs(format!("GET_SINGLE_CAUSAL: failed to decode: {}", e)))?;
 
         let vc = skc.vector_clock;
-        let value = skc
+        let values: Vec<String> = skc
             .values
-            .first()
+            .iter()
             .map(|v| String::from_utf8_lossy(v).to_string())
-            .unwrap_or_default();
+            .collect();
 
-        Ok((vc, value))
+        Ok((vc, values))
     }
 
     /// Store a value by key (Single-Key Causal lattice).

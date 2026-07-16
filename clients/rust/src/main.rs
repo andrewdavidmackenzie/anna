@@ -194,13 +194,15 @@ async fn execute_command(
         }
         #[cfg(feature = "causal")]
         "GET_SINGLE_CAUSAL" if split.len() == 2 => {
-            let (vc, value) = client.get_single_causal(split[1]).await?;
+            let (vc, values) = client.get_single_causal(split[1]).await?;
             let mut sorted_vc: Vec<_> = vc.iter().collect();
             sorted_vc.sort_by_key(|(k, _)| k.clone());
             for (k, v) in &sorted_vc {
                 println!("{{{} : {}}}", k, v);
             }
-            println!("{}", value);
+            for v in &values {
+                println!("{}", v);
+            }
         }
         #[cfg(feature = "causal")]
         "PUT_SINGLE_CAUSAL" if split.len() == 3 => {

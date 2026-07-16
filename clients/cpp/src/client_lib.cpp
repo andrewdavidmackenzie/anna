@@ -253,7 +253,7 @@ kvs::KeyResponse put_ordered_set(KvsClientInterface* client, const string& key,
   return response;
 }
 
-set<string> get_ordered_set(KvsClientInterface* client, const string& key) {
+vector<string> get_ordered_set(KvsClientInterface* client, const string& key) {
   client->get_async(key);
 
   vector<kvs::KeyResponse> responses = client->receive_async();
