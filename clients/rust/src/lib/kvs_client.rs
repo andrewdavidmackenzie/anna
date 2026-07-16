@@ -1008,12 +1008,12 @@ mod tests {
     #[test]
     fn priority_value_roundtrip() {
         let original = PriorityValue {
-            priority: 3.14,
+            priority: 2.75,
             value: b"important".to_vec(),
         };
         let encoded = original.encode_to_vec();
         let decoded = PriorityValue::decode(encoded.as_slice()).unwrap();
-        assert!((decoded.priority - 3.14).abs() < f64::EPSILON);
+        assert!((decoded.priority - 2.75).abs() < f64::EPSILON);
         assert_eq!(decoded.value, b"important");
     }
 
