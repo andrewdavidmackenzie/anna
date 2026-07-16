@@ -57,7 +57,9 @@ void print_single_causal_value(const annalib::SingleCausalValue& causal) {
               << "}" << std::endl;
   }
 
-  std::cout << causal.value << std::endl;
+  for (const auto& v : causal.values) {
+    std::cout << v << std::endl;
+  }
 }
 
 void print_priority_value(const annalib::PriorityResult& result) {
@@ -125,7 +127,12 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
       std::cout << "Failure!" << std::endl;
     }
   } else if (command == "GET_ORDERED_SET") {
-    print_set(annalib::get_ordered_set(client, v[1]));
+    vector<string> values = annalib::get_ordered_set(client, v[1]);
+    std::cout << "[ ";
+    for (const auto& val : values) {
+      std::cout << val << " ";
+    }
+    std::cout << "]" << std::endl;
   } else if (command == "PUT_SINGLE_CAUSAL") {
     kvs::KeyResponse response =
         annalib::put_single_causal(client, v[1], v[2]);

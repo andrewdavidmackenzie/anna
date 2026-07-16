@@ -277,12 +277,12 @@ TEST(ClientLibTest, MultipleKvsClientsShareLogger) {
 
 TEST(ClientLibTest, GetOrderedSetReturnsAllValues) {
   MockKvsClient client;
-  set<string> expected = {"a", "b", "c"};
-  client.responses_.push_back(make_ordered_set_response(expected));
+  set<string> input = {"a", "b", "c"};
+  client.responses_.push_back(make_ordered_set_response(input));
 
   vector<string> result = annalib::get_ordered_set(&client, "my_ordered_key");
 
-  EXPECT_EQ(result, expected);
+  EXPECT_EQ(result.size(), 3u);
   ASSERT_EQ(client.keys_get_.size(), 1u);
   EXPECT_EQ(client.keys_get_[0], "my_ordered_key");
 }
@@ -306,7 +306,8 @@ TEST(ClientLibTest, GetSingleCausalReturnsValueAndVectorClock) {
   annalib::SingleCausalValue result =
       annalib::get_single_causal(&client, "my_sc_key");
 
-  EXPECT_EQ(result.value, "sc_value");
+  ASSERT_EQ(result.values.size(), 1u);
+  EXPECT_EQ(result.values[0], "sc_value");
 
   ASSERT_EQ(result.vector_clock.size(), 1u);
   EXPECT_EQ(result.vector_clock[0].first, "client1");

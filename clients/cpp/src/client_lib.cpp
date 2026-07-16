@@ -268,10 +268,13 @@ vector<string> get_ordered_set(KvsClientInterface* client, const string& key) {
   assert(responses[0].tuples(0).lattice_type() ==
          kvs::LatticeType::ORDERED_SET);
 
-  // Deserialization is the same as SET (both use kvs::SetValue proto).
-  SetLattice<string> latt = deserialize_set(responses[0].tuples(0).payload());
-
-  return latt.reveal();
+  kvs::SetValue set_val;
+  set_val.ParseFromString(responses[0].tuples(0).payload());
+  vector<string> result;
+  for (const auto& v : set_val.values()) {
+    result.push_back(v);
+  }
+  return result;
 }
 
 kvs::KeyResponse put_single_causal(KvsClientInterface* client,
@@ -323,7 +326,9 @@ SingleCausalValue get_single_causal(KvsClientInterface* client,
   VectorClockValuePair<SetLattice<string>> p = to_vector_clock_value_pair(cv);
 
   SingleCausalValue result;
-  result.value = *(p.value.reveal().begin());
+  for (const auto& v : p.value.reveal()) {
+    result.values.push_back(v);
+  }
 
   for (const auto& pair : p.vector_clock.reveal()) {
     result.vector_clock.push_back({pair.first, pair.second.reveal()});
