@@ -186,3 +186,53 @@ class TestSystemPutGet:
     def test_get_nonexistent_key(self, client):
         got = client.get("sys_nonexistent_key_xyz")
         assert got["sys_nonexistent_key_xyz"] is None
+
+    def test_put_and_get_ordered_set(self, client):
+        from anna.lattices import ListBasedOrderedSet, OrderedSetLattice
+        result = client.put_ordered_set("sys_oset", ["alpha", "beta", "gamma"])
+        assert result["sys_oset"] is True
+
+        got = client.get_ordered_set("sys_oset")
+        assert got is not None
+        revealed = got.reveal()
+        assert isinstance(revealed, ListBasedOrderedSet)
+        assert "alpha" in revealed
+        assert "beta" in revealed
+        assert "gamma" in revealed
+
+    def test_put_and_get_single_causal(self, client):
+        from anna.lattices import SingleKeyCausalLattice
+        result = client.put_single_causal("sys_sc", "sc_hello")
+        assert result["sys_sc"] is True
+
+        got = client.get_single_causal("sys_sc")
+        assert got is not None
+        assert isinstance(got, SingleKeyCausalLattice)
+
+    def test_put_and_get_causal(self, client):
+        from anna.lattices import MultiKeyCausalLattice
+        result = client.put_causal("sys_mc", "mc_hello")
+        assert result["sys_mc"] is True
+
+        got = client.get_causal("sys_mc")
+        assert got is not None
+        assert isinstance(got, MultiKeyCausalLattice)
+
+    def test_put_and_get_priority(self, client):
+        from anna.lattices import PriorityLattice
+        result = client.put_priority("sys_pri", 1.5, "important")
+        assert result["sys_pri"] is True
+
+        got = client.get_priority("sys_pri")
+        assert got is not None
+        assert isinstance(got, PriorityLattice)
+
+    def test_delete(self, client):
+        from anna.lattices import LWWPairLattice
+        client.put("sys_del", LWWPairLattice(time.time_ns(), b"to_delete"))
+
+        got = client.get("sys_del")
+        assert got["sys_del"] is not None
+        assert got["sys_del"].reveal() == b"to_delete"
+
+        client.delete("sys_del")
