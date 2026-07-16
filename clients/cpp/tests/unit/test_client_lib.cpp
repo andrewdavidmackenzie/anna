@@ -194,10 +194,11 @@ policy:
   tiering: false
 )";
 
-  std::string path = "/tmp/anna_test_config.yml";
-  std::ofstream f(path);
-  f << config;
-  f.close();
+  char path[] = "/tmp/anna_test_config_XXXXXX";
+  int fd = mkstemp(path);
+  ASSERT_NE(fd, -1);
+  write(fd, config, strlen(config));
+  close(fd);
 
   annalib::ClientConfig cfg = annalib::load_config(path);
 
@@ -205,7 +206,7 @@ policy:
   // 2 routing IPs * 2 threads = 4 routing threads
   EXPECT_EQ(cfg.routing_threads.size(), 4u);
 
-  std::remove(path.c_str());
+  std::remove(path);
 }
 
 TEST(ClientLibTest, MultipleKvsClientsShareLogger) {
