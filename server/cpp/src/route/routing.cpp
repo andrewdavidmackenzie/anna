@@ -13,6 +13,7 @@
 //  limitations under the License.
 
 #include "route/routing_handlers.hpp"
+#include "signal_handler.hpp"
 #include "yaml-cpp/yaml.h"
 
 hmap<Tier, TierMetadata, TierEnumHash> kTierMetadata;
@@ -101,8 +102,8 @@ void run(unsigned thread_id, Address ip, vector<Address> monitoring_ips) {
       {static_cast<void *>(replication_change_puller), 0, ZMQ_POLLIN, 0},
       {static_cast<void *>(key_address_puller), 0, ZMQ_POLLIN, 0}};
 
-  while (true) {
-    kZmqUtil->poll(&pollitems, std::chrono::milliseconds{-1});
+  while (!shutdown_requested.load()) {
+    kZmqUtil->poll(&pollitems, std::chrono::milliseconds{100});
 
     // only relevant for the seed node
     if (pollitems[0].revents & ZMQ_POLLIN) {
@@ -178,6 +179,8 @@ int main(int argc, char *argv[]) {
   kTierMetadata[Tier::DISK] =
       TierMetadata(Tier::DISK, kEbsThreadCount, kDefaultGlobalEbsReplication,
                    kEbsNodeCapacity);
+
+  install_shutdown_handler();
 
   vector<std::thread> routing_worker_threads;
 

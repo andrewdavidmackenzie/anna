@@ -61,6 +61,7 @@ func startServers(t *testing.T) {
 
 func stopServers() {
 	annalib.Stop()
+	time.Sleep(2 * time.Second)
 }
 
 func TestSystemKVSClient(t *testing.T) {

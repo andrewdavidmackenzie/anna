@@ -167,13 +167,21 @@ policy:
             sys.exit(result.returncode)
 
     finally:
-        # Kill the server process group
         print("Cleaning up...")
         for proc in procs:
             try:
                 os.killpg(os.getpgid(proc.pid), subprocess.signal.SIGTERM)
             except Exception as e:
-                print(f"Error killing process {proc.pid}: {e}")
+                print(f"Error sending SIGTERM to {proc.pid}: {e}")
+
+        for proc in procs:
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                try:
+                    os.killpg(os.getpgid(proc.pid), subprocess.signal.SIGKILL)
+                except Exception:
+                    pass
         
         if os.path.exists(test_config):
             os.remove(test_config)

@@ -13,6 +13,7 @@
 //  limitations under the License.
 
 #include "kvs/kvs_handlers.hpp"
+#include "signal_handler.hpp"
 #include "yaml-cpp/yaml.h"
 
 // define server report threshold (in second)
@@ -300,7 +301,7 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
   unsigned epoch = 0;
 
   // enter event loop
-  while (true) {
+  while (!shutdown_requested.load()) {
     kZmqUtil->poll(&pollitems, std::chrono::milliseconds{0});
 
     // receives a node join
@@ -779,6 +780,8 @@ int main(int argc, char *argv[]) {
                    kEbsNodeCapacity);
 
   kThreadNum = kTierMetadata[kSelfTier].thread_number_;
+
+  install_shutdown_handler();
 
   // start the initial threads based on kThreadNum
   vector<std::thread> worker_threads;

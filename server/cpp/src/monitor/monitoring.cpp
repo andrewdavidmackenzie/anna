@@ -15,6 +15,7 @@
 #include "monitor/monitoring_handlers.hpp"
 #include "monitor/monitoring_utils.hpp"
 #include "monitor/policies.hpp"
+#include "signal_handler.hpp"
 #include "yaml-cpp/yaml.h"
 
 unsigned kMemoryThreadCount;
@@ -44,6 +45,8 @@ HashRingUtilInterface *kHashRingUtil = &hash_ring_util;
 int main(int argc, char *argv[]) {
   auto log = spdlog::basic_logger_mt("monitoring_log", "log.txt", true);
   log->flush_on(spdlog::level::info);
+
+  install_shutdown_handler();
 
   if (argc != 3) {
     std::cerr << "Usage: " << argv[0] << "--config <config file path>" << std::endl;
@@ -176,7 +179,7 @@ int main(int argc, char *argv[]) {
 
   unsigned rid = 0;
 
-  while (true) {
+  while (!shutdown_requested.load()) {
     kZmqUtil->poll(&pollitems, std::chrono::milliseconds{0});
 
     if (pollitems[0].revents & ZMQ_POLLIN) {
