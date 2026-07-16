@@ -695,6 +695,84 @@ func TestPutSetEmptyValues(t *testing.T) {
 	}
 }
 
+func TestBuildAndParseCausalPayload(t *testing.T) {
+	payload, err := buildCausalPayload("hello")
+	if err != nil {
+		t.Fatalf("buildCausalPayload failed: %v", err)
+	}
+
+	cv, err := parseCausalPayload(payload)
+	if err != nil {
+		t.Fatalf("parseCausalPayload failed: %v", err)
+	}
+	if cv.Value != "hello" {
+		t.Errorf("expected value 'hello', got '%s'", cv.Value)
+	}
+	if cv.VectorClock["test"] != 1 {
+		t.Errorf("expected VC test=1, got %v", cv.VectorClock)
+	}
+	dep, ok := cv.Dependencies["dep1"]
+	if !ok {
+		t.Fatal("expected dependency 'dep1'")
+	}
+	if dep["test1"] != 1 {
+		t.Errorf("expected dep VC test1=1, got %v", dep)
+	}
+}
+
+func TestParseCausalPayloadInvalid(t *testing.T) {
+	_, err := parseCausalPayload([]byte{0xff, 0xff})
+	if err == nil {
+		t.Error("expected error for invalid causal payload")
+	}
+}
+
+func TestGetCausalWithMock(t *testing.T) {
+	payload, _ := buildCausalPayload("causal_value")
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "k", Error: kvspb.AnnaError_NO_ERROR, Payload: payload}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "k", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	cv, err := client.GetCausal("k")
+	if err != nil {
+		t.Fatalf("GetCausal failed: %v", err)
+	}
+	if cv.Value != "causal_value" {
+		t.Errorf("expected 'causal_value', got '%s'", cv.Value)
+	}
+}
+
+func TestPutCausalWithMock(t *testing.T) {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "k", Error: kvspb.AnnaError_NO_ERROR}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "k", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	err := client.PutCausal("k", "test_val")
+	if err != nil {
+		t.Fatalf("PutCausal failed: %v", err)
+	}
+}
+
 func TestNewKVSClientNilConfig(t *testing.T) {
 	_, err := NewKVSClient(nil, 0)
 	if err == nil {

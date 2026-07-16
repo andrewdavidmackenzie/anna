@@ -5,10 +5,29 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	annalib "github.com/andrewdavidmackenzie/anna/clients/go/annalib"
 )
+
+func sortedKeys(m map[string]uint32) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedStringKeys(m map[string]map[string]uint32) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
 
 func main() {
 	configFile := "default-config.yml"
@@ -143,6 +162,37 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 			return false, err
 		}
 
+	case "GET_CAUSAL":
+		if len(parts) != 2 {
+			return false, fmt.Errorf("usage: GET_CAUSAL <key>")
+		}
+		cv, err := client.GetCausal(parts[1])
+		if err != nil {
+			return false, err
+		}
+		vcKeys := sortedKeys(cv.VectorClock)
+		for _, k := range vcKeys {
+			fmt.Printf("{%s : %d}\n", k, cv.VectorClock[k])
+		}
+		depKeys := sortedStringKeys(cv.Dependencies)
+		for _, depKey := range depKeys {
+			vc := cv.Dependencies[depKey]
+			var vcParts []string
+			for _, k := range sortedKeys(vc) {
+				vcParts = append(vcParts, fmt.Sprintf("{%s : %d}", k, vc[k]))
+			}
+			fmt.Printf("%s : %s\n", depKey, strings.Join(vcParts, " "))
+		}
+		fmt.Println(cv.Value)
+
+	case "PUT_CAUSAL":
+		if len(parts) != 3 {
+			return false, fmt.Errorf("usage: PUT_CAUSAL <key> <value>")
+		}
+		if err := client.PutCausal(parts[1], parts[2]); err != nil {
+			return false, err
+		}
+
 	case "START":
 		count, err := annalib.Start(configFilePath)
 		if err != nil {
@@ -179,6 +229,8 @@ func cliUsage() string {
 	put {key} {value} 		- set entry with key = {key} in the KVS to have value = {value}
 	get_set {key} 			- get the value of the set with key = {key} in the KVS
 	put_set {key} {set} 		- set the value of the set with key = {key} in the KVS
+	get_causal {key} 		- causal get of value with key = {key} in the KVS
+	put_causal {key} {value} 	- causal set of value with key = {key} in the KVS
 	start 				- start anna processes
 	stop 				- stop running anna processes
 	status 				- print the status of anna processes

@@ -44,11 +44,8 @@ pub fn start_servers(path: &str, config: &str) {
 
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
-        if TcpStream::connect_timeout(
-            &"127.0.0.1:6450".parse().unwrap(),
-            Duration::from_secs(1),
-        )
-        .is_ok()
+        if TcpStream::connect_timeout(&"127.0.0.1:6450".parse().unwrap(), Duration::from_secs(1))
+            .is_ok()
         {
             break;
         }

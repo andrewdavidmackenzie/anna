@@ -85,3 +85,30 @@ class TestDeserialize:
         result = BaseAnnaClient._deserialize(tup)
         assert isinstance(result, OrderedSetLattice)
         assert result.reveal() == [b"a", b"b"]
+
+
+class TestCausalDeserialization:
+    def test_multi_causal_roundtrip(self):
+        from anna.lattices import MultiKeyCausalLattice, SetLattice, MapLattice, VectorClock
+        from anna.base_client import BaseAnnaClient
+        from anna.kvs_pb2 import KeyTuple, MULTI_CAUSAL
+
+        vc = VectorClock({"test": 1}, True)
+        dep_vc = VectorClock({"test1": 1}, True)
+        deps = MapLattice({"dep1": dep_vc})
+        val = SetLattice({b"hello"})
+        lattice = MultiKeyCausalLattice(vc, deps, val)
+
+        pb, typ = lattice.serialize()
+        assert typ == MULTI_CAUSAL
+
+        tup = KeyTuple()
+        tup.lattice_type = MULTI_CAUSAL
+        tup.payload = pb.SerializeToString()
+
+        result = BaseAnnaClient._deserialize(tup)
+        assert isinstance(result, MultiKeyCausalLattice)
+        assert b"hello" in result.value.reveal()
+        assert result.vector_clock.reveal()["test"].reveal() == 1
+        dep = result.dependencies.reveal()["dep1"]
+        assert dep.reveal()["test1"].reveal() == 1

@@ -2,7 +2,7 @@ use crate::config::Config;
 use crate::errors::{Error, Result};
 use crate::proto::kvs::{
     AnnaError, KeyAddressRequest, KeyAddressResponse, KeyRequest, KeyResponse, KeyTuple,
-    LatticeType, LwwValue, RequestType, SetValue,
+    LatticeType, LwwValue, MultiKeyCausalValue, RequestType, SetValue,
 };
 use crate::threads::{UserRoutingThread, UserThread};
 use crate::types::{Address, Key, ThreadID};
@@ -137,7 +137,10 @@ impl KVSClient {
                 .map_err(|e| Error::Kvs(format!("Failed to connect to {}: {}", addr, e)))?;
             self.socket_cache.insert(addr.to_string(), sock);
         }
-        Ok(self.socket_cache.get_mut(addr).expect("socket just inserted"))
+        Ok(self
+            .socket_cache
+            .get_mut(addr)
+            .expect("socket just inserted"))
     }
 
     async fn send_request(&mut self, msg: &[u8], addr: &str) -> Result<()> {
@@ -212,9 +215,7 @@ impl KVSClient {
     }
 
     async fn get_worker_address(&mut self, key: &str) -> Option<Address> {
-        if !self.key_address_cache.contains_key(key)
-            || self.key_address_cache[key].is_empty()
-        {
+        if !self.key_address_cache.contains_key(key) || self.key_address_cache[key].is_empty() {
             let addrs = self.query_routing(key).await;
             if addrs.is_empty() {
                 return None;
@@ -260,7 +261,9 @@ impl KVSClient {
         request.tuples.push(tuple);
 
         let encoded = request.encode_to_vec();
-        if self.send_request(&encoded, &worker).await.is_err() { return None; }
+        if self.send_request(&encoded, &worker).await.is_err() {
+            return None;
+        }
 
         match self.recv_response(false).await {
             Some(data) => match KeyResponse::decode(data.as_slice()) {
@@ -413,11 +416,7 @@ impl KVSClient {
     /// # }
     /// ```
     #[cfg(feature = "set")]
-    pub async fn put_set<K: AsRef<str> + Display>(
-        &mut self,
-        key: K,
-        set: &[&str],
-    ) -> Result<()> {
+    pub async fn put_set<K: AsRef<str> + Display>(&mut self, key: K, set: &[&str]) -> Result<()> {
         debug!("PUT SET: {} <- {:?}", key, set);
         let set_val = SetValue {
             values: set.iter().map(|s| s.as_bytes().to_vec()).collect(),
@@ -438,22 +437,75 @@ impl KVSClient {
         Ok(())
     }
 
-    /// Perform a blocking causal GET (not yet implemented).
+    /// Retrieve a value by key (Multi-Key Causal lattice).
+    ///
+    /// Returns (vector_clock, dependencies, value).
     #[cfg(feature = "causal")]
-    pub async fn get_causal<K: AsRef<str> + Display>(&mut self, key: K) -> Result<String> {
-        debug!("GET_CAUSAL: {}", key);
-        Err(Error::Kvs("Causal GET is not yet implemented".into()))
-    }
-
-    /// Perform a blocking causal PUT (not yet implemented).
-    #[cfg(feature = "causal")]
-    pub async fn put_causal<K: AsRef<str> + Display>(
+    pub async fn get_causal<K: AsRef<str> + Display>(
         &mut self,
         key: K,
-        value: &str,
-    ) -> Result<()> {
+    ) -> Result<(std::collections::HashMap<String, u32>, Vec<(String, std::collections::HashMap<String, u32>)>, String)> {
+        debug!("GET_CAUSAL: {}", key);
+        let response = self
+            .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
+            .await
+            .ok_or_else(|| Error::Kvs("GET_CAUSAL: request failed or timed out".into()))?;
+
+        let tuple = Self::validate_response(&response, "GET_CAUSAL")?;
+
+        let mkc = MultiKeyCausalValue::decode(tuple.payload.as_slice())
+            .map_err(|e| Error::Kvs(format!("GET_CAUSAL: failed to decode: {}", e)))?;
+
+        let vc = mkc.vector_clock;
+        let deps: Vec<(String, std::collections::HashMap<String, u32>)> = mkc
+            .dependencies
+            .iter()
+            .map(|kv| (kv.key.clone(), kv.vector_clock.clone()))
+            .collect();
+        let value = mkc
+            .values
+            .first()
+            .map(|v| String::from_utf8_lossy(v).to_string())
+            .unwrap_or_default();
+
+        Ok((vc, deps, value))
+    }
+
+    /// Store a value by key (Multi-Key Causal lattice).
+    #[cfg(feature = "causal")]
+    pub async fn put_causal<K: AsRef<str> + Display>(&mut self, key: K, value: &str) -> Result<()> {
         debug!("PUT_CAUSAL: {} <- {}", key, value);
-        Err(Error::Kvs("Causal PUT is not yet implemented".into()))
+        let mut vc = std::collections::HashMap::new();
+        vc.insert("test".to_string(), 1u32);
+
+        let dep = crate::proto::shared::KeyVersion {
+            key: "dep1".to_string(),
+            vector_clock: {
+                let mut m = std::collections::HashMap::new();
+                m.insert("test1".to_string(), 1u32);
+                m
+            },
+        };
+
+        let mkc = MultiKeyCausalValue {
+            vector_clock: vc,
+            dependencies: vec![dep],
+            values: vec![value.as_bytes().to_vec()],
+        };
+        let payload = mkc.encode_to_vec();
+
+        let response = self
+            .send_data_request(
+                key.as_ref(),
+                RequestType::Put as i32,
+                Some(LatticeType::MultiCausal as i32),
+                Some(payload),
+            )
+            .await
+            .ok_or_else(|| Error::Kvs("PUT_CAUSAL: request failed or timed out".into()))?;
+
+        Self::validate_response(&response, "PUT_CAUSAL")?;
+        Ok(())
     }
 
     /// Clear the key-address cache.

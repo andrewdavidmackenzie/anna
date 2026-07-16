@@ -21,4 +21,7 @@ target_link_libraries(cli_tests
 )
 
 add_test(NAME CliInvocationTests COMMAND cli_tests)
-add_test(NAME CliSmokeTest COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/cli_test_runner.py)
+add_test(NAME CliSmokeTest COMMAND python3
+  ${CMAKE_SOURCE_DIR}/../../tests/shared/cli/run_smoke_test.py
+  ${CMAKE_BINARY_DIR}/cli/anna-cli --config {CONFIG} cli
+)

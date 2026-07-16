@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	kvspb "github.com/andrewdavidmackenzie/anna/clients/go/annalib/proto/kvs"
+	sharedpb "github.com/andrewdavidmackenzie/anna/clients/go/annalib/proto/shared"
 )
 
 type transport interface {
@@ -442,6 +443,78 @@ func (c *KVSClient) PutSet(key string, values []string) error {
 	}
 
 	_, err = validateResponse(response, "PUT_SET")
+	return err
+}
+
+// CausalValue holds the result of a causal GET.
+type CausalValue struct {
+	VectorClock  map[string]uint32
+	Dependencies map[string]map[string]uint32
+	Value        string
+}
+
+func buildCausalPayload(value string) ([]byte, error) {
+	mkc := &kvspb.MultiKeyCausalValue{
+		VectorClock: map[string]uint32{"test": 1},
+		Dependencies: []*sharedpb.KeyVersion{
+			{Key: "dep1", VectorClock: map[string]uint32{"test1": 1}},
+		},
+		Values: [][]byte{[]byte(value)},
+	}
+	return proto.Marshal(mkc)
+}
+
+func parseCausalPayload(payload []byte) (*CausalValue, error) {
+	var mkc kvspb.MultiKeyCausalValue
+	if err := proto.Unmarshal(payload, &mkc); err != nil {
+		return nil, fmt.Errorf("failed to decode causal value: %w", err)
+	}
+
+	deps := make(map[string]map[string]uint32)
+	for _, kv := range mkc.Dependencies {
+		deps[kv.Key] = kv.VectorClock
+	}
+
+	val := ""
+	if len(mkc.Values) > 0 {
+		val = string(mkc.Values[0])
+	}
+
+	return &CausalValue{
+		VectorClock:  mkc.VectorClock,
+		Dependencies: deps,
+		Value:        val,
+	}, nil
+}
+
+// GetCausal retrieves a value by key (Multi-Key Causal lattice).
+func (c *KVSClient) GetCausal(key string) (*CausalValue, error) {
+	response, err := c.sendDataRequest(key, kvspb.RequestType_GET, kvspb.LatticeType_NONE, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	tuple, err := validateResponse(response, "GET_CAUSAL")
+	if err != nil {
+		return nil, err
+	}
+
+	return parseCausalPayload(tuple.Payload)
+}
+
+// PutCausal stores a value by key (Multi-Key Causal lattice).
+func (c *KVSClient) PutCausal(key, value string) error {
+	payload, err := buildCausalPayload(value)
+	if err != nil {
+		return &KVSError{Message: fmt.Sprintf("PUT_CAUSAL: %v", err)}
+	}
+
+	response, err := c.sendDataRequest(key, kvspb.RequestType_PUT, kvspb.LatticeType_MULTI_CAUSAL, payload)
+	if err != nil {
+		return err
+	}
+
+	_, err = validateResponse(response, "PUT_CAUSAL")
 	return err
 }
 
