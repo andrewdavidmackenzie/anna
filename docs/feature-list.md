@@ -15,12 +15,12 @@ as the basis for black-box system testing.
 | PUT_SET                    | Add values to a set (union semantics)                        | Yes    |
 | GET_CAUSAL                 | Retrieve with causal metadata (vector clock, dependencies)   | Yes    |
 | PUT_CAUSAL                 | Store with causal metadata                                   | Yes    |
-| GET_ORDERED_SET          | Retrieve an ordered set-valued key                           | Yes    |
-| PUT_ORDERED_SET          | Add values to an ordered set                                 | Yes    |
-| GET_SINGLE_CAUSAL        | Retrieve with single-key causal metadata                     | Yes    |
-| PUT_SINGLE_CAUSAL        | Store with single-key causal metadata                        | Yes    |
-| GET_PRIORITY             | Retrieve a priority-valued key                               | Yes    |
-| PUT_PRIORITY             | Store a priority-value pair (lowest priority wins)           | Yes    |
+| GET_ORDERED_SET            | Retrieve an ordered set-valued key                           | Yes    |
+| PUT_ORDERED_SET            | Add values to an ordered set                                 | Yes    |
+| GET_SINGLE_CAUSAL          | Retrieve with single-key causal metadata                     | Yes    |
+| PUT_SINGLE_CAUSAL          | Store with single-key causal metadata                        | Yes    |
+| GET_PRIORITY               | Retrieve a priority-valued key                               | Yes    |
+| PUT_PRIORITY               | Store a priority-value pair (lowest priority wins)           | Yes    |
 | Address cache invalidation | Server signals client to refresh address cache               | No     |
 | Multi-key GET              | Retrieve multiple keys in one request                        | No     |
 
