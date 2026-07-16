@@ -15,6 +15,12 @@ as the basis for black-box system testing.
 | PUT_SET                    | Add values to a set (union semantics)                        | Yes    |
 | GET_CAUSAL                 | Retrieve with causal metadata (vector clock, dependencies)   | Yes    |
 | PUT_CAUSAL                 | Store with causal metadata                                   | Yes    |
+| GET_ORDERED_SET          | Retrieve an ordered set-valued key                           | Yes    |
+| PUT_ORDERED_SET          | Add values to an ordered set                                 | Yes    |
+| GET_SINGLE_CAUSAL        | Retrieve with single-key causal metadata                     | Yes    |
+| PUT_SINGLE_CAUSAL        | Store with single-key causal metadata                        | Yes    |
+| GET_PRIORITY             | Retrieve a priority-valued key                               | Yes    |
+| PUT_PRIORITY             | Store a priority-value pair (lowest priority wins)           | Yes    |
 | Address cache invalidation | Server signals client to refresh address cache               | No     |
 | Multi-key GET              | Retrieve multiple keys in one request                        | No     |
 
@@ -24,10 +30,10 @@ as the basis for black-box system testing.
 |------------------------|-----------------------------------------------------|--------|
 | LWW (Last-Writer-Wins) | Timestamp-based conflict resolution                 | Yes    |
 | SET                    | Unordered set with union merge                      | Yes    |
-| ORDERED_SET            | Ordered set with union merge                        | No     |
-| SINGLE_CAUSAL          | Single-key causal with vector clock                 | No     |
+| ORDERED_SET            | Ordered set with union merge                        | Yes    |
+| SINGLE_CAUSAL          | Single-key causal with vector clock                 | Yes    |
 | MULTI_CAUSAL           | Multi-key causal with vector clock and dependencies | Yes    |
-| PRIORITY               | Priority-value pair, lowest priority wins           | No     |
+| PRIORITY               | Priority-value pair, lowest priority wins           | Yes    |
 
 ## Storage Tiers
 
@@ -159,8 +165,8 @@ as the basis for black-box system testing.
 
 | Category                 | Total Features | Tested | Coverage |
 |--------------------------|----------------|--------|----------|
-| Client Operations        | 9              | 6      | 66%      |
-| Lattice Types            | 6              | 3      | 50%      |
+| Client Operations        | 15             | 12     | 80%      |
+| Lattice Types            | 6              | 6      | 100%     |
 | Storage Tiers            | 4              | 1      | 25%      |
 | Replication              | 6              | 0      | 0%       |
 | Gossip / Multicast       | 5              | 0      | 0%       |
@@ -173,7 +179,7 @@ as the basis for black-box system testing.
 | Configuration            | 7              | 4      | 57%      |
 | Communication            | 4              | 4      | 100%     |
 | Error Handling           | 6              | 1      | 17%      |
-| **Total**                | **81**         | **21** | **26%**  |
+| **Total**                | **87**         | **30** | **34%**  |
 
 The next step (#336) is to prioritize untested features and add system tests
 to improve both feature and code coverage of the server.
