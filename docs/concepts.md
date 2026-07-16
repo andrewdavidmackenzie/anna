@@ -58,7 +58,7 @@ Anna actors periodically exchange updates via a gossip protocol:
 - Each actor maintains a **changeset** of keys updated since the last epoch
 - At epoch end, the actor multicasts merged updates to relevant replicas
 - Updates are merged using lattice operations, ensuring convergence
-- The **multicast epoch** is a tunable parameter (default: 100ms)
+- The **multicast epoch** is a tunable parameter (default: 10 seconds)
 - Merge-at-sender optimization reduces network overhead for hot keys
 
 ## Storage Tiers

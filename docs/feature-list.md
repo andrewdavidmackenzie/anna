@@ -159,17 +159,21 @@ as the basis for black-box system testing.
 
 | Category | Total Features | Tested | Coverage |
 |----------|---------------|--------|----------|
-| Client Operations | 9 | 6 | 67% |
+| Client Operations | 9 | 6 | 66% |
 | Lattice Types | 6 | 3 | 50% |
-| Storage Tiers | 4 | 1 | 25% |
+| Storage Tiers | 3 | 1 | 33% |
 | Replication | 6 | 0 | 0% |
-| Gossip | 5 | 0 | 0% |
+| Gossip / Multicast | 5 | 0 | 0% |
 | Cluster Management | 5 | 0 | 0% |
-| Routing | 6 | 2 | 33% |
-| Monitoring/Policy | 8 | 0 | 0% |
+| Routing Tier | 6 | 2 | 33% |
+| Monitoring / Policy | 8 | 0 | 0% |
+| Consistent Hashing | 4 | 0 | 0% |
 | Fault Tolerance | 5 | 0 | 0% |
-| Error Handling | 6 | 1 | 17% |
-| **Total** | **60** | **13** | **22%** |
+| Periodic Self-Reporting | 6 | 0 | 0% |
+| Configuration | 7 | 4 | 57% |
+| Communication | 4 | 4 | 100% |
+| Error Handling | 15 | 1 | 6% |
+| **Total** | **89** | **21** | **23%** |
 
 The next step (#336) is to prioritize untested features and add system tests
 to improve both feature and code coverage of the server.
