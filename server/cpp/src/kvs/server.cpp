@@ -793,9 +793,9 @@ int main(int argc, char *argv[]) {
 
   run(0, ebs_root, public_ip, private_ip, seed_ip, routing_ips, monitoring_ips, mgmt_ip);
 
-  // join on all threads to make sure they finish before exiting
-  for (unsigned tid = 1; tid < kThreadNum; tid++) {
-    worker_threads[tid].join();
+  // join on all worker threads to make sure they finish before exiting
+  for (auto& t : worker_threads) {
+    t.join();
   }
 
   return 0;

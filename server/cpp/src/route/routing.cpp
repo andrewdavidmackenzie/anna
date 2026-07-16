@@ -190,4 +190,8 @@ int main(int argc, char *argv[]) {
   }
 
   run(0, ip, monitoring_ips);
+
+  for (auto& t : routing_worker_threads) {
+    t.join();
+  }
 }
