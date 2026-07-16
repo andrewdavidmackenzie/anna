@@ -71,10 +71,16 @@ struct PriorityResult {
 // Issue a blocking GET for `key` under the multi-key-causal lattice type.
 CausalValue get_causal(KvsClientInterface* client, const string& key);
 
+// Delete a key by writing an empty LWW value with a dominating timestamp.
+kvs::KeyResponse del(KvsClientInterface* client, const string& key);
+
 // Issue a blocking PUT of `value` for `key` under the default (LWW) lattice
 // type.
 kvs::KeyResponse put(KvsClientInterface* client, const string& key,
                      const string& value);
+
+// Delete a key by writing an empty LWW value with a dominating timestamp.
+kvs::KeyResponse del(KvsClientInterface* client, const string& key);
 
 // Issue a blocking PUT of `value` for `key` under the multi-key-causal
 // lattice type.
@@ -96,6 +102,9 @@ kvs::KeyResponse put_ordered_set(KvsClientInterface* client, const string& key,
 // Issue a blocking GET for `key` under the ordered-set lattice type.
 set<string> get_ordered_set(KvsClientInterface* client, const string& key);
 
+// Delete a key by writing an empty LWW value with a dominating timestamp.
+kvs::KeyResponse del(KvsClientInterface* client, const string& key);
+
 // Issue a blocking PUT of `value` for `key` under the single-key-causal
 // lattice type.
 kvs::KeyResponse put_single_causal(KvsClientInterface* client,
@@ -104,6 +113,9 @@ kvs::KeyResponse put_single_causal(KvsClientInterface* client,
 // Issue a blocking GET for `key` under the single-key-causal lattice type.
 SingleCausalValue get_single_causal(KvsClientInterface* client,
                                     const string& key);
+
+// Delete a key by writing an empty LWW value with a dominating timestamp.
+kvs::KeyResponse del(KvsClientInterface* client, const string& key);
 
 // Issue a blocking PUT of `value` with `priority` for `key` under the
 // priority lattice type (lower priority value wins).

@@ -10,7 +10,7 @@ as the basis for black-box system testing.
 |----------------------------|--------------------------------------------------------------|--------|
 | GET                        | Retrieve a value by key                                      | Yes    |
 | PUT                        | Store a value by key (lattice merge)                         | Yes    |
-| DELETE                     | Remove a key (PUT with empty value and dominating timestamp) | No     |
+| DELETE                     | Remove a key (PUT with empty value and dominating timestamp) | Yes    |
 | GET_SET                    | Retrieve a set-valued key                                    | Yes    |
 | PUT_SET                    | Add values to a set (union semantics)                        | Yes    |
 | GET_CAUSAL                 | Retrieve with causal metadata (vector clock, dependencies)   | Yes    |
@@ -165,7 +165,7 @@ as the basis for black-box system testing.
 
 | Category                 | Total Features | Tested | Coverage |
 |--------------------------|----------------|--------|----------|
-| Client Operations        | 15             | 12     | 80%      |
+| Client Operations        | 15             | 13     | 87%      |
 | Lattice Types            | 6              | 6      | 100%     |
 | Storage Tiers            | 4              | 1      | 25%      |
 | Replication              | 6              | 0      | 0%       |
@@ -179,7 +179,7 @@ as the basis for black-box system testing.
 | Configuration            | 7              | 4      | 57%      |
 | Communication            | 4              | 4      | 100%     |
 | Error Handling           | 6              | 1      | 17%      |
-| **Total**                | **87**         | **30** | **34%**  |
+| **Total**                | **87**         | **31** | **36%**  |
 
 The next step (#336) is to prioritize untested features and add system tests
 to improve both feature and code coverage of the server.

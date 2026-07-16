@@ -733,6 +733,21 @@ impl KVSClient {
         Ok(())
     }
 
+
+    /// Delete a key by writing an empty LWW value with a dominating timestamp.
+    ///
+    /// ```rust
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let config = annalib::config::Config::default();
+    /// let client = annalib::kvs_client::KVSClient::new(&config, Some(116)).await;
+    /// // client.delete("my_key").await?; // requires a running server
+    /// # }
+    /// ```
+    pub async fn delete<K: AsRef<str> + Display>(&mut self, key: K) -> Result<()> {
+        self.put(key, "").await
+    }
+
     /// Clear the key-address cache.
     pub fn clear_cache(&mut self) {
         self.key_address_cache.clear()

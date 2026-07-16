@@ -1033,3 +1033,24 @@ func TestPutPriorityWithMock(t *testing.T) {
 		t.Fatalf("PutPriority failed: %v", err)
 	}
 }
+
+func TestDeleteWithMock(t *testing.T) {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "k", Error: kvspb.AnnaError_NO_ERROR}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "k", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	err := client.Delete("k")
+	if err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+}

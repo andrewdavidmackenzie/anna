@@ -27,6 +27,7 @@ from .kvs_pb2 import (
 from .base_client import BaseAnnaClient
 from .common import UserThread
 from .lattices import (
+    LWWPairLattice,
     ListBasedOrderedSet,
     MultiKeyCausalLattice,
     OrderedSetLattice,
@@ -280,6 +281,13 @@ class AnnaTcpClient(BaseAnnaClient):
         val = SetLattice({value.encode() if isinstance(value, str) else value})
         lattice = MultiKeyCausalLattice(vc, deps, val)
         return self.put(key, lattice)
+
+
+    def delete(self, key):
+        import time
+        ts = time.time_ns()
+        val = LWWPairLattice(ts, b"")
+        return self.put(key, val)
 
     def get_ordered_set(self, key):
         result = self.get([key])

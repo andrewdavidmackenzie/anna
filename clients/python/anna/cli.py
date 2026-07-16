@@ -61,6 +61,10 @@ def execute_command(client, config_path, line):
         result = client.put(parts[1], val)
         if not result.get(parts[1], False):
             print("Failure!")
+    elif cmd == "DELETE":
+        result = client.delete(parts[1])
+        if not result.get(parts[1], False):
+            print("Failure!")
     elif cmd == "GET_SET":
         result = client.get(parts[1])
         val = result.get(parts[1])

@@ -88,6 +88,11 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
     std::cout << annalib::get(client, v[1]) << std::endl;
   } else if (command == "GET_CAUSAL") {
     print_causal_value(annalib::get_causal(client, v[1]));
+  } else if (command == "DELETE") {
+    kvs::KeyResponse response = annalib::del(client, v[1]);
+    if (response.error() != kvs::AnnaError::NO_ERROR) {
+      std::cout << "Failure!" << std::endl;
+    }
   } else if (command == "PUT") {
     kvs::KeyResponse response = annalib::put(client, v[1], v[2]);
     if (response.error() != kvs::AnnaError::NO_ERROR) {

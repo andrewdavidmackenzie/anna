@@ -71,6 +71,11 @@ std::unique_ptr<KvsClient> make_client(const ClientConfig& config,
                                       timeout);
 }
 
+
+kvs::KeyResponse del(KvsClientInterface* client, const string& key) {
+  return put(client, key, "");
+}
+
 string get(KvsClientInterface* client, const string& key) {
   client->get_async(key);
 

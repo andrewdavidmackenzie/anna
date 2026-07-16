@@ -24,6 +24,7 @@ pub const ANNA_COMMANDS: &[&str] = &[
     "STOP",
     "STATUS",
     "HELP",
+    "DELETE",
     "EXIT",
 ];
 

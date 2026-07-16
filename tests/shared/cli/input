@@ -18,3 +18,7 @@ PUT_SINGLE_CAUSAL e world
 GET_SINGLE_CAUSAL e
 PUT_PRIORITY f 1.5 important
 GET_PRIORITY f
+PUT g deleteme
+GET g
+DELETE g
+GET g

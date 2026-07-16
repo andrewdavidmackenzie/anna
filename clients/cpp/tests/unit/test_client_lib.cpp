@@ -185,6 +185,16 @@ TEST(ClientLibTest, PutCausalSendsRequest) {
   EXPECT_EQ(response.response_id(), "1");
 }
 
+
+TEST(ClientLibTest, DeleteSendsEmptyPut) {
+  MockKvsClient client;
+  client.responses_.push_back(make_lww_response("1", "unused"));
+
+  kvs::KeyResponse response = annalib::del(&client, "my_key");
+
+  ASSERT_EQ(client.keys_put_.size(), 1u);
+  EXPECT_EQ(client.keys_put_[0], "my_key");
+}
 TEST(ClientLibTest, LoadConfigParsesYaml) {
   // Write a minimal config file
   const char* config = R"(

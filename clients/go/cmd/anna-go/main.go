@@ -255,7 +255,15 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 			return false, err
 		}
 
-	case "START":
+	case "DELETE":
+		if len(parts) != 2 {
+			return false, fmt.Errorf("usage: DELETE <key>")
+		}
+		if err := client.Delete(parts[1]); err != nil {
+			return false, err
+		}
+
+		case "START":
 		count, err := annalib.Start(configFilePath)
 		if err != nil {
 			return false, err
@@ -299,6 +307,7 @@ func cliUsage() string {
 	put_single_causal {key} {value} 	- single-key causal set with key = {key} in the KVS
 	get_priority {key} 			- get the priority value with key = {key} in the KVS
 	put_priority {key} {priority} {value} 	- set the priority value with key = {key} in the KVS
+	delete {key} 			- delete a key from the KVS
 	start 					- start anna processes
 	stop 					- stop running anna processes
 	status 					- print the status of anna processes

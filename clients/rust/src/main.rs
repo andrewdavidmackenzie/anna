@@ -151,6 +151,7 @@ async fn execute_command(
 
     match split[0].to_ascii_uppercase().as_str() {
         "GET" if split.len() == 2 => println!("{}", client.get(split[1]).await?),
+        "DELETE" if split.len() == 2 => client.delete(split[1]).await?,
         "PUT" if split.len() == 3 => client.put(split[1], split[2]).await?,
         #[cfg(feature = "causal")]
         "GET_CAUSAL" if split.len() == 2 => {
@@ -275,7 +276,7 @@ fn cli_usage() -> String {
     );
 
     usage = format!(
-        "{}\n\tstart \t\t\t\t- start anna processes\
+        "{}\n\tdelete {{key}} \t\t\t- delete a key from the KVS\n\tstart \t\t\t\t- start anna processes\
         \n\tstop \t\t\t\t- stop running anna processes\
         \n\tstatus \t\t\t\t- print the status of anna processes\
         \n\thelp \t\t\t\t- print this usage message\

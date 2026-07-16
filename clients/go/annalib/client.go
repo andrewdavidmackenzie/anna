@@ -686,6 +686,11 @@ func (c *KVSClient) PutPriority(key string, priority float64, value string) erro
 	return err
 }
 
+
+// Delete removes a key by writing an empty LWW value with a dominating timestamp.
+func (c *KVSClient) Delete(key string) error {
+	return c.Put(key, "")
+}
 // ClearCache clears the key-address cache.
 func (c *KVSClient) ClearCache() {
 	c.keyAddressCache = make(map[string][]string)
