@@ -183,9 +183,7 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 			}
 			fmt.Printf("%s : %s\n", depKey, strings.Join(vcParts, " "))
 		}
-		for _, v := range cv.Values {
-			fmt.Println(v)
-		}
+		fmt.Println(cv.Value)
 
 	case "PUT_CAUSAL":
 		if len(parts) != 3 {
@@ -225,7 +223,9 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 		for _, k := range vcKeys {
 			fmt.Printf("{%s : %d}\n", k, scv.VectorClock[k])
 		}
-		fmt.Println(scv.Value)
+		for _, v := range scv.Values {
+			fmt.Println(v)
+		}
 
 	case "PUT_SINGLE_CAUSAL":
 		if len(parts) != 3 {
