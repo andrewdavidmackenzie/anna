@@ -2,7 +2,8 @@ use crate::config::Config;
 use crate::errors::{Error, Result};
 use crate::proto::kvs::{
     AnnaError, KeyAddressRequest, KeyAddressResponse, KeyRequest, KeyResponse, KeyTuple,
-    LatticeType, LwwValue, MultiKeyCausalValue, RequestType, SetValue,
+    LatticeType, LwwValue, MultiKeyCausalValue, PriorityValue, RequestType,
+    SingleKeyCausalValue, SetValue,
 };
 use crate::threads::{UserRoutingThread, UserThread};
 use crate::types::{Address, Key, ThreadID};
@@ -508,6 +509,230 @@ impl KVSClient {
         Ok(())
     }
 
+    /// Retrieve a set of values by key (Ordered Set lattice).
+    ///
+    /// Returns values in the order provided by the server.
+    ///
+    /// ```rust
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let config = annalib::config::Config::default();
+    /// let client = annalib::kvs_client::KVSClient::new(&config, Some(110)).await;
+    /// // let values = client.get_ordered_set("my_oset").await?; // requires a running server
+    /// # }
+    /// ```
+    #[cfg(feature = "set")]
+    pub async fn get_ordered_set<K: AsRef<str> + Display>(
+        &mut self,
+        key: K,
+    ) -> Result<Vec<String>> {
+        debug!("GET ORDERED_SET: {}", key);
+        let response = self
+            .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
+            .await
+            .ok_or_else(|| Error::Kvs("GET_ORDERED_SET: request failed or timed out".into()))?;
+
+        let tuple = Self::validate_response(&response, "GET_ORDERED_SET")?;
+
+        let set_val = SetValue::decode(tuple.payload.as_slice())
+            .map_err(|e| {
+                Error::Kvs(format!("GET_ORDERED_SET: failed to decode Set value: {}", e))
+            })?;
+        Ok(set_val
+            .values
+            .iter()
+            .map(|v| String::from_utf8_lossy(v).to_string())
+            .collect())
+    }
+
+    /// Store a set of values by key (Ordered Set lattice).
+    ///
+    /// ```rust
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let config = annalib::config::Config::default();
+    /// let client = annalib::kvs_client::KVSClient::new(&config, Some(111)).await;
+    /// // client.put_ordered_set("my_oset", &["x", "y", "z"]).await?; // requires a running server
+    /// # }
+    /// ```
+    #[cfg(feature = "set")]
+    pub async fn put_ordered_set<K: AsRef<str> + Display>(
+        &mut self,
+        key: K,
+        set: &[&str],
+    ) -> Result<()> {
+        debug!("PUT ORDERED_SET: {} <- {:?}", key, set);
+        let set_val = SetValue {
+            values: set.iter().map(|s| s.as_bytes().to_vec()).collect(),
+        };
+        let payload = set_val.encode_to_vec();
+
+        let response = self
+            .send_data_request(
+                key.as_ref(),
+                RequestType::Put as i32,
+                Some(LatticeType::OrderedSet as i32),
+                Some(payload),
+            )
+            .await
+            .ok_or_else(|| Error::Kvs("PUT_ORDERED_SET: request failed or timed out".into()))?;
+
+        Self::validate_response(&response, "PUT_ORDERED_SET")?;
+        Ok(())
+    }
+
+    /// Retrieve a value by key (Single-Key Causal lattice).
+    ///
+    /// Returns (vector_clock, value).
+    ///
+    /// ```rust
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let config = annalib::config::Config::default();
+    /// let client = annalib::kvs_client::KVSClient::new(&config, Some(112)).await;
+    /// // let (vc, val) = client.get_single_causal("my_key").await?; // requires a running server
+    /// # }
+    /// ```
+    #[cfg(feature = "causal")]
+    pub async fn get_single_causal<K: AsRef<str> + Display>(
+        &mut self,
+        key: K,
+    ) -> Result<(HashMap<String, u32>, String)> {
+        debug!("GET_SINGLE_CAUSAL: {}", key);
+        let response = self
+            .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
+            .await
+            .ok_or_else(|| {
+                Error::Kvs("GET_SINGLE_CAUSAL: request failed or timed out".into())
+            })?;
+
+        let tuple = Self::validate_response(&response, "GET_SINGLE_CAUSAL")?;
+
+        let skc = SingleKeyCausalValue::decode(tuple.payload.as_slice())
+            .map_err(|e| Error::Kvs(format!("GET_SINGLE_CAUSAL: failed to decode: {}", e)))?;
+
+        let vc = skc.vector_clock;
+        let value = skc
+            .values
+            .first()
+            .map(|v| String::from_utf8_lossy(v).to_string())
+            .unwrap_or_default();
+
+        Ok((vc, value))
+    }
+
+    /// Store a value by key (Single-Key Causal lattice).
+    ///
+    /// ```rust
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let config = annalib::config::Config::default();
+    /// let client = annalib::kvs_client::KVSClient::new(&config, Some(113)).await;
+    /// // client.put_single_causal("my_key", "my_value").await?; // requires a running server
+    /// # }
+    /// ```
+    #[cfg(feature = "causal")]
+    pub async fn put_single_causal<K: AsRef<str> + Display>(
+        &mut self,
+        key: K,
+        value: &str,
+    ) -> Result<()> {
+        debug!("PUT_SINGLE_CAUSAL: {} <- {}", key, value);
+        let mut vc = HashMap::new();
+        vc.insert("test".to_string(), 1u32);
+
+        let skc = SingleKeyCausalValue {
+            vector_clock: vc,
+            values: vec![value.as_bytes().to_vec()],
+        };
+        let payload = skc.encode_to_vec();
+
+        let response = self
+            .send_data_request(
+                key.as_ref(),
+                RequestType::Put as i32,
+                Some(LatticeType::SingleCausal as i32),
+                Some(payload),
+            )
+            .await
+            .ok_or_else(|| {
+                Error::Kvs("PUT_SINGLE_CAUSAL: request failed or timed out".into())
+            })?;
+
+        Self::validate_response(&response, "PUT_SINGLE_CAUSAL")?;
+        Ok(())
+    }
+
+    /// Retrieve a value by key (Priority lattice).
+    ///
+    /// Returns (priority, value).
+    ///
+    /// ```rust
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let config = annalib::config::Config::default();
+    /// let client = annalib::kvs_client::KVSClient::new(&config, Some(114)).await;
+    /// // let (priority, val) = client.get_priority("my_key").await?; // requires a running server
+    /// # }
+    /// ```
+    pub async fn get_priority<K: AsRef<str> + Display>(
+        &mut self,
+        key: K,
+    ) -> Result<(f64, String)> {
+        debug!("GET_PRIORITY: {}", key);
+        let response = self
+            .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
+            .await
+            .ok_or_else(|| Error::Kvs("GET_PRIORITY: request failed or timed out".into()))?;
+
+        let tuple = Self::validate_response(&response, "GET_PRIORITY")?;
+
+        let pv = PriorityValue::decode(tuple.payload.as_slice())
+            .map_err(|e| Error::Kvs(format!("GET_PRIORITY: failed to decode: {}", e)))?;
+
+        let value = String::from_utf8_lossy(&pv.value).to_string();
+        Ok((pv.priority, value))
+    }
+
+    /// Store a value by key with a priority (Priority lattice).
+    ///
+    /// Lower priority values win in the lattice merge.
+    ///
+    /// ```rust
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let config = annalib::config::Config::default();
+    /// let client = annalib::kvs_client::KVSClient::new(&config, Some(115)).await;
+    /// // client.put_priority("my_key", 1.0, "my_value").await?; // requires a running server
+    /// # }
+    /// ```
+    pub async fn put_priority<K: AsRef<str> + Display>(
+        &mut self,
+        key: K,
+        priority: f64,
+        value: &str,
+    ) -> Result<()> {
+        debug!("PUT_PRIORITY: {} <- {} (priority {})", key, value, priority);
+        let pv = PriorityValue {
+            priority,
+            value: value.as_bytes().to_vec(),
+        };
+        let payload = pv.encode_to_vec();
+
+        let response = self
+            .send_data_request(
+                key.as_ref(),
+                RequestType::Put as i32,
+                Some(LatticeType::Priority as i32),
+                Some(payload),
+            )
+            .await
+            .ok_or_else(|| Error::Kvs("PUT_PRIORITY: request failed or timed out".into()))?;
+
+        Self::validate_response(&response, "PUT_PRIORITY")?;
+        Ok(())
+    }
+
     /// Clear the key-address cache.
     pub fn clear_cache(&mut self) {
         self.key_address_cache.clear()
@@ -778,5 +1003,49 @@ mod tests {
         let decoded = KeyAddressRequest::decode(encoded.as_slice()).unwrap();
         assert_eq!(decoded.request_id, "addr_req_1");
         assert_eq!(decoded.keys[0], "lookup_key");
+    }
+
+    #[test]
+    fn priority_value_roundtrip() {
+        let original = PriorityValue {
+            priority: 3.14,
+            value: b"important".to_vec(),
+        };
+        let encoded = original.encode_to_vec();
+        let decoded = PriorityValue::decode(encoded.as_slice()).unwrap();
+        assert!((decoded.priority - 3.14).abs() < f64::EPSILON);
+        assert_eq!(decoded.value, b"important");
+    }
+
+    #[test]
+    fn ordered_set_value_roundtrip() {
+        let original = SetValue {
+            values: vec![b"x".to_vec(), b"y".to_vec(), b"z".to_vec()],
+        };
+        let encoded = original.encode_to_vec();
+        let decoded = SetValue::decode(encoded.as_slice()).unwrap();
+        assert_eq!(decoded.values.len(), 3);
+        assert_eq!(decoded.values[0], b"x");
+        assert_eq!(decoded.values[1], b"y");
+        assert_eq!(decoded.values[2], b"z");
+    }
+
+    #[test]
+    fn single_causal_value_roundtrip() {
+        let mut vc = HashMap::new();
+        vc.insert("node1".to_string(), 5u32);
+        vc.insert("node2".to_string(), 3u32);
+
+        let original = SingleKeyCausalValue {
+            vector_clock: vc,
+            values: vec![b"causal_data".to_vec()],
+        };
+        let encoded = original.encode_to_vec();
+        let decoded = SingleKeyCausalValue::decode(encoded.as_slice()).unwrap();
+        assert_eq!(decoded.vector_clock.len(), 2);
+        assert_eq!(decoded.vector_clock["node1"], 5);
+        assert_eq!(decoded.vector_clock["node2"], 3);
+        assert_eq!(decoded.values.len(), 1);
+        assert_eq!(decoded.values[0], b"causal_data");
     }
 }

@@ -225,6 +225,183 @@ class TestExecuteCommand:
         assert capsys.readouterr().out == ""
 
 
+class TestOrderedSetFormatting:
+    def test_get_ordered_set(self):
+        from anna.lattices import OrderedSetLattice, ListBasedOrderedSet
+        from unittest.mock import MagicMock
+        from io import StringIO
+        import sys
+
+        oset = ListBasedOrderedSet([b"apple", b"banana", b"cherry"])
+        lattice = OrderedSetLattice(oset)
+
+        client = MagicMock()
+        client.get_ordered_set.return_value = lattice
+
+        captured = StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured
+
+        from anna.cli import execute_command
+        execute_command(client, "/dev/null", "GET_ORDERED_SET mykey")
+
+        sys.stdout = old_stdout
+        output = captured.getvalue().strip()
+
+        assert output.startswith("[")
+        assert output.endswith("]")
+        assert "apple" in output
+        assert "banana" in output
+        assert "cherry" in output
+
+    def test_get_ordered_set_not_found(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.get_ordered_set.return_value = None
+
+        execute_command(client, "/dev/null", "GET_ORDERED_SET mykey")
+        assert "Key not found" in capsys.readouterr().out
+
+    def test_put_ordered_set(self):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.put_ordered_set.return_value = {"mykey": True}
+
+        result = execute_command(client, "/dev/null", "PUT_ORDERED_SET mykey a b c")
+        assert result is True
+        client.put_ordered_set.assert_called_once()
+
+    def test_put_ordered_set_failure(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.put_ordered_set.return_value = {"mykey": False}
+
+        execute_command(client, "/dev/null", "PUT_ORDERED_SET mykey a b")
+        assert "Failure!" in capsys.readouterr().out
+
+
+class TestSingleCausalFormatting:
+    def test_get_single_causal(self):
+        from anna.lattices import SingleKeyCausalLattice, SetLattice, VectorClock
+        from unittest.mock import MagicMock
+        from io import StringIO
+        import sys
+
+        vc = VectorClock({"node1": 2}, True)
+        val = SetLattice({b"world"})
+        lattice = SingleKeyCausalLattice(vc, val)
+
+        client = MagicMock()
+        client.get_single_causal.return_value = lattice
+
+        captured = StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured
+
+        from anna.cli import execute_command
+        execute_command(client, "/dev/null", "GET_SINGLE_CAUSAL mykey")
+
+        sys.stdout = old_stdout
+        output = captured.getvalue()
+
+        assert "{node1 : 2}" in output
+        assert "world" in output
+
+    def test_get_single_causal_not_found(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.get_single_causal.return_value = None
+
+        execute_command(client, "/dev/null", "GET_SINGLE_CAUSAL mykey")
+        assert "Key not found" in capsys.readouterr().out
+
+    def test_put_single_causal(self):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.put_single_causal.return_value = {"mykey": True}
+
+        result = execute_command(client, "/dev/null", "PUT_SINGLE_CAUSAL mykey hello")
+        assert result is True
+        client.put_single_causal.assert_called_once_with("mykey", "hello")
+
+    def test_put_single_causal_failure(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.put_single_causal.return_value = {"mykey": False}
+
+        execute_command(client, "/dev/null", "PUT_SINGLE_CAUSAL mykey val")
+        assert "Failure!" in capsys.readouterr().out
+
+
+class TestPriorityFormatting:
+    def test_get_priority(self):
+        from anna.lattices import PriorityLattice
+        from unittest.mock import MagicMock
+        from io import StringIO
+        import sys
+
+        lattice = PriorityLattice(3.5, b"important")
+
+        client = MagicMock()
+        client.get_priority.return_value = lattice
+
+        captured = StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured
+
+        from anna.cli import execute_command
+        execute_command(client, "/dev/null", "GET_PRIORITY mykey")
+
+        sys.stdout = old_stdout
+        output = captured.getvalue()
+
+        assert "priority: 3.5" in output
+        assert "important" in output
+
+    def test_get_priority_not_found(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.get_priority.return_value = None
+
+        execute_command(client, "/dev/null", "GET_PRIORITY mykey")
+        assert "Key not found" in capsys.readouterr().out
+
+    def test_put_priority(self):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.put_priority.return_value = {"mykey": True}
+
+        result = execute_command(client, "/dev/null", "PUT_PRIORITY mykey 2.5 hello")
+        assert result is True
+        client.put_priority.assert_called_once_with("mykey", 2.5, "hello")
+
+    def test_put_priority_failure(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.put_priority.return_value = {"mykey": False}
+
+        execute_command(client, "/dev/null", "PUT_PRIORITY mykey 1.0 val")
+        assert "Failure!" in capsys.readouterr().out
+
+
 class TestCausalFormatting:
     def test_format_causal_output(self):
         """Test the causal output formatting logic from cli.py execute_command."""

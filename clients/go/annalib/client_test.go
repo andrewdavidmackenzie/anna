@@ -808,3 +808,228 @@ func TestCloseClient(t *testing.T) {
 		t.Errorf("Close failed: %v", err)
 	}
 }
+
+// --- Ordered Set tests ---
+
+func TestBuildAndParseOrderedSetPayload(t *testing.T) {
+	values := []string{"cherry", "apple", "banana"}
+	payload, err := buildOrderedSetPayload(values)
+	if err != nil {
+		t.Fatalf("buildOrderedSetPayload failed: %v", err)
+	}
+
+	result, err := parseOrderedSetPayload(payload)
+	if err != nil {
+		t.Fatalf("parseOrderedSetPayload failed: %v", err)
+	}
+	if len(result) != 3 {
+		t.Fatalf("expected 3 values, got %d", len(result))
+	}
+	// Verify order is preserved
+	if result[0] != "cherry" || result[1] != "apple" || result[2] != "banana" {
+		t.Errorf("order not preserved: got %v", result)
+	}
+}
+
+func TestParseOrderedSetPayloadInvalid(t *testing.T) {
+	_, err := parseOrderedSetPayload([]byte{0xff, 0xff})
+	if err == nil {
+		t.Error("expected error for invalid OrderedSet payload")
+	}
+}
+
+func TestGetOrderedSetWithMock(t *testing.T) {
+	setVal := &kvspb.SetValue{Values: [][]byte{[]byte("x"), []byte("y"), []byte("z")}}
+	setBytes, _ := proto.Marshal(setVal)
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "os", Error: kvspb.AnnaError_NO_ERROR, Payload: setBytes}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "os", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	vals, err := client.GetOrderedSet("os")
+	if err != nil {
+		t.Fatalf("GetOrderedSet failed: %v", err)
+	}
+	if len(vals) != 3 || vals[0] != "x" || vals[1] != "y" || vals[2] != "z" {
+		t.Errorf("GetOrderedSet returned %v, want [x y z]", vals)
+	}
+}
+
+func TestPutOrderedSetWithMock(t *testing.T) {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "os", Error: kvspb.AnnaError_NO_ERROR}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "os", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	err := client.PutOrderedSet("os", []string{"a", "b", "c"})
+	if err != nil {
+		t.Fatalf("PutOrderedSet failed: %v", err)
+	}
+}
+
+// --- Single Causal tests ---
+
+func TestBuildAndParseSingleCausalPayload(t *testing.T) {
+	payload, err := buildSingleCausalPayload("hello")
+	if err != nil {
+		t.Fatalf("buildSingleCausalPayload failed: %v", err)
+	}
+
+	scv, err := parseSingleCausalPayload(payload)
+	if err != nil {
+		t.Fatalf("parseSingleCausalPayload failed: %v", err)
+	}
+	if scv.Value != "hello" {
+		t.Errorf("expected value 'hello', got '%s'", scv.Value)
+	}
+	if scv.VectorClock["test"] != 1 {
+		t.Errorf("expected VC test=1, got %v", scv.VectorClock)
+	}
+}
+
+func TestParseSingleCausalPayloadInvalid(t *testing.T) {
+	_, err := parseSingleCausalPayload([]byte{0xff, 0xff})
+	if err == nil {
+		t.Error("expected error for invalid single causal payload")
+	}
+}
+
+func TestGetSingleCausalWithMock(t *testing.T) {
+	payload, _ := buildSingleCausalPayload("sc_value")
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "k", Error: kvspb.AnnaError_NO_ERROR, Payload: payload}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "k", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	scv, err := client.GetSingleCausal("k")
+	if err != nil {
+		t.Fatalf("GetSingleCausal failed: %v", err)
+	}
+	if scv.Value != "sc_value" {
+		t.Errorf("expected 'sc_value', got '%s'", scv.Value)
+	}
+}
+
+func TestPutSingleCausalWithMock(t *testing.T) {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "k", Error: kvspb.AnnaError_NO_ERROR}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "k", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	err := client.PutSingleCausal("k", "test_val")
+	if err != nil {
+		t.Fatalf("PutSingleCausal failed: %v", err)
+	}
+}
+
+// --- Priority tests ---
+
+func TestBuildAndParsePriorityPayload(t *testing.T) {
+	payload, err := buildPriorityPayload(3.14, "pi_value")
+	if err != nil {
+		t.Fatalf("buildPriorityPayload failed: %v", err)
+	}
+
+	priority, value, err := parsePriorityPayload(payload)
+	if err != nil {
+		t.Fatalf("parsePriorityPayload failed: %v", err)
+	}
+	if priority != 3.14 {
+		t.Errorf("expected priority 3.14, got %f", priority)
+	}
+	if value != "pi_value" {
+		t.Errorf("expected value 'pi_value', got '%s'", value)
+	}
+}
+
+func TestParsePriorityPayloadInvalid(t *testing.T) {
+	_, _, err := parsePriorityPayload([]byte{0xff, 0xff})
+	if err == nil {
+		t.Error("expected error for invalid priority payload")
+	}
+}
+
+func TestGetPriorityWithMock(t *testing.T) {
+	payload, _ := buildPriorityPayload(1.5, "prio_value")
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "p", Error: kvspb.AnnaError_NO_ERROR, Payload: payload}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "p", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	priority, value, err := client.GetPriority("p")
+	if err != nil {
+		t.Fatalf("GetPriority failed: %v", err)
+	}
+	if priority != 1.5 {
+		t.Errorf("expected priority 1.5, got %f", priority)
+	}
+	if value != "prio_value" {
+		t.Errorf("expected 'prio_value', got '%s'", value)
+	}
+}
+
+func TestPutPriorityWithMock(t *testing.T) {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "p", Error: kvspb.AnnaError_NO_ERROR}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "p", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	err := client.PutPriority("p", 2.5, "test_val")
+	if err != nil {
+		t.Fatalf("PutPriority failed: %v", err)
+	}
+}

@@ -27,8 +27,12 @@ from .kvs_pb2 import (
 from .base_client import BaseAnnaClient
 from .common import UserThread
 from .lattices import (
+    ListBasedOrderedSet,
     MultiKeyCausalLattice,
+    OrderedSetLattice,
+    PriorityLattice,
     SetLattice,
+    SingleKeyCausalLattice,
     MapLattice,
     VectorClock,
 )
@@ -275,6 +279,34 @@ class AnnaTcpClient(BaseAnnaClient):
         deps = MapLattice({"dep1": dep_vc})
         val = SetLattice({value.encode() if isinstance(value, str) else value})
         lattice = MultiKeyCausalLattice(vc, deps, val)
+        return self.put(key, lattice)
+
+    def get_ordered_set(self, key):
+        result = self.get([key])
+        return result.get(key)
+
+    def put_ordered_set(self, key, values):
+        ordered_set = ListBasedOrderedSet(values)
+        lattice = OrderedSetLattice(ordered_set)
+        return self.put(key, lattice)
+
+    def get_single_causal(self, key):
+        result = self.get([key])
+        return result.get(key)
+
+    def put_single_causal(self, key, value):
+        vc = VectorClock({"test": 1}, True)
+        val = SetLattice({value.encode() if isinstance(value, str) else value})
+        lattice = SingleKeyCausalLattice(vc, val)
+        return self.put(key, lattice)
+
+    def get_priority(self, key):
+        result = self.get([key])
+        return result.get(key)
+
+    def put_priority(self, key, priority, value):
+        lattice = PriorityLattice(float(priority), value.encode()
+                                  if isinstance(value, str) else value)
         return self.put(key, lattice)
 
     # Returns and increments a request ID. Loops back after 10,000 requests.

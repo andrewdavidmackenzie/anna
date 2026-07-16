@@ -26,12 +26,16 @@ def load_config(config_path):
 
 
 def cli_usage():
-    return ("Valid commands are GET, GET_SET, PUT, PUT_SET, "
+    return ("Valid commands are GET, GET_SET, GET_ORDERED_SET, GET_CAUSAL, "
+            "GET_SINGLE_CAUSAL, GET_PRIORITY, PUT, PUT_SET, PUT_ORDERED_SET, "
+            "PUT_CAUSAL, PUT_SINGLE_CAUSAL, PUT_PRIORITY, "
             "START, STOP, STATUS, HELP and EXIT")
 
 
 def execute_command(client, config_path, line):
-    from .lattices import LWWPairLattice, SetLattice
+    from .lattices import (LWWPairLattice, SetLattice, OrderedSetLattice,
+                            ListBasedOrderedSet, SingleKeyCausalLattice,
+                            PriorityLattice, VectorClock)
 
     parts = line.strip().split()
     if not parts:
@@ -90,6 +94,46 @@ def execute_command(client, config_path, line):
             print("Key not found")
     elif cmd == "PUT_CAUSAL":
         result = client.put_causal(parts[1], parts[2])
+        if not result.get(parts[1], False):
+            print("Failure!")
+    elif cmd == "GET_ORDERED_SET":
+        val = client.get_ordered_set(parts[1])
+        if val is not None:
+            items = [v.decode("utf-8", errors="replace") if isinstance(v, bytes) else str(v)
+                     for v in val.reveal()]
+            print("[ " + " ".join(items) + " ]")
+        else:
+            print("Key not found")
+    elif cmd == "PUT_ORDERED_SET":
+        values = [v.encode("utf-8") for v in parts[2:]]
+        result = client.put_ordered_set(parts[1], values)
+        if not result.get(parts[1], False):
+            print("Failure!")
+    elif cmd == "GET_SINGLE_CAUSAL":
+        val = client.get_single_causal(parts[1])
+        if val is not None:
+            for k, v in sorted(val.vector_clock.reveal().items()):
+                print("{" + f"{k} : {v.reveal()}" + "}")
+            values = val.value.reveal()
+            for v in values:
+                print(v.decode("utf-8") if isinstance(v, bytes) else str(v))
+        else:
+            print("Key not found")
+    elif cmd == "PUT_SINGLE_CAUSAL":
+        result = client.put_single_causal(parts[1], parts[2])
+        if not result.get(parts[1], False):
+            print("Failure!")
+    elif cmd == "GET_PRIORITY":
+        val = client.get_priority(parts[1])
+        if val is not None:
+            print(f"priority: {val.priority}")
+            value = val.value
+            print(value.decode("utf-8") if isinstance(value, bytes) else str(value))
+        else:
+            print("Key not found")
+    elif cmd == "PUT_PRIORITY":
+        priority = float(parts[2])
+        result = client.put_priority(parts[1], priority, parts[3])
         if not result.get(parts[1], False):
             print("Failure!")
     elif cmd == "START":

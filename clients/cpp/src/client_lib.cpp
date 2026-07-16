@@ -226,6 +226,155 @@ set<string> get_set(KvsClientInterface* client, const string& key) {
   return latt.reveal();
 }
 
+kvs::KeyResponse put_ordered_set(KvsClientInterface* client, const string& key,
+                                 const set<string>& values) {
+  // Same serialization as SET, but use ORDERED_SET lattice type so the
+  // server stores as OrderedSetLattice.
+  string rid = client->put_async(key, serialize(SetLattice<string>(values)),
+                                 kvs::LatticeType::ORDERED_SET);
+
+  vector<kvs::KeyResponse> responses = client->receive_async();
+  while (responses.size() == 0) {
+    responses = client->receive_async();
+  }
+
+  kvs::KeyResponse response = responses[0];
+
+  if (response.response_id() != rid) {
+    std::cerr << "Invalid response: ID did not match request ID!"
+              << std::endl;
+  }
+
+  return response;
+}
+
+set<string> get_ordered_set(KvsClientInterface* client, const string& key) {
+  client->get_async(key);
+
+  vector<kvs::KeyResponse> responses = client->receive_async();
+  while (responses.size() == 0) {
+    responses = client->receive_async();
+  }
+
+  if (responses.size() > 1) {
+    std::cerr << "Error: received more than one response" << std::endl;
+  }
+
+  assert(responses[0].tuples(0).lattice_type() ==
+         kvs::LatticeType::ORDERED_SET);
+
+  // Deserialization is the same as SET (both use kvs::SetValue proto).
+  SetLattice<string> latt = deserialize_set(responses[0].tuples(0).payload());
+
+  return latt.reveal();
+}
+
+kvs::KeyResponse put_single_causal(KvsClientInterface* client,
+                                   const string& key, const string& value) {
+  VectorClockValuePair<SetLattice<string>> p;
+  // construct a test client id - version pair
+  p.vector_clock.insert("test", 1);
+  // populate the value
+  p.value.insert(value);
+
+  SingleKeyCausalLattice<SetLattice<string>> skcl(p);
+
+  string rid = client->put_async(key, serialize(skcl),
+                                 kvs::LatticeType::SINGLE_CAUSAL);
+
+  vector<kvs::KeyResponse> responses = client->receive_async();
+  while (responses.size() == 0) {
+    responses = client->receive_async();
+  }
+
+  kvs::KeyResponse response = responses[0];
+
+  if (response.response_id() != rid) {
+    std::cerr << "Invalid response: ID did not match request ID!"
+              << std::endl;
+  }
+
+  return response;
+}
+
+SingleCausalValue get_single_causal(KvsClientInterface* client,
+                                    const string& key) {
+  client->get_async(key);
+
+  vector<kvs::KeyResponse> responses = client->receive_async();
+  while (responses.size() == 0) {
+    responses = client->receive_async();
+  }
+
+  if (responses.size() > 1) {
+    std::cerr << "Error: received more than one response" << std::endl;
+  }
+
+  assert(responses[0].tuples(0).lattice_type() ==
+         kvs::LatticeType::SINGLE_CAUSAL);
+
+  kvs::SingleKeyCausalValue cv =
+      deserialize_causal(responses[0].tuples(0).payload());
+  VectorClockValuePair<SetLattice<string>> p = to_vector_clock_value_pair(cv);
+
+  SingleCausalValue result;
+  result.value = *(p.value.reveal().begin());
+
+  for (const auto& pair : p.vector_clock.reveal()) {
+    result.vector_clock.push_back({pair.first, pair.second.reveal()});
+  }
+
+  return result;
+}
+
+kvs::KeyResponse put_priority(KvsClientInterface* client, const string& key,
+                              double priority, const string& value) {
+  PriorityLattice<double, string> pl(
+      PriorityValuePair<double, string>(priority, value));
+
+  string rid = client->put_async(key, serialize(pl),
+                                 kvs::LatticeType::PRIORITY);
+
+  vector<kvs::KeyResponse> responses = client->receive_async();
+  while (responses.size() == 0) {
+    responses = client->receive_async();
+  }
+
+  kvs::KeyResponse response = responses[0];
+
+  if (response.response_id() != rid) {
+    std::cerr << "Invalid response: ID did not match request ID!"
+              << std::endl;
+  }
+
+  return response;
+}
+
+PriorityResult get_priority(KvsClientInterface* client, const string& key) {
+  client->get_async(key);
+
+  vector<kvs::KeyResponse> responses = client->receive_async();
+  while (responses.size() == 0) {
+    responses = client->receive_async();
+  }
+
+  if (responses.size() > 1) {
+    std::cerr << "Error: received more than one response" << std::endl;
+  }
+
+  assert(responses[0].tuples(0).lattice_type() ==
+         kvs::LatticeType::PRIORITY);
+
+  PriorityLattice<double, string> pl =
+      deserialize_priority(responses[0].tuples(0).payload());
+
+  PriorityResult result;
+  result.priority = pl.reveal().priority;
+  result.value = pl.reveal().value;
+
+  return result;
+}
+
 namespace {
 
 vector<int> pids_from_name(const string& name) {

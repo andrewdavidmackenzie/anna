@@ -193,6 +193,68 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 			return false, err
 		}
 
+	case "GET_ORDERED_SET":
+		if len(parts) != 2 {
+			return false, fmt.Errorf("usage: GET_ORDERED_SET <key>")
+		}
+		values, err := client.GetOrderedSet(parts[1])
+		if err != nil {
+			return false, err
+		}
+		fmt.Printf("[ %s ]\n", strings.Join(values, " "))
+
+	case "PUT_ORDERED_SET":
+		if len(parts) < 3 {
+			return false, fmt.Errorf("usage: PUT_ORDERED_SET <key> <value1> [value2 ...]")
+		}
+		if err := client.PutOrderedSet(parts[1], parts[2:]); err != nil {
+			return false, err
+		}
+
+	case "GET_SINGLE_CAUSAL":
+		if len(parts) != 2 {
+			return false, fmt.Errorf("usage: GET_SINGLE_CAUSAL <key>")
+		}
+		scv, err := client.GetSingleCausal(parts[1])
+		if err != nil {
+			return false, err
+		}
+		vcKeys := sortedKeys(scv.VectorClock)
+		for _, k := range vcKeys {
+			fmt.Printf("{%s : %d}\n", k, scv.VectorClock[k])
+		}
+		fmt.Println(scv.Value)
+
+	case "PUT_SINGLE_CAUSAL":
+		if len(parts) != 3 {
+			return false, fmt.Errorf("usage: PUT_SINGLE_CAUSAL <key> <value>")
+		}
+		if err := client.PutSingleCausal(parts[1], parts[2]); err != nil {
+			return false, err
+		}
+
+	case "GET_PRIORITY":
+		if len(parts) != 2 {
+			return false, fmt.Errorf("usage: GET_PRIORITY <key>")
+		}
+		priority, value, err := client.GetPriority(parts[1])
+		if err != nil {
+			return false, err
+		}
+		fmt.Printf("priority: %g\n%s\n", priority, value)
+
+	case "PUT_PRIORITY":
+		if len(parts) != 4 {
+			return false, fmt.Errorf("usage: PUT_PRIORITY <key> <priority> <value>")
+		}
+		var priority float64
+		if _, err := fmt.Sscanf(parts[2], "%f", &priority); err != nil {
+			return false, fmt.Errorf("invalid priority value: %s", parts[2])
+		}
+		if err := client.PutPriority(parts[1], priority, parts[3]); err != nil {
+			return false, err
+		}
+
 	case "START":
 		count, err := annalib.Start(configFilePath)
 		if err != nil {
@@ -225,17 +287,23 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 
 func cliUsage() string {
 	return `Valid commands are:
-	get {key} 			- get the value of entry with key = {key} from the KVS
-	put {key} {value} 		- set entry with key = {key} in the KVS to have value = {value}
-	get_set {key} 			- get the value of the set with key = {key} in the KVS
-	put_set {key} {set} 		- set the value of the set with key = {key} in the KVS
-	get_causal {key} 		- causal get of value with key = {key} in the KVS
-	put_causal {key} {value} 	- causal set of value with key = {key} in the KVS
-	start 				- start anna processes
-	stop 				- stop running anna processes
-	status 				- print the status of anna processes
-	help 				- print this usage message
-	exit 				- exit the CLI (does not stop any anna processes)
+	get {key} 				- get the value of entry with key = {key} from the KVS
+	put {key} {value} 			- set entry with key = {key} in the KVS to have value = {value}
+	get_set {key} 				- get the value of the set with key = {key} in the KVS
+	put_set {key} {set} 			- set the value of the set with key = {key} in the KVS
+	get_causal {key} 			- causal get of value with key = {key} in the KVS
+	put_causal {key} {value} 		- causal set of value with key = {key} in the KVS
+	get_ordered_set {key} 			- get the ordered set with key = {key} in the KVS
+	put_ordered_set {key} {val1} [...] 	- set the ordered set with key = {key} in the KVS
+	get_single_causal {key} 		- single-key causal get with key = {key} in the KVS
+	put_single_causal {key} {value} 	- single-key causal set with key = {key} in the KVS
+	get_priority {key} 			- get the priority value with key = {key} in the KVS
+	put_priority {key} {priority} {value} 	- set the priority value with key = {key} in the KVS
+	start 					- start anna processes
+	stop 					- stop running anna processes
+	status 					- print the status of anna processes
+	help 					- print this usage message
+	exit 					- exit the CLI (does not stop any anna processes)
 `
 }
 

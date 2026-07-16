@@ -182,6 +182,40 @@ async fn execute_command(
         }
         #[cfg(feature = "set")]
         "PUT_SET" if split.len() >= 3 => client.put_set(split[1], &split[2..]).await?,
+        #[cfg(feature = "set")]
+        "GET_ORDERED_SET" if split.len() == 2 => {
+            let values = client.get_ordered_set(split[1]).await?;
+            println!("[ {} ]", values.join(" "));
+        }
+        #[cfg(feature = "set")]
+        "PUT_ORDERED_SET" if split.len() >= 3 => {
+            client.put_ordered_set(split[1], &split[2..]).await?
+        }
+        #[cfg(feature = "causal")]
+        "GET_SINGLE_CAUSAL" if split.len() == 2 => {
+            let (vc, value) = client.get_single_causal(split[1]).await?;
+            let mut sorted_vc: Vec<_> = vc.iter().collect();
+            sorted_vc.sort_by_key(|(k, _)| k.clone());
+            for (k, v) in &sorted_vc {
+                println!("{{{} : {}}}", k, v);
+            }
+            println!("{}", value);
+        }
+        #[cfg(feature = "causal")]
+        "PUT_SINGLE_CAUSAL" if split.len() == 3 => {
+            client.put_single_causal(split[1], split[2]).await?
+        }
+        "GET_PRIORITY" if split.len() == 2 => {
+            let (priority, value) = client.get_priority(split[1]).await?;
+            println!("priority: {}", priority);
+            println!("{}", value);
+        }
+        "PUT_PRIORITY" if split.len() == 4 => {
+            let priority = split[2].parse::<f64>().map_err(|e| {
+                CliError::Other(format!("Invalid priority '{}': {}", split[2], e))
+            })?;
+            client.put_priority(split[1], priority, split[3]).await?
+        }
         "START" => println!("{} anna processes were started", start(config_file_path)?),
         "STOP" => println!("{} anna processes were terminated", stop()?),
         "STATUS" => println!("{}", format_status(status()?)),
@@ -214,14 +248,31 @@ fn cli_usage() -> String {
         );
     }
 
+    #[cfg(feature = "causal")]
+    {
+        usage = format!(
+            "{}\n\tget_single_causal {{key}} \t- single-key causal 'get' of value with key = {{key}} in the KVS\
+            \n\tput_single_causal {{key}} {{value}} \t- single-key causal set of value with key = {{key}} in the KVS",
+            usage
+        );
+    }
+
     #[cfg(feature = "set")]
     {
         usage = format!(
             "{}\n\tget_set {{key}} \t\t\t- get the value of the set with key = {{key}} in the KVS\
-        \n\tput_set {{key}} {{set}} \t\t- set the value of the set with key = {{key}} in the KVS",
+        \n\tput_set {{key}} {{set}} \t\t- set the value of the set with key = {{key}} in the KVS\
+        \n\tget_ordered_set {{key}} \t\t- get the ordered set with key = {{key}} in the KVS\
+        \n\tput_ordered_set {{key}} {{set}} \t- set the ordered set with key = {{key}} in the KVS",
             usage
         );
     }
+
+    usage = format!(
+        "{}\n\tget_priority {{key}} \t\t- get the priority value with key = {{key}} in the KVS\
+        \n\tput_priority {{key}} {{priority}} {{value}} - set value with priority for key = {{key}} in the KVS",
+        usage
+    );
 
     usage = format!(
         "{}\n\tstart \t\t\t\t- start anna processes\

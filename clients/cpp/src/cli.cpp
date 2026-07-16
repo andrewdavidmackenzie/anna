@@ -51,9 +51,25 @@ void print_causal_value(const annalib::CausalValue& causal) {
   std::cout << causal.value << std::endl;
 }
 
+void print_single_causal_value(const annalib::SingleCausalValue& causal) {
+  for (const auto& pair : causal.vector_clock) {
+    std::cout << "{" << pair.first << " : " << std::to_string(pair.second)
+              << "}" << std::endl;
+  }
+
+  std::cout << causal.value << std::endl;
+}
+
+void print_priority_value(const annalib::PriorityResult& result) {
+  std::cout << "priority: " << result.priority << std::endl;
+  std::cout << result.value << std::endl;
+}
+
 string cli_usage() {
-  return "Valid commands are GET, GET_SET, PUT, PUT_SET, PUT_CAUSAL, "
-         "GET_CAUSAL, START, STOP, STATUS, HELP and EXIT";
+  return "Valid commands are GET, GET_SET, GET_ORDERED_SET, GET_CAUSAL, "
+         "GET_SINGLE_CAUSAL, GET_PRIORITY, PUT, PUT_SET, PUT_ORDERED_SET, "
+         "PUT_CAUSAL, PUT_SINGLE_CAUSAL, PUT_PRIORITY, START, STOP, STATUS, "
+         "HELP and EXIT";
 }
 
 void execute_cli_command(KvsClientInterface* client, const string& config_file,
@@ -93,6 +109,35 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
     }
   } else if (command == "GET_SET") {
     print_set(annalib::get_set(client, v[1]));
+  } else if (command == "PUT_ORDERED_SET") {
+    set<string> values;
+    for (size_t i = 2; i < v.size(); i++) {
+      values.insert(v[i]);
+    }
+    kvs::KeyResponse response =
+        annalib::put_ordered_set(client, v[1], values);
+    if (response.error() != kvs::AnnaError::NO_ERROR) {
+      std::cout << "Failure!" << std::endl;
+    }
+  } else if (command == "GET_ORDERED_SET") {
+    print_set(annalib::get_ordered_set(client, v[1]));
+  } else if (command == "PUT_SINGLE_CAUSAL") {
+    kvs::KeyResponse response =
+        annalib::put_single_causal(client, v[1], v[2]);
+    if (response.error() != kvs::AnnaError::NO_ERROR) {
+      std::cout << "Failure!" << std::endl;
+    }
+  } else if (command == "GET_SINGLE_CAUSAL") {
+    print_single_causal_value(annalib::get_single_causal(client, v[1]));
+  } else if (command == "PUT_PRIORITY") {
+    double priority = std::stod(v[2]);
+    kvs::KeyResponse response =
+        annalib::put_priority(client, v[1], priority, v[3]);
+    if (response.error() != kvs::AnnaError::NO_ERROR) {
+      std::cout << "Failure!" << std::endl;
+    }
+  } else if (command == "GET_PRIORITY") {
+    print_priority_value(annalib::get_priority(client, v[1]));
   } else if (command == "STATUS") {
     for (const string& name : annalib::status()) {
       std::cout << name << " process is running" << std::endl;
