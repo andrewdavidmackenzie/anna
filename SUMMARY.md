@@ -7,6 +7,7 @@
 - [Architecture](docs/architecture.md)
 - [Lattices and Consistency](docs/lattices.md)
 - [Autoscaling and Policy Engine](docs/autoscaling.md)
+- [Feature List](docs/feature-list.md)
 
 # Building and Running
 - [Building anna](docs/building-anna.md)

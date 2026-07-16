@@ -24,29 +24,29 @@ An Anna deployment consists of four types of nodes:
 ```
 ┌──────────────────────────────────────────────────────────┐
 │                    Routing Tier                          │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐                 │
-│  │ Routing │  │ Routing │  │ Routing │  ...             │
-│  │  Node   │  │  Node   │  │  Node   │                  │
-│  └─────────┘  └─────────┘  └─────────┘                  │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐                   │
+│  │ Routing │  │ Routing │  │ Routing │  ...              │
+│  │  Node   │  │  Node   │  │  Node   │                   │
+│  └─────────┘  └─────────┘  └─────────┘                   │
 ├──────────────────────────────────────────────────────────┤
 │                   Memory Tier                            │
-│  ┌───────────────┐  ┌───────────────┐                   │
+│  ┌────────────────┐  ┌────────────────┐                  │
 │  │ Storage Kernel │  │ Storage Kernel │  ...             │
-│  │  (anna-kvs)   │  │  (anna-kvs)   │                   │
-│  │ Memory Buffer │  │ Memory Buffer │                   │
-│  └───────────────┘  └───────────────┘                   │
+│  │  (anna-kvs)    │  │  (anna-kvs)    │                  │
+│  │ Memory Buffer  │  │ Memory Buffer  │                  │
+│  └────────────────┘  └────────────────┘                  │
 ├──────────────────────────────────────────────────────────┤
-│                    Disk Tier                              │
-│  ┌───────────────┐  ┌───────────────┐                   │
+│                    Disk Tier                             │
+│  ┌────────────────┐  ┌────────────────┐                  │
 │  │ Storage Kernel │  │ Storage Kernel │  ...             │
-│  │  (anna-kvs)   │  │  (anna-kvs)   │                   │
-│  │  EBS Volume   │  │  EBS Volume   │                   │
-│  └───────────────┘  └───────────────┘                   │
+│  │  (anna-kvs)    │  │  (anna-kvs)    │                  │
+│  │  EBS Volume    │  │  EBS Volume    │                  │
+│  └────────────────┘  └────────────────┘                  │
 ├──────────────────────────────────────────────────────────┤
-│  ┌────────────┐  ┌───────────────┐                      │
-│  │ Monitoring │  │   Management  │                      │
-│  │   Node     │  │    System     │                      │
-│  └────────────┘  └───────────────┘                      │
+│  ┌────────────┐  ┌───────────────┐                       │
+│  │ Monitoring │  │   Management  │                       │
+│  │   Node     │  │    System     │                       │
+│  └────────────┘  └───────────────┘                       │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -57,7 +57,7 @@ threads, each pinned to a CPU core. Each thread:
 
 - Maintains a **private hash table** (no shared memory between threads)
 - Runs a tight event loop processing client requests via ZeroMQ
-- Periodically **multicasts** updates to replicas ("gossip" / anti-entropy)
+- Periodically **multicasts** updates to replicas via a "gossip" protocol
 - Uses **consistent hashing** with virtual nodes for key partitioning
 
 The storage kernel is identical across memory and disk tiers — the only

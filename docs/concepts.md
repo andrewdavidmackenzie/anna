@@ -65,10 +65,10 @@ Anna actors periodically exchange updates via a gossip protocol:
 
 Anna supports multiple storage tiers:
 
-| Tier | Medium | Performance | Cost |
-|---|---|---|---|
-| Memory | RAM | Low latency, high throughput | High |
-| Disk (EBS) | Flash/SSD | Higher latency | Lower |
+| Tier       | Medium    | Performance                  | Cost  |
+|------------|-----------|------------------------------|-------|
+| Memory     | RAM       | Low latency, high throughput | High  |
+| Disk (EBS) | Flash/SSD | Higher latency               | Lower |
 
 The storage kernel is identical across tiers — only the serialization
 ("serde") layer differs. Memory-tier threads read/write memory buffers;
@@ -82,22 +82,22 @@ Client proxies serve user requests:
 - Query the routing tier to find key locations
 - Cache key-address mappings locally
 - Handle cache invalidation when the cluster reconfigures
-- For advanced consistency levels, maintain per-transaction state
+- For advanced consistency levels, maintain a per-transaction state 
   (message buffers, read caches)
 
 ## Operations
 
 Anna supports these operations:
 
-| Operation | Description |
-|---|---|
-| **GET** | Retrieve a value from a single replica |
-| **PUT** | Merge a new value using the lattice merge function |
-| **DELETE** | Special PUT with empty value and dominating timestamp |
-| **GET_SET** | Retrieve a set-valued key |
-| **PUT_SET** | Add values to a set (union semantics) |
+| Operation      | Description                                                |
+|----------------|------------------------------------------------------------|
+| **GET**        | Retrieve a value from a single replica                     |
+| **PUT**        | Merge a new value using the lattice merge function         |
+| **DELETE**     | Special PUT with empty value and dominating timestamp      |
+| **GET_SET**    | Retrieve a set-valued key                                  |
+| **PUT_SET**    | Add values to a set (union semantics)                      |
 | **GET_CAUSAL** | Retrieve with causal metadata (vector clock, dependencies) |
-| **PUT_CAUSAL** | Store with causal metadata |
+| **PUT_CAUSAL** | Store with causal metadata                                 |
 
 ## Metadata
 
