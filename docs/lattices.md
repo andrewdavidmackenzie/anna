@@ -80,13 +80,13 @@ A pair of (priority, value) where higher priority wins.
 ## Lattice Composition
 
 Anna achieves its consistency guarantees through **monotone composition** of
-simple lattice building blocks, inspired by the Bloom language:
+simple lattice building blocks:
 
 ```
 Key-Value Store = MapLattice<Key, PairLattice<VectorClock, ValueLattice>>
 ```
 
-The private state of each worker is a `MapLattice` parameterized by key and
+The private state of each worker is a `MapLattice` parameterized by `Key` and
 value types. The merge operator of `MapLattice`:
 1. Takes the union of key sets from both inputs
 2. For keys appearing in both, merges the values using `ValueLattice`'s merge
@@ -102,18 +102,18 @@ This compositional approach means:
 Anna supports a wide range of coordination-free consistency levels, all
 implemented through lattice composition:
 
-| Consistency Level | Description |
-|---|---|
-| **Eventual** | Default. LWW lattice. Last write wins. |
-| **Causal** | Vector clocks track causal ordering between updates |
-| **Read Committed** | Transaction timestamps ensure no dirty reads/writes |
-| **Read Uncommitted** | Like Read Committed but allows dirty reads |
-| **Item Cut Isolation** | Buffered reads ensure same value on re-read within transaction |
-| **Monotonic Reads** | Once a value is read, subsequent reads return same or newer |
-| **Monotonic Writes** | Writes from same client are applied in order |
-| **Writes Follow Reads** | A write after a read is ordered after the read's version |
-| **Read Your Writes** | A client always sees its own writes |
-| **PRAM** | Pipelined RAM — combines monotonic reads, writes, and read-your-writes |
+| Consistency Level       | Description                                                            |
+|-------------------------|------------------------------------------------------------------------|
+| **Eventual**            | Default. LWW lattice. Last write wins.                                 |
+| **Causal**              | Vector clocks track causal ordering between updates                    |
+| **Read Committed**      | Transaction timestamps ensure no dirty reads/writes                    |
+| **Read Uncommitted**    | Like Read Committed but allows dirty reads                             |
+| **Item Cut Isolation**  | Buffered reads ensure same value on re-read within transaction         |
+| **Monotonic Reads**     | Once a value is read, subsequent reads return same or newer            |
+| **Monotonic Writes**    | Writes from same client are applied in order                           |
+| **Writes Follow Reads** | A write after a read is ordered after the read's version               |
+| **Read Your Writes**    | A client always sees its own writes                                    |
+| **PRAM**                | Pipelined RAM — combines monotonic reads, writes, and read-your-writes |
 
 The key insight is that switching between these levels requires changing only
 which lattice type wraps the value — the server code, communication protocol,
@@ -227,23 +227,87 @@ and actor model remain unchanged.
 - **Use case**: Interactive applications where a user expects to see their own
   actions reflected immediately and in order.
 
+### Stronger Consistency Levels (Not Supported by Anna)
+
+Anna deliberately does not implement the two strongest consistency levels.
+Understanding what they offer — and what they cost — clarifies why Anna
+makes this trade-off.
+
+#### Linearizability
+
+- **Definition**: Every operation appears to take effect instantaneously at some
+  point between its invocation and completion. All clients observe the same
+  order of operations, and that order is consistent with real-time ordering.
+  In other words, once a write completes, every subsequent read (by any client)
+  returns that value or a newer one.
+- **What it offers over Anna's levels**: Linearizability is the strongest
+  single-key guarantee. It eliminates stale reads entirely — a client can never
+  read an old value after a newer one has been written. Anna's eventual
+  consistency allows stale reads bounded by the gossip epoch (up to 10 seconds).
+  Even Anna's causal consistency only guarantees ordering between causally
+  related operations; concurrent operations may be observed in any order.
+- **Cost**: Requires coordination on every write — typically a consensus
+  protocol (Paxos, Raft) or quorum reads/writes. This coordination becomes
+  the throughput bottleneck: every write must wait for a majority of replicas
+  to acknowledge before completing. Under high contention, this means threads
+  spend most of their time waiting rather than doing useful work.
+- **Systems that offer it**: Redis, MongoDB, etcd, DynamoDB (optional),
+  Cassandra (with quorum), CockroachDB.
+
+#### Serializability
+
+- **Definition**: The result of executing a set of transactions is equivalent
+  to some serial (one-at-a-time) execution of those transactions. This is the
+  strongest multi-key guarantee — it ensures that concurrent transactions
+  behave as if they ran sequentially, even when they touch different keys.
+- **What it offers over Anna's levels**: Anna's Read Committed prevents dirty
+  reads/writes but allows non-repeatable reads and phantom reads across keys.
+  Serializability prevents all anomalies: if transaction T1 reads key A and
+  writes key B, and transaction T2 reads key B and writes key A, serializability
+  guarantees a consistent outcome as if one ran before the other. Anna has no
+  mechanism to enforce this across keys without coordination.
+- **Cost**: Requires either two-phase locking (pessimistic, blocks concurrent
+  access) or optimistic concurrency control with validation (aborts conflicting
+  transactions). Both approaches require global coordination that fundamentally
+  limits throughput. Two-phase commit for distributed transactions adds
+  additional latency and failure modes.
+- **Systems that offer it**: Redis (single-threaded, trivially serializable),
+  H-Store, CockroachDB, etcd (via Raft log ordering).
+
+#### Why Anna Doesn't Support These
+
+Anna's design is built on the principle that coordination is the enemy of
+scalability. Both linearizability and serializability require coordination
+on every operation:
+
+- **Linearizability** requires consensus or quorum acknowledgment per write,
+  introducing latency proportional to network round-trip time and limiting
+  throughput to the speed of the slowest replica.
+- **Serializability** requires global ordering of transactions, either via
+  locks (which create contention hotspots) or via a total-order broadcast
+  protocol (which limits throughput to a single serialization point).
+
+Anna's benchmarks show that coordination-based systems (TBB hash map, Masstree)
+spend 92-95% of CPU time on atomic instructions under high contention, while
+Anna spends 90%+ on useful request handling. This is the fundamental trade-off:
+Anna sacrifices the strongest consistency guarantees in exchange for orders of
+magnitude better performance and seamless horizontal scalability.
+
+For applications that need linearizability or serializability, systems like
+CockroachDB, etcd, or Redis are more appropriate — but they cannot match
+Anna's throughput or cost-efficiency at scale.
+
 ### Comparison with Other Systems
 
-| System | Per-Key Consistency | Multi-Key Consistency |
-|---|---|---|
-| **Anna** | Eventual, Causal, Item Cut, Monotonic R/W, PRAM, ... | Read Committed, Read Uncommitted |
-| **Redis** | Linearizable | Serializable |
-| **MongoDB** | Linearizable | Linearizable |
-| **etcd** | Linearizable (Raft consensus) | Serializable |
-| **DynamoDB** | Linearizable, Eventual | None |
-| **Cassandra** | Linearizable, Eventual | None |
-| **CockroachDB** | Serializable | Serializable |
-
-Anna is unique in offering the widest range of coordination-free consistency
-levels. Stronger levels (linearizability, serializability) require coordination
-and are outside Anna's design goals — Anna trades those for performance and
-scalability. Systems like Redis and etcd offer strong consistency but cannot
-scale horizontally without coordination overhead.
+| System          | Per-Key Consistency                                  | Multi-Key Consistency            |
+|-----------------|------------------------------------------------------|----------------------------------|
+| **Anna**        | Eventual, Causal, Item Cut, Monotonic R/W, PRAM, ... | Read Committed, Read Uncommitted |
+| **Redis**       | Linearizable                                         | Serializable                     |
+| **MongoDB**     | Linearizable                                         | Linearizable                     |
+| **etcd**        | Linearizable (Raft consensus)                        | Serializable                     |
+| **DynamoDB**    | Linearizable, Eventual                               | None                             |
+| **Cassandra**   | Linearizable, Eventual                               | None                             |
+| **CockroachDB** | Serializable                                         | Serializable                     |
 
 ## Merge-at-Sender Optimization
 

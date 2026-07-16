@@ -21,49 +21,9 @@ Anna's design rests on four requirements:
 
 An Anna deployment consists of four types of nodes:
 
-```
-┌──────────────────────────────────────────────────────────┐
-│                    Routing Tier                          │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐                 │
-│  │ Routing │  │ Routing │  │ Routing │  ...             │
-│  │  Node   │  │  Node   │  │  Node   │                  │
-│  └─────────┘  └─────────┘  └─────────┘                  │
-├──────────────────────────────────────────────────────────┤
-│                   Memory Tier                            │
-│  ┌───────────────┐  ┌───────────────┐                   │
-│  │ Storage Kernel │  │ Storage Kernel │  ...             │
-│  │  (anna-kvs)   │  │  (anna-kvs)   │                   │
-│  │ Memory Buffer │  │ Memory Buffer │                   │
-│  └───────────────┘  └───────────────┘                   │
-├──────────────────────────────────────────────────────────┤
-│                    Disk Tier                              │
-│  ┌───────────────┐  ┌───────────────┐                   │
-│  │ Storage Kernel │  │ Storage Kernel │  ...             │
-│  │  (anna-kvs)   │  │  (anna-kvs)   │                   │
-│  │  EBS Volume   │  │  EBS Volume   │                   │
-│  └───────────────┘  └───────────────┘                   │
-├──────────────────────────────────────────────────────────┤
-│  ┌────────────┐  ┌───────────────┐                      │
-│  │ Monitoring │  │   Management  │                      │
-│  │   Node     │  │    System     │                      │
-│  └────────────┘  └───────────────┘                      │
-└──────────────────────────────────────────────────────────┘
-```
+![Anna Architecture](images/architecture.svg)
 
-### Storage Nodes (anna-kvs)
-
-Storage nodes run the Anna storage kernel. Each node contains multiple worker
-threads, each pinned to a CPU core. Each thread:
-
-- Maintains a **private hash table** (no shared memory between threads)
-- Runs a tight event loop processing client requests via ZeroMQ
-- Periodically **multicasts** updates to replicas ("gossip" / anti-entropy)
-- Uses **consistent hashing** with virtual nodes for key partitioning
-
-The storage kernel is identical across memory and disk tiers — the only
-difference is the serialization layer (memory buffer vs. EBS volume).
-
-### Routing Nodes (anna-route)
+### Routing Tier (anna-route)
 
 The routing service isolates clients from the storage layer. A client asks
 the routing tier where to find a key and receives valid server addresses.
@@ -73,6 +33,19 @@ Routing nodes:
 - Return memory-tier addresses when available (for performance)
 - Are stateless — only maintain soft state (cached metadata)
 - Handle cluster configuration changes transparently to clients
+
+### Storage Tier (anna-kvs)
+
+Storage nodes run the Anna storage kernel. Each node contains multiple worker
+threads, each pinned to a CPU core. Each thread:
+
+- Maintains a **private hash table** (no shared memory between threads)
+- Runs a tight event loop processing client requests via ZeroMQ
+- Periodically **multicasts** updates to replicas via a "gossip" protocol
+- Uses **consistent hashing** with virtual nodes for key partitioning
+
+The storage kernel is identical across memory and disk tiers — the only
+difference is the serialization layer (memory buffer vs. EBS volume).
 
 ### Monitoring Node (anna-monitor)
 
