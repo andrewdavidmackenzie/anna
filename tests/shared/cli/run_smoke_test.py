@@ -146,6 +146,15 @@ def stop_servers(procs):
         except Exception:
             pass
 
+    for proc in procs:
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except Exception:
+                pass
+
 
 def run_smoke_test(cli_cmd):
     server_dir = find_server_dir()

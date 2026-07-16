@@ -146,13 +146,24 @@ coverage: test
 	@genhtml -o coverage --quiet rust_workspace.info server/cpp/build/server.info clients/cpp/build/client.info || true
 
 .PHONY: test
-test: server-cpp-tests client-cpp-tests client-python-tests workspace-rust-tests client-go-tests
+test: client-cpp-tests client-python-tests workspace-rust-tests client-go-tests server-system-coverage server-cpp-tests merge-server-coverage
+
+.PHONY: server-system-coverage
+server-system-coverage:
+	@echo "Capturing server coverage from client system tests"
+	@cd server/cpp/build && lcov --directory . --capture --output-file server-system.info --ignore-errors inconsistent,format,unused 2>/dev/null || true
+	@cd server/cpp/build && lcov --remove server-system.info '/Applications/*' '/usr*' '*/build/*' '*/gtest/*' '*/tests/*' -o server-system.info --ignore-errors inconsistent,format,unused 2>/dev/null || true
 
 .PHONY: server-cpp-tests
 server-cpp-tests:
 	@echo "Running C++ server tests with coverage"
 	@cd server/cpp/build && make --no-print-directory -s server-test-coverage
 	@find server/cpp -name "*.profraw" | xargs rm -f
+
+.PHONY: merge-server-coverage
+merge-server-coverage:
+	@echo "Merging server unit test and system test coverage"
+	@cd server/cpp/build && lcov --add-tracefile server.info --add-tracefile server-system.info --output-file server.info --ignore-errors inconsistent,format,unused 2>/dev/null || true
 
 .PHONY: client-cpp-tests
 client-cpp-tests:
