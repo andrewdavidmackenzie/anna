@@ -282,12 +282,18 @@ impl KVSClient {
             request.tuples.push(tuple);
 
             let encoded = request.encode_to_vec();
-            if self.send_request(&encoded, &worker).await.is_err() {
-                return None;
-            }
 
-            match self.recv_response(false).await {
-                Some(data) => match KeyResponse::decode(data.as_slice()) {
+            let result = tokio::time::timeout(self.timeout, async {
+                self.send_request(&encoded, &worker).await?;
+                match self.recv_response(false).await {
+                    Some(data) => Ok(data),
+                    None => Err(Error::Kvs("recv timed out".into())),
+                }
+            })
+            .await;
+
+            match result {
+                Ok(Ok(data)) => match KeyResponse::decode(data.as_slice()) {
                     Ok(response) => {
                         if !response.tuples.is_empty() {
                             let t = &response.tuples[0];
@@ -307,7 +313,7 @@ impl KVSClient {
                         return None;
                     }
                 },
-                None => {
+                _ => {
                     warn!(
                         "Request timed out for key {} at {}, attempt {}",
                         key, worker, attempt
