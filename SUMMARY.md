@@ -19,4 +19,3 @@ library and CLI. All clients support the same operations (GET, PUT, GET_SET,
 PUT_SET, GET_CAUSAL, PUT_CAUSAL) and are tested against the same shared
 golden files.
 
-- [Rust client](clients/rust/README.md)
