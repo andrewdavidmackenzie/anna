@@ -167,12 +167,12 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 
 | Category                     | Total | System Tested | Coverage | Issue  |
 |------------------------------|-------|---------------|----------|--------|
-| Client Operations            | 15    | 13            | 87%      | —      |
+| Client Operations            | 15    | 15            | 100%     | —      |
 | Lattice Types                | 6     | 6             | 100%     | —      |
 | Single-Node Features         | 9     | 9             | 100%     | —      |
 | Error Handling               | 6     | 1             | 17%      | #355   |
-| Disk Storage Tier            | 4     | 0             | 0%       | #356   |
-| Multi-Node Features          | 27    | 2             | 7%       | #352   |
+| Multi-Tiered Storage         | 4     | 0             | 0%       | #356   |
+| Multi-Node Features          | 27    | 9             | 33%      | #352   |
 | Monitoring & Policy Engine   | 8     | 0             | 0%       | #357   |
 | Server Internals             | 6     | 0             | 0%       | #358   |
-| **Total**                    | **81**| **31**        | **38%**  |        |
+| **Total**                    | **81**| **40**        | **49%**  |        |

@@ -60,6 +60,17 @@ int main(int argc, char *argv[]) {
     kBaseOffset = conf["ports"]["base_offset"].as<unsigned>();
   }
 
+  unsigned monitoringResponseTimeout = 10000;
+  if (conf["timings"]) {
+    YAML::Node timings = conf["timings"];
+    if (timings["monitoring_timeout"])
+      kMonitoringThreshold = timings["monitoring_timeout"].as<unsigned>();
+    if (timings["grace_period"])
+      kGracePeriod = timings["grace_period"].as<unsigned>();
+    if (timings["monitoring_response_timeout_ms"])
+      monitoringResponseTimeout = timings["monitoring_response_timeout_ms"].as<unsigned>();
+  }
+
   YAML::Node monitoring = conf["monitoring"];
   Address ip = monitoring["ip"].as<Address>();
   Address management_ip = monitoring["mgmt_ip"].as<Address>();
@@ -147,7 +158,7 @@ int main(int argc, char *argv[]) {
   // responsible for listening to the response of the replication factor change request
   zmq::socket_t response_puller(context, ZMQ_PULL);
 
-  response_puller.set(zmq::sockopt::rcvtimeo, 10000);
+  response_puller.set(zmq::sockopt::rcvtimeo, static_cast<int>(monitoringResponseTimeout));
   response_puller.bind(mt.response_bind_address());
 
   // keep track of departing node status

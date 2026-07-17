@@ -16,11 +16,8 @@
 #include "signal_handler.hpp"
 #include "yaml-cpp/yaml.h"
 
-// define server report threshold (in second)
-const unsigned kServerReportThreshold = 15;
-
-// define server's key monitoring threshold (in second)
-const unsigned kKeyMonitoringThreshold = 60;
+unsigned kServerReportThreshold = 15;
+unsigned kKeyMonitoringThreshold = 60;
 
 unsigned kThreadNum;
 
@@ -448,7 +445,7 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
     gossip_end = std::chrono::system_clock::now();
     if (std::chrono::duration_cast<std::chrono::microseconds>(gossip_end -
                                                               gossip_start)
-            .count() >= PERIOD) {
+            .count() >= kGossipPeriod) {
       auto work_start = std::chrono::system_clock::now();
       // only gossip if we have changes
       if (local_changeset.size() > 0) {
@@ -669,7 +666,7 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
         for (const Key &key : key_set) {
           addr_keyset_map[address].insert(key);
           sent_keys.insert(key);
-          if (sent_keys.size() >= DATA_REDISTRIBUTE_THRESHOLD) {
+          if (sent_keys.size() >= kDataRedistributeThreshold) {
             break;
           }
         }
@@ -736,6 +733,18 @@ int main(int argc, char *argv[]) {
 
   if (conf["ports"] && conf["ports"]["base_offset"]) {
     kBaseOffset = conf["ports"]["base_offset"].as<unsigned>();
+  }
+
+  if (conf["timings"]) {
+    YAML::Node timings = conf["timings"];
+    if (timings["server_report_period"])
+      kServerReportThreshold = timings["server_report_period"].as<unsigned>();
+    if (timings["key_monitoring_period"])
+      kKeyMonitoringThreshold = timings["key_monitoring_period"].as<unsigned>();
+    if (timings["gossip_epoch"])
+      kGossipPeriod = timings["gossip_epoch"].as<unsigned>() * 1000000;
+    if (timings["data_redistribute_batch"])
+      kDataRedistributeThreshold = timings["data_redistribute_batch"].as<unsigned>();
   }
 
   YAML::Node threads = conf["threads"];

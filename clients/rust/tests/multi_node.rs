@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-const GOSSIP_EPOCH_SECS: u64 = 12;
+const TEST_GOSSIP_EPOCH: u32 = 2;
 const NODE1_IP: &str = "127.0.0.1";
 const NODE2_IP: &str = "127.0.0.2";
 
@@ -31,6 +31,7 @@ fn write_node_config(
     seed_ip: &str,
     replication_memory: u32,
     base_offset: u32,
+    gossip_epoch: u32,
 ) {
     let mut f = fs::File::create(path).expect("Failed to create config file");
     write!(
@@ -73,6 +74,13 @@ threads:
   benchmark: 1
 ports:
   base_offset: {base_offset}
+timings:
+  gossip_epoch: {gossip_epoch}
+  server_report_period: 5
+  key_monitoring_period: 15
+  monitoring_timeout: 10
+  data_redistribute_batch: 50
+  grace_period: 30
 replication:
   memory: {replication_memory}
   ebs: 0
@@ -150,6 +158,7 @@ impl MultiNodeCluster {
             node_ip,
             replication_memory,
             self.base_offset,
+            TEST_GOSSIP_EPOCH,
         );
 
         for name in ["anna-monitor", "anna-route", "anna-kvs"] {
@@ -178,6 +187,7 @@ impl MultiNodeCluster {
             seed_ip,
             replication_memory,
             self.base_offset,
+            TEST_GOSSIP_EPOCH,
         );
 
         if let Some(child) = spawn_server("anna-kvs", &config, &server_path()) {
@@ -303,7 +313,7 @@ async fn multi_node_gossip_replication() {
         .expect("PUT gossip_test_2 failed");
 
     // Wait for gossip to replicate data across both nodes
-    std::thread::sleep(Duration::from_secs(GOSSIP_EPOCH_SECS));
+    std::thread::sleep(Duration::from_secs(TEST_GOSSIP_EPOCH as u64 + 2));
 
     // Clear cache so routing re-resolves — may direct to either node
     client.clear_cache();

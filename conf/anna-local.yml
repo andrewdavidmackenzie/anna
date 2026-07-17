@@ -35,6 +35,13 @@ threads:
   benchmark: 1
 ports:
   base_offset: 0
+timings:
+  server_report_period: 15
+  key_monitoring_period: 60
+  monitoring_timeout: 30
+  gossip_epoch: 10
+  data_redistribute_batch: 50
+  grace_period: 120
 replication:
   memory: 1
   ebs: 0
