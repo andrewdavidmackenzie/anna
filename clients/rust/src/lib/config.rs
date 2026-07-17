@@ -24,6 +24,8 @@ pub struct Config {
     replication: Replication,
     #[serde(default)]
     ports: Ports,
+    #[serde(default)]
+    timings: Timings,
 }
 
 /// Monitoring configuration section
@@ -106,6 +108,30 @@ struct Ports {
     base_offset: usize,
 }
 
+/// Timing configuration section
+#[derive(Deserialize)]
+struct Timings {
+    server_report_period: usize,
+    key_monitoring_period: usize,
+    monitoring_timeout: usize,
+    gossip_epoch: usize,
+    data_redistribute_batch: usize,
+    grace_period: usize,
+}
+
+impl Default for Timings {
+    fn default() -> Self {
+        Timings {
+            server_report_period: 15,
+            key_monitoring_period: 60,
+            monitoring_timeout: 30,
+            gossip_epoch: 10,
+            data_redistribute_batch: 50,
+            grace_period: 120,
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         let localhost = "127.0.0.1".to_string();
@@ -155,6 +181,7 @@ impl Default for Config {
                 local: 1,
             },
             ports: Ports::default(),
+            timings: Timings::default(),
         }
     }
 }
@@ -207,6 +234,16 @@ impl Config {
     /// Return the port base offset for this cluster
     pub fn get_base_offset(&self) -> usize {
         self.ports.base_offset
+    }
+
+    /// Return the gossip epoch interval in seconds
+    pub fn get_gossip_epoch(&self) -> usize {
+        self.timings.gossip_epoch
+    }
+
+    /// Return the monitoring timeout in seconds
+    pub fn get_monitoring_timeout(&self) -> usize {
+        self.timings.monitoring_timeout
     }
 }
 

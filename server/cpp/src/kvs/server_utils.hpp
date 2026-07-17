@@ -26,14 +26,14 @@
 #include "lattices/lww_pair_lattice.hpp"
 #include "yaml-cpp/yaml.h"
 
-// Define the garbage collect threshold
-#define GARBAGE_COLLECT_THRESHOLD 10000000
+// Gossip period in microseconds (default 10 seconds)
+inline unsigned kGossipPeriod = 10000000;
 
-// Define the data redistribute threshold
-#define DATA_REDISTRIBUTE_THRESHOLD 50
+// Max keys redistributed per gossip batch
+inline unsigned kDataRedistributeThreshold = 50;
 
-// Define the gossip period (frequency)
-#define PERIOD 10000000 // 10 seconds
+// Memory garbage collection trigger threshold
+inline unsigned kGarbageCollectThreshold = 10000000;
 
 typedef KVStore<Key, LWWPairLattice<string>> MemoryLWWKVS;
 typedef KVStore<Key, SetLattice<string>> MemorySetKVS;

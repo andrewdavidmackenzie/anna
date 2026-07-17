@@ -19,11 +19,8 @@
 #include "metadata.pb.h"
 #include "requests.hpp"
 
-// define monitoring threshold (in second)
-const unsigned kMonitoringThreshold = 30;
-
-// define the grace period for triggering elasticity action (in second)
-const unsigned kGracePeriod = 120;
+inline unsigned kMonitoringThreshold = 30;
+inline unsigned kGracePeriod = 120;
 
 // the default number of nodes to add concurrently for storage
 const unsigned kNodeAdditionBatchSize = 2;
