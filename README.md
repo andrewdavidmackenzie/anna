@@ -39,7 +39,7 @@ Anna has four client implementations, each with a library and CLI:
 | Go | `annalib` | `anna-go` | Go |
 
 All clients support the same operations (GET, PUT, GET_SET, PUT_SET, GET_CAUSAL, PUT_CAUSAL)
-and are tested against [shared golden files](tests/shared/cli/).
+and are tested against shared golden files (`tests/shared/cli/`).
 
 ## Building
 
