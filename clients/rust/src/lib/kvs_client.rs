@@ -1054,6 +1054,72 @@ mod tests {
         assert!(!client.key_address_cache.contains_key("evict_me"));
     }
 
+    #[tokio::test]
+    async fn evict_address_removes_single_address() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .expect("failed to read default config");
+        let mut client = KVSClient::new(&config, Some(88)).await;
+        let mut addrs = HashSet::new();
+        addrs.insert("tcp://10.0.0.1:6200".to_string());
+        addrs.insert("tcp://10.0.0.2:6200".to_string());
+        client.key_address_cache.insert("multi_addr".into(), addrs);
+
+        client.evict_address("multi_addr", "tcp://10.0.0.1:6200");
+        let remaining = &client.key_address_cache["multi_addr"];
+        assert_eq!(remaining.len(), 1);
+        assert!(remaining.contains("tcp://10.0.0.2:6200"));
+    }
+
+    #[tokio::test]
+    async fn evict_address_removes_key_when_last_address() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .expect("failed to read default config");
+        let mut client = KVSClient::new(&config, Some(87)).await;
+        client.key_address_cache.insert(
+            "single_addr".into(),
+            ["tcp://10.0.0.1:6200".to_string()].into(),
+        );
+
+        client.evict_address("single_addr", "tcp://10.0.0.1:6200");
+        assert!(!client.key_address_cache.contains_key("single_addr"));
+    }
+
+    #[tokio::test]
+    async fn evict_address_also_removes_socket() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .expect("failed to read default config");
+        let mut client = KVSClient::new(&config, Some(86)).await;
+        client.key_address_cache.insert(
+            "sock_test".into(),
+            ["tcp://10.0.0.1:6200".to_string()].into(),
+        );
+        let sock = PushSocket::new();
+        client
+            .socket_cache
+            .insert("tcp://10.0.0.1:6200".to_string(), sock);
+
+        client.evict_address("sock_test", "tcp://10.0.0.1:6200");
+        assert!(!client.socket_cache.contains_key("tcp://10.0.0.1:6200"));
+    }
+
+    #[tokio::test]
+    async fn set_timeout_changes_duration() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .expect("failed to read default config");
+        let mut client = KVSClient::new(&config, Some(85)).await;
+        assert_eq!(client.timeout, Duration::from_secs(10));
+        client.set_timeout(Duration::from_secs(3));
+        assert_eq!(client.timeout, Duration::from_secs(3));
+    }
+
     #[test]
     fn empty_set_value_roundtrip() {
         let original = SetValue { values: vec![] };
