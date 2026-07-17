@@ -187,7 +187,8 @@ mod test {
             assert!(
                 pids.is_empty(),
                 "Expected no pids for '{}', got {:?}",
-                name, pids
+                name,
+                pids
             );
         }
     }

@@ -41,6 +41,10 @@ jobs:
       run: |
         choco install make cmake protoc --no-progress -y
 
+    - name: Setup multi-node loopback alias
+      if: runner.os == 'macOS'
+      run: sudo ifconfig lo0 alias 127.0.0.2
+
     - name: clippy
       run: make clippy
 

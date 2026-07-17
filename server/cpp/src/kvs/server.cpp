@@ -733,6 +733,11 @@ int main(int argc, char *argv[]) {
 
   // read the YAML conf
   YAML::Node conf = YAML::LoadFile(argv[2]);
+
+  if (conf["ports"] && conf["ports"]["base_offset"]) {
+    kBaseOffset = conf["ports"]["base_offset"].as<unsigned>();
+  }
+
   YAML::Node threads = conf["threads"];
   kMemoryThreadCount = threads["memory"].as<unsigned>();
   kEbsThreadCount = threads["ebs"].as<unsigned>();

@@ -55,6 +55,11 @@ int main(int argc, char *argv[]) {
 
   // read the YAML conf
   YAML::Node conf = YAML::LoadFile(argv[2]);
+
+  if (conf["ports"] && conf["ports"]["base_offset"]) {
+    kBaseOffset = conf["ports"]["base_offset"].as<unsigned>();
+  }
+
   YAML::Node monitoring = conf["monitoring"];
   Address ip = monitoring["ip"].as<Address>();
   Address management_ip = monitoring["mgmt_ip"].as<Address>();

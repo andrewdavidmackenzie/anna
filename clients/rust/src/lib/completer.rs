@@ -70,8 +70,12 @@ mod tests {
     fn complete(input: &str) -> Vec<String> {
         let completer = AnnaCompleter;
         let (_, pairs) = completer
-            .complete(input, input.len(), &Context::new(&rustyline::history::DefaultHistory::new()))
-            .unwrap();
+            .complete(
+                input,
+                input.len(),
+                &Context::new(&rustyline::history::DefaultHistory::new()),
+            )
+            .expect("completion failed");
         pairs.into_iter().map(|p| p.display).collect()
     }
 

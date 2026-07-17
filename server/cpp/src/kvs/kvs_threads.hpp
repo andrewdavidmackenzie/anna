@@ -129,76 +129,76 @@ public:
   }
 
   Address node_join_connect_address() const {
-    return private_base_ + std::to_string(tid_ + kNodeJoinPort);
+    return private_base_ + std::to_string(tid_ + kNodeJoinPort + kBaseOffset);
   }
 
   Address node_join_bind_address() const {
-    return kBindBase + std::to_string(tid_ + kNodeJoinPort);
+    return private_base_ + std::to_string(tid_ + kNodeJoinPort + kBaseOffset);
   }
 
   Address node_depart_connect_address() const {
-    return private_base_ + std::to_string(tid_ + kNodeDepartPort);
+    return private_base_ + std::to_string(tid_ + kNodeDepartPort + kBaseOffset);
   }
 
   Address node_depart_bind_address() const {
-    return kBindBase + std::to_string(tid_ + kNodeDepartPort);
+    return private_base_ + std::to_string(tid_ + kNodeDepartPort + kBaseOffset);
   }
 
   Address self_depart_connect_address() const {
-    return private_base_ + std::to_string(tid_ + kSelfDepartPort);
+    return private_base_ + std::to_string(tid_ + kSelfDepartPort + kBaseOffset);
   }
 
   Address self_depart_bind_address() const {
-    return kBindBase + std::to_string(tid_ + kSelfDepartPort);
+    return private_base_ + std::to_string(tid_ + kSelfDepartPort + kBaseOffset);
   }
 
   Address key_request_connect_address() const {
-    return public_base_ + std::to_string(tid_ + kKeyRequestPort);
+    return public_base_ + std::to_string(tid_ + kKeyRequestPort + kBaseOffset);
   }
 
   Address key_request_bind_address() const {
-    return kBindBase + std::to_string(tid_ + kKeyRequestPort);
+    return private_base_ + std::to_string(tid_ + kKeyRequestPort + kBaseOffset);
   }
 
   Address replication_response_connect_address() const {
     return private_base_ +
-           std::to_string(tid_ + kServerReplicationResponsePort);
+           std::to_string(tid_ + kServerReplicationResponsePort + kBaseOffset);
   }
 
   Address replication_response_bind_address() const {
-    return kBindBase + std::to_string(tid_ + kServerReplicationResponsePort);
+    return private_base_ + std::to_string(tid_ + kServerReplicationResponsePort + kBaseOffset);
   }
 
   Address cache_ip_response_connect_address() const {
-    return private_base_ + std::to_string(tid_ + kCacheIpResponsePort);
+    return private_base_ + std::to_string(tid_ + kCacheIpResponsePort + kBaseOffset);
   }
 
   Address cache_ip_response_bind_address() const {
-    return kBindBase + std::to_string(tid_ + kCacheIpResponsePort);
+    return private_base_ + std::to_string(tid_ + kCacheIpResponsePort + kBaseOffset);
   }
 
   Address management_node_response_connect_address() const {
-    return private_base_ + std::to_string(tid_ + kManagementNodeResponsePort);
+    return private_base_ + std::to_string(tid_ + kManagementNodeResponsePort + kBaseOffset);
   }
 
   Address management_node_response_bind_address() const {
-    return kBindBase + std::to_string(tid_ + kManagementNodeResponsePort);
+    return private_base_ + std::to_string(tid_ + kManagementNodeResponsePort + kBaseOffset);
   }
 
   Address gossip_connect_address() const {
-    return private_base_ + std::to_string(tid_ + kGossipPort);
+    return private_base_ + std::to_string(tid_ + kGossipPort + kBaseOffset);
   }
 
   Address gossip_bind_address() const {
-    return kBindBase + std::to_string(tid_ + kGossipPort);
+    return private_base_ + std::to_string(tid_ + kGossipPort + kBaseOffset);
   }
 
   Address replication_change_connect_address() const {
-    return private_base_ + std::to_string(tid_ + kServerReplicationChangePort);
+    return private_base_ + std::to_string(tid_ + kServerReplicationChangePort + kBaseOffset);
   }
 
   Address replication_change_bind_address() const {
-    return kBindBase + std::to_string(tid_ + kServerReplicationChangePort);
+    return private_base_ + std::to_string(tid_ + kServerReplicationChangePort + kBaseOffset);
   }
 };
 
@@ -226,43 +226,43 @@ public:
   unsigned tid() const { return tid_; }
 
   Address seed_connect_address() const {
-    return ip_base_ + std::to_string(tid_ + kSeedPort);
+    return ip_base_ + std::to_string(tid_ + kSeedPort + kBaseOffset);
   }
 
   Address seed_bind_address() const {
-    return kBindBase + std::to_string(tid_ + kSeedPort);
+    return ip_base_ + std::to_string(tid_ + kSeedPort + kBaseOffset);
   }
 
   Address notify_connect_address() const {
-    return ip_base_ + std::to_string(tid_ + kRoutingNotifyPort);
+    return ip_base_ + std::to_string(tid_ + kRoutingNotifyPort + kBaseOffset);
   }
 
   Address notify_bind_address() const {
-    return kBindBase + std::to_string(tid_ + kRoutingNotifyPort);
+    return ip_base_ + std::to_string(tid_ + kRoutingNotifyPort + kBaseOffset);
   }
 
   Address key_address_connect_address() const {
-    return ip_base_ + std::to_string(tid_ + kKeyAddressPort);
+    return ip_base_ + std::to_string(tid_ + kKeyAddressPort + kBaseOffset);
   }
 
   Address key_address_bind_address() const {
-    return kBindBase + std::to_string(tid_ + kKeyAddressPort);
+    return ip_base_ + std::to_string(tid_ + kKeyAddressPort + kBaseOffset);
   }
 
   Address replication_response_connect_address() const {
-    return ip_base_ + std::to_string(tid_ + kRoutingReplicationResponsePort);
+    return ip_base_ + std::to_string(tid_ + kRoutingReplicationResponsePort + kBaseOffset);
   }
 
   Address replication_response_bind_address() const {
-    return kBindBase + std::to_string(tid_ + kRoutingReplicationResponsePort);
+    return ip_base_ + std::to_string(tid_ + kRoutingReplicationResponsePort + kBaseOffset);
   }
 
   Address replication_change_connect_address() const {
-    return ip_base_ + std::to_string(tid_ + kRoutingReplicationChangePort);
+    return ip_base_ + std::to_string(tid_ + kRoutingReplicationChangePort + kBaseOffset);
   }
 
   Address replication_change_bind_address() const {
-    return kBindBase + std::to_string(tid_ + kRoutingReplicationChangePort);
+    return ip_base_ + std::to_string(tid_ + kRoutingReplicationChangePort + kBaseOffset);
   }
 };
 
@@ -277,35 +277,35 @@ public:
   Address ip() const { return ip_; }
 
   Address notify_connect_address() const {
-    return ip_base_ + std::to_string(kMonitoringNotifyPort);
+    return ip_base_ + std::to_string(kMonitoringNotifyPort + kBaseOffset);
   }
 
   Address notify_bind_address() const {
-    return kBindBase + std::to_string(kMonitoringNotifyPort);
+    return ip_base_ + std::to_string(kMonitoringNotifyPort + kBaseOffset);
   }
 
   Address response_connect_address() const {
-    return ip_base_ + std::to_string(kMonitoringResponsePort);
+    return ip_base_ + std::to_string(kMonitoringResponsePort + kBaseOffset);
   }
 
   Address response_bind_address() const {
-    return kBindBase + std::to_string(kMonitoringResponsePort);
+    return ip_base_ + std::to_string(kMonitoringResponsePort + kBaseOffset);
   }
 
   Address depart_done_connect_address() const {
-    return ip_base_ + std::to_string(kDepartDonePort);
+    return ip_base_ + std::to_string(kDepartDonePort + kBaseOffset);
   }
 
   Address depart_done_bind_address() const {
-    return kBindBase + std::to_string(kDepartDonePort);
+    return ip_base_ + std::to_string(kDepartDonePort + kBaseOffset);
   }
 
   Address feedback_report_connect_address() const {
-    return ip_base_ + std::to_string(kFeedbackReportPort);
+    return ip_base_ + std::to_string(kFeedbackReportPort + kBaseOffset);
   }
 
   Address feedback_report_bind_address() const {
-    return kBindBase + std::to_string(kFeedbackReportPort);
+    return ip_base_ + std::to_string(kFeedbackReportPort + kBaseOffset);
   }
 };
 
@@ -319,7 +319,7 @@ public:
   unsigned tid() const { return tid_; }
 
   Address benchmark_command_address() const {
-    return "tcp://" + ip_ + ":" + std::to_string(tid_ + kBenchmarkCommandPort);
+    return "tcp://" + ip_ + ":" + std::to_string(tid_ + kBenchmarkCommandPort + kBaseOffset);
   }
 
 private:
@@ -328,11 +328,11 @@ private:
 };
 
 inline string get_join_count_req_address(string management_ip) {
-  return "tcp://" + management_ip + ":" + std::to_string(kKopsRestartCountPort);
+  return "tcp://" + management_ip + ":" + std::to_string(kKopsRestartCountPort + kBaseOffset);
 }
 
 inline string get_func_nodes_req_address(string management_ip) {
-  return "tcp://" + management_ip + ":" + std::to_string(kKopsFuncNodesPort);
+  return "tcp://" + management_ip + ":" + std::to_string(kKopsFuncNodesPort + kBaseOffset);
 }
 
 struct ThreadHash {

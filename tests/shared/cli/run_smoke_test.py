@@ -92,6 +92,8 @@ threads:
   ebs: 1
   routing: 1
   benchmark: 1
+ports:
+  base_offset: 0
 replication:
   memory: 1
   ebs: 0

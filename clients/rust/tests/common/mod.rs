@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::env;
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
@@ -33,7 +35,15 @@ pub fn config_file() -> String {
         .to_string()
 }
 
+pub fn routing_port(base_offset: u16) -> u16 {
+    6450 + base_offset
+}
+
 pub fn start_servers(path: &str, config: &str) {
+    start_servers_with_offset(path, config, 0);
+}
+
+pub fn start_servers_with_offset(path: &str, config: &str, base_offset: u16) {
     Command::new(anna_binary())
         .args(["--config", config, "start"])
         .env("PATH", path)
@@ -42,15 +52,22 @@ pub fn start_servers(path: &str, config: &str) {
         .status()
         .expect("Failed to start servers");
 
+    wait_for_routing(base_offset);
+}
+
+pub fn wait_for_routing(base_offset: u16) {
+    let port = routing_port(base_offset);
+    let addr = format!("127.0.0.1:{}", port);
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
-        if TcpStream::connect_timeout(&"127.0.0.1:6450".parse().unwrap(), Duration::from_secs(1))
-            .is_ok()
-        {
+        if TcpStream::connect_timeout(&addr.parse().unwrap(), Duration::from_secs(1)).is_ok() {
             break;
         }
         if Instant::now() > deadline {
-            panic!("Routing tier did not start within 30 seconds");
+            panic!(
+                "Routing tier did not start within 30 seconds (port {})",
+                port
+            );
         }
         std::thread::sleep(Duration::from_millis(500));
     }
