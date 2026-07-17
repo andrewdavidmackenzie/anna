@@ -110,6 +110,7 @@ struct Ports {
 
 /// Timing configuration section
 #[derive(Deserialize)]
+#[serde(default)]
 struct Timings {
     server_report_period: usize,
     key_monitoring_period: usize,
