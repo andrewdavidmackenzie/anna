@@ -64,7 +64,7 @@ mocks.
 | LATTICE      | Lattice type mismatch                             | No            |
 | NO_SERVERS   | No servers available (routing tier)               | No            |
 
-## Disk Storage Tier (#356)
+## Multi-Tiered Storage (#356)
 
 | Feature                       | Description                                           | System Tested |
 |-------------------------------|-------------------------------------------------------|---------------|
