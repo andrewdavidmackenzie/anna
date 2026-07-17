@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-992e10b7.js";
+            window.path_to_searchindex_js = "searchindex-0ada8b08.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7bb26e2b.js"></script>
@@ -751,7 +751,7 @@ its deployment to balance cost, latency, and fault tolerance.</p>
 <tbody>
 <tr><td><strong>Volume</strong></td><td>Overall load increases/decreases</td><td>Horizontal elasticity</td></tr>
 <tr><td><strong>Skewness</strong></td><td>Some keys are much hotter than others</td><td>Selective replication</td></tr>
-<tr><td><strong>Hotspot shifts</strong></td><td>Popular keys change over time</td><td>Replication + tiering</td></tr>
+<tr><td><strong>Hotspot shifts</strong></td><td>Hottest keys change over time</td><td>Replication + tiering</td></tr>
 </tbody>
 </table>
 </div>
@@ -839,6 +839,23 @@ can be removed to save cost</li>
 </tbody>
 </table>
 </div>
+<h2 id="port-configuration-for-multi-node-deployments"><a class="header" href="#port-configuration-for-multi-node-deployments">Port Configuration for Multi-Node Deployments</a></h2>
+<p>Anna uses a range of ports (6000–7150) for inter-node communication.
+The YAML config supports a <code>ports.base_offset</code> setting that shifts all
+ports by a fixed amount, enabling multiple independent clusters on the
+same machine (e.g., for testing or CI).</p>
+<pre><code class="language-yaml">ports:
+  base_offset: 0    # default — ports 6000-7150
+  # base_offset: 2000  # shifts to ports 8000-9150
+</code></pre>
+<p>For multi-node testing on a single machine, each node uses a different
+IP on the loopback range (127.0.0.1, 127.0.0.2, …) while sharing the
+same port numbers. ZMQ sockets bind to the node’s specific IP rather
+than <code>0.0.0.0</code>, so multiple nodes can coexist without port conflicts.</p>
+<p>On macOS, additional loopback addresses require explicit aliases:</p>
+<pre><code class="language-bash">sudo ifconfig lo0 alias 127.0.0.2
+</code></pre>
+<p>Linux supports the full 127.0.0.0/8 range by default.</p>
 <h2 id="performance-results"><a class="header" href="#performance-results">Performance Results</a></h2>
 <p>From the VLDB 2019 evaluation:</p>
 <ul>
@@ -878,8 +895,8 @@ mocks.</p>
 <tr><td>PUT_SINGLE_CAUSAL</td><td>Store with single-key causal metadata</td><td>Yes</td></tr>
 <tr><td>GET_PRIORITY</td><td>Retrieve a priority-valued key</td><td>Yes</td></tr>
 <tr><td>PUT_PRIORITY</td><td>Store a priority-value pair (lowest priority wins)</td><td>Yes</td></tr>
-<tr><td>Address cache invalidation</td><td>Server signals client to refresh address cache</td><td>No</td></tr>
-<tr><td>Multi-key GET</td><td>Retrieve multiple keys in one request</td><td>No</td></tr>
+<tr><td>Address cache invalidation</td><td>Server signals client to refresh address cache</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
+<tr><td>Multi-key GET</td><td>Retrieve multiple keys in one request</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
 </tbody>
 </table>
 </div>
@@ -907,9 +924,9 @@ mocks.</p>
 </thead>
 <tbody>
 <tr><td>YAML config file</td><td>All settings in a single YAML file</td><td>Yes</td></tr>
-<tr><td>Thread counts</td><td><code>threads.memory</code>, <code>threads.ebs</code>, <code>threads.routing</code></td><td>Partial</td></tr>
+<tr><td>Thread counts</td><td><code>threads.memory</code>, <code>threads.ebs</code>, <code>threads.routing</code></td><td>Yes</td></tr>
 <tr><td>Standalone mode</td><td><code>mgmt_ip: "NULL"</code> for local/non-k8s deployment</td><td>Yes</td></tr>
-<tr><td>Cluster topology</td><td>seed_ip, mgmt_ip, monitoring/routing IPs</td><td>Partial</td></tr>
+<tr><td>Cluster topology</td><td>seed_ip, mgmt_ip, monitoring/routing IPs</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
 <tr><td>ZeroMQ PUSH/PULL</td><td>Async messaging between all components</td><td>Yes</td></tr>
 <tr><td>Protocol Buffers</td><td>Structured message serialization</td><td>Yes</td></tr>
 <tr><td>Socket cache</td><td>Lazy-created, cached ZMQ push sockets</td><td>Yes</td></tr>
@@ -934,7 +951,7 @@ mocks.</p>
 </tbody>
 </table>
 </div>
-<h2 id="disk-storage-tier-356"><a class="header" href="#disk-storage-tier-356">Disk Storage Tier (#356)</a></h2>
+<h2 id="multi-tiered-storage-356"><a class="header" href="#multi-tiered-storage-356">Multi-Tiered Storage (#356)</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -959,7 +976,7 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 </thead>
 <tbody>
 <tr><td>Per-key replication factors</td><td>Independent replication per key per tier</td><td>No</td></tr>
-<tr><td>Default replication from config</td><td><code>replication.memory</code>, <code>replication.ebs</code>, <code>replication.local</code></td><td>No</td></tr>
+<tr><td>Default replication from config</td><td><code>replication.memory</code>, <code>replication.ebs</code>, <code>replication.local</code></td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
 <tr><td>Replication factor request</td><td>Server fetches unknown factors from metadata</td><td>No</td></tr>
 <tr><td>Replication factor change</td><td>Monitor can dynamically adjust replication</td><td>No</td></tr>
 <tr><td>Metadata stored as KVS data</td><td>Replication info under <code>METADATA|replication|&lt;key&gt;</code></td><td>No</td></tr>
@@ -974,10 +991,10 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
 </thead>
 <tbody>
-<tr><td>Periodic gossip (10s epoch)</td><td>Changesets multicast to all responsible replicas</td><td>No</td></tr>
+<tr><td>Periodic gossip (10s epoch)</td><td>Changesets multicast to all responsible replicas</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
 <tr><td>Merge-at-sender</td><td>Batched updates merged before sending</td><td>No</td></tr>
 <tr><td>Gossip to caches</td><td>Changed keys also sent to function executor nodes</td><td>No</td></tr>
-<tr><td>Join gossip</td><td>Redistribute data to newly joined nodes</td><td>No</td></tr>
+<tr><td>Join gossip</td><td>Redistribute data to newly joined nodes</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
 <tr><td>Cross-tier gossip</td><td>Updates propagated between memory and disk tiers</td><td>No</td></tr>
 </tbody>
 </table>
@@ -989,11 +1006,11 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
 </thead>
 <tbody>
-<tr><td>Node join</td><td>New node joins cluster, receives data via gossip</td><td>No</td></tr>
+<tr><td>Node join</td><td>New node joins cluster, receives data via gossip</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
 <tr><td>Node depart</td><td>Node leaves, data redistributed</td><td>No</td></tr>
 <tr><td>Self-depart</td><td>Node gracefully removes itself, gossips all data out</td><td>No</td></tr>
 <tr><td>Rejoin detection</td><td>Join counter distinguishes fresh joins from rejoins</td><td>No</td></tr>
-<tr><td>Seed node</td><td>First routing node serves cluster membership</td><td>No</td></tr>
+<tr><td>Seed node</td><td>First routing node serves cluster membership</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
 </tbody>
 </table>
 </div>
@@ -1019,10 +1036,10 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
 </thead>
 <tbody>
-<tr><td>Two-level hash ring</td><td>Global (nodes) + Local (threads within node)</td><td>No</td></tr>
+<tr><td>Two-level hash ring</td><td>Global (nodes) + Local (threads within node)</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
 <tr><td>Virtual nodes (3000 per thread)</td><td>Even distribution across physical threads</td><td>No</td></tr>
-<tr><td>CRC32 hashing</td><td>Hash function for key-to-ring mapping</td><td>No</td></tr>
-<tr><td>Thread responsibility lookup</td><td>Determines which threads handle a key</td><td>No</td></tr>
+<tr><td>CRC32 hashing</td><td>Hash function for key-to-ring mapping</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
+<tr><td>Thread responsibility lookup</td><td>Determines which threads handle a key</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
 </tbody>
 </table>
 </div>
