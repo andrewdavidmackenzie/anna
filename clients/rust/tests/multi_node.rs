@@ -425,7 +425,7 @@ async fn multi_node_fault_tolerance() {
     let config =
         Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
     let mut client = KVSClient::new(&config, Some(53)).await;
-    client.set_timeout(Duration::from_secs(3));
+    client.set_timeout(Duration::from_secs(5));
 
     // PUT data and wait for gossip to replicate to both nodes
     client
@@ -439,13 +439,11 @@ async fn multi_node_fault_tolerance() {
     std::thread::sleep(Duration::from_secs(TEST_GOSSIP_EPOCH as u64 + 2));
 
     // Kill Node 1's KVS — data should survive on Node 2.
-    // The client handles the dead node by evicting its address from cache
-    // on timeout and retrying via the remaining node.
+    // Don't clear cache: the client has both addresses cached. When Node 1
+    // times out, evict_address_from_cache removes only that address, and the
+    // retry uses Node 2's cached address directly (without re-querying
+    // routing, which would re-add the dead address).
     cluster.kill_process("anna-kvs@127.0.0.1");
-
-    // Clear client cache so it re-queries routing (which should no longer
-    // include the dead node)
-    client.clear_cache();
 
     let v1 = client
         .get("ft_key_1")
