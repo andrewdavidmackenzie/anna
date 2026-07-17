@@ -195,10 +195,10 @@ class TestSystemPutGet:
         got = client.get_ordered_set("sys_oset")
         assert got is not None
         revealed = got.reveal()
-        assert isinstance(revealed, ListBasedOrderedSet)
-        assert "alpha" in revealed
-        assert "beta" in revealed
-        assert "gamma" in revealed
+        assert len(revealed) == 3
+        assert b"alpha" in revealed
+        assert b"beta" in revealed
+        assert b"gamma" in revealed
 
     def test_put_and_get_single_causal(self, client):
         from anna.lattices import SingleKeyCausalLattice
