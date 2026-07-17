@@ -39,16 +39,46 @@ mocks.
 | MULTI_CAUSAL           | Multi-key causal with vector clock and dependencies | Yes           |
 | PRIORITY               | Priority-value pair, lowest priority wins           | Yes           |
 
-## Storage Tiers
+## Single-Node Features
 
-| Feature                       | Description                                | System Tested |
-|-------------------------------|--------------------------------------------|---------------|
-| Memory tier                   | In-memory storage using hash tables        | Yes           |
-| Disk (EBS) tier               | File-based storage on mounted volumes      | No            |
-| Tier selection via env var    | `SERVER_TYPE=memory` or `SERVER_TYPE=ebs`  | No            |
-| Identical kernel across tiers | Same storage kernel, different serde layer | No            |
+| Feature           | Description                                           | System Tested |
+|-------------------|-------------------------------------------------------|---------------|
+| YAML config file  | All settings in a single YAML file                    | Yes           |
+| Thread counts     | `threads.memory`, `threads.ebs`, `threads.routing`    | Partial       |
+| Standalone mode   | `mgmt_ip: "NULL"` for local/non-k8s deployment       | Yes           |
+| Cluster topology  | seed_ip, mgmt_ip, monitoring/routing IPs              | Partial       |
+| ZeroMQ PUSH/PULL  | Async messaging between all components                | Yes           |
+| Protocol Buffers  | Structured message serialization                      | Yes           |
+| Socket cache      | Lazy-created, cached ZMQ push sockets                 | Yes           |
+| Graceful shutdown | SIGTERM handler for clean exit                         | Yes           |
+| Memory tier       | In-memory storage using hash tables                   | Yes           |
 
-## Replication
+## Error Handling (#355)
+
+| Error Code   | Description                                      | System Tested |
+|--------------|--------------------------------------------------|---------------|
+| NO_ERROR     | Operation succeeded                              | Yes           |
+| KEY_DNE      | Key does not exist                                | No            |
+| WRONG_THREAD | This thread is not responsible for the key        | No            |
+| TIMEOUT      | Operation timed out                               | No            |
+| LATTICE      | Lattice type mismatch                             | No            |
+| NO_SERVERS   | No servers available (routing tier)               | No            |
+
+## Disk Storage Tier (#356)
+
+| Feature                       | Description                                           | System Tested |
+|-------------------------------|-------------------------------------------------------|---------------|
+| Disk tier                     | File-based storage on configurable path               | No            |
+| Tier selection                | `SERVER_TYPE` env var selects storage medium           | No            |
+| Identical kernel across tiers | Same storage kernel, different serialization layer     | No            |
+| Node capacities               | `capacities.memory-cap`, `capacities.ebs-cap`         | No            |
+
+Note: `SERVER_TYPE` and `ebs` config should be renamed to storage-medium-agnostic
+terms (e.g., `STORAGE_MEDIUM=ram|file`).
+
+## Multi-Node Features (#352)
+
+### Replication
 
 | Feature                         | Description                                                  | System Tested |
 |---------------------------------|--------------------------------------------------------------|---------------|
@@ -59,7 +89,7 @@ mocks.
 | Metadata stored as KVS data     | Replication info under `METADATA\|replication\|<key>`         | No            |
 | Gossip after replication change | Data redistributed to new responsible threads                 | No            |
 
-## Gossip / Multicast
+### Gossip / Multicast
 
 | Feature                     | Description                                      | System Tested |
 |-----------------------------|--------------------------------------------------|---------------|
@@ -69,7 +99,7 @@ mocks.
 | Join gossip                 | Redistribute data to newly joined nodes           | No            |
 | Cross-tier gossip           | Updates propagated between memory and disk tiers  | No            |
 
-## Cluster Management
+### Cluster Management
 
 | Feature          | Description                                          | System Tested |
 |------------------|------------------------------------------------------|---------------|
@@ -79,7 +109,26 @@ mocks.
 | Rejoin detection | Join counter distinguishes fresh joins from rejoins  | No            |
 | Seed node        | First routing node serves cluster membership         | No            |
 
-## Routing Tier
+### Fault Tolerance
+
+| Feature                                 | Description                                     | System Tested |
+|-----------------------------------------|-------------------------------------------------|---------------|
+| k-fault tolerance                       | k+1 replicas ensure k failures tolerable        | No            |
+| Failure detection via timeout           | Nodes detect peer failures and update hash ring  | No            |
+| Automatic repartitioning                | Data redistributed after node failure            | No            |
+| Stateless routing/monitoring            | Recovers by querying peers/storage               | No            |
+| Key migration interleaved with requests | No downtime during reconfiguration               | No            |
+
+### Consistent Hashing
+
+| Feature                         | Description                                  | System Tested |
+|---------------------------------|----------------------------------------------|---------------|
+| Two-level hash ring             | Global (nodes) + Local (threads within node) | No            |
+| Virtual nodes (3000 per thread) | Even distribution across physical threads    | No            |
+| CRC32 hashing                   | Hash function for key-to-ring mapping        | No            |
+| Thread responsibility lookup    | Determines which threads handle a key        | No            |
+
+### Routing Tier
 
 | Feature                   | Description                                              | System Tested |
 |---------------------------|----------------------------------------------------------|---------------|
@@ -90,7 +139,7 @@ mocks.
 | Pending request queue     | Queues requests while replication factor is unknown      | No            |
 | Multi-threaded routing    | Configurable number of routing threads                   | No            |
 
-## Monitoring and Policy Engine
+## Monitoring & Policy Engine (#357)
 
 | Feature                     | Description                                                   | System Tested |
 |-----------------------------|---------------------------------------------------------------|---------------|
@@ -103,26 +152,7 @@ mocks.
 | Grace period                | Prevent over-correction during data redistribution            | No            |
 | Policy toggles              | `policy.elasticity`, `policy.selective-rep`, `policy.tiering` | No            |
 
-## Consistent Hashing
-
-| Feature                         | Description                                  | System Tested |
-|---------------------------------|----------------------------------------------|---------------|
-| Two-level hash ring             | Global (nodes) + Local (threads within node) | No            |
-| Virtual nodes (3000 per thread) | Even distribution across physical threads    | No            |
-| CRC32 hashing                   | Hash function for key-to-ring mapping        | No            |
-| Thread responsibility lookup    | Determines which threads handle a key        | No            |
-
-## Fault Tolerance
-
-| Feature                                 | Description                                     | System Tested |
-|-----------------------------------------|-------------------------------------------------|---------------|
-| k-fault tolerance                       | k+1 replicas ensure k failures tolerable        | No            |
-| Failure detection via timeout           | Nodes detect peer failures and update hash ring  | No            |
-| Automatic repartitioning                | Data redistributed after node failure            | No            |
-| Stateless routing/monitoring            | Recovers by querying peers/storage               | No            |
-| Key migration interleaved with requests | No downtime during reconfiguration               | No            |
-
-## Periodic Self-Reporting (every 15s)
+## Server Internals (#358)
 
 | Feature                              | Description                                  | System Tested |
 |--------------------------------------|----------------------------------------------|---------------|
@@ -133,59 +163,16 @@ mocks.
 | Per-key size for primary replicas    | Size of data for keys this thread owns       | No            |
 | Per-event-type occupancy logging     | Performance profiling of event handlers      | No            |
 
-## Configuration
-
-| Feature                      | Description                                                   | System Tested |
-|------------------------------|---------------------------------------------------------------|---------------|
-| YAML config file             | All settings in a single YAML file                            | Yes           |
-| Thread counts                | `threads.memory`, `threads.ebs`, `threads.routing`            | Partial       |
-| Node capacities              | `capacities.memory-cap`, `capacities.ebs-cap`                 | No            |
-| Server identity              | `server.public_ip`, `server.private_ip`                       | No            |
-| Cluster topology             | `server.seed_ip`, `server.mgmt_ip`, monitoring/routing IPs    | Partial       |
-| Management node integration  | Kubernetes support for node provisioning                      | No            |
-| Standalone mode              | `mgmt_ip: "NULL"` for local/non-k8s deployment               | Yes           |
-
-## Communication
-
-| Feature           | Description                                  | System Tested |
-|-------------------|----------------------------------------------|---------------|
-| ZeroMQ PUSH/PULL  | Async messaging between all components       | Yes           |
-| Protocol Buffers  | Structured message serialization             | Yes           |
-| Socket cache      | Lazy-created, cached ZMQ push sockets        | Yes           |
-| Graceful shutdown | SIGTERM handler for clean exit                | Yes           |
-
-## Error Handling
-
-| Error Code   | Description                                      | System Tested |
-|--------------|--------------------------------------------------|---------------|
-| NO_ERROR     | Operation succeeded                              | Yes           |
-| KEY_DNE      | Key does not exist                                | No            |
-| WRONG_THREAD | This thread is not responsible for the key        | No            |
-| TIMEOUT      | Operation timed out                               | No            |
-| LATTICE      | Lattice type mismatch                             | No            |
-| NO_SERVERS   | No servers available (routing tier)               | No            |
-
 ## Summary
 
-| Category                 | Total Features | System Tested | Coverage |
-|--------------------------|----------------|---------------|----------|
-| Client Operations        | 15             | 13            | 87%      |
-| Lattice Types            | 6              | 6             | 100%     |
-| Storage Tiers            | 4              | 1             | 25%      |
-| Replication              | 6              | 0             | 0%       |
-| Gossip / Multicast       | 5              | 0             | 0%       |
-| Cluster Management       | 5              | 0             | 0%       |
-| Routing Tier             | 6              | 2             | 33%      |
-| Monitoring / Policy      | 8              | 0             | 0%       |
-| Consistent Hashing       | 4              | 0             | 0%       |
-| Fault Tolerance          | 5              | 0             | 0%       |
-| Periodic Self-Reporting  | 6              | 0             | 0%       |
-| Configuration            | 7              | 4             | 57%      |
-| Communication            | 4              | 4             | 100%     |
-| Error Handling           | 6              | 1             | 17%      |
-| **Total**                | **87**         | **31**        | **36%**  |
-
-Features not system-tested are either internal implementation details (consistent
-hashing, self-reporting), require multi-node setups (replication, gossip, cluster
-management, fault tolerance), or require specific workload patterns (monitoring
-policies).
+| Category                     | Total | System Tested | Coverage | Issue  |
+|------------------------------|-------|---------------|----------|--------|
+| Client Operations            | 15    | 13            | 87%      | —      |
+| Lattice Types                | 6     | 6             | 100%     | —      |
+| Single-Node Features         | 9     | 9             | 100%     | —      |
+| Error Handling               | 6     | 1             | 17%      | #355   |
+| Disk Storage Tier            | 4     | 0             | 0%       | #356   |
+| Multi-Node Features          | 27    | 2             | 7%       | #352   |
+| Monitoring & Policy Engine   | 8     | 0             | 0%       | #357   |
+| Server Internals             | 6     | 0             | 0%       | #358   |
+| **Total**                    | **81**| **31**        | **38%**  |        |
