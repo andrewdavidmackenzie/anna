@@ -83,7 +83,7 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Feature                         | Description                                                  | System Tested |
 |---------------------------------|--------------------------------------------------------------|---------------|
 | Per-key replication factors     | Independent replication per key per tier                      | No            |
-| Default replication from config | `replication.memory`, `replication.ebs`, `replication.local`  | No            |
+| Default replication from config | `replication.memory`, `replication.ebs`, `replication.local`  | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 | Replication factor request      | Server fetches unknown factors from metadata                  | No            |
 | Replication factor change       | Monitor can dynamically adjust replication                    | No            |
 | Metadata stored as KVS data     | Replication info under `METADATA\|replication\|<key>`         | No            |
@@ -93,21 +93,21 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 
 | Feature                     | Description                                      | System Tested |
 |-----------------------------|--------------------------------------------------|---------------|
-| Periodic gossip (10s epoch) | Changesets multicast to all responsible replicas  | No            |
+| Periodic gossip (10s epoch) | Changesets multicast to all responsible replicas  | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 | Merge-at-sender             | Batched updates merged before sending             | No            |
 | Gossip to caches            | Changed keys also sent to function executor nodes | No            |
-| Join gossip                 | Redistribute data to newly joined nodes           | No            |
+| Join gossip                 | Redistribute data to newly joined nodes           | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 | Cross-tier gossip           | Updates propagated between memory and disk tiers  | No            |
 
 ### Cluster Management
 
 | Feature          | Description                                          | System Tested |
 |------------------|------------------------------------------------------|---------------|
-| Node join        | New node joins cluster, receives data via gossip     | No            |
+| Node join        | New node joins cluster, receives data via gossip     | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 | Node depart      | Node leaves, data redistributed                      | No            |
 | Self-depart      | Node gracefully removes itself, gossips all data out | No            |
 | Rejoin detection | Join counter distinguishes fresh joins from rejoins  | No            |
-| Seed node        | First routing node serves cluster membership         | No            |
+| Seed node        | First routing node serves cluster membership         | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 
 ### Fault Tolerance
 
@@ -123,10 +123,10 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 
 | Feature                         | Description                                  | System Tested |
 |---------------------------------|----------------------------------------------|---------------|
-| Two-level hash ring             | Global (nodes) + Local (threads within node) | No            |
+| Two-level hash ring             | Global (nodes) + Local (threads within node) | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 | Virtual nodes (3000 per thread) | Even distribution across physical threads    | No            |
-| CRC32 hashing                   | Hash function for key-to-ring mapping        | No            |
-| Thread responsibility lookup    | Determines which threads handle a key        | No            |
+| CRC32 hashing                   | Hash function for key-to-ring mapping        | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
+| Thread responsibility lookup    | Determines which threads handle a key        | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 
 ### Routing Tier
 

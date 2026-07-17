@@ -2,8 +2,8 @@ use crate::config::Config;
 use crate::errors::{Error, Result};
 use crate::proto::kvs::{
     AnnaError, KeyAddressRequest, KeyAddressResponse, KeyRequest, KeyResponse, KeyTuple,
-    LatticeType, LwwValue, MultiKeyCausalValue, PriorityValue, RequestType,
-    SingleKeyCausalValue, SetValue,
+    LatticeType, LwwValue, MultiKeyCausalValue, PriorityValue, RequestType, SetValue,
+    SingleKeyCausalValue,
 };
 use crate::threads::{UserRoutingThread, UserThread};
 use crate::types::{Address, Key, ThreadID};
@@ -65,12 +65,13 @@ impl KVSClient {
     /// ```
     pub async fn new(config: &Config, tid: Option<ThreadID>) -> Self {
         let tid = tid.unwrap_or(0);
+        let base_offset = config.get_base_offset();
         let thread_count = config.get_routing_thread_count();
         let routing_ips = config.get_routing_ips();
         let mut routing_threads = Vec::with_capacity(routing_ips.len() * thread_count);
         for address in routing_ips {
             for i in 0..thread_count {
-                routing_threads.push(UserRoutingThread::new(address, i));
+                routing_threads.push(UserRoutingThread::with_offset(address, i, base_offset));
             }
         }
 
@@ -78,7 +79,7 @@ impl KVSClient {
         info!("Random seed is {}.", seed);
         let rng = StdRng::seed_from_u64(seed);
 
-        let ut = UserThread::new(config.get_user_ip(), tid);
+        let ut = UserThread::with_offset(config.get_user_ip(), tid, base_offset);
 
         let mut key_address_puller = PullSocket::new();
         key_address_puller
@@ -170,9 +171,11 @@ impl KVSClient {
     }
 
     async fn query_routing(&mut self, key: &str) -> Vec<Address> {
-        let mut request = KeyAddressRequest::default();
-        request.request_id = self.get_request_id();
-        request.response_address = self.ut.key_address_connect_address();
+        let mut request = KeyAddressRequest {
+            request_id: self.get_request_id(),
+            response_address: self.ut.key_address_connect_address(),
+            ..Default::default()
+        };
         request.keys.push(key.to_string());
 
         let rt_thread = self.get_routing_thread();
@@ -243,13 +246,17 @@ impl KVSClient {
     ) -> Option<KeyResponse> {
         let worker = self.get_worker_address(key).await?;
 
-        let mut request = KeyRequest::default();
-        request.request_id = self.get_request_id();
-        request.response_address = self.ut.response_connect_address();
-        request.r#type = req_type;
+        let mut request = KeyRequest {
+            request_id: self.get_request_id(),
+            response_address: self.ut.response_connect_address(),
+            r#type: req_type,
+            ..Default::default()
+        };
 
-        let mut tuple = KeyTuple::default();
-        tuple.key = key.to_string();
+        let mut tuple = KeyTuple {
+            key: key.to_string(),
+            ..Default::default()
+        };
         if let Some(lt) = lattice_type {
             tuple.lattice_type = lt;
         }
@@ -445,7 +452,11 @@ impl KVSClient {
     pub async fn get_causal<K: AsRef<str> + Display>(
         &mut self,
         key: K,
-    ) -> Result<(std::collections::HashMap<String, u32>, Vec<(String, std::collections::HashMap<String, u32>)>, String)> {
+    ) -> Result<(
+        std::collections::HashMap<String, u32>,
+        Vec<(String, std::collections::HashMap<String, u32>)>,
+        String,
+    )> {
         debug!("GET_CAUSAL: {}", key);
         let response = self
             .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
@@ -534,10 +545,12 @@ impl KVSClient {
 
         let tuple = Self::validate_response(&response, "GET_ORDERED_SET")?;
 
-        let set_val = SetValue::decode(tuple.payload.as_slice())
-            .map_err(|e| {
-                Error::Kvs(format!("GET_ORDERED_SET: failed to decode Set value: {}", e))
-            })?;
+        let set_val = SetValue::decode(tuple.payload.as_slice()).map_err(|e| {
+            Error::Kvs(format!(
+                "GET_ORDERED_SET: failed to decode Set value: {}",
+                e
+            ))
+        })?;
         Ok(set_val
             .values
             .iter()
@@ -602,9 +615,7 @@ impl KVSClient {
         let response = self
             .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
             .await
-            .ok_or_else(|| {
-                Error::Kvs("GET_SINGLE_CAUSAL: request failed or timed out".into())
-            })?;
+            .ok_or_else(|| Error::Kvs("GET_SINGLE_CAUSAL: request failed or timed out".into()))?;
 
         let tuple = Self::validate_response(&response, "GET_SINGLE_CAUSAL")?;
 
@@ -655,9 +666,7 @@ impl KVSClient {
                 Some(payload),
             )
             .await
-            .ok_or_else(|| {
-                Error::Kvs("PUT_SINGLE_CAUSAL: request failed or timed out".into())
-            })?;
+            .ok_or_else(|| Error::Kvs("PUT_SINGLE_CAUSAL: request failed or timed out".into()))?;
 
         Self::validate_response(&response, "PUT_SINGLE_CAUSAL")?;
         Ok(())
@@ -675,10 +684,7 @@ impl KVSClient {
     /// // let (priority, val) = client.get_priority("my_key").await?; // requires a running server
     /// # }
     /// ```
-    pub async fn get_priority<K: AsRef<str> + Display>(
-        &mut self,
-        key: K,
-    ) -> Result<(f64, String)> {
+    pub async fn get_priority<K: AsRef<str> + Display>(&mut self, key: K) -> Result<(f64, String)> {
         debug!("GET_PRIORITY: {}", key);
         let response = self
             .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
@@ -732,7 +738,6 @@ impl KVSClient {
         Self::validate_response(&response, "PUT_PRIORITY")?;
         Ok(())
     }
-
 
     /// Delete a key by writing an empty LWW value with a dominating timestamp.
     ///
@@ -800,7 +805,7 @@ mod tests {
             value: b"hello world".to_vec(),
         };
         let encoded = original.encode_to_vec();
-        let decoded = LwwValue::decode(encoded.as_slice()).unwrap();
+        let decoded = LwwValue::decode(encoded.as_slice()).expect("failed to decode LwwValue");
         assert_eq!(decoded.timestamp, 12345);
         assert_eq!(decoded.value, b"hello world");
     }
@@ -811,7 +816,7 @@ mod tests {
             values: vec![b"a".to_vec(), b"b".to_vec(), b"c".to_vec()],
         };
         let encoded = original.encode_to_vec();
-        let decoded = SetValue::decode(encoded.as_slice()).unwrap();
+        let decoded = SetValue::decode(encoded.as_slice()).expect("failed to decode SetValue");
         assert_eq!(decoded.values.len(), 3);
         assert!(decoded.values.contains(&b"a".to_vec()));
         assert!(decoded.values.contains(&b"b".to_vec()));
@@ -823,7 +828,7 @@ mod tests {
         let config = Config::read(
             &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
         )
-        .unwrap();
+        .expect("failed to read default config");
         let mut client = KVSClient::new(&config, Some(99)).await;
         let id1 = client.get_request_id();
         let id2 = client.get_request_id();
@@ -837,7 +842,7 @@ mod tests {
         let config = Config::read(
             &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
         )
-        .unwrap();
+        .expect("failed to read default config");
         let mut client = KVSClient::new(&config, Some(98)).await;
         let addr = client.get_routing_thread();
         assert!(addr.starts_with("tcp://"), "addr was: {}", addr);
@@ -849,7 +854,7 @@ mod tests {
         let config = Config::read(
             &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
         )
-        .unwrap();
+        .expect("failed to read default config");
         let mut client = KVSClient::new(&config, Some(97)).await;
         client
             .key_address_cache
@@ -864,7 +869,7 @@ mod tests {
         let config = Config::read(
             &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
         )
-        .unwrap();
+        .expect("failed to read default config");
         let mut client = KVSClient::new(&config, Some(96)).await;
         client.key_address_cache.insert(
             "cached_key".into(),
@@ -879,13 +884,16 @@ mod tests {
         let config = Config::read(
             &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
         )
-        .unwrap();
+        .expect("failed to read default config");
         let mut client = KVSClient::new(&config, Some(95)).await;
         let mut addrs = HashSet::new();
         addrs.insert("tcp://10.0.0.1:6200".to_string());
         addrs.insert("tcp://10.0.0.2:6200".to_string());
         client.key_address_cache.insert("multi_key".into(), addrs);
-        let addr = client.get_worker_address("multi_key").await.unwrap();
+        let addr = client
+            .get_worker_address("multi_key")
+            .await
+            .expect("expected cached address for multi_key");
         assert!(
             addr == "tcp://10.0.0.1:6200" || addr == "tcp://10.0.0.2:6200",
             "unexpected addr: {}",
@@ -898,7 +906,7 @@ mod tests {
         let config = Config::read(
             &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
         )
-        .unwrap();
+        .expect("failed to read default config");
         let mut client = KVSClient::new(&config, Some(92)).await;
         client.key_address_cache.insert(
             "evict_me".into(),
@@ -913,7 +921,8 @@ mod tests {
     fn empty_set_value_roundtrip() {
         let original = SetValue { values: vec![] };
         let encoded = original.encode_to_vec();
-        let decoded = SetValue::decode(encoded.as_slice()).unwrap();
+        let decoded =
+            SetValue::decode(encoded.as_slice()).expect("failed to decode empty SetValue");
         assert!(decoded.values.is_empty());
     }
 
@@ -924,7 +933,8 @@ mod tests {
             value: vec![],
         };
         let encoded = original.encode_to_vec();
-        let decoded = LwwValue::decode(encoded.as_slice()).unwrap();
+        let decoded =
+            LwwValue::decode(encoded.as_slice()).expect("failed to decode empty LwwValue");
         assert_eq!(decoded.timestamp, 0);
         assert!(decoded.value.is_empty());
     }
@@ -934,7 +944,7 @@ mod tests {
         let config = Config::read(
             &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
         )
-        .unwrap();
+        .expect("failed to read default config");
         let mut client = KVSClient::new(&config, Some(91)).await;
         let id = client.get_request_id();
         let parts: Vec<&str> = id.split(':').collect();
@@ -957,51 +967,64 @@ mod tests {
         let response = KeyResponse::default();
         let result = KVSClient::validate_response(&response, "TEST");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("no tuples"));
+        assert!(result
+            .expect_err("expected error for empty tuples")
+            .to_string()
+            .contains("no tuples"));
     }
 
     #[test]
     fn validate_response_error_code() {
         let mut response = KeyResponse::default();
-        let mut tuple = KeyTuple::default();
-        tuple.error = AnnaError::KeyDne as i32;
+        let tuple = KeyTuple {
+            error: AnnaError::KeyDne as i32,
+            ..Default::default()
+        };
         response.tuples.push(tuple);
         let result = KVSClient::validate_response(&response, "TEST");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("KEY_DNE"));
+        assert!(result
+            .expect_err("expected error for KEY_DNE")
+            .to_string()
+            .contains("KEY_DNE"));
     }
 
     #[test]
     fn validate_response_success() {
         let mut response = KeyResponse::default();
-        let mut tuple = KeyTuple::default();
-        tuple.error = AnnaError::NoError as i32;
-        tuple.key = "mykey".into();
+        let tuple = KeyTuple {
+            error: AnnaError::NoError as i32,
+            key: "mykey".into(),
+            ..Default::default()
+        };
         response.tuples.push(tuple);
         let result = KVSClient::validate_response(&response, "TEST");
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().key, "mykey");
+        assert_eq!(result.expect("expected successful validation").key, "mykey");
     }
 
     #[test]
     fn key_request_protobuf_roundtrip() {
-        let mut request = KeyRequest::default();
-        request.request_id = "test:0_1".to_string();
-        request.response_address = "tcp://127.0.0.1:6800".to_string();
-        request.r#type = RequestType::Put as i32;
-
-        let mut tuple = KeyTuple::default();
-        tuple.key = "mykey".to_string();
-        tuple.lattice_type = LatticeType::Lww as i32;
         let lww = LwwValue {
             timestamp: 100,
             value: b"test".to_vec(),
         };
-        tuple.payload = lww.encode_to_vec();
+        let tuple = KeyTuple {
+            key: "mykey".to_string(),
+            lattice_type: LatticeType::Lww as i32,
+            payload: lww.encode_to_vec(),
+            ..Default::default()
+        };
+        let mut request = KeyRequest {
+            request_id: "test:0_1".to_string(),
+            response_address: "tcp://127.0.0.1:6800".to_string(),
+            r#type: RequestType::Put as i32,
+            ..Default::default()
+        };
         request.tuples.push(tuple);
 
         let encoded = request.encode_to_vec();
-        let decoded = KeyRequest::decode(encoded.as_slice()).unwrap();
+        let decoded = KeyRequest::decode(encoded.as_slice()).expect("failed to decode KeyRequest");
         assert_eq!(decoded.request_id, "test:0_1");
         assert_eq!(decoded.tuples[0].key, "mykey");
         assert_eq!(decoded.tuples[0].lattice_type, LatticeType::Lww as i32);
@@ -1009,13 +1032,16 @@ mod tests {
 
     #[test]
     fn key_address_request_protobuf_roundtrip() {
-        let mut request = KeyAddressRequest::default();
-        request.request_id = "addr_req_1".to_string();
-        request.response_address = "tcp://127.0.0.1:6850".to_string();
+        let mut request = KeyAddressRequest {
+            request_id: "addr_req_1".to_string(),
+            response_address: "tcp://127.0.0.1:6850".to_string(),
+            ..Default::default()
+        };
         request.keys.push("lookup_key".to_string());
 
         let encoded = request.encode_to_vec();
-        let decoded = KeyAddressRequest::decode(encoded.as_slice()).unwrap();
+        let decoded = KeyAddressRequest::decode(encoded.as_slice())
+            .expect("failed to decode KeyAddressRequest");
         assert_eq!(decoded.request_id, "addr_req_1");
         assert_eq!(decoded.keys[0], "lookup_key");
     }
@@ -1027,7 +1053,8 @@ mod tests {
             value: b"important".to_vec(),
         };
         let encoded = original.encode_to_vec();
-        let decoded = PriorityValue::decode(encoded.as_slice()).unwrap();
+        let decoded =
+            PriorityValue::decode(encoded.as_slice()).expect("failed to decode PriorityValue");
         assert!((decoded.priority - 2.75).abs() < f64::EPSILON);
         assert_eq!(decoded.value, b"important");
     }
@@ -1038,7 +1065,8 @@ mod tests {
             values: vec![b"x".to_vec(), b"y".to_vec(), b"z".to_vec()],
         };
         let encoded = original.encode_to_vec();
-        let decoded = SetValue::decode(encoded.as_slice()).unwrap();
+        let decoded =
+            SetValue::decode(encoded.as_slice()).expect("failed to decode ordered SetValue");
         assert_eq!(decoded.values.len(), 3);
         assert_eq!(decoded.values[0], b"x");
         assert_eq!(decoded.values[1], b"y");
@@ -1056,7 +1084,8 @@ mod tests {
             values: vec![b"causal_data".to_vec()],
         };
         let encoded = original.encode_to_vec();
-        let decoded = SingleKeyCausalValue::decode(encoded.as_slice()).unwrap();
+        let decoded = SingleKeyCausalValue::decode(encoded.as_slice())
+            .expect("failed to decode SingleKeyCausalValue");
         assert_eq!(decoded.vector_clock.len(), 2);
         assert_eq!(decoded.vector_clock["node1"], 5);
         assert_eq!(decoded.vector_clock["node2"], 3);

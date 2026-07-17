@@ -17,6 +17,15 @@ clean-start:
 # rust toolchain
 # python tooling
 
+.PHONY: setup-multinode
+setup-multinode:
+	@echo "Setting up loopback aliases for multi-node testing"
+ifeq ($(UNAME), Darwin)
+	sudo ifconfig lo0 alias 127.0.0.2
+else
+	@echo "Linux: 127.0.0.0/8 loopback range available by default"
+endif
+
 .PHONY: dependencies
 dependencies: clang
 	@echo "Installing build-tools"

@@ -12,13 +12,12 @@ const K_USER_KEY_ADDRESS_PORT: usize = 6850;
 // The port on which cache nodes listen for updates from the KVS.
 const K_CACHE_UPDATE_PORT: usize = 7150;
 
-const K_BIND_BASE: &str = "tcp://0.0.0.0:";
-
 /// `Thread` is a base type for a number of other thread types
 pub struct Thread {
     ip: Address,
     ip_base: Address,
     tid: usize,
+    base_offset: usize,
 }
 
 impl Thread {
@@ -34,12 +33,20 @@ impl Thread {
 
     /// return the ZMQ `Address` used to bind to a Key
     pub fn key_address_bind_address(&self) -> Address {
-        format!("{}{}", K_BIND_BASE, self.tid + K_USER_KEY_ADDRESS_PORT)
+        format!(
+            "{}{}",
+            self.ip_base,
+            self.tid + K_USER_KEY_ADDRESS_PORT + self.base_offset
+        )
     }
 
     /// return the ZMQ `Address` used to connect to a Key
     pub fn key_address_connect_address(&self) -> Address {
-        format!("{}{}", self.ip_base, self.tid + K_USER_KEY_ADDRESS_PORT)
+        format!(
+            "{}{}",
+            self.ip_base,
+            self.tid + K_USER_KEY_ADDRESS_PORT + self.base_offset
+        )
     }
 }
 
@@ -49,21 +56,35 @@ pub type UserThread = Thread;
 impl UserThread {
     /// create a new `UserThread` from the `Address` and `tid`thread id
     pub fn new(ip: &Address, tid: usize) -> Self {
+        Self::with_offset(ip, tid, 0)
+    }
+
+    /// create a new `UserThread` with a port base offset
+    pub fn with_offset(ip: &Address, tid: usize, base_offset: usize) -> Self {
         UserThread {
             ip: ip.clone(),
             tid,
             ip_base: format!("tcp://{}:", ip),
+            base_offset,
         }
     }
 
     /// return the ZMQ `Address` to use to bind to a response
     pub fn response_bind_address(&self) -> Address {
-        format!("{}{}", K_BIND_BASE, self.tid + K_USER_RESPONSE_PORT)
+        format!(
+            "{}{}",
+            self.ip_base,
+            self.tid + K_USER_RESPONSE_PORT + self.base_offset
+        )
     }
 
     /// return the ZMQ `Address` to use to connect to a response
     pub fn response_connect_address(&self) -> Address {
-        format!("{}{}", self.ip_base, self.tid + K_USER_RESPONSE_PORT)
+        format!(
+            "{}{}",
+            self.ip_base,
+            self.tid + K_USER_RESPONSE_PORT + self.base_offset
+        )
     }
 }
 
@@ -71,20 +92,31 @@ impl UserThread {
 pub struct UserRoutingThread {
     ip_base: Address,
     tid: usize,
+    base_offset: usize,
 }
 
 impl UserRoutingThread {
     /// Create a new routing thread reference.
     pub fn new(ip: &Address, tid: usize) -> Self {
+        Self::with_offset(ip, tid, 0)
+    }
+
+    /// Create a new routing thread reference with a port base offset.
+    pub fn with_offset(ip: &Address, tid: usize, base_offset: usize) -> Self {
         UserRoutingThread {
             ip_base: format!("tcp://{}:", ip),
             tid,
+            base_offset,
         }
     }
 
     /// The address to connect to for sending key address requests to the routing tier.
     pub fn key_address_connect_address(&self) -> Address {
-        format!("{}{}", self.ip_base, self.tid + K_KEY_ADDRESS_PORT)
+        format!(
+            "{}{}",
+            self.ip_base,
+            self.tid + K_KEY_ADDRESS_PORT + self.base_offset
+        )
     }
 }
 
@@ -114,12 +146,20 @@ impl CacheThread {
 
     /// return the `Address` to use to bind to an update in the cache
     pub fn cache_update_bind_address(&self) -> Address {
-        format!("{}{}", K_BIND_BASE, self.tid + K_CACHE_UPDATE_PORT)
+        format!(
+            "{}{}",
+            self.ip_base,
+            self.tid + K_CACHE_UPDATE_PORT + self.base_offset
+        )
     }
 
     /// return the `Address` to use to connect to an update in the cache
     pub fn cache_update_connect_address(&self) -> Address {
-        format!("{}{}", self.ip_base, self.tid + K_CACHE_UPDATE_PORT)
+        format!(
+            "{}{}",
+            self.ip_base,
+            self.tid + K_CACHE_UPDATE_PORT + self.base_offset
+        )
     }
 }
 
@@ -137,29 +177,36 @@ mod tests {
     #[test]
     fn user_thread_response_addresses() {
         let ut = UserThread::new(&"10.0.0.1".into(), 0);
-        assert_eq!(ut.response_bind_address(), "tcp://0.0.0.0:6800");
+        assert_eq!(ut.response_bind_address(), "tcp://10.0.0.1:6800");
         assert_eq!(ut.response_connect_address(), "tcp://10.0.0.1:6800");
     }
 
     #[test]
     fn user_thread_response_with_offset() {
         let ut = UserThread::new(&"10.0.0.1".into(), 2);
-        assert_eq!(ut.response_bind_address(), "tcp://0.0.0.0:6802");
+        assert_eq!(ut.response_bind_address(), "tcp://10.0.0.1:6802");
         assert_eq!(ut.response_connect_address(), "tcp://10.0.0.1:6802");
     }
 
     #[test]
     fn user_thread_key_addresses() {
         let ut = UserThread::new(&"10.0.0.1".into(), 0);
-        assert_eq!(ut.key_address_bind_address(), "tcp://0.0.0.0:6850");
+        assert_eq!(ut.key_address_bind_address(), "tcp://10.0.0.1:6850");
         assert_eq!(ut.key_address_connect_address(), "tcp://10.0.0.1:6850");
     }
 
     #[test]
     fn user_thread_key_addresses_with_offset() {
         let ut = UserThread::new(&"10.0.0.1".into(), 3);
-        assert_eq!(ut.key_address_bind_address(), "tcp://0.0.0.0:6853");
+        assert_eq!(ut.key_address_bind_address(), "tcp://10.0.0.1:6853");
         assert_eq!(ut.key_address_connect_address(), "tcp://10.0.0.1:6853");
+    }
+
+    #[test]
+    fn user_thread_with_base_offset() {
+        let ut = UserThread::with_offset(&"10.0.0.1".into(), 0, 1000);
+        assert_eq!(ut.response_bind_address(), "tcp://10.0.0.1:7800");
+        assert_eq!(ut.key_address_bind_address(), "tcp://10.0.0.1:7850");
     }
 
     #[test]
@@ -174,7 +221,7 @@ mod tests {
     #[test]
     fn cache_thread_update_addresses() {
         let ct = UserThread::new(&"10.0.0.1".into(), 1);
-        assert_eq!(ct.cache_update_bind_address(), "tcp://0.0.0.0:7151");
+        assert_eq!(ct.cache_update_bind_address(), "tcp://10.0.0.1:7151");
         assert_eq!(ct.cache_update_connect_address(), "tcp://10.0.0.1:7151");
     }
 
@@ -188,5 +235,11 @@ mod tests {
     fn routing_thread_with_offset() {
         let rt = super::UserRoutingThread::new(&"10.0.0.1".into(), 2);
         assert_eq!(rt.key_address_connect_address(), "tcp://10.0.0.1:6452");
+    }
+
+    #[test]
+    fn routing_thread_with_base_offset() {
+        let rt = super::UserRoutingThread::with_offset(&"10.0.0.1".into(), 0, 1000);
+        assert_eq!(rt.key_address_connect_address(), "tcp://10.0.0.1:7450");
     }
 }

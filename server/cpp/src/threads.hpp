@@ -29,7 +29,7 @@ const unsigned kUserKeyAddressPort = 6850;
 // The port on which cache nodes listen for updates from the KVS.
 const unsigned kCacheUpdatePort = 7150;
 
-const string kBindBase = "tcp://*:";
+inline unsigned kBaseOffset = 0;
 
 class CacheThread {
   Address ip_;
@@ -55,11 +55,11 @@ class CacheThread {
   Address cache_put_connect_address() const { return "ipc:///requests/put"; }
 
   Address cache_update_bind_address() const {
-    return kBindBase + std::to_string(tid_ + kCacheUpdatePort);
+    return ip_base_ + std::to_string(tid_ + kCacheUpdatePort + kBaseOffset);
   }
 
   Address cache_update_connect_address() const {
-    return ip_base_ + std::to_string(tid_ + kCacheUpdatePort);
+    return ip_base_ + std::to_string(tid_ + kCacheUpdatePort + kBaseOffset);
   }
 };
 
@@ -81,11 +81,11 @@ class UserRoutingThread {
   unsigned tid() const { return tid_; }
 
   Address key_address_connect_address() const {
-    return ip_base_ + std::to_string(tid_ + kKeyAddressPort);
+    return ip_base_ + std::to_string(tid_ + kKeyAddressPort + kBaseOffset);
   }
 
   Address key_address_bind_address() const {
-    return kBindBase + std::to_string(tid_ + kKeyAddressPort);
+    return ip_base_ + std::to_string(tid_ + kKeyAddressPort + kBaseOffset);
   }
 };
 
@@ -106,19 +106,19 @@ class UserThread {
   unsigned tid() const { return tid_; }
 
   Address response_connect_address() const {
-    return ip_base_ + std::to_string(tid_ + kUserResponsePort);
+    return ip_base_ + std::to_string(tid_ + kUserResponsePort + kBaseOffset);
   }
 
   Address response_bind_address() const {
-    return kBindBase + std::to_string(tid_ + kUserResponsePort);
+    return ip_base_ + std::to_string(tid_ + kUserResponsePort + kBaseOffset);
   }
 
   Address key_address_connect_address() const {
-    return ip_base_ + std::to_string(tid_ + kUserKeyAddressPort);
+    return ip_base_ + std::to_string(tid_ + kUserKeyAddressPort + kBaseOffset);
   }
 
   Address key_address_bind_address() const {
-    return kBindBase + std::to_string(tid_ + kUserKeyAddressPort);
+    return ip_base_ + std::to_string(tid_ + kUserKeyAddressPort + kBaseOffset);
   }
 };
 

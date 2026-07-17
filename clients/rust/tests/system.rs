@@ -31,10 +31,12 @@ async fn system_test_kvs_client() {
     // Overwrite
     client
         .put("sys_test_a", "world")
-        .await.expect("PUT overwrite failed");
+        .await
+        .expect("PUT overwrite failed");
     let val = client
         .get("sys_test_a")
-        .await.expect("GET after overwrite failed");
+        .await
+        .expect("GET after overwrite failed");
     assert_eq!(val, "world", "GET after overwrite returned wrong value");
 
     // Multiple keys
@@ -49,8 +51,12 @@ async fn system_test_kvs_client() {
     {
         client
             .put_set("sys_test_set", &["x", "y", "z"])
-            .await.expect("PUT_SET failed");
-        let set_val = client.get_set("sys_test_set").await.expect("GET_SET failed");
+            .await
+            .expect("PUT_SET failed");
+        let set_val = client
+            .get_set("sys_test_set")
+            .await
+            .expect("GET_SET failed");
         assert!(set_val.contains(&"x".to_string()));
         assert!(set_val.contains(&"y".to_string()));
         assert!(set_val.contains(&"z".to_string()));
@@ -59,10 +65,12 @@ async fn system_test_kvs_client() {
         // SET union
         client
             .put_set("sys_test_set", &["w", "x"])
-            .await.expect("PUT_SET union failed");
+            .await
+            .expect("PUT_SET union failed");
         let set_val = client
             .get_set("sys_test_set")
-            .await.expect("GET_SET after union failed");
+            .await
+            .expect("GET_SET after union failed");
         assert!(
             set_val.len() >= 3,
             "Expected at least 3 elements, got {}",
@@ -143,20 +151,20 @@ async fn system_test_kvs_client() {
         "PRIORITY should be 1.5, got {}",
         priority
     );
-    assert_eq!(pri_value, "important", "PRIORITY value should be 'important'");
+    assert_eq!(
+        pri_value, "important",
+        "PRIORITY value should be 'important'"
+    );
 
     // DELETE
     client
         .put("sys_test_del", "to_delete")
         .await
         .expect("PUT failed");
-    let del_val = client
-        .get("sys_test_del")
-        .await
-        .expect("GET failed");
-    assert_eq!(del_val, "to_delete", "Value before delete should be 'to_delete'");
-    client
-        .delete("sys_test_del")
-        .await
-        .expect("DELETE failed");
+    let del_val = client.get("sys_test_del").await.expect("GET failed");
+    assert_eq!(
+        del_val, "to_delete",
+        "Value before delete should be 'to_delete'"
+    );
+    client.delete("sys_test_del").await.expect("DELETE failed");
 }

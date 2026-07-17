@@ -15,13 +15,15 @@ pub struct Config {
     routing: Routing,
     user: User,
     #[serde(rename = "routing-elb")]
-    routing_elb: Option<Vec<Address>>, // Need an example, this maybe a single IP not an array
+    routing_elb: Option<Vec<Address>>,
     server: Server,
     policy: Policy,
     ebs: Ebs,
     capacities: Capacities,
     threads: Threads,
     replication: Replication,
+    #[serde(default)]
+    ports: Ports,
 }
 
 /// Monitoring configuration section
@@ -98,6 +100,12 @@ struct Replication {
     local: usize,
 }
 
+/// Port configuration section
+#[derive(Default, Deserialize)]
+struct Ports {
+    base_offset: usize,
+}
+
 impl Default for Config {
     fn default() -> Self {
         let localhost = "127.0.0.1".to_string();
@@ -146,6 +154,7 @@ impl Default for Config {
                 minimum: 1,
                 local: 1,
             },
+            ports: Ports::default(),
         }
     }
 }
@@ -166,10 +175,11 @@ impl Config {
             detail: format!("Could not open: {}", e),
         })?;
         let mut content = String::new();
-        file.read_to_string(&mut content).map_err(|e| Error::ConfigFile {
-            path: path_str.clone(),
-            detail: format!("Could not read: {}", e),
-        })?;
+        file.read_to_string(&mut content)
+            .map_err(|e| Error::ConfigFile {
+                path: path_str.clone(),
+                detail: format!("Could not read: {}", e),
+            })?;
         serde_yaml::from_str(&content).map_err(|e| Error::ConfigFile {
             path: path_str,
             detail: format!("YAML parse error: {}", e),
@@ -192,6 +202,11 @@ impl Config {
     /// Return the number of threads used for routing
     pub fn get_routing_thread_count(&self) -> usize {
         self.threads.routing
+    }
+
+    /// Return the port base offset for this cluster
+    pub fn get_base_offset(&self) -> usize {
+        self.ports.base_offset
     }
 }
 
@@ -234,17 +249,20 @@ mod test {
         let result = Config::read(&PathBuf::from("nonexistent_file.yml"));
         assert!(result.is_err());
         match result {
-            Err(e) => assert!(e.to_string().contains("nonexistent_file.yml"), "err was: {}", e),
+            Err(e) => assert!(
+                e.to_string().contains("nonexistent_file.yml"),
+                "err was: {}",
+                e
+            ),
             Ok(_) => panic!("expected error"),
         }
     }
 
     #[test]
     fn config_from_default_file() {
-        let config = Config::read(
-            &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
-        )
-        .expect("Could not read default-config.yml");
+        let config =
+            Config::read(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"))
+                .expect("Could not read default-config.yml");
         assert_eq!(config.get_user_ip(), "127.0.0.1");
         assert!(!config.get_routing_ips().is_empty());
     }

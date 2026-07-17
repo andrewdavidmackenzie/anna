@@ -7,6 +7,8 @@ threads:
   ebs: 4
   routing: 4
   benchmark: 4
+ports:
+  base_offset: 0
 replication:
   memory: 1
   ebs: 0

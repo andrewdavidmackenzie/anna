@@ -157,7 +157,7 @@ async fn execute_command(
         "GET_CAUSAL" if split.len() == 2 => {
             let (vc, deps, value) = client.get_causal(split[1]).await?;
             let mut sorted_vc: Vec<_> = vc.iter().collect();
-            sorted_vc.sort_by_key(|(k, _)| k.clone());
+            sorted_vc.sort_by_key(|(k, _)| k.to_string());
             for (k, v) in &sorted_vc {
                 println!("{{{} : {}}}", k, v);
             }
@@ -165,7 +165,7 @@ async fn execute_command(
             sorted_deps.sort_by(|(a, _), (b, _)| a.cmp(b));
             for (dep_key, dep_vc) in &sorted_deps {
                 let mut sorted_dep_vc: Vec<_> = dep_vc.iter().collect();
-                sorted_dep_vc.sort_by_key(|(k, _)| k.clone());
+                sorted_dep_vc.sort_by_key(|(k, _)| k.to_string());
                 let vc_str: Vec<String> = sorted_dep_vc
                     .iter()
                     .map(|(k, v)| format!("{{{} : {}}}", k, v))
@@ -196,7 +196,7 @@ async fn execute_command(
         "GET_SINGLE_CAUSAL" if split.len() == 2 => {
             let (vc, values) = client.get_single_causal(split[1]).await?;
             let mut sorted_vc: Vec<_> = vc.iter().collect();
-            sorted_vc.sort_by_key(|(k, _)| k.clone());
+            sorted_vc.sort_by_key(|(k, _)| k.to_string());
             for (k, v) in &sorted_vc {
                 println!("{{{} : {}}}", k, v);
             }
@@ -214,9 +214,9 @@ async fn execute_command(
             println!("{}", value);
         }
         "PUT_PRIORITY" if split.len() == 4 => {
-            let priority = split[2].parse::<f64>().map_err(|e| {
-                CliError::Other(format!("Invalid priority '{}': {}", split[2], e))
-            })?;
+            let priority = split[2]
+                .parse::<f64>()
+                .map_err(|e| CliError::Other(format!("Invalid priority '{}': {}", split[2], e)))?;
             client.put_priority(split[1], priority, split[3]).await?
         }
         "START" => println!("{} anna processes were started", start(config_file_path)?),

@@ -8,11 +8,11 @@ its deployment to balance cost, latency, and fault tolerance.
 
 Real-world workloads vary along three dimensions:
 
-| Dimension | Challenge | Anna's Response |
-|---|---|---|
-| **Volume** | Overall load increases/decreases | Horizontal elasticity |
-| **Skewness** | Some keys are much hotter than others | Selective replication |
-| **Hotspot shifts** | Popular keys change over time | Replication + tiering |
+| Dimension          | Challenge                             | Anna's Response       |
+|--------------------|---------------------------------------|-----------------------|
+| **Volume**         | Overall load increases/decreases      | Horizontal elasticity |
+| **Skewness**       | Some keys are much hotter than others | Selective replication |
+| **Hotspot shifts** | Hottest keys change over time         | Replication + tiering |
 
 ## Three Key Mechanisms
 
@@ -58,11 +58,11 @@ Anna supports multiple storage tiers with different cost-performance profiles:
 
 Anna supports three types of SLOs:
 
-| SLO | Description | Default |
-|---|---|---|
-| **Latency** (L_obj) | Average request latency target | 2.5ms |
-| **Budget** (B) | Maximum cost per hour | User-specified |
-| **Fault Tolerance** (k) | Number of replica failures to tolerate | 2 |
+| SLO                     | Description                            | Default        |
+|-------------------------|----------------------------------------|----------------|
+| **Latency** (L_obj)     | Average request latency target         | 2.5ms          |
+| **Budget** (B)          | Maximum cost per hour                  | User-specified |
+| **Fault Tolerance** (k) | Number of replica failures to tolerate | 2              |
 
 The policy engine balances these potentially conflicting objectives. For example,
 lower latency requires more memory-tier replicas (higher cost), while lower cost
@@ -84,16 +84,40 @@ engine, which evaluates actions in this order:
 
 ### Policy Knobs
 
-| Parameter | Meaning | Default |
-|---|---|---|
-| T | Monitoring report period | 15 seconds |
-| H | Key hotness threshold (std devs above mean) | 3 |
-| L | Key coldness threshold (mean access frequency) | Mean |
-| P | Key promotion threshold | 2 accesses in 60s |
-| S_lower, S_upper | Storage consumption thresholds | Memory: 0.3-0.6, EBS: 0.5-0.75 |
-| f_lower, f_upper | Latency thresholds (fraction of SLO) | 0.5, 0.75 |
-| C_lower, C_upper | Compute occupancy thresholds | 0.05, 0.20 |
-| c | Upper bound for latency ratio | 1.5 |
+| Parameter        | Meaning                                        | Default                        |
+|------------------|------------------------------------------------|--------------------------------|
+| T                | Monitoring report period                       | 15 seconds                     |
+| H                | Key hotness threshold (std devs above mean)    | 3                              |
+| L                | Key coldness threshold (mean access frequency) | Mean                           |
+| P                | Key promotion threshold                        | 2 accesses in 60s              |
+| S_lower, S_upper | Storage consumption thresholds                 | Memory: 0.3-0.6, EBS: 0.5-0.75 |
+| f_lower, f_upper | Latency thresholds (fraction of SLO)           | 0.5, 0.75                      |
+| C_lower, C_upper | Compute occupancy thresholds                   | 0.05, 0.20                     |
+| c                | Upper bound for latency ratio                  | 1.5                            |
+
+## Port Configuration for Multi-Node Deployments
+
+Anna uses a range of ports (6000–7150) for inter-node communication.
+The YAML config supports a `ports.base_offset` setting that shifts all
+ports by a fixed amount, enabling multiple independent clusters on the
+same machine (e.g., for testing or CI).
+
+```yaml
+ports:
+  base_offset: 0    # default — ports 6000-7150
+  # base_offset: 2000  # shifts to ports 8000-9150
+```
+
+For multi-node testing on a single machine, each node uses a different
+IP on the loopback range (127.0.0.1, 127.0.0.2, …) while sharing the
+same port numbers. ZMQ sockets bind to the node's specific IP rather
+than `0.0.0.0`, so multiple nodes can coexist without port conflicts.
+
+On macOS, additional loopback addresses require explicit aliases:
+```bash
+sudo ifconfig lo0 alias 127.0.0.2
+```
+Linux supports the full 127.0.0.0/8 range by default.
 
 ## Performance Results
 
