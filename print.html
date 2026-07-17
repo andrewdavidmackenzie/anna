@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a4522d54.js";
+            window.path_to_searchindex_js = "searchindex-992e10b7.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-50415cde.js"></script>
+        <script src="toc-7bb26e2b.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -186,33 +186,915 @@ Anna instead employs a wait-free, shared-nothing architecture, where each thread
 buffer and is allowed to process requests unencumbered by coordination. To resolve potentially conflicting updates,
 Anna encapsulates all user data in <a href="https://en.wikipedia.org/wiki/Lattice_(order)">lattice</a> data structures, which have
 associative, commutative, and idempotent merge functions. As a result, for workloads that can tolerate slightly stale
-data, Anna provides best-in-class performance. A more detailed description of the system design and the coordination-free
-consistency mechanisms, as well as an evaluation and comparison against other state-of-the-art systems can be found
-in our <a href="http://db.cs.berkeley.edu/jmh/papers/anna_ieee18.pdf">ICDE 2018 paper</a>.</p>
-<p>Anna also is designed to be a cloud-native, autoscaling system. When deployed in a cluster,
-Anna comes with a monitoring subsystem that tracks workload volume, and responds with three key policy decisions:
-(1) horizontal elasticity to add or remove resources from the cluster; (2) selective replication of hot keys; and
-(3) data movement across two storage tiers (memory- and disk-based) for cost efficiency. This enables Anna to maintain
-its extremely low latencies while also being orders of magnitude more cost efficient than systems like
-<a href="https://aws.amazon.com/dynamodb">AWS DynamoDB</a>. A more detailed description of the cloud-native design of the system
-can be found in our <a href="http://www.vikrams.io/papers/anna-vldb19.pdf">VLDB 2019 paper</a>.</p>
-<h2 id="cli"><a class="header" href="#cli">CLI</a></h2>
-<p>This repository has interactive CLI’s built using provided client libraries in three languages:</p>
+data, Anna provides best-in-class performance.</p>
+<p>For more details, see:</p>
 <ul>
-<li>C++</li>
-<li>Python</li>
-<li>Rust</li>
+<li><a href="#key-concepts">Key Concepts</a> — actors, consistent hashing, replication, gossip, storage tiers</li>
+<li><a href="#anna-architecture">Architecture</a> — system components, actor model, communication, fault tolerance</li>
+<li><a href="#lattices-and-consistency">Lattices and Consistency</a> — lattice types, consistency levels, comparisons with other systems</li>
+<li><a href="#autoscaling-and-policy-engine">Autoscaling and Policy Engine</a> — SLOs, elasticity, selective replication, tiering</li>
 </ul>
-<h2 id="building"><a class="header" href="#building">Building</a></h2>
-<p>See more detailed instructions on building in <a href="#building-anna">building-anna</a></p>
-<h2 id="running-anna"><a class="header" href="#running-anna">Running Anna</a></h2>
-<p>See more detailed instructions on running <code>anna</code> in <a href="#instructions-for-running-anna">running</a></p>
-<h2 id="more-information-on-anna"><a class="header" href="#more-information-on-anna">More Information on Anna</a></h2>
+<h2 id="research-papers"><a class="header" href="#research-papers">Research Papers</a></h2>
 <ul>
-<li><a href="https://www.youtube.com/watch?v=9qU1zO9wCNs&amp;t=2036s">video of talk</a></li>
+<li><a href="http://db.cs.berkeley.edu/jmh/papers/anna_ieee18.pdf">ICDE 2018</a> — “Anna: A KVS For Any Scale” — system design, coordination-free consistency, evaluation</li>
+<li><a href="http://www.vikrams.io/papers/anna-vldb19.pdf">VLDB 2019</a> — “Autoscaling Tiered Cloud Storage in Anna” — cloud-native design, policy engine, cost-performance evaluation</li>
+</ul>
+<h2 id="clients"><a class="header" href="#clients">Clients</a></h2>
+<p>Anna has four client implementations, each with a library and CLI:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Client</th><th>Library</th><th>CLI Binary</th><th>Language</th></tr>
+</thead>
+<tbody>
+<tr><td>C++</td><td><code>anna-client-lib</code></td><td><code>anna-cli</code></td><td>C++</td></tr>
+<tr><td>Rust</td><td><code>annalib</code></td><td><code>anna</code></td><td>Rust</td></tr>
+<tr><td>Python</td><td><code>anna</code> package</td><td><code>anna-py</code></td><td>Python</td></tr>
+<tr><td>Go</td><td><code>annalib</code></td><td><code>anna-go</code></td><td>Go</td></tr>
+</tbody>
+</table>
+</div>
+<p>All clients support the same operations (GET, PUT, GET_SET, PUT_SET, GET_CAUSAL, PUT_CAUSAL)
+and are tested against shared golden files (<code>tests/shared/cli/</code>).</p>
+<h2 id="building"><a class="header" href="#building">Building</a></h2>
+<p>See detailed instructions in <a href="#building-anna">building anna</a>.</p>
+<h2 id="running-anna"><a class="header" href="#running-anna">Running Anna</a></h2>
+<p>See detailed instructions in <a href="#running-anna-1">running anna</a>.</p>
+<h2 id="more-information"><a class="header" href="#more-information">More Information</a></h2>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=9qU1zO9wCNs&amp;t=2036s">Video of talk</a></li>
 </ul>
 <h2 id="license"><a class="header" href="#license">License</a></h2>
 <p>The Project is licensed under the <a href="LICENSE">Apache v2 License</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="key-concepts"><a class="header" href="#key-concepts">Key Concepts</a></h1>
+<p>This page defines the core concepts used throughout Anna’s design and
+documentation.</p>
+<h2 id="coordination-free-actors"><a class="header" href="#coordination-free-actors">Coordination-Free Actors</a></h2>
+<p>Anna’s execution model is based on coordination-free actors:</p>
+<ul>
+<li>Each worker thread is an <strong>actor</strong> with private memory, pinned to a CPU core</li>
+<li>Actors never share memory or use locks/atomic instructions</li>
+<li>Communication is via <strong>asynchronous message passing</strong> (ZeroMQ)</li>
+<li>Each actor runs a continuous event loop, always doing useful work</li>
+</ul>
+<p>This model avoids the scalability bottleneck of shared-memory architectures,
+where synchronization (locks, atomics, cache coherence) becomes the dominant
+cost as core count increases.</p>
+<h2 id="consistent-hashing"><a class="header" href="#consistent-hashing">Consistent Hashing</a></h2>
+<p>Anna uses consistent hashing with virtual nodes to partition keys:</p>
+<ul>
+<li>Each actor maps to multiple <strong>virtual nodes</strong> on a hash ring</li>
+<li>A key’s hash determines which actors store it</li>
+<li>The <strong>replication factor</strong> controls how many clockwise successors hold copies</li>
+<li>Virtual nodes ensure even distribution and support heterogeneous hardware</li>
+<li>When nodes join/leave, only keys in the affected ring segments need to move</li>
+</ul>
+<h2 id="replication-vector"><a class="header" href="#replication-vector">Replication Vector</a></h2>
+<p>Each key has a <strong>replication vector</strong> describing how many replicas exist in each
+tier and how they are distributed:</p>
+<pre><code>[&lt; R_M, R_E &gt;, &lt; T_M, T_E &gt;]
+</code></pre>
+<ul>
+<li>R_M: number of memory-tier nodes storing this key</li>
+<li>R_E: number of EBS-tier nodes storing this key</li>
+<li>T_M: number of threads per memory node storing this key</li>
+<li>T_E: number of threads per EBS node storing this key</li>
+</ul>
+<p>The policy engine adjusts replication vectors dynamically based on workload.</p>
+<h2 id="hash-rings"><a class="header" href="#hash-rings">Hash Rings</a></h2>
+<p>Anna maintains two types of hash rings per tier:</p>
+<ul>
+<li><strong>Global hash ring (G)</strong>: Determines which nodes in a tier store a key</li>
+<li><strong>Local hash ring (L)</strong>: Determines which threads within a node store a key</li>
+</ul>
+<p>During request handling, both rings are consulted to find the responsible threads.</p>
+<h2 id="gossip--multicast"><a class="header" href="#gossip--multicast">Gossip / Multicast</a></h2>
+<p>Anna actors periodically exchange updates via a gossip protocol:</p>
+<ul>
+<li>Each actor maintains a <strong>changeset</strong> of keys updated since the last epoch</li>
+<li>At epoch end, the actor multicasts merged updates to relevant replicas</li>
+<li>Updates are merged using lattice operations, ensuring convergence</li>
+<li>The <strong>multicast epoch</strong> is a tunable parameter (default: 10 seconds)</li>
+<li>Merge-at-sender optimization reduces network overhead for hot keys</li>
+</ul>
+<h2 id="storage-tiers"><a class="header" href="#storage-tiers">Storage Tiers</a></h2>
+<p>Anna supports multiple storage tiers:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Tier</th><th>Medium</th><th>Performance</th><th>Cost</th></tr>
+</thead>
+<tbody>
+<tr><td>Memory</td><td>RAM</td><td>Low latency, high throughput</td><td>High</td></tr>
+<tr><td>Disk (EBS)</td><td>Flash/SSD</td><td>Higher latency</td><td>Lower</td></tr>
+</tbody>
+</table>
+</div>
+<p>The storage kernel is identical across tiers — only the serialization
+(“serde”) layer differs. Memory-tier threads read/write memory buffers;
+disk-tier threads read/write files on mounted volumes.</p>
+<h2 id="client-proxy"><a class="header" href="#client-proxy">Client Proxy</a></h2>
+<p>Client proxies serve user requests:</p>
+<ul>
+<li>Support GET, PUT, and DELETE operations</li>
+<li>Query the routing tier to find key locations</li>
+<li>Cache key-address mappings locally</li>
+<li>Handle cache invalidation when the cluster reconfigures</li>
+<li>For advanced consistency levels, maintain a per-transaction state
+(message buffers, read caches)</li>
+</ul>
+<h2 id="operations"><a class="header" href="#operations">Operations</a></h2>
+<p>Anna supports these operations:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>GET</strong></td><td>Retrieve a value from a single replica</td></tr>
+<tr><td><strong>PUT</strong></td><td>Merge a new value using the lattice merge function</td></tr>
+<tr><td><strong>DELETE</strong></td><td>Special PUT with empty value and dominating timestamp</td></tr>
+<tr><td><strong>GET_SET</strong></td><td>Retrieve a set-valued key</td></tr>
+<tr><td><strong>PUT_SET</strong></td><td>Add values to a set (union semantics)</td></tr>
+<tr><td><strong>GET_CAUSAL</strong></td><td>Retrieve with causal metadata (vector clock, dependencies)</td></tr>
+<tr><td><strong>PUT_CAUSAL</strong></td><td>Store with causal metadata</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="metadata"><a class="header" href="#metadata">Metadata</a></h2>
+<p>Anna manages three types of metadata:</p>
+<ol>
+<li><strong>Hash rings</strong> — Which nodes/threads are responsible for which keys</li>
+<li><strong>Replication vectors</strong> — Per-key replication configuration</li>
+<li><strong>Monitoring statistics</strong> — Access frequency, storage consumption per node</li>
+</ol>
+<p>All metadata is stored in the key-value store itself, using the same
+lattice-based merge for consistency. Metadata changes propagate via the
+same gossip mechanism as regular data.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="anna-architecture"><a class="header" href="#anna-architecture">Anna Architecture</a></h1>
+<p>Anna is a partitioned, multi-mastered key-value store that achieves high performance
+and elasticity via wait-free execution and coordination-free consistency. It was
+developed at UC Berkeley’s RISE Lab.</p>
+<h2 id="design-principles"><a class="header" href="#design-principles">Design Principles</a></h2>
+<p>Anna’s design rests on four requirements:</p>
+<ol>
+<li><strong>Partitioning</strong> — The key space is sharded not only across nodes but also across
+cores for high performance.</li>
+<li><strong>Multi-master replication</strong> — Multiple replicas can concurrently serve puts and
+gets against a single key from multiple threads.</li>
+<li><strong>Wait-free execution</strong> — Each thread is always doing useful work, never waiting
+for other threads for coordination or consistency.</li>
+<li><strong>Coordination-free consistency</strong> — A unified implementation supports a wide range
+of consistency models without coordination protocols.</li>
+</ol>
+<h2 id="system-components"><a class="header" href="#system-components">System Components</a></h2>
+<p>An Anna deployment consists of four types of nodes:</p>
+<p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="docs/images/architecture.svg" alt="Anna Architecture"><span class="img-wrapper"><img src="docs/images/architecture.svg" alt="Anna Architecture"></span></label></p>
+<h3 id="routing-tier-anna-route"><a class="header" href="#routing-tier-anna-route">Routing Tier (anna-route)</a></h3>
+<p>The routing service isolates clients from the storage layer. A client asks
+the routing tier where to find a key and receives valid server addresses.
+Routing nodes:</p>
+<ul>
+<li>Cache the storage tiers’ hash rings and replication vectors</li>
+<li>Return memory-tier addresses when available (for performance)</li>
+<li>Are stateless — only maintain soft state (cached metadata)</li>
+<li>Handle cluster configuration changes transparently to clients</li>
+</ul>
+<h3 id="storage-tier-anna-kvs"><a class="header" href="#storage-tier-anna-kvs">Storage Tier (anna-kvs)</a></h3>
+<p>Storage nodes run the Anna storage kernel. Each node contains multiple worker
+threads, each pinned to a CPU core. Each thread:</p>
+<ul>
+<li>Maintains a <strong>private hash table</strong> (no shared memory between threads)</li>
+<li>Runs a tight event loop processing client requests via ZeroMQ</li>
+<li>Periodically <strong>multicasts</strong> updates to replicas via a “gossip” protocol</li>
+<li>Uses <strong>consistent hashing</strong> with virtual nodes for key partitioning</li>
+</ul>
+<p>The storage kernel is identical across memory and disk tiers — the only
+difference is the serialization layer (memory buffer vs. EBS volume).</p>
+<h3 id="monitoring-node-anna-monitor"><a class="header" href="#monitoring-node-anna-monitor">Monitoring Node (anna-monitor)</a></h3>
+<p>The monitoring system collects statistics and drives the policy engine:</p>
+<ul>
+<li>Tracks per-key access frequency and per-node storage consumption</li>
+<li>Triggers <strong>elasticity</strong> actions (add/remove nodes)</li>
+<li>Triggers <strong>hot-key replication</strong> (replicate popular keys across more cores/nodes)</li>
+<li>Triggers <strong>cross-tier data movement</strong> (promote hot data to memory, demote cold to disk)</li>
+</ul>
+<h3 id="cluster-management"><a class="header" href="#cluster-management">Cluster Management</a></h3>
+<p>In a cloud deployment, Anna uses Kubernetes for allocating and deallocating nodes.
+The cluster management pod receives REST requests from the policy engine and
+executes node additions/removals.</p>
+<h2 id="actor-model-and-event-loop"><a class="header" href="#actor-model-and-event-loop">Actor Model and Event Loop</a></h2>
+<p>Each Anna worker thread implements a <strong>coordination-free actor</strong>:</p>
+<ol>
+<li>The thread checks for incoming requests (PUT, GET) via ZeroMQ poll</li>
+<li>It serves the request against its private hash table</li>
+<li>It appends updated keys to a local <strong>changeset</strong></li>
+<li>At the end of each <strong>multicast epoch</strong>, the thread:
+<ul>
+<li>Multicasts its changeset to other masters responsible for those keys</li>
+<li>Checks for incoming multicasts from other actors</li>
+<li>Merges received updates into its local state using lattice merge</li>
+</ul>
+</li>
+</ol>
+<p>This design ensures:</p>
+<ul>
+<li>No thread synchronization (wait-free)</li>
+<li>No shared memory contention</li>
+<li>Updates propagate asynchronously via gossip</li>
+<li>Lattice merge guarantees eventual consistency despite message reordering</li>
+</ul>
+<h2 id="communication"><a class="header" href="#communication">Communication</a></h2>
+<p>Anna uses ZeroMQ for all communication:</p>
+<ul>
+<li><strong>Intra-node</strong> (between threads on same machine): ZeroMQ <code>inproc</code> transport
+with shared memory buffers for zero-copy messaging</li>
+<li><strong>Inter-node</strong> (between machines): ZeroMQ <code>tcp</code> transport with Protocol
+Buffer serialization</li>
+<li><strong>Client-to-routing</strong>: PUSH/PULL sockets on port 6450</li>
+<li><strong>Client-to-KVS</strong>: PUSH/PULL sockets on configurable ports (6800/6850)</li>
+</ul>
+<h2 id="consistent-hashing-1"><a class="header" href="#consistent-hashing-1">Consistent Hashing</a></h2>
+<p>Anna partitions keys across actors using consistent hashing with virtual nodes:</p>
+<ul>
+<li>Each physical node/thread maps to multiple virtual nodes on the hash ring</li>
+<li>CRC32 hash of the key determines which actors store it</li>
+<li>The <strong>replication factor</strong> determines how many clockwise successors store copies</li>
+<li>Virtual nodes enable even distribution and support for heterogeneous hardware</li>
+</ul>
+<h2 id="fault-tolerance"><a class="header" href="#fault-tolerance">Fault Tolerance</a></h2>
+<p>Anna guarantees k-fault tolerance by ensuring k+1 replicas are live:</p>
+<ul>
+<li>When a storage node fails, other nodes detect via timeout and remove it
+from the hash ring</li>
+<li>Data is automatically repartitioned using the updated hash ring</li>
+<li>The management system spawns a replacement node</li>
+<li>Key migration is interleaved with request handling (no downtime)</li>
+<li>Routing and monitoring nodes are stateless and recover by querying peers</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="lattices-and-consistency"><a class="header" href="#lattices-and-consistency">Lattices and Consistency</a></h1>
+<p>Lattices are central to Anna’s design. They enable coordination-free consistency
+by providing data structures whose merge operations are insensitive to the order
+in which updates are applied.</p>
+<h2 id="what-is-a-lattice"><a class="header" href="#what-is-a-lattice">What is a Lattice?</a></h2>
+<p>A <strong>bounded join semilattice</strong> consists of:</p>
+<ul>
+<li>A set of possible states S</li>
+<li>A binary “least upper bound” operator (merge)</li>
+<li>A bottom value</li>
+</ul>
+<p>The merge operator satisfies three properties (ACI):</p>
+<ul>
+<li><strong>Associativity</strong>: merge(merge(a, b), c) = merge(a, merge(b, c))</li>
+<li><strong>Commutativity</strong>: merge(a, b) = merge(b, a)</li>
+<li><strong>Idempotence</strong>: merge(a, a) = a</li>
+</ul>
+<p>These properties mean that replicas can receive and process updates in any order,
+with any amount of duplication, and still converge to the same state.</p>
+<h2 id="lattice-types-in-anna"><a class="header" href="#lattice-types-in-anna">Lattice Types in Anna</a></h2>
+<h3 id="last-writer-wins-lww"><a class="header" href="#last-writer-wins-lww">Last-Writer-Wins (LWW)</a></h3>
+<p>The simplest and default lattice type. Each value is paired with a timestamp.
+The merge function keeps the value with the higher timestamp.</p>
+<pre><code>LWWPairLattice = PairLattice&lt;MaxIntLattice, ValueLattice&gt;
+</code></pre>
+<ul>
+<li>Merge: if timestamp A &gt; timestamp B, keep A; otherwise keep B</li>
+<li>Guarantees: eventual consistency (last write wins)</li>
+<li>Use case: simple key-value storage where latest value is desired</li>
+</ul>
+<h3 id="set-lattice"><a class="header" href="#set-lattice">Set Lattice</a></h3>
+<p>A set where the merge operation is set union.</p>
+<pre><code>SetLattice&lt;T&gt; = { values: Set&lt;T&gt; }
+</code></pre>
+<ul>
+<li>Merge: union of both sets</li>
+<li>Guarantees: elements are never lost; sets only grow</li>
+<li>Use case: collecting tags, maintaining membership lists</li>
+</ul>
+<h3 id="ordered-set-lattice"><a class="header" href="#ordered-set-lattice">Ordered Set Lattice</a></h3>
+<p>Similar to Set but maintains insertion order.</p>
+<h3 id="single-key-causal-lattice"><a class="header" href="#single-key-causal-lattice">Single-Key Causal Lattice</a></h3>
+<p>Tracks causal relationships for a single key using a vector clock.</p>
+<pre><code>SingleKeyCausalLattice = (VectorClock, SetLattice&lt;Value&gt;)
+</code></pre>
+<ul>
+<li>The vector clock tracks which client versions have been incorporated</li>
+<li>Merge: compare vector clocks; if one dominates, keep it; if concurrent,
+merge both values and vector clocks</li>
+</ul>
+<h3 id="multi-key-causal-lattice"><a class="header" href="#multi-key-causal-lattice">Multi-Key Causal Lattice</a></h3>
+<p>Extends causal consistency across multiple keys by tracking dependencies.</p>
+<pre><code>MultiKeyCausalLattice = (VectorClock, Dependencies, SetLattice&lt;Value&gt;)
+</code></pre>
+<ul>
+<li>Dependencies: a map of key -&gt; vector clock for cross-key causal relationships</li>
+<li>Enables causal consistency for transactions spanning multiple keys</li>
+</ul>
+<h3 id="priority-lattice"><a class="header" href="#priority-lattice">Priority Lattice</a></h3>
+<p>A pair of (priority, value) where higher priority wins.</p>
+<h2 id="lattice-composition"><a class="header" href="#lattice-composition">Lattice Composition</a></h2>
+<p>Anna achieves its consistency guarantees through <strong>monotone composition</strong> of
+simple lattice building blocks:</p>
+<pre><code>Key-Value Store = MapLattice&lt;Key, PairLattice&lt;VectorClock, ValueLattice&gt;&gt;
+</code></pre>
+<p>The private state of each worker is a <code>MapLattice</code> parameterized by <code>Key</code> and
+value types. The merge operator of <code>MapLattice</code>:</p>
+<ol>
+<li>Takes the union of key sets from both inputs</li>
+<li>For keys appearing in both, merges the values using <code>ValueLattice</code>’s merge</li>
+</ol>
+<p>This compositional approach means:</p>
+<ul>
+<li>Adding a new consistency level requires changing only the lattice type
+(typically under 60 lines of C++)</li>
+<li>Each component’s ACI properties can be verified independently</li>
+<li>The composed system inherits ACI properties by construction</li>
+</ul>
+<h2 id="consistency-levels"><a class="header" href="#consistency-levels">Consistency Levels</a></h2>
+<p>Anna supports a wide range of coordination-free consistency levels, all
+implemented through lattice composition:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Consistency Level</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Eventual</strong></td><td>Default. LWW lattice. Last write wins.</td></tr>
+<tr><td><strong>Causal</strong></td><td>Vector clocks track causal ordering between updates</td></tr>
+<tr><td><strong>Read Committed</strong></td><td>Transaction timestamps ensure no dirty reads/writes</td></tr>
+<tr><td><strong>Read Uncommitted</strong></td><td>Like Read Committed but allows dirty reads</td></tr>
+<tr><td><strong>Item Cut Isolation</strong></td><td>Buffered reads ensure same value on re-read within transaction</td></tr>
+<tr><td><strong>Monotonic Reads</strong></td><td>Once a value is read, subsequent reads return same or newer</td></tr>
+<tr><td><strong>Monotonic Writes</strong></td><td>Writes from same client are applied in order</td></tr>
+<tr><td><strong>Writes Follow Reads</strong></td><td>A write after a read is ordered after the read’s version</td></tr>
+<tr><td><strong>Read Your Writes</strong></td><td>A client always sees its own writes</td></tr>
+<tr><td><strong>PRAM</strong></td><td>Pipelined RAM — combines monotonic reads, writes, and read-your-writes</td></tr>
+</tbody>
+</table>
+</div>
+<p>The key insight is that switching between these levels requires changing only
+which lattice type wraps the value — the server code, communication protocol,
+and actor model remain unchanged.</p>
+<h3 id="consistency-level-details"><a class="header" href="#consistency-level-details">Consistency Level Details</a></h3>
+<h4 id="eventual-consistency-lww"><a class="header" href="#eventual-consistency-lww">Eventual Consistency (LWW)</a></h4>
+<ul>
+<li><strong>Definition</strong>: All replicas eventually converge to the same value. Concurrent
+writes are resolved by timestamp (last writer wins).</li>
+<li><strong>Implementation</strong>: <code>LWWPairLattice</code> in the server’s storage kernel. The merge
+function compares timestamps and keeps the higher one.</li>
+<li><strong>Where</strong>: Server (<code>server/cpp/src/kvs/</code>), all client libraries.</li>
+<li><strong>Use case</strong>: Session data, user preferences, caches — any scenario where the
+most recent write is the correct one and brief inconsistency is acceptable.</li>
+<li><strong>Comparison</strong>: Similar to DynamoDB’s default eventual consistency, Cassandra
+with <code>CONSISTENCY ONE</code>, and Redis replication.</li>
+</ul>
+<h4 id="causal-consistency"><a class="header" href="#causal-consistency">Causal Consistency</a></h4>
+<ul>
+<li><strong>Definition</strong>: If operation A causally precedes operation B (A happened before
+B, or B read A’s result), then all replicas observe A before B. Concurrent
+operations (neither caused the other) may be observed in any order.</li>
+<li><strong>Implementation</strong>: <code>MultiKeyCausalLattice</code> composed of a <code>VectorClock</code>
+(MapLattice of client IDs to MaxIntLattice counters), a dependency map, and
+a <code>SetLattice</code> of values. The merge function compares vector clocks: if one
+dominates, it wins; if concurrent, both values are kept.</li>
+<li><strong>Where</strong>: Server (<code>server/cpp/src/kvs/</code>), client libraries (<code>GET_CAUSAL</code>/
+<code>PUT_CAUSAL</code> commands).</li>
+<li><strong>Use case</strong>: Social media feeds (a reply should appear after the post it
+replies to), collaborative editing, distributed caches where causal ordering
+matters.</li>
+<li><strong>Comparison</strong>: COPS and Bolt-on provide causal consistency in distributed
+settings. MongoDB offers causal consistency sessions. Anna’s implementation
+is unique in being coordination-free — no consensus protocol or total ordering.</li>
+</ul>
+<h4 id="read-committed"><a class="header" href="#read-committed">Read Committed</a></h4>
+<ul>
+<li><strong>Definition</strong>: Transactions only see committed data. No dirty reads (reading
+uncommitted writes) and no dirty writes (overwriting uncommitted data).</li>
+<li><strong>Implementation</strong>: Appends a transaction timestamp to each write using a
+<code>MaxIntLattice</code>. The merge function keeps the value with the higher
+transaction timestamp, ensuring writes within a transaction are atomic.
+Dirty reads are prevented by buffering writes at the client proxy until
+commit time.</li>
+<li><strong>Where</strong>: Client proxy logic (transaction buffering).</li>
+<li><strong>Use case</strong>: Banking transactions, inventory management — anywhere partial
+transaction results must not be visible.</li>
+<li><strong>Comparison</strong>: PostgreSQL’s default isolation level. Most SQL databases
+support this. Anna achieves it without coordination through lattice composition.</li>
+</ul>
+<h4 id="read-uncommitted"><a class="header" href="#read-uncommitted">Read Uncommitted</a></h4>
+<ul>
+<li><strong>Definition</strong>: Like Read Committed but allows dirty reads (seeing uncommitted
+data from other transactions).</li>
+<li><strong>Implementation</strong>: Same lattice as Read Committed but without client-side
+write buffering.</li>
+<li><strong>Where</strong>: Client proxy logic.</li>
+<li><strong>Use case</strong>: Analytics queries where approximate results are acceptable and
+performance is prioritized over strict correctness.</li>
+</ul>
+<h4 id="item-cut-isolation"><a class="header" href="#item-cut-isolation">Item Cut Isolation</a></h4>
+<ul>
+<li><strong>Definition</strong>: Within a transaction, reading the same key twice returns the
+same value (repeatable read for individual keys).</li>
+<li><strong>Implementation</strong>: The client proxy caches read values for the duration of
+the transaction. Subsequent reads of the same key return the cached value.
+No modification to the lattice composition is needed.</li>
+<li><strong>Where</strong>: Client proxy (read cache).</li>
+<li><strong>Use case</strong>: Report generation where consistency within a single query
+matters, even if the data changes between queries.</li>
+</ul>
+<h4 id="monotonic-reads"><a class="header" href="#monotonic-reads">Monotonic Reads</a></h4>
+<ul>
+<li><strong>Definition</strong>: Once a client reads a value, subsequent reads return the same
+or a newer value — never an older one.</li>
+<li><strong>Implementation</strong>: The base eventual consistency lattice already guarantees
+this because lattice merge is monotonically increasing.</li>
+<li><strong>Where</strong>: Inherent in the lattice design.</li>
+<li><strong>Use case</strong>: Newsfeeds, notification systems — users should never see items
+disappear.</li>
+</ul>
+<h4 id="monotonic-writes"><a class="header" href="#monotonic-writes">Monotonic Writes</a></h4>
+<ul>
+<li><strong>Definition</strong>: Writes from the same client are applied in the order they
+were issued.</li>
+<li><strong>Implementation</strong>: Inherent in the LWW lattice with monotonically increasing
+timestamps.</li>
+<li><strong>Where</strong>: Inherent in the lattice design.</li>
+<li><strong>Use case</strong>: Logging, audit trails — events must appear in order.</li>
+</ul>
+<h4 id="writes-follow-reads"><a class="header" href="#writes-follow-reads">Writes Follow Reads</a></h4>
+<ul>
+<li><strong>Definition</strong>: A write that follows a read is ordered after the version that
+was read.</li>
+<li><strong>Implementation</strong>: The client includes the version it read in its write
+request. The lattice merge ensures the write is ordered after the read.</li>
+<li><strong>Where</strong>: Client proxy + lattice composition.</li>
+<li><strong>Use case</strong>: Comment systems (a reply is always ordered after the post
+it responds to).</li>
+</ul>
+<h4 id="pram-pipelined-ram"><a class="header" href="#pram-pipelined-ram">PRAM (Pipelined RAM)</a></h4>
+<ul>
+<li><strong>Definition</strong>: Combines monotonic reads, monotonic writes, and read-your-writes.
+All operations from a single client are seen by all replicas in the order
+the client issued them.</li>
+<li><strong>Implementation</strong>: Composition of the lattices for the three constituent
+properties.</li>
+<li><strong>Where</strong>: Client proxy + lattice composition.</li>
+<li><strong>Use case</strong>: Interactive applications where a user expects to see their own
+actions reflected immediately and in order.</li>
+</ul>
+<h3 id="stronger-consistency-levels-not-supported-by-anna"><a class="header" href="#stronger-consistency-levels-not-supported-by-anna">Stronger Consistency Levels (Not Supported by Anna)</a></h3>
+<p>Anna deliberately does not implement the two strongest consistency levels.
+Understanding what they offer — and what they cost — clarifies why Anna
+makes this trade-off.</p>
+<h4 id="linearizability"><a class="header" href="#linearizability">Linearizability</a></h4>
+<ul>
+<li><strong>Definition</strong>: Every operation appears to take effect instantaneously at some
+point between its invocation and completion. All clients observe the same
+order of operations, and that order is consistent with real-time ordering.
+In other words, once a write completes, every subsequent read (by any client)
+returns that value or a newer one.</li>
+<li><strong>What it offers over Anna’s levels</strong>: Linearizability is the strongest
+single-key guarantee. It eliminates stale reads entirely — a client can never
+read an old value after a newer one has been written. Anna’s eventual
+consistency allows stale reads bounded by the gossip epoch (up to 10 seconds).
+Even Anna’s causal consistency only guarantees ordering between causally
+related operations; concurrent operations may be observed in any order.</li>
+<li><strong>Cost</strong>: Requires coordination on every write — typically a consensus
+protocol (Paxos, Raft) or quorum reads/writes. This coordination becomes
+the throughput bottleneck: every write must wait for a majority of replicas
+to acknowledge before completing. Under high contention, this means threads
+spend most of their time waiting rather than doing useful work.</li>
+<li><strong>Systems that offer it</strong>: Redis, MongoDB, etcd, DynamoDB (optional),
+Cassandra (with quorum), CockroachDB.</li>
+</ul>
+<h4 id="serializability"><a class="header" href="#serializability">Serializability</a></h4>
+<ul>
+<li><strong>Definition</strong>: The result of executing a set of transactions is equivalent
+to some serial (one-at-a-time) execution of those transactions. This is the
+strongest multi-key guarantee — it ensures that concurrent transactions
+behave as if they ran sequentially, even when they touch different keys.</li>
+<li><strong>What it offers over Anna’s levels</strong>: Anna’s Read Committed prevents dirty
+reads/writes but allows non-repeatable reads and phantom reads across keys.
+Serializability prevents all anomalies: if transaction T1 reads key A and
+writes key B, and transaction T2 reads key B and writes key A, serializability
+guarantees a consistent outcome as if one ran before the other. Anna has no
+mechanism to enforce this across keys without coordination.</li>
+<li><strong>Cost</strong>: Requires either two-phase locking (pessimistic, blocks concurrent
+access) or optimistic concurrency control with validation (aborts conflicting
+transactions). Both approaches require global coordination that fundamentally
+limits throughput. Two-phase commit for distributed transactions adds
+additional latency and failure modes.</li>
+<li><strong>Systems that offer it</strong>: Redis (single-threaded, trivially serializable),
+H-Store, CockroachDB, etcd (via Raft log ordering).</li>
+</ul>
+<h4 id="why-anna-doesnt-support-these"><a class="header" href="#why-anna-doesnt-support-these">Why Anna Doesn’t Support These</a></h4>
+<p>Anna’s design is built on the principle that coordination is the enemy of
+scalability. Both linearizability and serializability require coordination
+on every operation:</p>
+<ul>
+<li><strong>Linearizability</strong> requires consensus or quorum acknowledgment per write,
+introducing latency proportional to network round-trip time and limiting
+throughput to the speed of the slowest replica.</li>
+<li><strong>Serializability</strong> requires global ordering of transactions, either via
+locks (which create contention hotspots) or via a total-order broadcast
+protocol (which limits throughput to a single serialization point).</li>
+</ul>
+<p>Anna’s benchmarks show that coordination-based systems (TBB hash map, Masstree)
+spend 92-95% of CPU time on atomic instructions under high contention, while
+Anna spends 90%+ on useful request handling. This is the fundamental trade-off:
+Anna sacrifices the strongest consistency guarantees in exchange for orders of
+magnitude better performance and seamless horizontal scalability.</p>
+<p>For applications that need linearizability or serializability, systems like
+CockroachDB, etcd, or Redis are more appropriate — but they cannot match
+Anna’s throughput or cost-efficiency at scale.</p>
+<h3 id="comparison-with-other-systems"><a class="header" href="#comparison-with-other-systems">Comparison with Other Systems</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>System</th><th>Per-Key Consistency</th><th>Multi-Key Consistency</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Anna</strong></td><td>Eventual, Causal, Item Cut, Monotonic R/W, PRAM, …</td><td>Read Committed, Read Uncommitted</td></tr>
+<tr><td><strong>Redis</strong></td><td>Linearizable</td><td>Serializable</td></tr>
+<tr><td><strong>MongoDB</strong></td><td>Linearizable</td><td>Linearizable</td></tr>
+<tr><td><strong>etcd</strong></td><td>Linearizable (Raft consensus)</td><td>Serializable</td></tr>
+<tr><td><strong>DynamoDB</strong></td><td>Linearizable, Eventual</td><td>None</td></tr>
+<tr><td><strong>Cassandra</strong></td><td>Linearizable, Eventual</td><td>None</td></tr>
+<tr><td><strong>CockroachDB</strong></td><td>Serializable</td><td>Serializable</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="merge-at-sender-optimization"><a class="header" href="#merge-at-sender-optimization">Merge-at-Sender Optimization</a></h2>
+<p>For frequently-updated “hot” keys, exchanging every individual update would be
+expensive. Anna exploits lattice associativity to <strong>merge at the sender</strong>:</p>
+<p>Instead of sending updates {u1, u2, …, un} individually, the sender computes
+merge(u1, u2, …, un) and sends only the single merged result. This is
+equivalent because:</p>
+<pre><code>merge(s, merge(u1, u2, ..., un)) = merge(...merge(merge(s, u1), u2), ...un)
+</code></pre>
+<p>This dramatically reduces network overhead for hot keys.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="autoscaling-and-policy-engine"><a class="header" href="#autoscaling-and-policy-engine">Autoscaling and Policy Engine</a></h1>
+<p>The second Anna paper (VLDB 2019) extended the system with autoscaling
+capabilities to adapt to changing workloads. Anna automatically adjusts
+its deployment to balance cost, latency, and fault tolerance.</p>
+<h2 id="workload-challenges"><a class="header" href="#workload-challenges">Workload Challenges</a></h2>
+<p>Real-world workloads vary along three dimensions:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Dimension</th><th>Challenge</th><th>Anna’s Response</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Volume</strong></td><td>Overall load increases/decreases</td><td>Horizontal elasticity</td></tr>
+<tr><td><strong>Skewness</strong></td><td>Some keys are much hotter than others</td><td>Selective replication</td></tr>
+<tr><td><strong>Hotspot shifts</strong></td><td>Popular keys change over time</td><td>Replication + tiering</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="three-key-mechanisms"><a class="header" href="#three-key-mechanisms">Three Key Mechanisms</a></h2>
+<h3 id="1-horizontal-elasticity"><a class="header" href="#1-horizontal-elasticity">1. Horizontal Elasticity</a></h3>
+<p>Anna scales each storage tier independently by adding or removing nodes:</p>
+<ul>
+<li><strong>Scaling out</strong>: When storage or compute capacity is insufficient, the policy
+engine instructs the cluster manager to add nodes. Data is automatically
+repartitioned via consistent hashing.</li>
+<li><strong>Scaling in</strong>: When resources are underutilized, nodes are removed. The
+policy engine first checks that no key’s replication factor would exceed
+the remaining node count, adjusting replication factors if needed.</li>
+<li><strong>Grace period</strong>: After any resource change, a grace period prevents
+over-correction while data redistributes and access patterns stabilize.</li>
+</ul>
+<h3 id="2-multi-master-selective-replication"><a class="header" href="#2-multi-master-selective-replication">2. Multi-Master Selective Replication</a></h3>
+<p>Unlike Anna v0 which replicated all keys uniformly, the extended Anna
+selectively replicates hot keys:</p>
+<ul>
+<li>The policy engine classifies keys as “hot” if their access frequency
+exceeds H standard deviations above the mean</li>
+<li>Hot keys are first replicated across more threads within a node
+(intra-node replication), then across nodes (cross-node replication)</li>
+<li>Cold keys maintain the default replication factor</li>
+<li>Cross-node replication provides 4x throughput improvement per replica
+(due to network bandwidth scaling), vs 2x for intra-node</li>
+</ul>
+<h3 id="3-vertical-tiering"><a class="header" href="#3-vertical-tiering">3. Vertical Tiering</a></h3>
+<p>Anna supports multiple storage tiers with different cost-performance profiles:</p>
+<ul>
+<li><strong>Memory tier</strong>: Fast RAM-based storage (e.g., AWS EC2 instances)</li>
+<li><strong>Disk tier</strong>: Cheaper flash-based storage (e.g., AWS EBS volumes)</li>
+<li>Hot data is <strong>promoted</strong> from disk to memory when access frequency
+exceeds a threshold</li>
+<li>Cold data is <strong>demoted</strong> from memory to disk when access frequency drops</li>
+<li>Promotion and demotion are implemented by adjusting per-key replication
+vectors — gossip handles the actual data movement</li>
+</ul>
+<h2 id="service-level-objectives-slos"><a class="header" href="#service-level-objectives-slos">Service Level Objectives (SLOs)</a></h2>
+<p>Anna supports three types of SLOs:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>SLO</th><th>Description</th><th>Default</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Latency</strong> (L_obj)</td><td>Average request latency target</td><td>2.5ms</td></tr>
+<tr><td><strong>Budget</strong> (B)</td><td>Maximum cost per hour</td><td>User-specified</td></tr>
+<tr><td><strong>Fault Tolerance</strong> (k)</td><td>Number of replica failures to tolerate</td><td>2</td></tr>
+</tbody>
+</table>
+</div>
+<p>The policy engine balances these potentially conflicting objectives. For example,
+lower latency requires more memory-tier replicas (higher cost), while lower cost
+means fewer replicas (higher latency, lower fault tolerance).</p>
+<h2 id="policy-engine-algorithm"><a class="header" href="#policy-engine-algorithm">Policy Engine Algorithm</a></h2>
+<p>The monitoring system periodically collects statistics and triggers the policy
+engine, which evaluates actions in this order:</p>
+<ol>
+<li><strong>Storage capacity check</strong>: If storage consumption exceeds thresholds,
+add or remove nodes</li>
+<li><strong>Cross-tier data movement</strong>: Promote hot data to memory, demote cold
+data to disk based on access frequency</li>
+<li><strong>Latency check</strong>: If latency exceeds the SLO, add memory nodes or
+replicate hot keys</li>
+<li><strong>Cost optimization</strong>: If latency is well below the SLO, check if nodes
+can be removed to save cost</li>
+</ol>
+<h3 id="policy-knobs"><a class="header" href="#policy-knobs">Policy Knobs</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Parameter</th><th>Meaning</th><th>Default</th></tr>
+</thead>
+<tbody>
+<tr><td>T</td><td>Monitoring report period</td><td>15 seconds</td></tr>
+<tr><td>H</td><td>Key hotness threshold (std devs above mean)</td><td>3</td></tr>
+<tr><td>L</td><td>Key coldness threshold (mean access frequency)</td><td>Mean</td></tr>
+<tr><td>P</td><td>Key promotion threshold</td><td>2 accesses in 60s</td></tr>
+<tr><td>S_lower, S_upper</td><td>Storage consumption thresholds</td><td>Memory: 0.3-0.6, EBS: 0.5-0.75</td></tr>
+<tr><td>f_lower, f_upper</td><td>Latency thresholds (fraction of SLO)</td><td>0.5, 0.75</td></tr>
+<tr><td>C_lower, C_upper</td><td>Compute occupancy thresholds</td><td>0.05, 0.20</td></tr>
+<tr><td>c</td><td>Upper bound for latency ratio</td><td>1.5</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="performance-results"><a class="header" href="#performance-results">Performance Results</a></h2>
+<p>From the VLDB 2019 evaluation:</p>
+<ul>
+<li>Anna outperforms AWS ElastiCache and Masstree by up to 10x in
+cost-effectiveness under various contention levels</li>
+<li>Anna outperforms DynamoDB by 36x at low cost and up to 355x at higher costs</li>
+<li>Anna meets latency SLOs 97% of the time during dynamic workload changes</li>
+<li>Node failure recovery maintains 80%+ throughput (vs Redis dropping to 0
+during leader election)</li>
+<li>Hotspot adaptation achieves 99.5% memory-tier hit rate within 25 seconds</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="anna-feature-list"><a class="header" href="#anna-feature-list">Anna Feature List</a></h1>
+<p>A comprehensive list of features implemented in the Anna KVS, derived from
+the research papers, documentation, and server source code. This list serves
+as the basis for black-box system testing.</p>
+<p>The “System Tested” column indicates whether the feature is tested against a
+<strong>live server</strong> (system tests or CLI smoke tests), not just unit tested with
+mocks.</p>
+<h2 id="client-operations"><a class="header" href="#client-operations">Client Operations</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
+</thead>
+<tbody>
+<tr><td>GET</td><td>Retrieve a value by key</td><td>Yes</td></tr>
+<tr><td>PUT</td><td>Store a value by key (lattice merge)</td><td>Yes</td></tr>
+<tr><td>DELETE</td><td>Remove a key (PUT with empty value and dominating timestamp)</td><td>Yes</td></tr>
+<tr><td>GET_SET</td><td>Retrieve a set-valued key</td><td>Yes</td></tr>
+<tr><td>PUT_SET</td><td>Add values to a set (union semantics)</td><td>Yes</td></tr>
+<tr><td>GET_CAUSAL</td><td>Retrieve with causal metadata (vector clock, dependencies)</td><td>Yes</td></tr>
+<tr><td>PUT_CAUSAL</td><td>Store with causal metadata</td><td>Yes</td></tr>
+<tr><td>GET_ORDERED_SET</td><td>Retrieve an ordered set-valued key</td><td>Yes</td></tr>
+<tr><td>PUT_ORDERED_SET</td><td>Add values to an ordered set</td><td>Yes</td></tr>
+<tr><td>GET_SINGLE_CAUSAL</td><td>Retrieve with single-key causal metadata</td><td>Yes</td></tr>
+<tr><td>PUT_SINGLE_CAUSAL</td><td>Store with single-key causal metadata</td><td>Yes</td></tr>
+<tr><td>GET_PRIORITY</td><td>Retrieve a priority-valued key</td><td>Yes</td></tr>
+<tr><td>PUT_PRIORITY</td><td>Store a priority-value pair (lowest priority wins)</td><td>Yes</td></tr>
+<tr><td>Address cache invalidation</td><td>Server signals client to refresh address cache</td><td>No</td></tr>
+<tr><td>Multi-key GET</td><td>Retrieve multiple keys in one request</td><td>No</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="lattice-types"><a class="header" href="#lattice-types">Lattice Types</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Lattice</th><th>Description</th><th>System Tested</th></tr>
+</thead>
+<tbody>
+<tr><td>LWW (Last-Writer-Wins)</td><td>Timestamp-based conflict resolution</td><td>Yes</td></tr>
+<tr><td>SET</td><td>Unordered set with union merge</td><td>Yes</td></tr>
+<tr><td>ORDERED_SET</td><td>Ordered set with union merge</td><td>Yes</td></tr>
+<tr><td>SINGLE_CAUSAL</td><td>Single-key causal with vector clock</td><td>Yes</td></tr>
+<tr><td>MULTI_CAUSAL</td><td>Multi-key causal with vector clock and dependencies</td><td>Yes</td></tr>
+<tr><td>PRIORITY</td><td>Priority-value pair, lowest priority wins</td><td>Yes</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="single-node-features"><a class="header" href="#single-node-features">Single-Node Features</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
+</thead>
+<tbody>
+<tr><td>YAML config file</td><td>All settings in a single YAML file</td><td>Yes</td></tr>
+<tr><td>Thread counts</td><td><code>threads.memory</code>, <code>threads.ebs</code>, <code>threads.routing</code></td><td>Partial</td></tr>
+<tr><td>Standalone mode</td><td><code>mgmt_ip: "NULL"</code> for local/non-k8s deployment</td><td>Yes</td></tr>
+<tr><td>Cluster topology</td><td>seed_ip, mgmt_ip, monitoring/routing IPs</td><td>Partial</td></tr>
+<tr><td>ZeroMQ PUSH/PULL</td><td>Async messaging between all components</td><td>Yes</td></tr>
+<tr><td>Protocol Buffers</td><td>Structured message serialization</td><td>Yes</td></tr>
+<tr><td>Socket cache</td><td>Lazy-created, cached ZMQ push sockets</td><td>Yes</td></tr>
+<tr><td>Graceful shutdown</td><td>SIGTERM handler for clean exit</td><td>Yes</td></tr>
+<tr><td>Memory tier</td><td>In-memory storage using hash tables</td><td>Yes</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="error-handling-355"><a class="header" href="#error-handling-355">Error Handling (#355)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Error Code</th><th>Description</th><th>System Tested</th></tr>
+</thead>
+<tbody>
+<tr><td>NO_ERROR</td><td>Operation succeeded</td><td>Yes</td></tr>
+<tr><td>KEY_DNE</td><td>Key does not exist</td><td>No</td></tr>
+<tr><td>WRONG_THREAD</td><td>This thread is not responsible for the key</td><td>No</td></tr>
+<tr><td>TIMEOUT</td><td>Operation timed out</td><td>No</td></tr>
+<tr><td>LATTICE</td><td>Lattice type mismatch</td><td>No</td></tr>
+<tr><td>NO_SERVERS</td><td>No servers available (routing tier)</td><td>No</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="disk-storage-tier-356"><a class="header" href="#disk-storage-tier-356">Disk Storage Tier (#356)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
+</thead>
+<tbody>
+<tr><td>Disk tier</td><td>File-based storage on configurable path</td><td>No</td></tr>
+<tr><td>Tier selection</td><td><code>SERVER_TYPE</code> env var selects storage medium</td><td>No</td></tr>
+<tr><td>Identical kernel across tiers</td><td>Same storage kernel, different serialization layer</td><td>No</td></tr>
+<tr><td>Node capacities</td><td><code>capacities.memory-cap</code>, <code>capacities.ebs-cap</code></td><td>No</td></tr>
+</tbody>
+</table>
+</div>
+<p>Note: <code>SERVER_TYPE</code> and <code>ebs</code> config should be renamed to storage-medium-agnostic
+terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
+<h2 id="multi-node-features-352"><a class="header" href="#multi-node-features-352">Multi-Node Features (#352)</a></h2>
+<h3 id="replication"><a class="header" href="#replication">Replication</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
+</thead>
+<tbody>
+<tr><td>Per-key replication factors</td><td>Independent replication per key per tier</td><td>No</td></tr>
+<tr><td>Default replication from config</td><td><code>replication.memory</code>, <code>replication.ebs</code>, <code>replication.local</code></td><td>No</td></tr>
+<tr><td>Replication factor request</td><td>Server fetches unknown factors from metadata</td><td>No</td></tr>
+<tr><td>Replication factor change</td><td>Monitor can dynamically adjust replication</td><td>No</td></tr>
+<tr><td>Metadata stored as KVS data</td><td>Replication info under <code>METADATA|replication|&lt;key&gt;</code></td><td>No</td></tr>
+<tr><td>Gossip after replication change</td><td>Data redistributed to new responsible threads</td><td>No</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="gossip--multicast-1"><a class="header" href="#gossip--multicast-1">Gossip / Multicast</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
+</thead>
+<tbody>
+<tr><td>Periodic gossip (10s epoch)</td><td>Changesets multicast to all responsible replicas</td><td>No</td></tr>
+<tr><td>Merge-at-sender</td><td>Batched updates merged before sending</td><td>No</td></tr>
+<tr><td>Gossip to caches</td><td>Changed keys also sent to function executor nodes</td><td>No</td></tr>
+<tr><td>Join gossip</td><td>Redistribute data to newly joined nodes</td><td>No</td></tr>
+<tr><td>Cross-tier gossip</td><td>Updates propagated between memory and disk tiers</td><td>No</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="cluster-management-1"><a class="header" href="#cluster-management-1">Cluster Management</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
+</thead>
+<tbody>
+<tr><td>Node join</td><td>New node joins cluster, receives data via gossip</td><td>No</td></tr>
+<tr><td>Node depart</td><td>Node leaves, data redistributed</td><td>No</td></tr>
+<tr><td>Self-depart</td><td>Node gracefully removes itself, gossips all data out</td><td>No</td></tr>
+<tr><td>Rejoin detection</td><td>Join counter distinguishes fresh joins from rejoins</td><td>No</td></tr>
+<tr><td>Seed node</td><td>First routing node serves cluster membership</td><td>No</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="fault-tolerance-1"><a class="header" href="#fault-tolerance-1">Fault Tolerance</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
+</thead>
+<tbody>
+<tr><td>k-fault tolerance</td><td>k+1 replicas ensure k failures tolerable</td><td>No</td></tr>
+<tr><td>Failure detection via timeout</td><td>Nodes detect peer failures and update hash ring</td><td>No</td></tr>
+<tr><td>Automatic repartitioning</td><td>Data redistributed after node failure</td><td>No</td></tr>
+<tr><td>Stateless routing/monitoring</td><td>Recovers by querying peers/storage</td><td>No</td></tr>
+<tr><td>Key migration interleaved with requests</td><td>No downtime during reconfiguration</td><td>No</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="consistent-hashing-2"><a class="header" href="#consistent-hashing-2">Consistent Hashing</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
+</thead>
+<tbody>
+<tr><td>Two-level hash ring</td><td>Global (nodes) + Local (threads within node)</td><td>No</td></tr>
+<tr><td>Virtual nodes (3000 per thread)</td><td>Even distribution across physical threads</td><td>No</td></tr>
+<tr><td>CRC32 hashing</td><td>Hash function for key-to-ring mapping</td><td>No</td></tr>
+<tr><td>Thread responsibility lookup</td><td>Determines which threads handle a key</td><td>No</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="routing-tier"><a class="header" href="#routing-tier">Routing Tier</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
+</thead>
+<tbody>
+<tr><td>Key address lookup</td><td>Client queries routing for server addresses</td><td>Yes</td></tr>
+<tr><td>Hash ring caching</td><td>Routing caches storage tier hash rings</td><td>Yes</td></tr>
+<tr><td>Memory-tier preference</td><td>Returns memory addresses when available</td><td>No</td></tr>
+<tr><td>Replication-aware routing</td><td>Uses replication vectors to find all responsible threads</td><td>No</td></tr>
+<tr><td>Pending request queue</td><td>Queues requests while replication factor is unknown</td><td>No</td></tr>
+<tr><td>Multi-threaded routing</td><td>Configurable number of routing threads</td><td>No</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="monitoring--policy-engine-357"><a class="header" href="#monitoring--policy-engine-357">Monitoring &amp; Policy Engine (#357)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
+</thead>
+<tbody>
+<tr><td>Statistics collection</td><td>Per-key access frequency, per-node storage, CPU occupancy</td><td>No</td></tr>
+<tr><td>Elasticity policy</td><td>Add/remove nodes based on storage/compute capacity</td><td>No</td></tr>
+<tr><td>Hot-key replication</td><td>Selectively replicate hot keys across more threads/nodes</td><td>No</td></tr>
+<tr><td>Cross-tier data movement</td><td>Promote hot data to memory, demote cold to disk</td><td>No</td></tr>
+<tr><td>SLO enforcement</td><td>Latency-based scaling (target: 3ms)</td><td>No</td></tr>
+<tr><td>Underutilization scale-down</td><td>Remove nodes when occupancy is low</td><td>No</td></tr>
+<tr><td>Grace period</td><td>Prevent over-correction during data redistribution</td><td>No</td></tr>
+<tr><td>Policy toggles</td><td><code>policy.elasticity</code>, <code>policy.selective-rep</code>, <code>policy.tiering</code></td><td>No</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="server-internals-358"><a class="header" href="#server-internals-358">Server Internals (#358)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
+</thead>
+<tbody>
+<tr><td>Storage consumption reporting</td><td>Per-thread storage size in KB</td><td>No</td></tr>
+<tr><td>CPU occupancy reporting</td><td>Ratio of working time to wall-clock time</td><td>No</td></tr>
+<tr><td>Access count reporting</td><td>Total accesses per epoch</td><td>No</td></tr>
+<tr><td>Per-key access frequency</td><td>Tracked over 60-second window</td><td>No</td></tr>
+<tr><td>Per-key size for primary replicas</td><td>Size of data for keys this thread owns</td><td>No</td></tr>
+<tr><td>Per-event-type occupancy logging</td><td>Performance profiling of event handlers</td><td>No</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Category</th><th>Total</th><th>System Tested</th><th>Coverage</th><th>Issue</th></tr>
+</thead>
+<tbody>
+<tr><td>Client Operations</td><td>15</td><td>13</td><td>87%</td><td>—</td></tr>
+<tr><td>Lattice Types</td><td>6</td><td>6</td><td>100%</td><td>—</td></tr>
+<tr><td>Single-Node Features</td><td>9</td><td>9</td><td>100%</td><td>—</td></tr>
+<tr><td>Error Handling</td><td>6</td><td>1</td><td>17%</td><td>#355</td></tr>
+<tr><td>Disk Storage Tier</td><td>4</td><td>0</td><td>0%</td><td>#356</td></tr>
+<tr><td>Multi-Node Features</td><td>27</td><td>2</td><td>7%</td><td>#352</td></tr>
+<tr><td>Monitoring &amp; Policy Engine</td><td>8</td><td>0</td><td>0%</td><td>#357</td></tr>
+<tr><td>Server Internals</td><td>6</td><td>0</td><td>0%</td><td>#358</td></tr>
+<tr><td><strong>Total</strong></td><td><strong>81</strong></td><td><strong>31</strong></td><td><strong>38%</strong></td><td></td></tr>
+</tbody>
+</table>
+</div>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="building-anna"><a class="header" href="#building-anna">Building Anna</a></h1>
 <h2 id="prerequisites-left-to-the-user"><a class="header" href="#prerequisites-left-to-the-user">Prerequisites left to the user</a></h2>
@@ -244,7 +1126,7 @@ can run the standard build using the top-level <code>Makefile</code> with just <
 <p>KVS server executables will be in <code>build/target</code>, the CPP-based interactive CLI for Anna in
 <code>build/client</code> and the rust cli <code>anna</code> in <code>cli/target</code>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="instructions-for-running-anna"><a href="#instructions-for-running-anna" class="header">Instructions for running anna</a></h1>
+<h1 id="running-anna-1"><a href="#running-anna-1" class="header">Running anna</a></h1>
 <h2 id="using-anna-in-local-mode"><a class="header" href="#using-anna-in-local-mode">Using Anna in Local Mode</a></h2>
 <h3 id="starting-anna-processes-using-the-rust-cli"><a class="header" href="#starting-anna-processes-using-the-rust-cli">Starting Anna processes using the rust CLi</a></h3>
 <p>You can start anna background processes by using the <code>anna</code> CLI <code>start</code> command</p>

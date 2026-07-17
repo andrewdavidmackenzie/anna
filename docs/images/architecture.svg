@@ -1,0 +1,192 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 620" font-family="Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#666"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#c44"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="400" y="28" text-anchor="middle" font-size="18" font-weight="bold" fill="#333">Anna Architecture</text>
+
+  <!-- Users -->
+  <g transform="translate(0, 530)">
+    <rect x="80" y="0" width="640" height="70" rx="8" fill="#f0f4ff" stroke="#aab" stroke-width="1.5"/>
+    <text x="400" y="20" text-anchor="middle" font-size="14" font-weight="bold" fill="#446">Users / Client Applications</text>
+    <g transform="translate(120, 30)">
+      <rect width="70" height="30" rx="4" fill="#dde4f0" stroke="#889"/>
+      <text x="35" y="20" text-anchor="middle" font-size="11">User 1</text>
+    </g>
+    <g transform="translate(250, 30)">
+      <rect width="70" height="30" rx="4" fill="#dde4f0" stroke="#889"/>
+      <text x="35" y="20" text-anchor="middle" font-size="11">User 2</text>
+    </g>
+    <g transform="translate(380, 30)">
+      <rect width="70" height="30" rx="4" fill="#dde4f0" stroke="#889"/>
+      <text x="35" y="20" text-anchor="middle" font-size="11">User 3</text>
+    </g>
+    <g transform="translate(510, 30)">
+      <rect width="70" height="30" rx="4" fill="#dde4f0" stroke="#889"/>
+      <text x="35" y="20" text-anchor="middle" font-size="11">User 4</text>
+    </g>
+  </g>
+
+  <!-- Arrows: Users to Routing -->
+  <line x1="200" y1="530" x2="200" y2="490" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="400" y1="530" x2="400" y2="490" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="600" y1="530" x2="600" y2="490" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="650" y="515" font-size="10" fill="#666" font-style="italic">Key Address Requests</text>
+
+  <!-- Routing Tier -->
+  <rect x="80" y="440" width="540" height="50" rx="8" fill="#e8f5e9" stroke="#4a7" stroke-width="1.5"/>
+  <text x="350" y="462" text-anchor="middle" font-size="14" font-weight="bold" fill="#2a6">Routing Tier</text>
+  <text x="350" y="480" text-anchor="middle" font-size="10" fill="#4a7">anna-route (stateless, caches hash rings)</text>
+
+  <!-- Arrows: Routing to KVS -->
+  <line x1="200" y1="440" x2="200" y2="405" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="500" y1="440" x2="500" y2="405" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="550" y="425" font-size="10" fill="#666" font-style="italic">Request Forwarding</text>
+
+  <!-- Memory Tier -->
+  <rect x="40" y="200" width="620" height="200" rx="10" fill="#fff8e1" stroke="#e8a" stroke-width="1.5"/>
+  <text x="350" y="225" text-anchor="middle" font-size="14" font-weight="bold" fill="#a64">Memory Tier</text>
+
+  <!-- Server Node 1 -->
+  <rect x="60" y="240" width="180" height="145" rx="6" fill="#fff" stroke="#cca" stroke-width="1"/>
+  <text x="150" y="258" text-anchor="middle" font-size="12" font-weight="bold" fill="#664">Server Node</text>
+
+  <!-- Actor threads in Node 1 -->
+  <g transform="translate(70, 265)">
+    <rect width="155" height="32" rx="4" fill="#ffeedd" stroke="#dba"/>
+    <rect x="4" y="4" width="24" height="24" rx="3" fill="#ffcc88" stroke="#c96"/>
+    <text x="16" y="20" text-anchor="middle" font-size="9" fill="#643">T0</text>
+    <rect x="32" y="4" width="60" height="24" rx="3" fill="#fff5e6" stroke="#dca"/>
+    <text x="62" y="20" text-anchor="middle" font-size="8" fill="#864">HashTbl</text>
+    <rect x="96" y="4" width="55" height="24" rx="3" fill="#fff5e6" stroke="#dca"/>
+    <text x="123" y="20" text-anchor="middle" font-size="8" fill="#864">Memory</text>
+  </g>
+  <g transform="translate(70, 302)">
+    <rect width="155" height="32" rx="4" fill="#ffeedd" stroke="#dba"/>
+    <rect x="4" y="4" width="24" height="24" rx="3" fill="#ffcc88" stroke="#c96"/>
+    <text x="16" y="20" text-anchor="middle" font-size="9" fill="#643">T1</text>
+    <rect x="32" y="4" width="60" height="24" rx="3" fill="#fff5e6" stroke="#dca"/>
+    <text x="62" y="20" text-anchor="middle" font-size="8" fill="#864">HashTbl</text>
+    <rect x="96" y="4" width="55" height="24" rx="3" fill="#fff5e6" stroke="#dca"/>
+    <text x="123" y="20" text-anchor="middle" font-size="8" fill="#864">Memory</text>
+  </g>
+  <g transform="translate(70, 339)">
+    <rect width="155" height="32" rx="4" fill="#ffeedd" stroke="#dba"/>
+    <rect x="4" y="4" width="24" height="24" rx="3" fill="#ffcc88" stroke="#c96"/>
+    <text x="16" y="20" text-anchor="middle" font-size="9" fill="#643">T2</text>
+    <rect x="32" y="4" width="60" height="24" rx="3" fill="#fff5e6" stroke="#dca"/>
+    <text x="62" y="20" text-anchor="middle" font-size="8" fill="#864">HashTbl</text>
+    <rect x="96" y="4" width="55" height="24" rx="3" fill="#fff5e6" stroke="#dca"/>
+    <text x="123" y="20" text-anchor="middle" font-size="8" fill="#864">Memory</text>
+  </g>
+
+  <!-- Server Node 2 -->
+  <rect x="280" y="240" width="180" height="145" rx="6" fill="#fff" stroke="#cca" stroke-width="1"/>
+  <text x="370" y="258" text-anchor="middle" font-size="12" font-weight="bold" fill="#664">Server Node</text>
+
+  <g transform="translate(290, 265)">
+    <rect width="155" height="32" rx="4" fill="#ffeedd" stroke="#dba"/>
+    <rect x="4" y="4" width="24" height="24" rx="3" fill="#ffcc88" stroke="#c96"/>
+    <text x="16" y="20" text-anchor="middle" font-size="9" fill="#643">T0</text>
+    <rect x="32" y="4" width="60" height="24" rx="3" fill="#fff5e6" stroke="#dca"/>
+    <text x="62" y="20" text-anchor="middle" font-size="8" fill="#864">HashTbl</text>
+    <rect x="96" y="4" width="55" height="24" rx="3" fill="#fff5e6" stroke="#dca"/>
+    <text x="123" y="20" text-anchor="middle" font-size="8" fill="#864">Memory</text>
+  </g>
+  <g transform="translate(290, 302)">
+    <rect width="155" height="32" rx="4" fill="#ffeedd" stroke="#dba"/>
+    <rect x="4" y="4" width="24" height="24" rx="3" fill="#ffcc88" stroke="#c96"/>
+    <text x="16" y="20" text-anchor="middle" font-size="9" fill="#643">T1</text>
+    <rect x="32" y="4" width="60" height="24" rx="3" fill="#fff5e6" stroke="#dca"/>
+    <text x="62" y="20" text-anchor="middle" font-size="8" fill="#864">HashTbl</text>
+    <rect x="96" y="4" width="55" height="24" rx="3" fill="#fff5e6" stroke="#dca"/>
+    <text x="123" y="20" text-anchor="middle" font-size="8" fill="#864">Memory</text>
+  </g>
+  <g transform="translate(290, 339)">
+    <rect width="155" height="32" rx="4" fill="#ffeedd" stroke="#dba"/>
+    <rect x="4" y="4" width="24" height="24" rx="3" fill="#ffcc88" stroke="#c96"/>
+    <text x="16" y="20" text-anchor="middle" font-size="9" fill="#643">T2</text>
+    <rect x="32" y="4" width="60" height="24" rx="3" fill="#fff5e6" stroke="#dca"/>
+    <text x="62" y="20" text-anchor="middle" font-size="8" fill="#864">HashTbl</text>
+    <rect x="96" y="4" width="55" height="24" rx="3" fill="#fff5e6" stroke="#dca"/>
+    <text x="123" y="20" text-anchor="middle" font-size="8" fill="#864">Memory</text>
+  </g>
+
+  <!-- Gossip arrows between nodes -->
+  <line x1="240" y1="310" x2="278" y2="310" stroke="#c44" stroke-width="2" marker-end="url(#arrow-red)" stroke-dasharray="5,3"/>
+  <line x1="278" y1="325" x2="240" y2="325" stroke="#c44" stroke-width="2" marker-end="url(#arrow-red)" stroke-dasharray="5,3"/>
+  <text x="259" y="355" text-anchor="middle" font-size="9" fill="#c44" font-style="italic">Gossip</text>
+
+  <!-- Monitoring + Management -->
+  <rect x="680" y="200" width="110" height="200" rx="8" fill="#f3e5f5" stroke="#a6c" stroke-width="1.5"/>
+  <text x="735" y="225" text-anchor="middle" font-size="11" font-weight="bold" fill="#639">Monitoring</text>
+
+  <rect x="690" y="240" width="90" height="45" rx="4" fill="#f9f0fc" stroke="#c9d"/>
+  <text x="735" y="258" text-anchor="middle" font-size="10" fill="#639">Statistics</text>
+  <text x="735" y="275" text-anchor="middle" font-size="9" fill="#96a">Collection</text>
+
+  <rect x="690" y="295" width="90" height="45" rx="4" fill="#f9f0fc" stroke="#c9d"/>
+  <text x="735" y="313" text-anchor="middle" font-size="10" fill="#639">Policy</text>
+  <text x="735" y="330" text-anchor="middle" font-size="9" fill="#96a">Engine</text>
+
+  <rect x="690" y="350" width="90" height="40" rx="4" fill="#f9f0fc" stroke="#c9d"/>
+  <text x="735" y="368" text-anchor="middle" font-size="10" fill="#639">Management</text>
+  <text x="735" y="382" text-anchor="middle" font-size="9" fill="#96a">System</text>
+
+  <!-- Arrows: Monitoring to/from KVS -->
+  <line x1="660" y1="280" x2="688" y2="260" stroke="#a6c" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <line x1="688" y1="330" x2="660" y2="340" stroke="#a6c" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <text x="672" y="410" text-anchor="middle" font-size="9" fill="#a6c" font-style="italic">Stats &amp;</text>
+  <text x="672" y="422" text-anchor="middle" font-size="9" fill="#a6c" font-style="italic">Actions</text>
+
+  <!-- Disk Tier -->
+  <rect x="40" y="55" width="620" height="130" rx="10" fill="#e3f2fd" stroke="#68a" stroke-width="1.5"/>
+  <text x="350" y="80" text-anchor="middle" font-size="14" font-weight="bold" fill="#468">Disk Tier (EBS)</text>
+
+  <g transform="translate(60, 90)">
+    <rect width="170" height="80" rx="6" fill="#fff" stroke="#8ab" stroke-width="1"/>
+    <text x="85" y="18" text-anchor="middle" font-size="12" font-weight="bold" fill="#468">Server Node</text>
+    <rect x="10" y="28" width="65" height="22" rx="3" fill="#e1f0ff" stroke="#8ab"/>
+    <text x="42" y="43" text-anchor="middle" font-size="9" fill="#468">anna-kvs</text>
+    <rect x="10" y="54" width="65" height="22" rx="3" fill="#cce5ff" stroke="#68a"/>
+    <text x="42" y="69" text-anchor="middle" font-size="9" fill="#468">EBS Vol</text>
+    <rect x="90" y="28" width="65" height="22" rx="3" fill="#e1f0ff" stroke="#8ab"/>
+    <text x="122" y="43" text-anchor="middle" font-size="9" fill="#468">anna-kvs</text>
+    <rect x="90" y="54" width="65" height="22" rx="3" fill="#cce5ff" stroke="#68a"/>
+    <text x="122" y="69" text-anchor="middle" font-size="9" fill="#468">EBS Vol</text>
+  </g>
+
+  <g transform="translate(280, 90)">
+    <rect width="170" height="80" rx="6" fill="#fff" stroke="#8ab" stroke-width="1"/>
+    <text x="85" y="18" text-anchor="middle" font-size="12" font-weight="bold" fill="#468">Server Node</text>
+    <rect x="10" y="28" width="65" height="22" rx="3" fill="#e1f0ff" stroke="#8ab"/>
+    <text x="42" y="43" text-anchor="middle" font-size="9" fill="#468">anna-kvs</text>
+    <rect x="10" y="54" width="65" height="22" rx="3" fill="#cce5ff" stroke="#68a"/>
+    <text x="42" y="69" text-anchor="middle" font-size="9" fill="#468">EBS Vol</text>
+    <rect x="90" y="28" width="65" height="22" rx="3" fill="#e1f0ff" stroke="#8ab"/>
+    <text x="122" y="43" text-anchor="middle" font-size="9" fill="#468">anna-kvs</text>
+    <rect x="90" y="54" width="65" height="22" rx="3" fill="#cce5ff" stroke="#68a"/>
+    <text x="122" y="69" text-anchor="middle" font-size="9" fill="#468">EBS Vol</text>
+  </g>
+
+  <!-- Arrow: Memory to Disk tier (data movement) -->
+  <line x1="350" y1="200" x2="350" y2="188" stroke="#c44" stroke-width="1.5" marker-end="url(#arrow-red)" stroke-dasharray="4,3"/>
+  <line x1="380" y1="188" x2="380" y2="200" stroke="#c44" stroke-width="1.5" marker-end="url(#arrow-red)" stroke-dasharray="4,3"/>
+  <text x="425" y="196" font-size="9" fill="#c44" font-style="italic">Promote / Demote</text>
+
+  <!-- Legend -->
+  <rect x="510" y="90" width="140" height="80" rx="6" fill="#fafafa" stroke="#ccc"/>
+  <text x="580" y="108" text-anchor="middle" font-size="11" font-weight="bold" fill="#555">Legend</text>
+  <line x1="520" y1="120" x2="555" y2="120" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="565" y="124" font-size="10" fill="#666">Data flow</text>
+  <line x1="520" y1="140" x2="555" y2="140" stroke="#c44" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arrow-red)"/>
+  <text x="565" y="144" font-size="10" fill="#c44">Gossip / Move</text>
+  <rect x="520" y="152" width="14" height="10" rx="2" fill="#ffcc88" stroke="#c96"/>
+  <text x="542" y="161" font-size="10" fill="#664">Actor thread</text>
+</svg>

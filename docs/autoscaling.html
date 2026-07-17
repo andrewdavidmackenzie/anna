@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Running anna - The &#x27;anna&#x27; book</title>
+        <title>Autoscaling and Policy Engine - The &#x27;anna&#x27; book</title>
 
 
         <!-- Custom HTML head -->
@@ -174,39 +174,131 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h2 id="using-anna-in-local-mode"><a class="header" href="#using-anna-in-local-mode">Using Anna in Local Mode</a></h2>
-<h3 id="starting-anna-processes-using-the-rust-cli"><a class="header" href="#starting-anna-processes-using-the-rust-cli">Starting Anna processes using the rust CLi</a></h3>
-<p>You can start anna background processes by using the <code>anna</code> CLI <code>start</code> command</p>
-<p>If you have the <code>anna</code> crate installed, just use</p>
-<pre><code class="language-bash">&gt; anna start
-</code></pre>
-<p>If you have not installed it, then you can build and run the development version using</p>
-<pre><code class="language-bash">&gt; cargo run -- start
-</code></pre>
-<p>By default, the <code>conf/anna-config.yml</code> config file is used, which only specifies one routing thread and one storage
-thread.</p>
-<p>You are welcome to modify this file if you would like, but we generally do not recommend running more than one
-thread per process in local mode.</p>
-<h3 id="stopping-anna"><a class="header" href="#stopping-anna">Stopping Anna</a></h3>
-<p>You can stop the running background processes by using the <code>anna</code> CLI <code>stop</code> command</p>
-<p>If you have the <code>anna</code> crate installed, just use</p>
-<pre><code class="language-bash">&gt; anna stop
-</code></pre>
-<p>If you have not installed it, then you can build and run the development version using</p>
-<pre><code class="language-bash">&gt; cargo run -- stop
-</code></pre>
-<h2 id="running-anna-in-cluster-mode"><a class="header" href="#running-anna-in-cluster-mode">Running Anna in cluster mode</a></h2>
-<p>For instructions on how to run Anna in cluster mode, please see the <code>hydro-project/cluster</code>
-<a href="https://github.com/hydro-project/cluster">repository</a>.</p>
+                        <h1 id="autoscaling-and-policy-engine"><a class="header" href="#autoscaling-and-policy-engine">Autoscaling and Policy Engine</a></h1>
+<p>The second Anna paper (VLDB 2019) extended the system with autoscaling
+capabilities to adapt to changing workloads. Anna automatically adjusts
+its deployment to balance cost, latency, and fault tolerance.</p>
+<h2 id="workload-challenges"><a class="header" href="#workload-challenges">Workload Challenges</a></h2>
+<p>Real-world workloads vary along three dimensions:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Dimension</th><th>Challenge</th><th>Anna’s Response</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Volume</strong></td><td>Overall load increases/decreases</td><td>Horizontal elasticity</td></tr>
+<tr><td><strong>Skewness</strong></td><td>Some keys are much hotter than others</td><td>Selective replication</td></tr>
+<tr><td><strong>Hotspot shifts</strong></td><td>Popular keys change over time</td><td>Replication + tiering</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="three-key-mechanisms"><a class="header" href="#three-key-mechanisms">Three Key Mechanisms</a></h2>
+<h3 id="1-horizontal-elasticity"><a class="header" href="#1-horizontal-elasticity">1. Horizontal Elasticity</a></h3>
+<p>Anna scales each storage tier independently by adding or removing nodes:</p>
+<ul>
+<li><strong>Scaling out</strong>: When storage or compute capacity is insufficient, the policy
+engine instructs the cluster manager to add nodes. Data is automatically
+repartitioned via consistent hashing.</li>
+<li><strong>Scaling in</strong>: When resources are underutilized, nodes are removed. The
+policy engine first checks that no key’s replication factor would exceed
+the remaining node count, adjusting replication factors if needed.</li>
+<li><strong>Grace period</strong>: After any resource change, a grace period prevents
+over-correction while data redistributes and access patterns stabilize.</li>
+</ul>
+<h3 id="2-multi-master-selective-replication"><a class="header" href="#2-multi-master-selective-replication">2. Multi-Master Selective Replication</a></h3>
+<p>Unlike Anna v0 which replicated all keys uniformly, the extended Anna
+selectively replicates hot keys:</p>
+<ul>
+<li>The policy engine classifies keys as “hot” if their access frequency
+exceeds H standard deviations above the mean</li>
+<li>Hot keys are first replicated across more threads within a node
+(intra-node replication), then across nodes (cross-node replication)</li>
+<li>Cold keys maintain the default replication factor</li>
+<li>Cross-node replication provides 4x throughput improvement per replica
+(due to network bandwidth scaling), vs 2x for intra-node</li>
+</ul>
+<h3 id="3-vertical-tiering"><a class="header" href="#3-vertical-tiering">3. Vertical Tiering</a></h3>
+<p>Anna supports multiple storage tiers with different cost-performance profiles:</p>
+<ul>
+<li><strong>Memory tier</strong>: Fast RAM-based storage (e.g., AWS EC2 instances)</li>
+<li><strong>Disk tier</strong>: Cheaper flash-based storage (e.g., AWS EBS volumes)</li>
+<li>Hot data is <strong>promoted</strong> from disk to memory when access frequency
+exceeds a threshold</li>
+<li>Cold data is <strong>demoted</strong> from memory to disk when access frequency drops</li>
+<li>Promotion and demotion are implemented by adjusting per-key replication
+vectors — gossip handles the actual data movement</li>
+</ul>
+<h2 id="service-level-objectives-slos"><a class="header" href="#service-level-objectives-slos">Service Level Objectives (SLOs)</a></h2>
+<p>Anna supports three types of SLOs:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>SLO</th><th>Description</th><th>Default</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Latency</strong> (L_obj)</td><td>Average request latency target</td><td>2.5ms</td></tr>
+<tr><td><strong>Budget</strong> (B)</td><td>Maximum cost per hour</td><td>User-specified</td></tr>
+<tr><td><strong>Fault Tolerance</strong> (k)</td><td>Number of replica failures to tolerate</td><td>2</td></tr>
+</tbody>
+</table>
+</div>
+<p>The policy engine balances these potentially conflicting objectives. For example,
+lower latency requires more memory-tier replicas (higher cost), while lower cost
+means fewer replicas (higher latency, lower fault tolerance).</p>
+<h2 id="policy-engine-algorithm"><a class="header" href="#policy-engine-algorithm">Policy Engine Algorithm</a></h2>
+<p>The monitoring system periodically collects statistics and triggers the policy
+engine, which evaluates actions in this order:</p>
+<ol>
+<li><strong>Storage capacity check</strong>: If storage consumption exceeds thresholds,
+add or remove nodes</li>
+<li><strong>Cross-tier data movement</strong>: Promote hot data to memory, demote cold
+data to disk based on access frequency</li>
+<li><strong>Latency check</strong>: If latency exceeds the SLO, add memory nodes or
+replicate hot keys</li>
+<li><strong>Cost optimization</strong>: If latency is well below the SLO, check if nodes
+can be removed to save cost</li>
+</ol>
+<h3 id="policy-knobs"><a class="header" href="#policy-knobs">Policy Knobs</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Parameter</th><th>Meaning</th><th>Default</th></tr>
+</thead>
+<tbody>
+<tr><td>T</td><td>Monitoring report period</td><td>15 seconds</td></tr>
+<tr><td>H</td><td>Key hotness threshold (std devs above mean)</td><td>3</td></tr>
+<tr><td>L</td><td>Key coldness threshold (mean access frequency)</td><td>Mean</td></tr>
+<tr><td>P</td><td>Key promotion threshold</td><td>2 accesses in 60s</td></tr>
+<tr><td>S_lower, S_upper</td><td>Storage consumption thresholds</td><td>Memory: 0.3-0.6, EBS: 0.5-0.75</td></tr>
+<tr><td>f_lower, f_upper</td><td>Latency thresholds (fraction of SLO)</td><td>0.5, 0.75</td></tr>
+<tr><td>C_lower, C_upper</td><td>Compute occupancy thresholds</td><td>0.05, 0.20</td></tr>
+<tr><td>c</td><td>Upper bound for latency ratio</td><td>1.5</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="performance-results"><a class="header" href="#performance-results">Performance Results</a></h2>
+<p>From the VLDB 2019 evaluation:</p>
+<ul>
+<li>Anna outperforms AWS ElastiCache and Masstree by up to 10x in
+cost-effectiveness under various contention levels</li>
+<li>Anna outperforms DynamoDB by 36x at low cost and up to 355x at higher costs</li>
+<li>Anna meets latency SLOs 97% of the time during dynamic workload changes</li>
+<li>Node failure recovery maintains 80%+ throughput (vs Redis dropping to 0
+during leader election)</li>
+<li>Hotspot adaptation achieves 99.5% memory-tier hit rate within 25 seconds</li>
+</ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../docs/building-anna.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../docs/lattices.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
+                            <a rel="next prefetch" href="../docs/feature-list.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -214,10 +306,13 @@ thread per process in local mode.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../docs/building-anna.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../docs/lattices.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
+                    <a rel="next prefetch" href="../docs/feature-list.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
             </nav>
 
         </div>

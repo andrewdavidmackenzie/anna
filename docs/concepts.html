@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Running anna - The &#x27;anna&#x27; book</title>
+        <title>Key Concepts - The &#x27;anna&#x27; book</title>
 
 
         <!-- Custom HTML head -->
@@ -174,39 +174,123 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h2 id="using-anna-in-local-mode"><a class="header" href="#using-anna-in-local-mode">Using Anna in Local Mode</a></h2>
-<h3 id="starting-anna-processes-using-the-rust-cli"><a class="header" href="#starting-anna-processes-using-the-rust-cli">Starting Anna processes using the rust CLi</a></h3>
-<p>You can start anna background processes by using the <code>anna</code> CLI <code>start</code> command</p>
-<p>If you have the <code>anna</code> crate installed, just use</p>
-<pre><code class="language-bash">&gt; anna start
+                        <h1 id="key-concepts"><a class="header" href="#key-concepts">Key Concepts</a></h1>
+<p>This page defines the core concepts used throughout Anna’s design and
+documentation.</p>
+<h2 id="coordination-free-actors"><a class="header" href="#coordination-free-actors">Coordination-Free Actors</a></h2>
+<p>Anna’s execution model is based on coordination-free actors:</p>
+<ul>
+<li>Each worker thread is an <strong>actor</strong> with private memory, pinned to a CPU core</li>
+<li>Actors never share memory or use locks/atomic instructions</li>
+<li>Communication is via <strong>asynchronous message passing</strong> (ZeroMQ)</li>
+<li>Each actor runs a continuous event loop, always doing useful work</li>
+</ul>
+<p>This model avoids the scalability bottleneck of shared-memory architectures,
+where synchronization (locks, atomics, cache coherence) becomes the dominant
+cost as core count increases.</p>
+<h2 id="consistent-hashing"><a class="header" href="#consistent-hashing">Consistent Hashing</a></h2>
+<p>Anna uses consistent hashing with virtual nodes to partition keys:</p>
+<ul>
+<li>Each actor maps to multiple <strong>virtual nodes</strong> on a hash ring</li>
+<li>A key’s hash determines which actors store it</li>
+<li>The <strong>replication factor</strong> controls how many clockwise successors hold copies</li>
+<li>Virtual nodes ensure even distribution and support heterogeneous hardware</li>
+<li>When nodes join/leave, only keys in the affected ring segments need to move</li>
+</ul>
+<h2 id="replication-vector"><a class="header" href="#replication-vector">Replication Vector</a></h2>
+<p>Each key has a <strong>replication vector</strong> describing how many replicas exist in each
+tier and how they are distributed:</p>
+<pre><code>[&lt; R_M, R_E &gt;, &lt; T_M, T_E &gt;]
 </code></pre>
-<p>If you have not installed it, then you can build and run the development version using</p>
-<pre><code class="language-bash">&gt; cargo run -- start
-</code></pre>
-<p>By default, the <code>conf/anna-config.yml</code> config file is used, which only specifies one routing thread and one storage
-thread.</p>
-<p>You are welcome to modify this file if you would like, but we generally do not recommend running more than one
-thread per process in local mode.</p>
-<h3 id="stopping-anna"><a class="header" href="#stopping-anna">Stopping Anna</a></h3>
-<p>You can stop the running background processes by using the <code>anna</code> CLI <code>stop</code> command</p>
-<p>If you have the <code>anna</code> crate installed, just use</p>
-<pre><code class="language-bash">&gt; anna stop
-</code></pre>
-<p>If you have not installed it, then you can build and run the development version using</p>
-<pre><code class="language-bash">&gt; cargo run -- stop
-</code></pre>
-<h2 id="running-anna-in-cluster-mode"><a class="header" href="#running-anna-in-cluster-mode">Running Anna in cluster mode</a></h2>
-<p>For instructions on how to run Anna in cluster mode, please see the <code>hydro-project/cluster</code>
-<a href="https://github.com/hydro-project/cluster">repository</a>.</p>
+<ul>
+<li>R_M: number of memory-tier nodes storing this key</li>
+<li>R_E: number of EBS-tier nodes storing this key</li>
+<li>T_M: number of threads per memory node storing this key</li>
+<li>T_E: number of threads per EBS node storing this key</li>
+</ul>
+<p>The policy engine adjusts replication vectors dynamically based on workload.</p>
+<h2 id="hash-rings"><a class="header" href="#hash-rings">Hash Rings</a></h2>
+<p>Anna maintains two types of hash rings per tier:</p>
+<ul>
+<li><strong>Global hash ring (G)</strong>: Determines which nodes in a tier store a key</li>
+<li><strong>Local hash ring (L)</strong>: Determines which threads within a node store a key</li>
+</ul>
+<p>During request handling, both rings are consulted to find the responsible threads.</p>
+<h2 id="gossip--multicast"><a class="header" href="#gossip--multicast">Gossip / Multicast</a></h2>
+<p>Anna actors periodically exchange updates via a gossip protocol:</p>
+<ul>
+<li>Each actor maintains a <strong>changeset</strong> of keys updated since the last epoch</li>
+<li>At epoch end, the actor multicasts merged updates to relevant replicas</li>
+<li>Updates are merged using lattice operations, ensuring convergence</li>
+<li>The <strong>multicast epoch</strong> is a tunable parameter (default: 10 seconds)</li>
+<li>Merge-at-sender optimization reduces network overhead for hot keys</li>
+</ul>
+<h2 id="storage-tiers"><a class="header" href="#storage-tiers">Storage Tiers</a></h2>
+<p>Anna supports multiple storage tiers:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Tier</th><th>Medium</th><th>Performance</th><th>Cost</th></tr>
+</thead>
+<tbody>
+<tr><td>Memory</td><td>RAM</td><td>Low latency, high throughput</td><td>High</td></tr>
+<tr><td>Disk (EBS)</td><td>Flash/SSD</td><td>Higher latency</td><td>Lower</td></tr>
+</tbody>
+</table>
+</div>
+<p>The storage kernel is identical across tiers — only the serialization
+(“serde”) layer differs. Memory-tier threads read/write memory buffers;
+disk-tier threads read/write files on mounted volumes.</p>
+<h2 id="client-proxy"><a class="header" href="#client-proxy">Client Proxy</a></h2>
+<p>Client proxies serve user requests:</p>
+<ul>
+<li>Support GET, PUT, and DELETE operations</li>
+<li>Query the routing tier to find key locations</li>
+<li>Cache key-address mappings locally</li>
+<li>Handle cache invalidation when the cluster reconfigures</li>
+<li>For advanced consistency levels, maintain a per-transaction state
+(message buffers, read caches)</li>
+</ul>
+<h2 id="operations"><a class="header" href="#operations">Operations</a></h2>
+<p>Anna supports these operations:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>GET</strong></td><td>Retrieve a value from a single replica</td></tr>
+<tr><td><strong>PUT</strong></td><td>Merge a new value using the lattice merge function</td></tr>
+<tr><td><strong>DELETE</strong></td><td>Special PUT with empty value and dominating timestamp</td></tr>
+<tr><td><strong>GET_SET</strong></td><td>Retrieve a set-valued key</td></tr>
+<tr><td><strong>PUT_SET</strong></td><td>Add values to a set (union semantics)</td></tr>
+<tr><td><strong>GET_CAUSAL</strong></td><td>Retrieve with causal metadata (vector clock, dependencies)</td></tr>
+<tr><td><strong>PUT_CAUSAL</strong></td><td>Store with causal metadata</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="metadata"><a class="header" href="#metadata">Metadata</a></h2>
+<p>Anna manages three types of metadata:</p>
+<ol>
+<li><strong>Hash rings</strong> — Which nodes/threads are responsible for which keys</li>
+<li><strong>Replication vectors</strong> — Per-key replication configuration</li>
+<li><strong>Monitoring statistics</strong> — Access frequency, storage consumption per node</li>
+</ol>
+<p>All metadata is stored in the key-value store itself, using the same
+lattice-based merge for consistency. Metadata changes propagate via the
+same gossip mechanism as regular data.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../docs/building-anna.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../README.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
+                            <a rel="next prefetch" href="../docs/architecture.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -214,10 +298,13 @@ thread per process in local mode.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../docs/building-anna.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../README.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
+                    <a rel="next prefetch" href="../docs/architecture.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
             </nav>
 
         </div>

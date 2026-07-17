@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Running anna - The &#x27;anna&#x27; book</title>
+        <title>Architecture - The &#x27;anna&#x27; book</title>
 
 
         <!-- Custom HTML head -->
@@ -174,39 +174,119 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h2 id="using-anna-in-local-mode"><a class="header" href="#using-anna-in-local-mode">Using Anna in Local Mode</a></h2>
-<h3 id="starting-anna-processes-using-the-rust-cli"><a class="header" href="#starting-anna-processes-using-the-rust-cli">Starting Anna processes using the rust CLi</a></h3>
-<p>You can start anna background processes by using the <code>anna</code> CLI <code>start</code> command</p>
-<p>If you have the <code>anna</code> crate installed, just use</p>
-<pre><code class="language-bash">&gt; anna start
-</code></pre>
-<p>If you have not installed it, then you can build and run the development version using</p>
-<pre><code class="language-bash">&gt; cargo run -- start
-</code></pre>
-<p>By default, the <code>conf/anna-config.yml</code> config file is used, which only specifies one routing thread and one storage
-thread.</p>
-<p>You are welcome to modify this file if you would like, but we generally do not recommend running more than one
-thread per process in local mode.</p>
-<h3 id="stopping-anna"><a class="header" href="#stopping-anna">Stopping Anna</a></h3>
-<p>You can stop the running background processes by using the <code>anna</code> CLI <code>stop</code> command</p>
-<p>If you have the <code>anna</code> crate installed, just use</p>
-<pre><code class="language-bash">&gt; anna stop
-</code></pre>
-<p>If you have not installed it, then you can build and run the development version using</p>
-<pre><code class="language-bash">&gt; cargo run -- stop
-</code></pre>
-<h2 id="running-anna-in-cluster-mode"><a class="header" href="#running-anna-in-cluster-mode">Running Anna in cluster mode</a></h2>
-<p>For instructions on how to run Anna in cluster mode, please see the <code>hydro-project/cluster</code>
-<a href="https://github.com/hydro-project/cluster">repository</a>.</p>
+                        <h1 id="anna-architecture"><a class="header" href="#anna-architecture">Anna Architecture</a></h1>
+<p>Anna is a partitioned, multi-mastered key-value store that achieves high performance
+and elasticity via wait-free execution and coordination-free consistency. It was
+developed at UC Berkeley’s RISE Lab.</p>
+<h2 id="design-principles"><a class="header" href="#design-principles">Design Principles</a></h2>
+<p>Anna’s design rests on four requirements:</p>
+<ol>
+<li><strong>Partitioning</strong> — The key space is sharded not only across nodes but also across
+cores for high performance.</li>
+<li><strong>Multi-master replication</strong> — Multiple replicas can concurrently serve puts and
+gets against a single key from multiple threads.</li>
+<li><strong>Wait-free execution</strong> — Each thread is always doing useful work, never waiting
+for other threads for coordination or consistency.</li>
+<li><strong>Coordination-free consistency</strong> — A unified implementation supports a wide range
+of consistency models without coordination protocols.</li>
+</ol>
+<h2 id="system-components"><a class="header" href="#system-components">System Components</a></h2>
+<p>An Anna deployment consists of four types of nodes:</p>
+<p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="images/architecture.svg" alt="Anna Architecture"><span class="img-wrapper"><img src="images/architecture.svg" alt="Anna Architecture"></span></label></p>
+<h3 id="routing-tier-anna-route"><a class="header" href="#routing-tier-anna-route">Routing Tier (anna-route)</a></h3>
+<p>The routing service isolates clients from the storage layer. A client asks
+the routing tier where to find a key and receives valid server addresses.
+Routing nodes:</p>
+<ul>
+<li>Cache the storage tiers’ hash rings and replication vectors</li>
+<li>Return memory-tier addresses when available (for performance)</li>
+<li>Are stateless — only maintain soft state (cached metadata)</li>
+<li>Handle cluster configuration changes transparently to clients</li>
+</ul>
+<h3 id="storage-tier-anna-kvs"><a class="header" href="#storage-tier-anna-kvs">Storage Tier (anna-kvs)</a></h3>
+<p>Storage nodes run the Anna storage kernel. Each node contains multiple worker
+threads, each pinned to a CPU core. Each thread:</p>
+<ul>
+<li>Maintains a <strong>private hash table</strong> (no shared memory between threads)</li>
+<li>Runs a tight event loop processing client requests via ZeroMQ</li>
+<li>Periodically <strong>multicasts</strong> updates to replicas via a “gossip” protocol</li>
+<li>Uses <strong>consistent hashing</strong> with virtual nodes for key partitioning</li>
+</ul>
+<p>The storage kernel is identical across memory and disk tiers — the only
+difference is the serialization layer (memory buffer vs. EBS volume).</p>
+<h3 id="monitoring-node-anna-monitor"><a class="header" href="#monitoring-node-anna-monitor">Monitoring Node (anna-monitor)</a></h3>
+<p>The monitoring system collects statistics and drives the policy engine:</p>
+<ul>
+<li>Tracks per-key access frequency and per-node storage consumption</li>
+<li>Triggers <strong>elasticity</strong> actions (add/remove nodes)</li>
+<li>Triggers <strong>hot-key replication</strong> (replicate popular keys across more cores/nodes)</li>
+<li>Triggers <strong>cross-tier data movement</strong> (promote hot data to memory, demote cold to disk)</li>
+</ul>
+<h3 id="cluster-management"><a class="header" href="#cluster-management">Cluster Management</a></h3>
+<p>In a cloud deployment, Anna uses Kubernetes for allocating and deallocating nodes.
+The cluster management pod receives REST requests from the policy engine and
+executes node additions/removals.</p>
+<h2 id="actor-model-and-event-loop"><a class="header" href="#actor-model-and-event-loop">Actor Model and Event Loop</a></h2>
+<p>Each Anna worker thread implements a <strong>coordination-free actor</strong>:</p>
+<ol>
+<li>The thread checks for incoming requests (PUT, GET) via ZeroMQ poll</li>
+<li>It serves the request against its private hash table</li>
+<li>It appends updated keys to a local <strong>changeset</strong></li>
+<li>At the end of each <strong>multicast epoch</strong>, the thread:
+<ul>
+<li>Multicasts its changeset to other masters responsible for those keys</li>
+<li>Checks for incoming multicasts from other actors</li>
+<li>Merges received updates into its local state using lattice merge</li>
+</ul>
+</li>
+</ol>
+<p>This design ensures:</p>
+<ul>
+<li>No thread synchronization (wait-free)</li>
+<li>No shared memory contention</li>
+<li>Updates propagate asynchronously via gossip</li>
+<li>Lattice merge guarantees eventual consistency despite message reordering</li>
+</ul>
+<h2 id="communication"><a class="header" href="#communication">Communication</a></h2>
+<p>Anna uses ZeroMQ for all communication:</p>
+<ul>
+<li><strong>Intra-node</strong> (between threads on same machine): ZeroMQ <code>inproc</code> transport
+with shared memory buffers for zero-copy messaging</li>
+<li><strong>Inter-node</strong> (between machines): ZeroMQ <code>tcp</code> transport with Protocol
+Buffer serialization</li>
+<li><strong>Client-to-routing</strong>: PUSH/PULL sockets on port 6450</li>
+<li><strong>Client-to-KVS</strong>: PUSH/PULL sockets on configurable ports (6800/6850)</li>
+</ul>
+<h2 id="consistent-hashing"><a class="header" href="#consistent-hashing">Consistent Hashing</a></h2>
+<p>Anna partitions keys across actors using consistent hashing with virtual nodes:</p>
+<ul>
+<li>Each physical node/thread maps to multiple virtual nodes on the hash ring</li>
+<li>CRC32 hash of the key determines which actors store it</li>
+<li>The <strong>replication factor</strong> determines how many clockwise successors store copies</li>
+<li>Virtual nodes enable even distribution and support for heterogeneous hardware</li>
+</ul>
+<h2 id="fault-tolerance"><a class="header" href="#fault-tolerance">Fault Tolerance</a></h2>
+<p>Anna guarantees k-fault tolerance by ensuring k+1 replicas are live:</p>
+<ul>
+<li>When a storage node fails, other nodes detect via timeout and remove it
+from the hash ring</li>
+<li>Data is automatically repartitioned using the updated hash ring</li>
+<li>The management system spawns a replacement node</li>
+<li>Key migration is interleaved with request handling (no downtime)</li>
+<li>Routing and monitoring nodes are stateless and recover by querying peers</li>
+</ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../docs/building-anna.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../docs/concepts.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
+                            <a rel="next prefetch" href="../docs/lattices.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -214,10 +294,13 @@ thread per process in local mode.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../docs/building-anna.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../docs/concepts.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
+                    <a rel="next prefetch" href="../docs/lattices.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
             </nav>
 
         </div>
