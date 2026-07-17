@@ -294,7 +294,8 @@ class AnnaTcpClient(BaseAnnaClient):
         return result.get(key)
 
     def put_ordered_set(self, key, values):
-        ordered_set = ListBasedOrderedSet(values)
+        encoded = [v.encode("utf-8") if isinstance(v, str) else v for v in values]
+        ordered_set = ListBasedOrderedSet(encoded)
         lattice = OrderedSetLattice(ordered_set)
         return self.put(key, lattice)
 

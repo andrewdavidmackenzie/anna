@@ -70,5 +70,93 @@ async fn system_test_kvs_client() {
         );
         assert!(set_val.contains(&"x".to_string()));
         assert!(set_val.contains(&"w".to_string()));
+
+        // ORDERED_SET
+        client
+            .put_ordered_set("sys_test_oset", &["alpha", "beta", "gamma"])
+            .await
+            .expect("PUT_ORDERED_SET failed");
+        let oset_val = client
+            .get_ordered_set("sys_test_oset")
+            .await
+            .expect("GET_ORDERED_SET failed");
+        assert!(oset_val.contains(&"alpha".to_string()));
+        assert!(oset_val.contains(&"beta".to_string()));
+        assert!(oset_val.contains(&"gamma".to_string()));
+        assert_eq!(oset_val.len(), 3, "ORDERED_SET should have 3 elements");
     }
+
+    // SINGLE_CAUSAL
+    #[cfg(feature = "causal")]
+    {
+        client
+            .put_single_causal("sys_test_sc", "sc_hello")
+            .await
+            .expect("PUT_SINGLE_CAUSAL failed");
+        let (vc, values) = client
+            .get_single_causal("sys_test_sc")
+            .await
+            .expect("GET_SINGLE_CAUSAL failed");
+        assert!(
+            values.contains(&"sc_hello".to_string()),
+            "SINGLE_CAUSAL values should contain 'sc_hello'"
+        );
+        assert!(
+            vc.contains_key("test"),
+            "SINGLE_CAUSAL vector clock should have 'test' key"
+        );
+    }
+
+    // MULTI_CAUSAL
+    #[cfg(feature = "causal")]
+    {
+        client
+            .put_causal("sys_test_mc", "mc_hello")
+            .await
+            .expect("PUT_CAUSAL failed");
+        let (vc, deps, value) = client
+            .get_causal("sys_test_mc")
+            .await
+            .expect("GET_CAUSAL failed");
+        assert_eq!(value, "mc_hello", "MULTI_CAUSAL value should be 'mc_hello'");
+        assert!(
+            vc.contains_key("test"),
+            "MULTI_CAUSAL vector clock should have 'test' key"
+        );
+        assert!(
+            deps.iter().any(|(k, _)| k == "dep1"),
+            "MULTI_CAUSAL dependencies should have 'dep1'"
+        );
+    }
+
+    // PRIORITY
+    client
+        .put_priority("sys_test_pri", 1.5, "important")
+        .await
+        .expect("PUT_PRIORITY failed");
+    let (priority, pri_value) = client
+        .get_priority("sys_test_pri")
+        .await
+        .expect("GET_PRIORITY failed");
+    assert!(
+        (priority - 1.5).abs() < f64::EPSILON,
+        "PRIORITY should be 1.5, got {}",
+        priority
+    );
+    assert_eq!(pri_value, "important", "PRIORITY value should be 'important'");
+
+    // DELETE
+    client
+        .put("sys_test_del", "to_delete")
+        .await
+        .expect("PUT failed");
+    let del_val = client
+        .get("sys_test_del")
+        .await
+        .expect("GET failed");
+    assert_eq!(del_val, "to_delete", "Value before delete should be 'to_delete'");
+    client
+        .delete("sys_test_del")
+        .await
+        .expect("DELETE failed");
 }

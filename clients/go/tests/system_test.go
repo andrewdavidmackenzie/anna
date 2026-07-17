@@ -153,6 +153,84 @@ func TestSystemKVSClient(t *testing.T) {
 	if len(setVal) != 4 {
 		t.Errorf("Expected 4 elements after union, got %d: %v", len(setVal), setVal)
 	}
+
+	// ORDERED_SET: PUT and GET
+	if err := client.PutOrderedSet("go_sys_oset", []string{"alpha", "beta", "gamma"}); err != nil {
+		t.Fatalf("PUT_ORDERED_SET failed: %v", err)
+	}
+	osetVal, err := client.GetOrderedSet("go_sys_oset")
+	if err != nil {
+		t.Fatalf("GET_ORDERED_SET failed: %v", err)
+	}
+	if !contains(osetVal, "alpha") || !contains(osetVal, "beta") || !contains(osetVal, "gamma") {
+		t.Errorf("GET_ORDERED_SET missing expected values, got %v", osetVal)
+	}
+	if len(osetVal) != 3 {
+		t.Errorf("GET_ORDERED_SET expected 3 elements, got %d", len(osetVal))
+	}
+
+	// SINGLE_CAUSAL: PUT and GET
+	if err := client.PutSingleCausal("go_sys_sc", "sc_hello"); err != nil {
+		t.Fatalf("PUT_SINGLE_CAUSAL failed: %v", err)
+	}
+	scVal, err := client.GetSingleCausal("go_sys_sc")
+	if err != nil {
+		t.Fatalf("GET_SINGLE_CAUSAL failed: %v", err)
+	}
+	if !contains(scVal.Values, "sc_hello") {
+		t.Errorf("GET_SINGLE_CAUSAL Values missing 'sc_hello', got %v", scVal.Values)
+	}
+	if _, ok := scVal.VectorClock["test"]; !ok {
+		t.Errorf("GET_SINGLE_CAUSAL VectorClock missing 'test' key, got %v", scVal.VectorClock)
+	}
+
+	// MULTI_CAUSAL: PUT and GET
+	if err := client.PutCausal("go_sys_mc", "mc_hello"); err != nil {
+		t.Fatalf("PUT_CAUSAL failed: %v", err)
+	}
+	mcVal, err := client.GetCausal("go_sys_mc")
+	if err != nil {
+		t.Fatalf("GET_CAUSAL failed: %v", err)
+	}
+	if mcVal.Value != "mc_hello" {
+		t.Errorf("GET_CAUSAL Value = %q, want %q", mcVal.Value, "mc_hello")
+	}
+	if _, ok := mcVal.VectorClock["test"]; !ok {
+		t.Errorf("GET_CAUSAL VectorClock missing 'test' key, got %v", mcVal.VectorClock)
+	}
+	if _, ok := mcVal.Dependencies["dep1"]; !ok {
+		t.Errorf("GET_CAUSAL Dependencies missing 'dep1' key, got %v", mcVal.Dependencies)
+	}
+
+	// PRIORITY: PUT and GET
+	if err := client.PutPriority("go_sys_pri", 1.5, "important"); err != nil {
+		t.Fatalf("PUT_PRIORITY failed: %v", err)
+	}
+	priPriority, priValue, err := client.GetPriority("go_sys_pri")
+	if err != nil {
+		t.Fatalf("GET_PRIORITY failed: %v", err)
+	}
+	if priPriority != 1.5 {
+		t.Errorf("GET_PRIORITY priority = %f, want 1.5", priPriority)
+	}
+	if priValue != "important" {
+		t.Errorf("GET_PRIORITY value = %q, want %q", priValue, "important")
+	}
+
+	// DELETE: PUT, verify, then DELETE
+	if err := client.Put("go_sys_del", "to_delete"); err != nil {
+		t.Fatalf("PUT for delete test failed: %v", err)
+	}
+	delVal, err := client.Get("go_sys_del")
+	if err != nil {
+		t.Fatalf("GET before delete failed: %v", err)
+	}
+	if delVal != "to_delete" {
+		t.Errorf("GET before delete = %q, want %q", delVal, "to_delete")
+	}
+	if err := client.Delete("go_sys_del"); err != nil {
+		t.Fatalf("DELETE failed: %v", err)
+	}
 }
 
 func contains(slice []string, item string) bool {
