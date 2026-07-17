@@ -237,6 +237,15 @@ impl KVSClient {
         }
     }
 
+    fn evict_address_from_cache(&mut self, key: &str, addr: &str) {
+        if let Some(addrs) = self.key_address_cache.get_mut(key) {
+            addrs.remove(addr);
+            if addrs.is_empty() {
+                self.key_address_cache.remove(key);
+            }
+        }
+    }
+
     async fn send_data_request(
         &mut self,
         key: &str,
@@ -282,11 +291,8 @@ impl KVSClient {
                         if !response.tuples.is_empty() {
                             let t = &response.tuples[0];
                             if t.error == AnnaError::WrongThread as i32 && attempt < MAX_RETRIES {
-                                debug!(
-                                    "WRONG_THREAD for key {}, invalidating cache and retrying",
-                                    key
-                                );
-                                self.key_address_cache.remove(key);
+                                debug!("WRONG_THREAD for key {} at {}, retrying", key, worker);
+                                self.evict_address_from_cache(key, &worker);
                                 continue;
                             }
                             if t.invalidate {
@@ -301,8 +307,14 @@ impl KVSClient {
                     }
                 },
                 None => {
-                    warn!("Request timed out for key {}", key);
-                    self.key_address_cache.remove(key);
+                    warn!(
+                        "Request timed out for key {} at {}, attempt {}",
+                        key, worker, attempt
+                    );
+                    self.evict_address_from_cache(key, &worker);
+                    if attempt < MAX_RETRIES {
+                        continue;
+                    }
                     return None;
                 }
             }
@@ -875,6 +887,11 @@ impl KVSClient {
     /// Clear the key-address cache.
     pub fn clear_cache(&mut self) {
         self.key_address_cache.clear()
+    }
+
+    /// Set the request timeout duration.
+    pub fn set_timeout(&mut self, timeout: Duration) {
+        self.timeout = timeout;
     }
 }
 

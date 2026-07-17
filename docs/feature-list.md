@@ -113,7 +113,7 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 
 | Feature                                 | Description                                     | System Tested |
 |-----------------------------------------|-------------------------------------------------|---------------|
-| k-fault tolerance                       | k+1 replicas ensure k failures tolerable        | No            |
+| k-fault tolerance                       | k+1 replicas ensure k failures tolerable        | [#364](https://github.com/andrewdavidmackenzie/anna/issues/364) |
 | Failure detection via timeout           | Nodes detect peer failures and update hash ring  | No            |
 | Automatic repartitioning                | Data redistributed after node failure            | No            |
 | Stateless routing/monitoring            | Recovers by querying peers/storage               | No            |
@@ -172,7 +172,7 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Single-Node Features         | 9     | 9             | 100%     | —      |
 | Error Handling               | 6     | 1             | 17%      | #355   |
 | Multi-Tiered Storage         | 4     | 0             | 0%       | #356   |
-| Multi-Node Features          | 27    | 9             | 33%      | #352   |
+| Multi-Node Features          | 27    | 10            | 37%      | #352   |
 | Monitoring & Policy Engine   | 8     | 0             | 0%       | #357   |
 | Server Internals             | 6     | 0             | 0%       | #358   |
-| **Total**                    | **81**| **40**        | **49%**  |        |
+| **Total**                    | **81**| **41**        | **51%**  |        |
