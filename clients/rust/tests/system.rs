@@ -167,4 +167,33 @@ async fn system_test_kvs_client() {
         "Value before delete should be 'to_delete'"
     );
     client.delete("sys_test_del").await.expect("DELETE failed");
+
+    // MULTI-KEY GET
+    client
+        .put("multi_a", "val_a")
+        .await
+        .expect("PUT multi_a failed");
+    client
+        .put("multi_b", "val_b")
+        .await
+        .expect("PUT multi_b failed");
+    client
+        .put("multi_c", "val_c")
+        .await
+        .expect("PUT multi_c failed");
+    let results = client
+        .get_multi(&["multi_a", "multi_b", "multi_c"])
+        .await
+        .expect("GET_MULTI failed");
+    assert_eq!(results.len(), 3, "GET_MULTI should return 3 results");
+    assert_eq!(results["multi_a"], "val_a");
+    assert_eq!(results["multi_b"], "val_b");
+    assert_eq!(results["multi_c"], "val_c");
+
+    // MULTI-KEY GET with empty list
+    let empty_results = client
+        .get_multi::<String>(&[])
+        .await
+        .expect("GET_MULTI empty failed");
+    assert!(empty_results.is_empty());
 }

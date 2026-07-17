@@ -244,54 +244,70 @@ impl KVSClient {
         lattice_type: Option<i32>,
         payload: Option<Vec<u8>>,
     ) -> Option<KeyResponse> {
-        let worker = self.get_worker_address(key).await?;
+        const MAX_RETRIES: usize = 3;
 
-        let mut request = KeyRequest {
-            request_id: self.get_request_id(),
-            response_address: self.ut.response_connect_address(),
-            r#type: req_type,
-            ..Default::default()
-        };
+        for attempt in 0..=MAX_RETRIES {
+            let worker = self.get_worker_address(key).await?;
 
-        let mut tuple = KeyTuple {
-            key: key.to_string(),
-            ..Default::default()
-        };
-        if let Some(lt) = lattice_type {
-            tuple.lattice_type = lt;
-        }
-        if let Some(p) = payload {
-            tuple.payload = p;
-        }
-        if let Some(cache) = self.key_address_cache.get(key) {
-            tuple.address_cache_size = cache.len() as u32;
-        }
-        request.tuples.push(tuple);
+            let mut request = KeyRequest {
+                request_id: self.get_request_id(),
+                response_address: self.ut.response_connect_address(),
+                r#type: req_type,
+                ..Default::default()
+            };
 
-        let encoded = request.encode_to_vec();
-        if self.send_request(&encoded, &worker).await.is_err() {
-            return None;
-        }
+            let mut tuple = KeyTuple {
+                key: key.to_string(),
+                ..Default::default()
+            };
+            if let Some(lt) = lattice_type {
+                tuple.lattice_type = lt;
+            }
+            if let Some(ref p) = payload {
+                tuple.payload = p.clone();
+            }
+            if let Some(cache) = self.key_address_cache.get(key) {
+                tuple.address_cache_size = cache.len() as u32;
+            }
+            request.tuples.push(tuple);
 
-        match self.recv_response(false).await {
-            Some(data) => match KeyResponse::decode(data.as_slice()) {
-                Ok(response) => {
-                    if !response.tuples.is_empty() && response.tuples[0].invalidate {
-                        self.key_address_cache.remove(key);
+            let encoded = request.encode_to_vec();
+            if self.send_request(&encoded, &worker).await.is_err() {
+                return None;
+            }
+
+            match self.recv_response(false).await {
+                Some(data) => match KeyResponse::decode(data.as_slice()) {
+                    Ok(response) => {
+                        if !response.tuples.is_empty() {
+                            let t = &response.tuples[0];
+                            if t.error == AnnaError::WrongThread as i32 && attempt < MAX_RETRIES {
+                                debug!(
+                                    "WRONG_THREAD for key {}, invalidating cache and retrying",
+                                    key
+                                );
+                                self.key_address_cache.remove(key);
+                                continue;
+                            }
+                            if t.invalidate {
+                                self.key_address_cache.remove(key);
+                            }
+                        }
+                        return Some(response);
                     }
-                    Some(response)
+                    Err(e) => {
+                        error!("Failed to decode response: {}", e);
+                        return None;
+                    }
+                },
+                None => {
+                    warn!("Request timed out for key {}", key);
+                    self.key_address_cache.remove(key);
+                    return None;
                 }
-                Err(e) => {
-                    error!("Failed to decode response: {}", e);
-                    None
-                }
-            },
-            None => {
-                warn!("Request timed out for key {}", key);
-                self.key_address_cache.remove(key);
-                None
             }
         }
+        None
     }
 
     fn generate_timestamp() -> u64 {
@@ -751,6 +767,89 @@ impl KVSClient {
     /// ```
     pub async fn delete<K: AsRef<str> + Display>(&mut self, key: K) -> Result<()> {
         self.put(key, "").await
+    }
+
+    /// Retrieve multiple keys in a single batched request (LWW lattice).
+    ///
+    /// Keys that map to the same worker are sent in one `KeyRequest` with
+    /// multiple tuples, which is more efficient than individual `get` calls.
+    /// Returns a map from key to value for all keys that were found.
+    pub async fn get_multi<K: AsRef<str> + Display>(
+        &mut self,
+        keys: &[K],
+    ) -> Result<HashMap<String, String>> {
+        if keys.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        // Resolve worker addresses and group keys by worker
+        let mut worker_keys: HashMap<Address, Vec<String>> = HashMap::new();
+        for key in keys {
+            if let Some(worker) = self.get_worker_address(key.as_ref()).await {
+                worker_keys
+                    .entry(worker)
+                    .or_default()
+                    .push(key.as_ref().to_string());
+            } else {
+                return Err(Error::Kvs(format!(
+                    "GET_MULTI: failed to resolve address for key {}",
+                    key
+                )));
+            }
+        }
+
+        let mut results = HashMap::new();
+
+        for (worker, batch_keys) in &worker_keys {
+            let mut request = KeyRequest {
+                request_id: self.get_request_id(),
+                response_address: self.ut.response_connect_address(),
+                r#type: RequestType::Get as i32,
+                ..Default::default()
+            };
+
+            for key in batch_keys {
+                let mut tuple = KeyTuple {
+                    key: key.clone(),
+                    ..Default::default()
+                };
+                if let Some(cache) = self.key_address_cache.get(key) {
+                    tuple.address_cache_size = cache.len() as u32;
+                }
+                request.tuples.push(tuple);
+            }
+
+            let encoded = request.encode_to_vec();
+            self.send_request(&encoded, worker).await?;
+
+            let data = self
+                .recv_response(false)
+                .await
+                .ok_or_else(|| Error::Kvs("GET_MULTI: request timed out".into()))?;
+
+            let response = KeyResponse::decode(data.as_slice())
+                .map_err(|e| Error::Kvs(format!("GET_MULTI: decode error: {}", e)))?;
+
+            for tuple in &response.tuples {
+                if tuple.invalidate {
+                    self.key_address_cache.remove(&tuple.key);
+                }
+                if tuple.error == AnnaError::NoError as i32 {
+                    let lww = LwwValue::decode(tuple.payload.as_slice()).map_err(|e| {
+                        Error::Kvs(format!(
+                            "GET_MULTI: failed to decode LWW for key {}: {}",
+                            tuple.key, e
+                        ))
+                    })?;
+                    results.insert(
+                        tuple.key.clone(),
+                        String::from_utf8_lossy(&lww.value).to_string(),
+                    );
+                }
+            }
+        }
+
+        Ok(results)
     }
 
     /// Clear the key-address cache.

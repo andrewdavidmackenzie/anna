@@ -25,8 +25,8 @@ mocks.
 | PUT_SINGLE_CAUSAL          | Store with single-key causal metadata                        | Yes           |
 | GET_PRIORITY               | Retrieve a priority-valued key                               | Yes           |
 | PUT_PRIORITY               | Store a priority-value pair (lowest priority wins)           | Yes           |
-| Address cache invalidation | Server signals client to refresh address cache               | No            |
-| Multi-key GET              | Retrieve multiple keys in one request                        | No            |
+| Address cache invalidation | Server signals client to refresh address cache               | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
+| Multi-key GET              | Retrieve multiple keys in one request                        | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 
 ## Lattice Types
 
@@ -44,9 +44,9 @@ mocks.
 | Feature           | Description                                           | System Tested |
 |-------------------|-------------------------------------------------------|---------------|
 | YAML config file  | All settings in a single YAML file                    | Yes           |
-| Thread counts     | `threads.memory`, `threads.ebs`, `threads.routing`    | Partial       |
+| Thread counts     | `threads.memory`, `threads.ebs`, `threads.routing`    | Yes           |
 | Standalone mode   | `mgmt_ip: "NULL"` for local/non-k8s deployment       | Yes           |
-| Cluster topology  | seed_ip, mgmt_ip, monitoring/routing IPs              | Partial       |
+| Cluster topology  | seed_ip, mgmt_ip, monitoring/routing IPs              | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 | ZeroMQ PUSH/PULL  | Async messaging between all components                | Yes           |
 | Protocol Buffers  | Structured message serialization                      | Yes           |
 | Socket cache      | Lazy-created, cached ZMQ push sockets                 | Yes           |

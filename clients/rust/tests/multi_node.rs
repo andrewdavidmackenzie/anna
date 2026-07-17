@@ -310,3 +310,61 @@ async fn multi_node_gossip_replication() {
         .expect("GET gossip_test_2 failed");
     assert_eq!(v2, "beta");
 }
+
+/// Uses base_offset=4000 to avoid conflicts with other tests.
+/// Tests that the server signals address cache invalidation when the hash ring
+/// changes (new node joins), and that the client handles it transparently.
+#[tokio::test]
+#[cfg(unix)]
+async fn multi_node_address_cache_invalidation() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(4000);
+
+    // Start with just one node
+    cluster.start_full_node(NODE1_IP, 1);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(52)).await;
+
+    // PUT keys — client caches server addresses (1 node in hash ring)
+    for i in 0..5 {
+        client
+            .put(&format!("inval_key_{}", i), &format!("v{}", i))
+            .await
+            .unwrap_or_else(|e| panic!("PUT inval_key_{} failed: {}", i, e));
+    }
+
+    // Now add a second node — this changes the hash ring, so the client's
+    // cached address_cache_size may differ from the server's thread count
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
+
+    // GET the keys — if the server detects stale cache sizes, it sets
+    // invalidate=true and the client re-queries routing on the next access.
+    // The key test: all GETs succeed despite the topology change.
+    for i in 0..5 {
+        let key = format!("inval_key_{}", i);
+        let val = client
+            .get(&key)
+            .await
+            .unwrap_or_else(|e| panic!("GET {} after node join failed: {}", key, e));
+        assert_eq!(val, format!("v{}", i));
+    }
+
+    // PUT and GET new keys to verify routing works with the updated topology
+    client
+        .put("post_join_key", "fresh")
+        .await
+        .expect("PUT post_join_key failed");
+    let v = client
+        .get("post_join_key")
+        .await
+        .expect("GET post_join_key failed");
+    assert_eq!(v, "fresh");
+}
