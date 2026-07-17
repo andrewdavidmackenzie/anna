@@ -254,7 +254,7 @@ impl KVSClient {
         lattice_type: Option<i32>,
         payload: Option<Vec<u8>>,
     ) -> Option<KeyResponse> {
-        const MAX_RETRIES: usize = 3;
+        const MAX_RETRIES: usize = 5;
 
         for attempt in 0..=MAX_RETRIES {
             let worker = self.get_worker_address(key).await?;

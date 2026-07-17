@@ -425,7 +425,7 @@ async fn multi_node_fault_tolerance() {
     let config =
         Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
     let mut client = KVSClient::new(&config, Some(53)).await;
-    client.set_timeout(Duration::from_secs(5));
+    client.set_timeout(Duration::from_secs(2));
 
     // PUT data and wait for gossip to replicate to both nodes
     client
