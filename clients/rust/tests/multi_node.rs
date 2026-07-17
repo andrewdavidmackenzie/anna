@@ -1,5 +1,6 @@
-//! Multi-node system tests: verify cluster join, gossip, and replication
-//! by running multiple server processes on different loopback IPs.
+//! Multi-node system tests: verify cluster join, gossip, replication,
+//! cache invalidation, and fault tolerance by running multiple server
+//! processes on different loopback IPs.
 //!
 //! These tests require `127.0.0.2` to be bindable:
 //! - **Linux**: works by default (full 127.0.0.0/8 loopback range)
@@ -223,6 +224,7 @@ fn skip_unless_multi_ip() -> bool {
     false
 }
 
+/// Cluster management: node join via seed, consistent hashing across 2 nodes.
 /// Uses base_offset=0 (ports 6000-7150)
 #[tokio::test]
 #[cfg(unix)]
@@ -267,7 +269,11 @@ async fn multi_node_cluster_join_and_data_access() {
     }
 }
 
-/// Uses base_offset=2000 (ports 8000-9150) to avoid conflicts with other tests
+/// Gossip replication: with replication=2 and 2 nodes, PUT data, wait for
+/// gossip epoch, then read back. With replication=2, the routing tier
+/// requires both nodes to hold each key, exercising join gossip and
+/// periodic gossip replication.
+/// Uses base_offset=2000 (ports 8000-9150)
 #[tokio::test]
 #[cfg(unix)]
 async fn multi_node_gossip_replication() {
@@ -296,7 +302,11 @@ async fn multi_node_gossip_replication() {
         .await
         .expect("PUT gossip_test_2 failed");
 
+    // Wait for gossip to replicate data across both nodes
     std::thread::sleep(Duration::from_secs(GOSSIP_EPOCH_SECS));
+
+    // Clear cache so routing re-resolves — may direct to either node
+    client.clear_cache();
 
     let v1 = client
         .get("gossip_test_1")
@@ -311,9 +321,8 @@ async fn multi_node_gossip_replication() {
     assert_eq!(v2, "beta");
 }
 
+/// Address cache invalidation after topology change.
 /// Uses base_offset=4000 to avoid conflicts with other tests.
-/// Tests that the server signals address cache invalidation when the hash ring
-/// changes (new node joins), and that the client handles it transparently.
 #[tokio::test]
 #[cfg(unix)]
 async fn multi_node_address_cache_invalidation() {
@@ -326,14 +335,12 @@ async fn multi_node_address_cache_invalidation() {
 
     let mut cluster = MultiNodeCluster::new(4000);
 
-    // Start with just one node
     cluster.start_full_node(NODE1_IP, 1);
 
     let config =
         Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
     let mut client = KVSClient::new(&config, Some(52)).await;
 
-    // PUT keys — client caches server addresses (1 node in hash ring)
     for i in 0..5 {
         client
             .put(&format!("inval_key_{}", i), &format!("v{}", i))
@@ -341,13 +348,10 @@ async fn multi_node_address_cache_invalidation() {
             .unwrap_or_else(|e| panic!("PUT inval_key_{} failed: {}", i, e));
     }
 
-    // Now add a second node — this changes the hash ring, so the client's
-    // cached address_cache_size may differ from the server's thread count
+    // Add second node — changes hash ring, stales client cache
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
-    // GET the keys — if the server detects stale cache sizes, it sets
-    // invalidate=true and the client re-queries routing on the next access.
-    // The key test: all GETs succeed despite the topology change.
+    // GETs succeed despite topology change (WRONG_THREAD retry + cache invalidation)
     for i in 0..5 {
         let key = format!("inval_key_{}", i);
         let val = client
@@ -357,7 +361,6 @@ async fn multi_node_address_cache_invalidation() {
         assert_eq!(val, format!("v{}", i));
     }
 
-    // PUT and GET new keys to verify routing works with the updated topology
     client
         .put("post_join_key", "fresh")
         .await

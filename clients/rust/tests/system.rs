@@ -167,6 +167,18 @@ async fn system_test_kvs_client() {
         "Value before delete should be 'to_delete'"
     );
     client.delete("sys_test_del").await.expect("DELETE failed");
+    let after_del = client.get("sys_test_del").await;
+    assert!(
+        after_del.is_err(),
+        "GET after DELETE should fail with KEY_DNE"
+    );
+    assert!(
+        after_del
+            .expect_err("expected error")
+            .to_string()
+            .contains("KEY_DNE"),
+        "Error should indicate KEY_DNE"
+    );
 
     // MULTI-KEY GET
     client
