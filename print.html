@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-8f08ee42.js";
+            window.path_to_searchindex_js = "searchindex-a99cef0b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7bb26e2b.js"></script>
@@ -1021,7 +1021,7 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
 </thead>
 <tbody>
-<tr><td>k-fault tolerance</td><td>k+1 replicas ensure k failures tolerable</td><td>No</td></tr>
+<tr><td>k-fault tolerance</td><td>k+1 replicas ensure k failures tolerable</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/364">#364</a></td></tr>
 <tr><td>Failure detection via timeout</td><td>Nodes detect peer failures and update hash ring</td><td>No</td></tr>
 <tr><td>Automatic repartitioning</td><td>Data redistributed after node failure</td><td>No</td></tr>
 <tr><td>Stateless routing/monitoring</td><td>Recovers by querying peers/storage</td><td>No</td></tr>
@@ -1105,10 +1105,10 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tr><td>Single-Node Features</td><td>9</td><td>9</td><td>100%</td><td>—</td></tr>
 <tr><td>Error Handling</td><td>6</td><td>1</td><td>17%</td><td>#355</td></tr>
 <tr><td>Multi-Tiered Storage</td><td>4</td><td>0</td><td>0%</td><td>#356</td></tr>
-<tr><td>Multi-Node Features</td><td>27</td><td>9</td><td>33%</td><td>#352</td></tr>
+<tr><td>Multi-Node Features</td><td>31</td><td>11</td><td>35%</td><td>#352</td></tr>
 <tr><td>Monitoring &amp; Policy Engine</td><td>8</td><td>0</td><td>0%</td><td>#357</td></tr>
-<tr><td>Server Internals</td><td>6</td><td>0</td><td>0%</td><td>#358</td></tr>
-<tr><td><strong>Total</strong></td><td><strong>81</strong></td><td><strong>40</strong></td><td><strong>49%</strong></td><td></td></tr>
+<tr><td>Server Internals</td><td>5</td><td>0</td><td>0%</td><td>#358</td></tr>
+<tr><td><strong>Total</strong></td><td><strong>84</strong></td><td><strong>42</strong></td><td><strong>50%</strong></td><td></td></tr>
 </tbody>
 </table>
 </div>
