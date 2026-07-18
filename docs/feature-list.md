@@ -58,11 +58,11 @@ mocks.
 | Error Code   | Description                                      | System Tested |
 |--------------|--------------------------------------------------|---------------|
 | NO_ERROR     | Operation succeeded                              | Yes           |
-| KEY_DNE      | Key does not exist                                | No            |
-| WRONG_THREAD | This thread is not responsible for the key        | No            |
+| KEY_DNE      | Key does not exist                                | [#355](https://github.com/andrewdavidmackenzie/anna/issues/355) |
+| WRONG_THREAD | This thread is not responsible for the key        | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 | TIMEOUT      | Operation timed out                               | No            |
-| LATTICE      | Lattice type mismatch                             | No            |
-| NO_SERVERS   | No servers available (routing tier)               | No            |
+| LATTICE      | Lattice type mismatch                             | [#355](https://github.com/andrewdavidmackenzie/anna/issues/355) |
+| NO_SERVERS   | No servers available (routing tier)               | [#355](https://github.com/andrewdavidmackenzie/anna/issues/355) |
 
 ## Multi-Tiered Storage (#356)
 
@@ -170,9 +170,9 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Client Operations            | 15    | 15            | 100%     | —      |
 | Lattice Types                | 6     | 6             | 100%     | —      |
 | Single-Node Features         | 9     | 9             | 100%     | —      |
-| Error Handling               | 6     | 1             | 17%      | #355   |
+| Error Handling               | 6     | 4             | 67%      | #355   |
 | Multi-Tiered Storage         | 4     | 0             | 0%       | #356   |
 | Multi-Node Features          | 31    | 11            | 35%      | #352   |
 | Monitoring & Policy Engine   | 8     | 0             | 0%       | #357   |
 | Server Internals             | 5     | 0             | 0%       | #358   |
-| **Total**                    | **84**| **42**        | **50%**  |        |
+| **Total**                    | **84**| **45**        | **54%**  |        |
