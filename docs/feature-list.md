@@ -55,8 +55,6 @@ mocks.
 
 ## Error Handling (#355)
 
-Server-side error codes returned in `KeyTuple.error`:
-
 | Error Code   | Description                                      | System Tested |
 |--------------|--------------------------------------------------|---------------|
 | NO_ERROR     | Operation succeeded                              | Yes           |
@@ -65,10 +63,8 @@ Server-side error codes returned in `KeyTuple.error`:
 | LATTICE      | Lattice type mismatch                             | [#355](https://github.com/andrewdavidmackenzie/anna/issues/355) |
 | NO_SERVERS   | No servers available (routing tier)               | [#355](https://github.com/andrewdavidmackenzie/anna/issues/355) |
 
-Note: `TIMEOUT` is a client-side construct (never set by the server). Each client
-generates it locally when a request exceeds its timeout. Tested in Rust (fault
-tolerance retry), C++ (`generate_bad_response`), Go (unit tests), and Python
-(unit tests).
+Note: The protobuf defines a `TIMEOUT` error code but the server never sets it.
+It is a client-side construct — see `docs/client-feature-list.md`.
 
 ## Multi-Tiered Storage (#356)
 
