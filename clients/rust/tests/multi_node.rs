@@ -25,14 +25,29 @@ fn can_bind(ip: &str) -> bool {
     TcpListener::bind(addr).is_ok()
 }
 
-fn write_node_config(
-    path: &Path,
-    node_ip: &str,
-    seed_ip: &str,
+struct NodeConfig {
+    node_ip: &'static str,
+    seed_ip: &'static str,
     replication_memory: u32,
     base_offset: u32,
     gossip_epoch: u32,
-) {
+    routing_threads: u32,
+}
+
+impl Default for NodeConfig {
+    fn default() -> Self {
+        NodeConfig {
+            node_ip: NODE1_IP,
+            seed_ip: NODE1_IP,
+            replication_memory: 1,
+            base_offset: 0,
+            gossip_epoch: TEST_GOSSIP_EPOCH,
+            routing_threads: 1,
+        }
+    }
+}
+
+fn write_node_config(path: &Path, cfg: &NodeConfig) {
     let mut f = fs::File::create(path).expect("Failed to create config file");
     write!(
         f,
@@ -70,7 +85,7 @@ capacities:
 threads:
   memory: 1
   ebs: 1
-  routing: 1
+  routing: {routing_threads}
   benchmark: 1
 ports:
   base_offset: {base_offset}
@@ -86,7 +101,13 @@ replication:
   ebs: 0
   minimum: 1
   local: 1
-"
+",
+        seed_ip = cfg.seed_ip,
+        node_ip = cfg.node_ip,
+        replication_memory = cfg.replication_memory,
+        base_offset = cfg.base_offset,
+        gossip_epoch = cfg.gossip_epoch,
+        routing_threads = cfg.routing_threads,
     )
     .expect("Failed to write config");
 }
@@ -155,22 +176,34 @@ impl MultiNodeCluster {
         6450 + self.base_offset as u16
     }
 
-    fn start_full_node(&mut self, node_ip: &str, replication_memory: u32) {
-        let config = self.config_dir.join(format!("node-{}.yml", node_ip));
-        write_node_config(
-            &config,
+    fn make_config(
+        &self,
+        node_ip: &'static str,
+        seed_ip: &'static str,
+        replication_memory: u32,
+    ) -> NodeConfig {
+        NodeConfig {
             node_ip,
-            node_ip,
+            seed_ip,
             replication_memory,
-            self.base_offset,
-            TEST_GOSSIP_EPOCH,
-        );
+            base_offset: self.base_offset,
+            ..Default::default()
+        }
+    }
+
+    fn start_full_node(&mut self, node_ip: &'static str, replication_memory: u32) {
+        self.start_full_node_with_config(self.make_config(node_ip, node_ip, replication_memory));
+    }
+
+    fn start_full_node_with_config(&mut self, cfg: NodeConfig) {
+        let config = self.config_dir.join(format!("node-{}.yml", cfg.node_ip));
+        write_node_config(&config, &cfg);
 
         for name in ["anna-monitor", "anna-route", "anna-kvs"] {
             if let Some(child) = spawn_server(name, &config, &server_path()) {
                 self.processes.push(ServerProcess {
                     child,
-                    label: format!("{}@{}", name, node_ip),
+                    label: format!("{}@{}", name, cfg.node_ip),
                 });
             } else {
                 self.shutdown();
@@ -180,28 +213,27 @@ impl MultiNodeCluster {
         }
 
         assert!(
-            wait_for_port(node_ip, self.routing_port(), 30),
+            wait_for_port(cfg.node_ip, self.routing_port(), 30),
             "Routing tier on {} did not start within 30 seconds",
-            node_ip
+            cfg.node_ip
         );
         std::thread::sleep(Duration::from_secs(1));
     }
 
-    fn start_kvs_node(&mut self, node_ip: &str, seed_ip: &str, replication_memory: u32) {
-        let config = self.config_dir.join(format!("node-{}.yml", node_ip));
-        write_node_config(
-            &config,
-            node_ip,
-            seed_ip,
-            replication_memory,
-            self.base_offset,
-            TEST_GOSSIP_EPOCH,
-        );
+    fn start_kvs_node(
+        &mut self,
+        node_ip: &'static str,
+        seed_ip: &'static str,
+        replication_memory: u32,
+    ) {
+        let cfg = self.make_config(node_ip, seed_ip, replication_memory);
+        let config = self.config_dir.join(format!("node-{}.yml", cfg.node_ip));
+        write_node_config(&config, &cfg);
 
         if let Some(child) = spawn_server("anna-kvs", &config, &server_path()) {
             self.processes.push(ServerProcess {
                 child,
-                label: format!("anna-kvs@{}", node_ip),
+                label: format!("anna-kvs@{}", cfg.node_ip),
             });
         } else {
             self.shutdown();
@@ -210,16 +242,10 @@ impl MultiNodeCluster {
         std::thread::sleep(Duration::from_secs(3));
     }
 
-    fn start_routing_only(&mut self, node_ip: &str) {
-        let config = self.config_dir.join(format!("node-{}.yml", node_ip));
-        write_node_config(
-            &config,
-            node_ip,
-            node_ip,
-            1,
-            self.base_offset,
-            TEST_GOSSIP_EPOCH,
-        );
+    fn start_routing_only(&mut self, node_ip: &'static str) {
+        let cfg = self.make_config(node_ip, node_ip, 1);
+        let config = self.config_dir.join(format!("node-{}.yml", cfg.node_ip));
+        write_node_config(&config, &cfg);
 
         for name in ["anna-monitor", "anna-route"] {
             if let Some(child) = spawn_server(name, &config, &server_path()) {
@@ -747,4 +773,135 @@ async fn stateless_routing_recovery() {
         .await
         .expect("GET after recovery failed");
     assert_eq!(v, "recovered");
+}
+
+/// Multi-threaded routing: start with threads.routing=2, verify PUT/GET
+/// works through multiple routing threads.
+/// Uses base_offset=18000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn multi_threaded_routing() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if !server_bin_dir().join("anna-kvs").exists() {
+        eprintln!("SKIP: server binaries not built");
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(18000);
+    cluster.start_full_node_with_config(NodeConfig {
+        base_offset: 18000,
+        routing_threads: 2,
+        ..Default::default()
+    });
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(63)).await;
+
+    for i in 0..10 {
+        let key = format!("mt_route_key_{}", i);
+        client
+            .put(&key, &format!("val_{}", i))
+            .await
+            .unwrap_or_else(|e| panic!("PUT {} failed: {}", key, e));
+    }
+
+    for i in 0..10 {
+        let key = format!("mt_route_key_{}", i);
+        let val = client
+            .get(&key)
+            .await
+            .unwrap_or_else(|e| panic!("GET {} failed: {}", key, e));
+        assert_eq!(val, format!("val_{}", i));
+    }
+}
+
+/// Replication-aware routing: with replication=2 and 2 nodes, routing
+/// returns addresses for both responsible nodes per key.
+/// Uses base_offset=20000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn replication_aware_routing() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(20000);
+    cluster.start_full_node(NODE1_IP, 2);
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(64)).await;
+
+    // PUT a key so routing resolves it
+    client
+        .put("rep_aware_key", "value")
+        .await
+        .expect("PUT failed");
+
+    // Query routing — with replication=2 and 2 nodes, should return 2 addresses
+    let addrs = client.get_key_addresses("rep_aware_key").await;
+    assert!(
+        addrs.len() >= 2,
+        "Expected 2 addresses for replication=2, got {}",
+        addrs.len()
+    );
+
+    let has_node1 = addrs.iter().any(|a| a.contains(NODE1_IP));
+    let has_node2 = addrs.iter().any(|a| a.contains(NODE2_IP));
+    assert!(
+        has_node1 && has_node2,
+        "Expected addresses from both nodes, got {:?}",
+        addrs
+    );
+}
+
+/// Pending request queue: when a KVS node receives a request for a key
+/// whose replication factor is unknown, it queues the request and fetches
+/// the factor from metadata. Every PUT to a new key exercises this path.
+/// This test verifies it works by PUTting many new keys rapidly.
+/// Uses base_offset=22000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn pending_request_queue() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(22000);
+    cluster.start_full_node(NODE1_IP, 1);
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(65)).await;
+
+    // Rapidly PUT many new keys — each triggers a replication factor lookup
+    // that goes through the pending request queue
+    for i in 0..20 {
+        let key = format!("pending_q_key_{}", i);
+        client
+            .put(&key, &format!("pq_val_{}", i))
+            .await
+            .unwrap_or_else(|e| panic!("PUT {} failed: {}", key, e));
+    }
+
+    // Verify all keys are readable
+    for i in 0..20 {
+        let key = format!("pending_q_key_{}", i);
+        let val = client
+            .get(&key)
+            .await
+            .unwrap_or_else(|e| panic!("GET {} failed: {}", key, e));
+        assert_eq!(val, format!("pq_val_{}", i));
+    }
 }

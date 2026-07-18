@@ -137,9 +137,9 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Key address lookup        | Client queries routing for server addresses              | Yes           |
 | Hash ring caching         | Routing caches storage tier hash rings                   | Yes           |
 | Memory-tier preference    | Returns memory addresses when available                  | No            |
-| Replication-aware routing | Uses replication vectors to find all responsible threads | No            |
-| Pending request queue     | Queues requests while replication factor is unknown      | No            |
-| Multi-threaded routing    | Configurable number of routing threads                   | No            |
+| Replication-aware routing | Uses replication vectors to find all responsible threads | [#371](https://github.com/andrewdavidmackenzie/anna/issues/371) |
+| Pending request queue     | Queues requests while replication factor is unknown      | [#371](https://github.com/andrewdavidmackenzie/anna/issues/371) |
+| Multi-threaded routing    | Configurable number of routing threads                   | [#371](https://github.com/andrewdavidmackenzie/anna/issues/371) |
 
 ## Monitoring & Policy Engine — `anna-monitor` (#357)
 
@@ -181,6 +181,6 @@ autoscaling policies.
 | Error Handling                         | `anna-kvs`     | 5     | 5      | 100%     | #355   |
 | Multi-Tiered Storage                   | `anna-kvs`     | 4     | 0      | 0%       | #356   |
 | Multi-Node Features                    | `anna-kvs`     | 25    | 15     | 60%      | #352   |
-| Routing Tier                           | `anna-route`   | 6     | 2      | 33%      | #371   |
+| Routing Tier                           | `anna-route`   | 6     | 5      | 83%      | #371   |
 | Monitoring & Policy Engine             | `anna-monitor` | 14    | 0      | 0%       | #357   |
-| **Total**                              |                | **84**| **52** | **62%**  |        |
+| **Total**                              |                | **84**| **55** | **65%**  |        |
