@@ -84,6 +84,21 @@ class TestRecvResponse:
         with pytest.raises(TimeoutError, match="Timed out"):
             recv_response(["req-1"], sock, resp_class, timeout_ms=100)
 
+    def test_timeout_while_skipping_non_matching(self):
+        import pytest
+        resp_class = MagicMock()
+        resp_obj = MagicMock()
+        resp_obj.response_id = "wrong-id"
+        resp_obj.Clear = MagicMock()
+        resp_class.return_value = resp_obj
+
+        sock = MagicMock()
+        sock.poll.side_effect = [1, 0]
+        sock.recv.return_value = b"data"
+
+        with pytest.raises(TimeoutError, match="Timed out"):
+            recv_response(["req-1"], sock, resp_class, timeout_ms=100)
+
 
 class TestSocketCache:
     def test_creates_socket_on_first_access(self):
