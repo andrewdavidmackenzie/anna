@@ -937,15 +937,19 @@ impl KVSClient {
             value: payload,
         };
 
-        self.send_data_request(
-            &meta_key,
-            RequestType::Put as i32,
-            Some(LatticeType::Lww as i32),
-            Some(lww.encode_to_vec()),
-        )
-        .await
-        .ok_or_else(|| Error::Kvs("PUT_REPLICATION_FACTOR: request failed or timed out".into()))?;
+        let response = self
+            .send_data_request(
+                &meta_key,
+                RequestType::Put as i32,
+                Some(LatticeType::Lww as i32),
+                Some(lww.encode_to_vec()),
+            )
+            .await
+            .ok_or_else(|| {
+                Error::Kvs("PUT_REPLICATION_FACTOR: request failed or timed out".into())
+            })?;
 
+        Self::validate_response(&response, "PUT_REPLICATION_FACTOR")?;
         Ok(())
     }
 
@@ -1208,6 +1212,39 @@ mod tests {
             addrs
         );
         assert!(!client.key_address_cache.contains_key("stale_key"));
+    }
+
+    #[test]
+    fn replication_factor_protobuf_roundtrip() {
+        use crate::proto::metadata::{
+            replication_factor::ReplicationValue, ReplicationFactor, Tier,
+        };
+
+        let rep = ReplicationFactor {
+            key: "test_key".to_string(),
+            global: vec![
+                ReplicationValue {
+                    tier: Tier::Memory as i32,
+                    value: 2,
+                },
+                ReplicationValue {
+                    tier: Tier::Disk as i32,
+                    value: 0,
+                },
+            ],
+            local: vec![ReplicationValue {
+                tier: Tier::Memory as i32,
+                value: 1,
+            }],
+        };
+
+        let encoded = rep.encode_to_vec();
+        let decoded = ReplicationFactor::decode(encoded.as_slice())
+            .expect("failed to decode ReplicationFactor");
+        assert_eq!(decoded.key, "test_key");
+        assert_eq!(decoded.global.len(), 2);
+        assert_eq!(decoded.global[0].value, 2);
+        assert_eq!(decoded.local[0].value, 1);
     }
 
     #[test]
