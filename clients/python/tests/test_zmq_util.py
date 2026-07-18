@@ -24,6 +24,7 @@ class TestRecvResponse:
         resp_obj.ParseFromString = MagicMock()
 
         sock = MagicMock()
+        sock.poll.return_value = 1
         sock.recv.return_value = b"response_bytes"
 
         responses = recv_response(["req-1"], sock, resp_class)
@@ -33,15 +34,6 @@ class TestRecvResponse:
 
     def test_skips_non_matching_then_matches(self):
         resp_class = MagicMock()
-
-        wrong_resp = MagicMock()
-        wrong_resp.response_id = "wrong-id"
-        wrong_resp.Clear = MagicMock()
-        wrong_resp.ParseFromString = MagicMock()
-
-        right_resp = MagicMock()
-        right_resp.response_id = "req-1"
-        right_resp.ParseFromString = MagicMock()
 
         call_count = [0]
         def make_resp():
@@ -60,6 +52,7 @@ class TestRecvResponse:
         resp_class.side_effect = make_resp
 
         sock = MagicMock()
+        sock.poll.return_value = 1
         sock.recv.return_value = b"data"
 
         responses = recv_response(["req-1"], sock, resp_class)
@@ -76,10 +69,20 @@ class TestRecvResponse:
         resp_class.side_effect = [resp1, resp2]
 
         sock = MagicMock()
+        sock.poll.return_value = 1
         sock.recv.return_value = b"data"
 
         responses = recv_response(["req-1", "req-2"], sock, resp_class)
         assert len(responses) == 2
+
+    def test_timeout_raises_error(self):
+        import pytest
+        resp_class = MagicMock()
+        sock = MagicMock()
+        sock.poll.return_value = 0
+
+        with pytest.raises(TimeoutError, match="Timed out"):
+            recv_response(["req-1"], sock, resp_class, timeout_ms=100)
 
 
 class TestSocketCache:

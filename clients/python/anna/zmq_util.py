@@ -19,15 +19,23 @@ def send_request(req_obj, send_sock):
     send_sock.send(req_string)
 
 
-def recv_response(req_ids, rcv_sock, resp_class):
+def recv_response(req_ids, rcv_sock, resp_class, timeout_ms=10000):
     responses = []
 
     while len(responses) < len(req_ids):
+        if rcv_sock.poll(timeout_ms) == 0:
+            raise TimeoutError(
+                f"Timed out waiting for response (timeout={timeout_ms}ms)"
+            )
         resp_obj = resp_class()
         resp = rcv_sock.recv()
         resp_obj.ParseFromString(resp)
 
         while resp_obj.response_id not in req_ids:
+            if rcv_sock.poll(timeout_ms) == 0:
+                raise TimeoutError(
+                    f"Timed out waiting for matching response (timeout={timeout_ms}ms)"
+                )
             resp_obj.Clear()
             resp_obj.ParseFromString(rcv_sock.recv())
 
