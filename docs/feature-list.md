@@ -119,7 +119,7 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Failure detection via timeout           | Nodes detect peer failures and update hash ring  | No            |
 | Automatic repartitioning                | Data redistributed after node failure            | No            |
 | Stateless routing recovery              | Routing rebuilds hash ring from KVS join messages | [#372](https://github.com/andrewdavidmackenzie/anna/issues/372) |
-| Key migration interleaved with requests | No downtime during reconfiguration               | No            |
+| Key migration interleaved with requests | No downtime during reconfiguration               | [#380](https://github.com/andrewdavidmackenzie/anna/issues/380) |
 
 ### Consistent Hashing
 
@@ -180,7 +180,7 @@ autoscaling policies.
 | Single-Node Features                   | `anna-kvs`     | 9     | 9      | 100%     | —      |
 | Error Handling                         | `anna-kvs`     | 5     | 5      | 100%     | #355   |
 | Multi-Tiered Storage                   | `anna-kvs`     | 4     | 0      | 0%       | #356   |
-| Multi-Node Features                    | `anna-kvs`     | 25    | 15     | 60%      | #352   |
+| Multi-Node Features                    | `anna-kvs`     | 25    | 16     | 64%      | #352   |
 | Routing Tier                           | `anna-route`   | 6     | 5      | 83%      | #371   |
 | Monitoring & Policy Engine             | `anna-monitor` | 14    | 0      | 0%       | #357   |
-| **Total**                              |                | **84**| **55** | **65%**  |        |
+| **Total**                              |                | **84**| **56** | **67%**  |        |

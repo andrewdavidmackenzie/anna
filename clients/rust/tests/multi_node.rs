@@ -905,3 +905,54 @@ async fn pending_request_queue() {
         assert_eq!(val, format!("pq_val_{}", i));
     }
 }
+
+/// Key migration interleaved with requests: send PUT/GET traffic while
+/// a new node joins the cluster, verify no requests fail.
+/// Uses base_offset=24000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn key_migration_during_join() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(24000);
+    cluster.start_full_node(NODE1_IP, 1);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(66)).await;
+
+    // PUT initial data on single node
+    for i in 0..10 {
+        client
+            .put(&format!("migrate_key_{}", i), &format!("val_{}", i))
+            .await
+            .unwrap_or_else(|e| panic!("PUT migrate_key_{} failed: {}", i, e));
+    }
+
+    // Add second node while continuing to send requests — this triggers
+    // hash ring changes and key migration
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
+
+    // PUT more keys during/after the topology change
+    for i in 10..20 {
+        client
+            .put(&format!("migrate_key_{}", i), &format!("val_{}", i))
+            .await
+            .unwrap_or_else(|e| panic!("PUT migrate_key_{} during join failed: {}", i, e));
+    }
+
+    // GET all keys — both pre-join and post-join should be accessible
+    for i in 0..20 {
+        let key = format!("migrate_key_{}", i);
+        let val = client
+            .get(&key)
+            .await
+            .unwrap_or_else(|e| panic!("GET {} failed during migration: {}", key, e));
+        assert_eq!(val, format!("val_{}", i));
+    }
+}
