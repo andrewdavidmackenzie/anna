@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-df23efa1.js";
+            window.path_to_searchindex_js = "../searchindex-1841cfea.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-7bb26e2b.js"></script>
@@ -284,9 +284,9 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tbody>
 <tr><td>Per-key replication factors</td><td>Independent replication per key per tier</td><td>No</td></tr>
 <tr><td>Default replication from config</td><td><code>replication.memory</code>, <code>replication.ebs</code>, <code>replication.local</code></td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
-<tr><td>Replication factor request</td><td>Server fetches unknown factors from metadata</td><td>No</td></tr>
+<tr><td>Replication factor request</td><td>Server fetches unknown factors from metadata</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/368">#368</a></td></tr>
 <tr><td>Replication factor change</td><td>Monitor can dynamically adjust replication</td><td>No</td></tr>
-<tr><td>Metadata stored as KVS data</td><td>Replication info under <code>METADATA|replication|&lt;key&gt;</code></td><td>No</td></tr>
+<tr><td>Metadata stored as KVS data</td><td>Replication info under <code>METADATA|replication|&lt;key&gt;</code></td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/368">#368</a></td></tr>
 <tr><td>Gossip after replication change</td><td>Data redistributed to new responsible threads</td><td>No</td></tr>
 </tbody>
 </table>
@@ -299,7 +299,7 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 </thead>
 <tbody>
 <tr><td>Periodic gossip (10s epoch)</td><td>Changesets multicast to all responsible replicas</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
-<tr><td>Merge-at-sender</td><td>Batched updates merged before sending</td><td>No</td></tr>
+<tr><td>Merge-at-sender</td><td>Batched updates merged before sending</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/368">#368</a></td></tr>
 <tr><td>Gossip to caches</td><td>Changed keys also sent to function executor nodes</td><td>No</td></tr>
 <tr><td>Join gossip</td><td>Redistribute data to newly joined nodes</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
 <tr><td>Cross-tier gossip</td><td>Updates propagated between memory and disk tiers</td><td>No</td></tr>
@@ -366,25 +366,11 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 </tbody>
 </table>
 </div>
-<h2 id="monitoring--policy-engine-357"><a class="header" href="#monitoring--policy-engine-357">Monitoring &amp; Policy Engine (#357)</a></h2>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
-</thead>
-<tbody>
-<tr><td>Statistics collection</td><td>Per-key access frequency, per-node storage, CPU occupancy</td><td>No</td></tr>
-<tr><td>Elasticity policy</td><td>Add/remove nodes based on storage/compute capacity</td><td>No</td></tr>
-<tr><td>Hot-key replication</td><td>Selectively replicate hot keys across more threads/nodes</td><td>No</td></tr>
-<tr><td>Cross-tier data movement</td><td>Promote hot data to memory, demote cold to disk</td><td>No</td></tr>
-<tr><td>SLO enforcement</td><td>Latency-based scaling (target: 3ms)</td><td>No</td></tr>
-<tr><td>Underutilization scale-down</td><td>Remove nodes when occupancy is low</td><td>No</td></tr>
-<tr><td>Grace period</td><td>Prevent over-correction during data redistribution</td><td>No</td></tr>
-<tr><td>Policy toggles</td><td><code>policy.elasticity</code>, <code>policy.selective-rep</code>, <code>policy.tiering</code></td><td>No</td></tr>
-</tbody>
-</table>
-</div>
-<h2 id="server-internals-358"><a class="header" href="#server-internals-358">Server Internals (#358)</a></h2>
+<h2 id="monitoring--policy-engine--anna-monitor-357"><a class="header" href="#monitoring--policy-engine--anna-monitor-357">Monitoring &amp; Policy Engine — <code>anna-monitor</code> (#357)</a></h2>
+<p>The monitoring system is a separate server process (<code>anna-monitor</code>) that
+collects statistics from KVS nodes, detects membership changes, and enforces
+autoscaling policies.</p>
+<h3 id="statistics-reported-by-anna-kvs-via-serverthreadstatistics-protobuf"><a class="header" href="#statistics-reported-by-anna-kvs-via-serverthreadstatistics-protobuf">Statistics (reported by <code>anna-kvs</code> via <code>ServerThreadStatistics</code> protobuf)</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -400,22 +386,40 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 </tbody>
 </table>
 </div>
+<h3 id="autoscaling-policies"><a class="header" href="#autoscaling-policies">Autoscaling Policies</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
+</thead>
+<tbody>
+<tr><td>Statistics collection</td><td>Monitor aggregates stats from all KVS nodes</td><td>No</td></tr>
+<tr><td>Elasticity policy</td><td>Add/remove nodes based on storage/compute capacity</td><td>No</td></tr>
+<tr><td>Hot-key replication</td><td>Selectively replicate hot keys across more threads/nodes</td><td>No</td></tr>
+<tr><td>Cross-tier data movement</td><td>Promote hot data to memory, demote cold to disk</td><td>No</td></tr>
+<tr><td>SLO enforcement</td><td>Latency-based scaling (target: 3ms)</td><td>No</td></tr>
+<tr><td>Underutilization scale-down</td><td>Remove nodes when occupancy is low</td><td>No</td></tr>
+<tr><td>Grace period</td><td>Prevent over-correction during data redistribution</td><td>No</td></tr>
+<tr><td>Policy toggles</td><td><code>policy.elasticity</code>, <code>policy.selective-rep</code>, <code>policy.tiering</code></td><td>No</td></tr>
+</tbody>
+</table>
+</div>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Category</th><th>Total</th><th>System Tested</th><th>Coverage</th><th>Issue</th></tr>
+<tr><th>Category</th><th>Process</th><th>Total</th><th>Tested</th><th>Coverage</th><th>Issue</th></tr>
 </thead>
 <tbody>
-<tr><td>Client Operations</td><td>15</td><td>15</td><td>100%</td><td>—</td></tr>
-<tr><td>Lattice Types</td><td>6</td><td>6</td><td>100%</td><td>—</td></tr>
-<tr><td>Single-Node Features</td><td>9</td><td>9</td><td>100%</td><td>—</td></tr>
-<tr><td>Error Handling</td><td>5</td><td>5</td><td>100%</td><td>#355</td></tr>
-<tr><td>Multi-Tiered Storage</td><td>4</td><td>0</td><td>0%</td><td>#356</td></tr>
-<tr><td>Multi-Node Features</td><td>31</td><td>14</td><td>45%</td><td>#352</td></tr>
-<tr><td>Monitoring &amp; Policy Engine</td><td>8</td><td>0</td><td>0%</td><td>#357</td></tr>
-<tr><td>Server Internals</td><td>5</td><td>0</td><td>0%</td><td>#358</td></tr>
-<tr><td><strong>Total</strong></td><td><strong>83</strong></td><td><strong>48</strong></td><td><strong>58%</strong></td><td></td></tr>
+<tr><td>Client Operations</td><td>all clients</td><td>15</td><td>15</td><td>100%</td><td>—</td></tr>
+<tr><td>Lattice Types</td><td><code>anna-kvs</code></td><td>6</td><td>6</td><td>100%</td><td>—</td></tr>
+<tr><td>Single-Node Features</td><td><code>anna-kvs</code></td><td>9</td><td>9</td><td>100%</td><td>—</td></tr>
+<tr><td>Error Handling</td><td><code>anna-kvs</code></td><td>5</td><td>5</td><td>100%</td><td>#355</td></tr>
+<tr><td>Multi-Tiered Storage</td><td><code>anna-kvs</code></td><td>4</td><td>0</td><td>0%</td><td>#356</td></tr>
+<tr><td>Multi-Node Features</td><td><code>anna-kvs</code></td><td>25</td><td>15</td><td>60%</td><td>#352</td></tr>
+<tr><td>Routing Tier</td><td><code>anna-route</code></td><td>6</td><td>2</td><td>33%</td><td>#371</td></tr>
+<tr><td>Monitoring &amp; Policy Engine</td><td><code>anna-monitor</code></td><td>14</td><td>0</td><td>0%</td><td>#357</td></tr>
+<tr><td><strong>Total</strong></td><td></td><td><strong>84</strong></td><td><strong>52</strong></td><td><strong>62%</strong></td><td></td></tr>
 </tbody>
 </table>
 </div>
