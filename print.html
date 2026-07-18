@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-6a852bc8.js";
+            window.path_to_searchindex_js = "searchindex-df23efa1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7bb26e2b.js"></script>
@@ -1010,7 +1010,7 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tr><td>Node join</td><td>New node joins cluster, receives data via gossip</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
 <tr><td>Node depart</td><td>Node leaves, data redistributed</td><td>No</td></tr>
 <tr><td>Self-depart</td><td>Node gracefully removes itself, gossips all data out</td><td>No</td></tr>
-<tr><td>Rejoin detection</td><td>Join counter distinguishes fresh joins from rejoins</td><td>No</td></tr>
+<tr><td>Rejoin detection</td><td>Join counter distinguishes fresh joins from rejoins</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/372">#372</a></td></tr>
 <tr><td>Seed node</td><td>First routing node serves cluster membership</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
 </tbody>
 </table>
@@ -1025,7 +1025,7 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tr><td>k-fault tolerance</td><td>k+1 replicas ensure k failures tolerable</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/364">#364</a></td></tr>
 <tr><td>Failure detection via timeout</td><td>Nodes detect peer failures and update hash ring</td><td>No</td></tr>
 <tr><td>Automatic repartitioning</td><td>Data redistributed after node failure</td><td>No</td></tr>
-<tr><td>Stateless routing/monitoring</td><td>Recovers by querying peers/storage</td><td>No</td></tr>
+<tr><td>Stateless routing recovery</td><td>Routing rebuilds hash ring from KVS join messages</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/372">#372</a></td></tr>
 <tr><td>Key migration interleaved with requests</td><td>No downtime during reconfiguration</td><td>No</td></tr>
 </tbody>
 </table>
@@ -1106,10 +1106,10 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tr><td>Single-Node Features</td><td>9</td><td>9</td><td>100%</td><td>—</td></tr>
 <tr><td>Error Handling</td><td>5</td><td>5</td><td>100%</td><td>#355</td></tr>
 <tr><td>Multi-Tiered Storage</td><td>4</td><td>0</td><td>0%</td><td>#356</td></tr>
-<tr><td>Multi-Node Features</td><td>31</td><td>12</td><td>39%</td><td>#352</td></tr>
+<tr><td>Multi-Node Features</td><td>31</td><td>14</td><td>45%</td><td>#352</td></tr>
 <tr><td>Monitoring &amp; Policy Engine</td><td>8</td><td>0</td><td>0%</td><td>#357</td></tr>
 <tr><td>Server Internals</td><td>5</td><td>0</td><td>0%</td><td>#358</td></tr>
-<tr><td><strong>Total</strong></td><td><strong>83</strong></td><td><strong>46</strong></td><td><strong>55%</strong></td><td></td></tr>
+<tr><td><strong>Total</strong></td><td><strong>83</strong></td><td><strong>48</strong></td><td><strong>58%</strong></td><td></td></tr>
 </tbody>
 </table>
 </div>
