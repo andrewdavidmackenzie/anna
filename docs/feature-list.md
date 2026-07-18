@@ -39,7 +39,7 @@ mocks.
 | MULTI_CAUSAL           | Multi-key causal with vector clock and dependencies | Yes           |
 | PRIORITY               | Priority-value pair, lowest priority wins           | Yes           |
 
-## Single-Node Features
+## Single-Node Features — `anna-kvs`
 
 | Feature           | Description                                           | System Tested |
 |-------------------|-------------------------------------------------------|---------------|
@@ -53,7 +53,7 @@ mocks.
 | Graceful shutdown | SIGTERM handler for clean exit                         | Yes           |
 | Memory tier       | In-memory storage using hash tables                   | Yes           |
 
-## Error Handling (#355)
+## Error Handling — `anna-kvs` (#355)
 
 | Error Code   | Description                                      | System Tested |
 |--------------|--------------------------------------------------|---------------|
@@ -66,7 +66,7 @@ mocks.
 Note: The protobuf defines a `TIMEOUT` error code but the server never sets it.
 It is a client-side construct — see `docs/client-feature-list.md`.
 
-## Multi-Tiered Storage (#356)
+## Multi-Tiered Storage — `anna-kvs` (#356)
 
 | Feature                       | Description                                           | System Tested |
 |-------------------------------|-------------------------------------------------------|---------------|
@@ -78,7 +78,7 @@ It is a client-side construct — see `docs/client-feature-list.md`.
 Note: `SERVER_TYPE` and `ebs` config should be renamed to storage-medium-agnostic
 terms (e.g., `STORAGE_MEDIUM=ram|file`).
 
-## Multi-Node Features (#352)
+## Multi-Node Features — `anna-kvs` (#352)
 
 ### Replication
 
@@ -130,7 +130,10 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | CRC32 hashing                   | Hash function for key-to-ring mapping        | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 | Thread responsibility lookup    | Determines which threads handle a key        | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 
-### Routing Tier
+## Routing Tier — `anna-route` (#371)
+
+The routing tier is a separate server process (`anna-route`) that maintains
+hash rings and directs clients to the correct KVS nodes.
 
 | Feature                   | Description                                              | System Tested |
 |---------------------------|----------------------------------------------------------|---------------|
@@ -141,7 +144,11 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Pending request queue     | Queues requests while replication factor is unknown      | No            |
 | Multi-threaded routing    | Configurable number of routing threads                   | No            |
 
-## Monitoring & Policy Engine (#357)
+## Monitoring & Policy Engine — `anna-monitor` (#357)
+
+The monitoring system is a separate server process (`anna-monitor`) that
+collects statistics, detects membership changes, and enforces autoscaling
+policies.
 
 | Feature                     | Description                                                   | System Tested |
 |-----------------------------|---------------------------------------------------------------|---------------|
@@ -154,7 +161,7 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Grace period                | Prevent over-correction during data redistribution            | No            |
 | Policy toggles              | `policy.elasticity`, `policy.selective-rep`, `policy.tiering` | No            |
 
-## Server Internals (#358)
+## Server Internals — `anna-kvs` (#358)
 
 | Feature                              | Description                                  | System Tested |
 |--------------------------------------|----------------------------------------------|---------------|
@@ -167,14 +174,15 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 
 ## Summary
 
-| Category                     | Total | System Tested | Coverage | Issue  |
-|------------------------------|-------|---------------|----------|--------|
-| Client Operations            | 15    | 15            | 100%     | —      |
-| Lattice Types                | 6     | 6             | 100%     | —      |
-| Single-Node Features         | 9     | 9             | 100%     | —      |
-| Error Handling               | 5     | 5             | 100%     | #355   |
-| Multi-Tiered Storage         | 4     | 0             | 0%       | #356   |
-| Multi-Node Features          | 31    | 14            | 45%      | #352   |
-| Monitoring & Policy Engine   | 8     | 0             | 0%       | #357   |
-| Server Internals             | 5     | 0             | 0%       | #358   |
-| **Total**                    | **83**| **48**        | **58%**  |        |
+| Category                               | Process        | Total | Tested | Coverage | Issue  |
+|----------------------------------------|----------------|-------|--------|----------|--------|
+| Client Operations                      | all clients    | 15    | 15     | 100%     | —      |
+| Lattice Types                          | `anna-kvs`     | 6     | 6      | 100%     | —      |
+| Single-Node Features                   | `anna-kvs`     | 9     | 9      | 100%     | —      |
+| Error Handling                         | `anna-kvs`     | 5     | 5      | 100%     | #355   |
+| Multi-Tiered Storage                   | `anna-kvs`     | 4     | 0      | 0%       | #356   |
+| Multi-Node Features                    | `anna-kvs`     | 25    | 12     | 48%      | #352   |
+| Routing Tier                           | `anna-route`   | 6     | 2      | 33%      | #371   |
+| Monitoring & Policy Engine             | `anna-monitor` | 8     | 0      | 0%       | #357   |
+| Server Internals                       | `anna-kvs`     | 5     | 0      | 0%       | #358   |
+| **Total**                              |                | **83**| **49** | **59%**  |        |
