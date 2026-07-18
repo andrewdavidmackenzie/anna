@@ -304,4 +304,72 @@ mod test {
         assert_eq!(config.get_user_ip(), "127.0.0.1");
         assert!(!config.get_routing_ips().is_empty());
     }
+
+    #[test]
+    fn default_timings() {
+        let config = Config::default();
+        assert_eq!(config.get_gossip_epoch(), 10);
+        assert_eq!(config.get_monitoring_timeout(), 30);
+        assert_eq!(config.get_base_offset(), 0);
+    }
+
+    #[test]
+    fn timings_from_config_file() {
+        let config = Config::read(&PathBuf::from("src/lib/test_config.yml"))
+            .expect("Could not read test_config.yml");
+        assert_eq!(config.get_gossip_epoch(), 10);
+        assert_eq!(config.get_monitoring_timeout(), 30);
+    }
+
+    #[test]
+    fn timings_partial_override() {
+        let yaml = "\
+monitoring:
+  mgmt_ip: 127.0.0.1
+  ip: 127.0.0.1
+routing:
+  monitoring:
+      - 127.0.0.1
+  ip: 127.0.0.1
+user:
+  monitoring:
+      - 127.0.0.1
+  routing:
+      - 127.0.0.1
+  ip: 127.0.0.1
+server:
+  monitoring:
+      - 127.0.0.1
+  routing:
+      - 127.0.0.1
+  seed_ip: 127.0.0.1
+  public_ip: 127.0.0.1
+  private_ip: 127.0.0.1
+  mgmt_ip: \"NULL\"
+policy:
+  elasticity: false
+  selective-rep: false
+  tiering: false
+ebs: ./
+capacities:
+  memory-cap: 1
+  ebs-cap: 0
+threads:
+  memory: 1
+  ebs: 1
+  routing: 1
+  benchmark: 1
+timings:
+  gossip_epoch: 2
+replication:
+  memory: 1
+  ebs: 0
+  minimum: 1
+  local: 1
+";
+        let config: Config =
+            serde_yaml::from_str(yaml).expect("Failed to parse partial timings config");
+        assert_eq!(config.get_gossip_epoch(), 2);
+        assert_eq!(config.get_monitoring_timeout(), 30);
+    }
 }
