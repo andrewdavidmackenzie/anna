@@ -905,3 +905,73 @@ async fn pending_request_queue() {
         assert_eq!(val, format!("pq_val_{}", i));
     }
 }
+
+/// Key migration interleaved with requests: send PUT/GET traffic
+/// concurrently with a node join, verify no requests fail.
+/// Uses base_offset=24000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn key_migration_during_join() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(24000);
+    cluster.start_full_node(NODE1_IP, 1);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(66)).await;
+
+    // PUT initial data on single node
+    for i in 0..10 {
+        client
+            .put(&format!("migrate_key_{}", i), &format!("val_{}", i))
+            .await
+            .unwrap_or_else(|e| panic!("PUT migrate_key_{} failed: {}", i, e));
+    }
+
+    // Write Node 2's config, then spawn its KVS in a background thread
+    // while simultaneously sending PUT requests — this overlaps traffic
+    // with the node join and hash ring reconfiguration.
+    let cfg = cluster.make_config(NODE2_IP, NODE1_IP, 1);
+    let node2_config = cluster.config_dir.join(format!("node-{}.yml", NODE2_IP));
+    write_node_config(&node2_config, &cfg);
+
+    let node2_config_clone = node2_config.clone();
+    let path = server_path();
+    let join_handle = std::thread::spawn(move || {
+        spawn_server("anna-kvs", &node2_config_clone, &path).expect("Failed to spawn Node 2 KVS")
+    });
+
+    // Send PUT requests concurrently with the node join
+    for i in 10..30 {
+        client
+            .put(&format!("migrate_key_{}", i), &format!("val_{}", i))
+            .await
+            .unwrap_or_else(|e| panic!("PUT migrate_key_{} during join failed: {}", i, e));
+    }
+
+    // Collect the spawned child process for cleanup
+    let child = join_handle.join().expect("Join thread panicked");
+    cluster.processes.push(ServerProcess {
+        child,
+        label: format!("anna-kvs@{}", NODE2_IP),
+    });
+
+    // Wait for Node 2 to fully join
+    std::thread::sleep(Duration::from_secs(2));
+
+    // GET all keys — both pre-join and concurrent should be accessible
+    for i in 0..30 {
+        let key = format!("migrate_key_{}", i);
+        let val = client
+            .get(&key)
+            .await
+            .unwrap_or_else(|e| panic!("GET {} failed after migration: {}", key, e));
+        assert_eq!(val, format!("val_{}", i));
+    }
+}
