@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a99cef0b.js";
+            window.path_to_searchindex_js = "../searchindex-855b261d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-7bb26e2b.js"></script>
@@ -249,14 +249,15 @@ mocks.</p>
 </thead>
 <tbody>
 <tr><td>NO_ERROR</td><td>Operation succeeded</td><td>Yes</td></tr>
-<tr><td>KEY_DNE</td><td>Key does not exist</td><td>No</td></tr>
-<tr><td>WRONG_THREAD</td><td>This thread is not responsible for the key</td><td>No</td></tr>
-<tr><td>TIMEOUT</td><td>Operation timed out</td><td>No</td></tr>
-<tr><td>LATTICE</td><td>Lattice type mismatch</td><td>No</td></tr>
-<tr><td>NO_SERVERS</td><td>No servers available (routing tier)</td><td>No</td></tr>
+<tr><td>KEY_DNE</td><td>Key does not exist</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/355">#355</a></td></tr>
+<tr><td>WRONG_THREAD</td><td>This thread is not responsible for the key</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
+<tr><td>LATTICE</td><td>Lattice type mismatch</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/355">#355</a></td></tr>
+<tr><td>NO_SERVERS</td><td>No servers available (routing tier)</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/355">#355</a></td></tr>
 </tbody>
 </table>
 </div>
+<p>Note: The protobuf defines a <code>TIMEOUT</code> error code but the server never sets it.
+It is a client-side construct — see <code>docs/client-feature-list.md</code>.</p>
 <h2 id="multi-tiered-storage-356"><a class="header" href="#multi-tiered-storage-356">Multi-Tiered Storage (#356)</a></h2>
 <div class="table-wrapper">
 <table>
@@ -409,12 +410,12 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tr><td>Client Operations</td><td>15</td><td>15</td><td>100%</td><td>—</td></tr>
 <tr><td>Lattice Types</td><td>6</td><td>6</td><td>100%</td><td>—</td></tr>
 <tr><td>Single-Node Features</td><td>9</td><td>9</td><td>100%</td><td>—</td></tr>
-<tr><td>Error Handling</td><td>6</td><td>1</td><td>17%</td><td>#355</td></tr>
+<tr><td>Error Handling</td><td>5</td><td>5</td><td>100%</td><td>#355</td></tr>
 <tr><td>Multi-Tiered Storage</td><td>4</td><td>0</td><td>0%</td><td>#356</td></tr>
 <tr><td>Multi-Node Features</td><td>31</td><td>11</td><td>35%</td><td>#352</td></tr>
 <tr><td>Monitoring &amp; Policy Engine</td><td>8</td><td>0</td><td>0%</td><td>#357</td></tr>
 <tr><td>Server Internals</td><td>5</td><td>0</td><td>0%</td><td>#358</td></tr>
-<tr><td><strong>Total</strong></td><td><strong>84</strong></td><td><strong>42</strong></td><td><strong>50%</strong></td><td></td></tr>
+<tr><td><strong>Total</strong></td><td><strong>83</strong></td><td><strong>45</strong></td><td><strong>54%</strong></td><td></td></tr>
 </tbody>
 </table>
 </div>
