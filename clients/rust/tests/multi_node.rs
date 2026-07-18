@@ -638,3 +638,109 @@ async fn multi_node_depart() {
         .expect("GET depart_key_2 failed after node depart");
     assert_eq!(v2, "data_2");
 }
+
+/// Rejoin detection: kill and restart a KVS node, verify it rejoins the
+/// cluster and can serve requests.
+/// Uses base_offset=14000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn multi_node_rejoin() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(14000);
+    cluster.start_full_node(NODE1_IP, 1);
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(59)).await;
+
+    // PUT data while both nodes are up
+    client
+        .put("rejoin_key", "before_restart")
+        .await
+        .expect("PUT rejoin_key failed");
+
+    // Kill Node 2
+    cluster.kill_process("anna-kvs@127.0.0.2");
+
+    // Restart Node 2 — it should rejoin via the seed node
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
+
+    // PUT new data — routing should include the rejoined node
+    let mut client2 = KVSClient::new(&config, Some(60)).await;
+    client2
+        .put("post_rejoin_key", "after_restart")
+        .await
+        .expect("PUT post_rejoin_key failed");
+    let v = client2
+        .get("post_rejoin_key")
+        .await
+        .expect("GET post_rejoin_key failed");
+    assert_eq!(v, "after_restart");
+}
+
+/// Stateless routing recovery: kill routing and KVS, restart both, verify
+/// the cluster rebuilds and serves requests. Routing is stateless — it
+/// rebuilds its hash ring from join announcements when KVS nodes start.
+/// Uses base_offset=16000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn stateless_routing_recovery() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(16000);
+    cluster.start_full_node(NODE1_IP, 1);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(61)).await;
+
+    client
+        .put("routing_recovery_key", "persistent")
+        .await
+        .expect("PUT failed");
+
+    // Kill both routing and KVS
+    cluster.kill_process("anna-route@127.0.0.1");
+    cluster.kill_process("anna-kvs@127.0.0.1");
+
+    // Restart routing, then KVS (KVS announces to routing on startup)
+    let node_config = cluster.config_dir.join(format!("node-{}.yml", NODE1_IP));
+    for name in ["anna-route", "anna-kvs"] {
+        if let Some(child) = spawn_server(name, &node_config, &server_path()) {
+            cluster.processes.push(ServerProcess {
+                child,
+                label: format!("{}@{}", name, NODE1_IP),
+            });
+        }
+        std::thread::sleep(Duration::from_secs(1));
+    }
+    assert!(
+        wait_for_port(NODE1_IP, cluster.routing_port(), 30),
+        "Routing did not restart"
+    );
+    std::thread::sleep(Duration::from_secs(2));
+
+    // KVS data is in-memory and lost on restart, so PUT again
+    let mut client2 = KVSClient::new(&config, Some(62)).await;
+    client2
+        .put("post_recovery_key", "recovered")
+        .await
+        .expect("PUT after recovery failed");
+    let v = client2
+        .get("post_recovery_key")
+        .await
+        .expect("GET after recovery failed");
+    assert_eq!(v, "recovered");
+}
