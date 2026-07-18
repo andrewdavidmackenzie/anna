@@ -238,4 +238,15 @@ async fn system_test_kvs_client() {
             "Original LWW value should be preserved after mismatched PUT_SET"
         );
     }
+
+    // METADATA KEY: verify metadata keys (ANNA_METADATA|...) are stored in
+    // the KVS like regular data. This exercises the metadata-as-KVS-data
+    // path in the server.
+    let meta_key = "ANNA_METADATA|replication|meta_test_key";
+    client
+        .put(meta_key, "meta_value")
+        .await
+        .expect("PUT metadata key failed");
+    let meta_val = client.get(meta_key).await.expect("GET metadata key failed");
+    assert_eq!(meta_val, "meta_value");
 }

@@ -86,9 +86,9 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 |---------------------------------|--------------------------------------------------------------|---------------|
 | Per-key replication factors     | Independent replication per key per tier                      | No            |
 | Default replication from config | `replication.memory`, `replication.ebs`, `replication.local`  | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
-| Replication factor request      | Server fetches unknown factors from metadata                  | No            |
+| Replication factor request      | Server fetches unknown factors from metadata                  | [#368](https://github.com/andrewdavidmackenzie/anna/issues/368) |
 | Replication factor change       | Monitor can dynamically adjust replication                    | No            |
-| Metadata stored as KVS data     | Replication info under `METADATA\|replication\|<key>`         | No            |
+| Metadata stored as KVS data     | Replication info under `METADATA\|replication\|<key>`         | [#368](https://github.com/andrewdavidmackenzie/anna/issues/368) |
 | Gossip after replication change | Data redistributed to new responsible threads                 | No            |
 
 ### Gossip / Multicast
@@ -96,7 +96,7 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Feature                     | Description                                      | System Tested |
 |-----------------------------|--------------------------------------------------|---------------|
 | Periodic gossip (10s epoch) | Changesets multicast to all responsible replicas  | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
-| Merge-at-sender             | Batched updates merged before sending             | No            |
+| Merge-at-sender             | Batched updates merged before sending             | [#368](https://github.com/andrewdavidmackenzie/anna/issues/368) |
 | Gossip to caches            | Changed keys also sent to function executor nodes | No            |
 | Join gossip                 | Redistribute data to newly joined nodes           | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 | Cross-tier gossip           | Updates propagated between memory and disk tiers  | No            |
@@ -174,7 +174,7 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Single-Node Features         | 9     | 9             | 100%     | —      |
 | Error Handling               | 5     | 5             | 100%     | #355   |
 | Multi-Tiered Storage         | 4     | 0             | 0%       | #356   |
-| Multi-Node Features          | 31    | 14            | 45%      | #352   |
+| Multi-Node Features          | 31    | 17            | 55%      | #352   |
 | Monitoring & Policy Engine   | 8     | 0             | 0%       | #357   |
 | Server Internals             | 5     | 0             | 0%       | #358   |
-| **Total**                    | **83**| **48**        | **58%**  |        |
+| **Total**                    | **83**| **51**        | **61%**  |        |
