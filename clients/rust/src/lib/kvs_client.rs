@@ -237,6 +237,16 @@ impl KVSClient {
         }
     }
 
+    fn evict_address(&mut self, key: &str, addr: &str) {
+        if let Some(addrs) = self.key_address_cache.get_mut(key) {
+            addrs.remove(addr);
+            if addrs.is_empty() {
+                self.key_address_cache.remove(key);
+            }
+        }
+        self.socket_cache.remove(addr);
+    }
+
     async fn send_data_request(
         &mut self,
         key: &str,
@@ -244,7 +254,7 @@ impl KVSClient {
         lattice_type: Option<i32>,
         payload: Option<Vec<u8>>,
     ) -> Option<KeyResponse> {
-        const MAX_RETRIES: usize = 3;
+        const MAX_RETRIES: usize = 5;
 
         for attempt in 0..=MAX_RETRIES {
             let worker = self.get_worker_address(key).await?;
@@ -272,21 +282,24 @@ impl KVSClient {
             request.tuples.push(tuple);
 
             let encoded = request.encode_to_vec();
-            if self.send_request(&encoded, &worker).await.is_err() {
-                return None;
-            }
 
-            match self.recv_response(false).await {
-                Some(data) => match KeyResponse::decode(data.as_slice()) {
+            let result = tokio::time::timeout(self.timeout, async {
+                self.send_request(&encoded, &worker).await?;
+                match self.recv_response(false).await {
+                    Some(data) => Ok(data),
+                    None => Err(Error::Kvs("recv timed out".into())),
+                }
+            })
+            .await;
+
+            match result {
+                Ok(Ok(data)) => match KeyResponse::decode(data.as_slice()) {
                     Ok(response) => {
                         if !response.tuples.is_empty() {
                             let t = &response.tuples[0];
                             if t.error == AnnaError::WrongThread as i32 && attempt < MAX_RETRIES {
-                                debug!(
-                                    "WRONG_THREAD for key {}, invalidating cache and retrying",
-                                    key
-                                );
-                                self.key_address_cache.remove(key);
+                                debug!("WRONG_THREAD for key {} at {}, retrying", key, worker);
+                                self.evict_address(key, &worker);
                                 continue;
                             }
                             if t.invalidate {
@@ -300,9 +313,15 @@ impl KVSClient {
                         return None;
                     }
                 },
-                None => {
-                    warn!("Request timed out for key {}", key);
-                    self.key_address_cache.remove(key);
+                _ => {
+                    warn!(
+                        "Request timed out for key {} at {}, attempt {}",
+                        key, worker, attempt
+                    );
+                    self.evict_address(key, &worker);
+                    if attempt < MAX_RETRIES {
+                        continue;
+                    }
                     return None;
                 }
             }
@@ -876,6 +895,11 @@ impl KVSClient {
     pub fn clear_cache(&mut self) {
         self.key_address_cache.clear()
     }
+
+    /// Set the request timeout duration.
+    pub fn set_timeout(&mut self, timeout: Duration) {
+        self.timeout = timeout;
+    }
 }
 
 #[cfg(test)]
@@ -1034,6 +1058,72 @@ mod tests {
         assert!(client.key_address_cache.contains_key("evict_me"));
         client.key_address_cache.remove("evict_me");
         assert!(!client.key_address_cache.contains_key("evict_me"));
+    }
+
+    #[tokio::test]
+    async fn evict_address_removes_single_address() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .expect("failed to read default config");
+        let mut client = KVSClient::new(&config, Some(88)).await;
+        let mut addrs = HashSet::new();
+        addrs.insert("tcp://10.0.0.1:6200".to_string());
+        addrs.insert("tcp://10.0.0.2:6200".to_string());
+        client.key_address_cache.insert("multi_addr".into(), addrs);
+
+        client.evict_address("multi_addr", "tcp://10.0.0.1:6200");
+        let remaining = &client.key_address_cache["multi_addr"];
+        assert_eq!(remaining.len(), 1);
+        assert!(remaining.contains("tcp://10.0.0.2:6200"));
+    }
+
+    #[tokio::test]
+    async fn evict_address_removes_key_when_last_address() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .expect("failed to read default config");
+        let mut client = KVSClient::new(&config, Some(87)).await;
+        client.key_address_cache.insert(
+            "single_addr".into(),
+            ["tcp://10.0.0.1:6200".to_string()].into(),
+        );
+
+        client.evict_address("single_addr", "tcp://10.0.0.1:6200");
+        assert!(!client.key_address_cache.contains_key("single_addr"));
+    }
+
+    #[tokio::test]
+    async fn evict_address_also_removes_socket() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .expect("failed to read default config");
+        let mut client = KVSClient::new(&config, Some(86)).await;
+        client.key_address_cache.insert(
+            "sock_test".into(),
+            ["tcp://10.0.0.1:6200".to_string()].into(),
+        );
+        let sock = PushSocket::new();
+        client
+            .socket_cache
+            .insert("tcp://10.0.0.1:6200".to_string(), sock);
+
+        client.evict_address("sock_test", "tcp://10.0.0.1:6200");
+        assert!(!client.socket_cache.contains_key("tcp://10.0.0.1:6200"));
+    }
+
+    #[tokio::test]
+    async fn set_timeout_changes_duration() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .expect("failed to read default config");
+        let mut client = KVSClient::new(&config, Some(85)).await;
+        assert_eq!(client.timeout, Duration::from_secs(10));
+        client.set_timeout(Duration::from_secs(3));
+        assert_eq!(client.timeout, Duration::from_secs(3));
     }
 
     #[test]

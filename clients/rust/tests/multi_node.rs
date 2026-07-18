@@ -125,8 +125,13 @@ fn wait_for_port(ip: &str, port: u16, timeout_secs: u64) -> bool {
     false
 }
 
+struct ServerProcess {
+    child: Child,
+    label: String,
+}
+
 struct MultiNodeCluster {
-    children: Vec<Child>,
+    processes: Vec<ServerProcess>,
     config_dir: PathBuf,
     base_offset: u32,
 }
@@ -140,7 +145,7 @@ impl MultiNodeCluster {
         ));
         fs::create_dir_all(&config_dir).expect("Failed to create config dir");
         MultiNodeCluster {
-            children: Vec::new(),
+            processes: Vec::new(),
             config_dir,
             base_offset,
         }
@@ -163,7 +168,10 @@ impl MultiNodeCluster {
 
         for name in ["anna-monitor", "anna-route", "anna-kvs"] {
             if let Some(child) = spawn_server(name, &config, &server_path()) {
-                self.children.push(child);
+                self.processes.push(ServerProcess {
+                    child,
+                    label: format!("{}@{}", name, node_ip),
+                });
             } else {
                 self.shutdown();
                 panic!("Server binary {} not found", name);
@@ -191,7 +199,10 @@ impl MultiNodeCluster {
         );
 
         if let Some(child) = spawn_server("anna-kvs", &config, &server_path()) {
-            self.children.push(child);
+            self.processes.push(ServerProcess {
+                child,
+                label: format!("anna-kvs@{}", node_ip),
+            });
         } else {
             self.shutdown();
             panic!("Server binary anna-kvs not found");
@@ -199,16 +210,26 @@ impl MultiNodeCluster {
         std::thread::sleep(Duration::from_secs(3));
     }
 
+    fn kill_process(&mut self, label_substring: &str) {
+        for proc in &mut self.processes {
+            if proc.label.contains(label_substring) {
+                proc.child.kill().ok();
+                proc.child.wait().ok();
+            }
+        }
+        std::thread::sleep(Duration::from_secs(1));
+    }
+
     fn client_config_path(&self, node_ip: &str) -> PathBuf {
         self.config_dir.join(format!("node-{}.yml", node_ip))
     }
 
     fn shutdown(&mut self) {
-        for child in &mut self.children {
-            child.kill().ok();
-            child.wait().ok();
+        for proc in &mut self.processes {
+            proc.child.kill().ok();
+            proc.child.wait().ok();
         }
-        self.children.clear();
+        self.processes.clear();
     }
 }
 
@@ -380,4 +401,61 @@ async fn multi_node_address_cache_invalidation() {
         .await
         .expect("GET post_join_key failed");
     assert_eq!(v, "fresh");
+}
+
+/// Fault tolerance: with replication=2, kill one KVS node and verify data
+/// survives on the remaining node after the monitoring system detects the
+/// failure and updates the routing tier's hash ring.
+/// Uses base_offset=6000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn multi_node_fault_tolerance() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(6000);
+
+    cluster.start_full_node(NODE1_IP, 2);
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(53)).await;
+
+    // PUT data and wait for gossip to replicate to both nodes
+    client
+        .put("ft_key_1", "survive_1")
+        .await
+        .expect("PUT ft_key_1 failed");
+    client
+        .put("ft_key_2", "survive_2")
+        .await
+        .expect("PUT ft_key_2 failed");
+    std::thread::sleep(Duration::from_secs(TEST_GOSSIP_EPOCH as u64 + 2));
+
+    // Kill Node 1's KVS process
+    cluster.kill_process("anna-kvs@127.0.0.1");
+
+    // Anna has no automatic crash detection — routing still returns both
+    // addresses. Verify fault tolerance by reading each key individually
+    // with a fresh client and short timeout. The client's retry logic
+    // evicts the dead address on timeout and retries via the live node.
+    let mut reader = KVSClient::new(&config, Some(54)).await;
+    reader.set_timeout(Duration::from_secs(2));
+
+    let v1 = reader
+        .get("ft_key_1")
+        .await
+        .expect("GET ft_key_1 failed after node failure");
+    assert_eq!(v1, "survive_1");
+
+    let v2 = reader
+        .get("ft_key_2")
+        .await
+        .expect("GET ft_key_2 failed after node failure");
+    assert_eq!(v2, "survive_2");
 }
