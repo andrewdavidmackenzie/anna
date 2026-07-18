@@ -586,12 +586,12 @@ async fn virtual_nodes_key_distribution() {
     );
 }
 
-/// Node depart: kill Node 2's KVS after data is replicated, verify data
-/// survives on Node 1 via client retry.
+/// Replica survival: with replication=2, kill Node 2's KVS after gossip,
+/// verify data survives on Node 1 via client retry.
 /// Uses base_offset=12000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
-async fn multi_node_depart() {
+async fn multi_node_replica_survival() {
     use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
@@ -640,7 +640,9 @@ async fn multi_node_depart() {
 }
 
 /// Rejoin detection: kill and restart a KVS node, verify it rejoins the
-/// cluster and can serve requests.
+/// cluster by proving data can be served from the restarted node.
+/// With replication=2, PUT after rejoin goes to both nodes. Kill Node 1
+/// and verify the restarted Node 2 serves the data.
 /// Uses base_offset=14000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
@@ -653,36 +655,38 @@ async fn multi_node_rejoin() {
     }
 
     let mut cluster = MultiNodeCluster::new(14000);
-    cluster.start_full_node(NODE1_IP, 1);
-    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
+    cluster.start_full_node(NODE1_IP, 2);
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
 
     let config =
         Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
-    let mut client = KVSClient::new(&config, Some(59)).await;
-
-    // PUT data while both nodes are up
-    client
-        .put("rejoin_key", "before_restart")
-        .await
-        .expect("PUT rejoin_key failed");
 
     // Kill Node 2
     cluster.kill_process("anna-kvs@127.0.0.2");
 
     // Restart Node 2 — it should rejoin via the seed node
-    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
 
-    // PUT new data — routing should include the rejoined node
-    let mut client2 = KVSClient::new(&config, Some(60)).await;
-    client2
-        .put("post_rejoin_key", "after_restart")
+    // PUT data after rejoin — with replication=2, data goes to both nodes
+    let mut client = KVSClient::new(&config, Some(59)).await;
+    client
+        .put("rejoin_proof", "on_both_nodes")
         .await
-        .expect("PUT post_rejoin_key failed");
-    let v = client2
-        .get("post_rejoin_key")
+        .expect("PUT rejoin_proof failed");
+
+    // Wait for gossip to replicate
+    std::thread::sleep(Duration::from_secs(TEST_GOSSIP_EPOCH as u64 + 2));
+
+    // Kill Node 1 — forces reads through Node 2, proving it rejoined
+    cluster.kill_process("anna-kvs@127.0.0.1");
+
+    let mut reader = KVSClient::new(&config, Some(60)).await;
+    reader.set_timeout(Duration::from_secs(2));
+    let v = reader
+        .get("rejoin_proof")
         .await
-        .expect("GET post_rejoin_key failed");
-    assert_eq!(v, "after_restart");
+        .expect("GET rejoin_proof failed — Node 2 did not rejoin");
+    assert_eq!(v, "on_both_nodes");
 }
 
 /// Stateless routing recovery: kill routing and KVS, restart both, verify
