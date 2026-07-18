@@ -170,9 +170,9 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Client Operations            | 15    | 15            | 100%     | —      |
 | Lattice Types                | 6     | 6             | 100%     | —      |
 | Single-Node Features         | 9     | 9             | 100%     | —      |
-| Error Handling               | 5     | 1             | 20%      | #355   |
+| Error Handling               | 6     | 1             | 17%      | #355   |
 | Multi-Tiered Storage         | 4     | 0             | 0%       | #356   |
 | Multi-Node Features          | 31    | 11            | 35%      | #352   |
 | Monitoring & Policy Engine   | 8     | 0             | 0%       | #357   |
 | Server Internals             | 5     | 0             | 0%       | #358   |
-| **Total**                    | **83**| **42**        | **51%**  |        |
+| **Total**                    | **84**| **42**        | **50%**  |        |
