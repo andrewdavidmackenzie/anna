@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1841cfea.js";
+            window.path_to_searchindex_js = "searchindex-11e1401d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7bb26e2b.js"></script>
@@ -1054,9 +1054,9 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tr><td>Key address lookup</td><td>Client queries routing for server addresses</td><td>Yes</td></tr>
 <tr><td>Hash ring caching</td><td>Routing caches storage tier hash rings</td><td>Yes</td></tr>
 <tr><td>Memory-tier preference</td><td>Returns memory addresses when available</td><td>No</td></tr>
-<tr><td>Replication-aware routing</td><td>Uses replication vectors to find all responsible threads</td><td>No</td></tr>
-<tr><td>Pending request queue</td><td>Queues requests while replication factor is unknown</td><td>No</td></tr>
-<tr><td>Multi-threaded routing</td><td>Configurable number of routing threads</td><td>No</td></tr>
+<tr><td>Replication-aware routing</td><td>Uses replication vectors to find all responsible threads</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/371">#371</a></td></tr>
+<tr><td>Pending request queue</td><td>Queues requests while replication factor is unknown</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/371">#371</a></td></tr>
+<tr><td>Multi-threaded routing</td><td>Configurable number of routing threads</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/371">#371</a></td></tr>
 </tbody>
 </table>
 </div>
@@ -1111,9 +1111,9 @@ autoscaling policies.</p>
 <tr><td>Error Handling</td><td><code>anna-kvs</code></td><td>5</td><td>5</td><td>100%</td><td>#355</td></tr>
 <tr><td>Multi-Tiered Storage</td><td><code>anna-kvs</code></td><td>4</td><td>0</td><td>0%</td><td>#356</td></tr>
 <tr><td>Multi-Node Features</td><td><code>anna-kvs</code></td><td>25</td><td>15</td><td>60%</td><td>#352</td></tr>
-<tr><td>Routing Tier</td><td><code>anna-route</code></td><td>6</td><td>2</td><td>33%</td><td>#371</td></tr>
+<tr><td>Routing Tier</td><td><code>anna-route</code></td><td>6</td><td>5</td><td>83%</td><td>#371</td></tr>
 <tr><td>Monitoring &amp; Policy Engine</td><td><code>anna-monitor</code></td><td>14</td><td>0</td><td>0%</td><td>#357</td></tr>
-<tr><td><strong>Total</strong></td><td></td><td><strong>84</strong></td><td><strong>52</strong></td><td><strong>62%</strong></td><td></td></tr>
+<tr><td><strong>Total</strong></td><td></td><td><strong>84</strong></td><td><strong>55</strong></td><td><strong>65%</strong></td><td></td></tr>
 </tbody>
 </table>
 </div>
