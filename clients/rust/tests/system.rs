@@ -208,4 +208,34 @@ async fn system_test_kvs_client() {
         .await
         .expect("GET_MULTI empty failed");
     assert!(empty_results.is_empty());
+
+    // KEY_DNE: GET a key that was never PUT
+    let dne = client.get("nonexistent_key_xyz").await;
+    assert!(dne.is_err(), "GET nonexistent key should fail");
+    assert!(
+        dne.expect_err("expected KEY_DNE")
+            .to_string()
+            .contains("KEY_DNE"),
+        "Error should indicate KEY_DNE"
+    );
+
+    // LATTICE mismatch: PUT as LWW then PUT_SET to the same key.
+    // The server logs the mismatch but silently drops the mismatched PUT
+    // (does not set a LATTICE error code). Verify the original value survives.
+    client
+        .put("lattice_clash", "lww_value")
+        .await
+        .expect("PUT LWW failed");
+    #[cfg(feature = "set")]
+    {
+        client.put_set("lattice_clash", &["set_val"]).await.ok();
+        let original = client
+            .get("lattice_clash")
+            .await
+            .expect("GET after lattice mismatch failed");
+        assert_eq!(
+            original, "lww_value",
+            "Original LWW value should be preserved after mismatched PUT_SET"
+        );
+    }
 }

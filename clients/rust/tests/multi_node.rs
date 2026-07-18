@@ -210,6 +210,37 @@ impl MultiNodeCluster {
         std::thread::sleep(Duration::from_secs(3));
     }
 
+    fn start_routing_only(&mut self, node_ip: &str) {
+        let config = self.config_dir.join(format!("node-{}.yml", node_ip));
+        write_node_config(
+            &config,
+            node_ip,
+            node_ip,
+            1,
+            self.base_offset,
+            TEST_GOSSIP_EPOCH,
+        );
+
+        for name in ["anna-monitor", "anna-route"] {
+            if let Some(child) = spawn_server(name, &config, &server_path()) {
+                self.processes.push(ServerProcess {
+                    child,
+                    label: format!("{}@{}", name, node_ip),
+                });
+            } else {
+                self.shutdown();
+                panic!("Server binary {} not found", name);
+            }
+            std::thread::sleep(Duration::from_secs(1));
+        }
+
+        assert!(
+            wait_for_port(node_ip, self.routing_port(), 30),
+            "Routing tier on {} did not start within 30 seconds",
+            node_ip
+        );
+    }
+
     fn kill_process(&mut self, label_substring: &str) {
         for proc in &mut self.processes {
             if proc.label.contains(label_substring) {
@@ -458,4 +489,35 @@ async fn multi_node_fault_tolerance() {
         .await
         .expect("GET ft_key_2 failed after node failure");
     assert_eq!(v2, "survive_2");
+}
+
+/// NO_SERVERS error: start monitor+route without KVS, verify client gets error.
+/// Uses base_offset=8000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn no_servers_error() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if !server_bin_dir().join("anna-route").exists() {
+        eprintln!("SKIP: server binaries not built");
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(8000);
+    cluster.start_routing_only(NODE1_IP);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(55)).await;
+    client.set_timeout(Duration::from_secs(3));
+
+    let result = client.put("no_servers_test", "value").await;
+    assert!(result.is_err(), "PUT with no KVS servers should fail");
+    let err_msg = result.expect_err("expected error").to_string();
+    assert!(
+        err_msg.contains("NO_SERVERS") || err_msg.contains("timed out"),
+        "Error should indicate NO_SERVERS or timeout, got: {}",
+        err_msg
+    );
 }
