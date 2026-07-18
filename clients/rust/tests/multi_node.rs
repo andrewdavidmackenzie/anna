@@ -586,12 +586,12 @@ async fn virtual_nodes_key_distribution() {
     );
 }
 
-/// Node depart: kill Node 2's KVS after data is replicated, verify data
-/// survives on Node 1 via client retry.
+/// Replica survival: with replication=2, kill Node 2's KVS after gossip,
+/// verify data survives on Node 1 via client retry.
 /// Uses base_offset=12000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
-async fn multi_node_depart() {
+async fn multi_node_replica_survival() {
     use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
