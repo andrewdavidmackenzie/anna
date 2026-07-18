@@ -521,3 +521,67 @@ async fn no_servers_error() {
         err_msg
     );
 }
+
+/// Virtual nodes: verify consistent hashing distributes keys across 2 nodes.
+/// Uses base_offset=10000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn virtual_nodes_key_distribution() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+    use std::collections::HashMap;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(10000);
+    cluster.start_full_node(NODE1_IP, 1);
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(56)).await;
+
+    let mut node_counts: HashMap<String, usize> = HashMap::new();
+    let num_keys = 100;
+
+    for i in 0..num_keys {
+        let key = format!("dist_key_{}", i);
+        let addrs = client.get_key_addresses(&key).await;
+        assert!(!addrs.is_empty(), "No addresses returned for {}", key);
+        for addr in &addrs {
+            let node = if addr.contains(NODE1_IP) {
+                NODE1_IP
+            } else if addr.contains(NODE2_IP) {
+                NODE2_IP
+            } else {
+                "unknown"
+            };
+            *node_counts.entry(node.to_string()).or_default() += 1;
+        }
+    }
+
+    let node1_count = *node_counts.get(NODE1_IP).unwrap_or(&0);
+    let node2_count = *node_counts.get(NODE2_IP).unwrap_or(&0);
+    let total = node1_count + node2_count;
+
+    assert!(
+        total >= num_keys,
+        "Expected at least {} key assignments, got {}",
+        num_keys,
+        total
+    );
+    let node1_pct = (node1_count as f64 / total as f64) * 100.0;
+    let node2_pct = (node2_count as f64 / total as f64) * 100.0;
+    assert!(
+        node1_pct > 15.0 && node1_pct < 85.0,
+        "Node 1 has {}% of keys (expected 15-85%) — distribution too skewed",
+        node1_pct
+    );
+    assert!(
+        node2_pct > 15.0 && node2_pct < 85.0,
+        "Node 2 has {}% of keys (expected 15-85%) — distribution too skewed",
+        node2_pct
+    );
+}

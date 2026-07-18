@@ -126,7 +126,7 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Feature                         | Description                                  | System Tested |
 |---------------------------------|----------------------------------------------|---------------|
 | Two-level hash ring             | Global (nodes) + Local (threads within node) | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
-| Virtual nodes (3000 per thread) | Even distribution across physical threads    | No            |
+| Virtual nodes (3000 per thread) | Even distribution across physical threads    | [#373](https://github.com/andrewdavidmackenzie/anna/issues/373) |
 | CRC32 hashing                   | Hash function for key-to-ring mapping        | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 | Thread responsibility lookup    | Determines which threads handle a key        | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 
@@ -174,7 +174,7 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Single-Node Features         | 9     | 9             | 100%     | —      |
 | Error Handling               | 5     | 5             | 100%     | #355   |
 | Multi-Tiered Storage         | 4     | 0             | 0%       | #356   |
-| Multi-Node Features          | 31    | 11            | 35%      | #352   |
+| Multi-Node Features          | 31    | 12            | 39%      | #352   |
 | Monitoring & Policy Engine   | 8     | 0             | 0%       | #357   |
 | Server Internals             | 5     | 0             | 0%       | #358   |
-| **Total**                    | **83**| **45**        | **54%**  |        |
+| **Total**                    | **83**| **46**        | **55%**  |        |

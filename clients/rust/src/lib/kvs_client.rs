@@ -891,6 +891,12 @@ impl KVSClient {
         Ok(results)
     }
 
+    /// Query routing for a key and return all responsible server addresses.
+    pub async fn get_key_addresses(&mut self, key: &str) -> Vec<Address> {
+        self.key_address_cache.remove(key);
+        self.query_routing(key).await
+    }
+
     /// Clear the key-address cache.
     pub fn clear_cache(&mut self) {
         self.key_address_cache.clear()
@@ -1124,6 +1130,26 @@ mod tests {
         assert_eq!(client.timeout, Duration::from_secs(10));
         client.set_timeout(Duration::from_secs(3));
         assert_eq!(client.timeout, Duration::from_secs(3));
+    }
+
+    #[tokio::test]
+    async fn get_key_addresses_clears_cache_first() {
+        let config = Config::read(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
+        )
+        .expect("failed to read default config");
+        let mut client = KVSClient::new(&config, Some(84)).await;
+        client.key_address_cache.insert(
+            "stale_key".into(),
+            ["tcp://10.0.0.1:6200".to_string()].into(),
+        );
+        let addrs = client.get_key_addresses("stale_key").await;
+        assert!(
+            addrs.is_empty(),
+            "Expected empty (no routing server), got {:?}",
+            addrs
+        );
+        assert!(!client.key_address_cache.contains_key("stale_key"));
     }
 
     #[test]
