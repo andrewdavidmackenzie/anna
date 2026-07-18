@@ -86,9 +86,9 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 |---------------------------------|--------------------------------------------------------------|---------------|
 | Per-key replication factors     | Independent replication per key per tier                      | No            |
 | Default replication from config | `replication.memory`, `replication.ebs`, `replication.local`  | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
-| Replication factor request      | Server fetches unknown factors from metadata                  | No            |
+| Replication factor request      | Server fetches unknown factors from metadata                  | [#368](https://github.com/andrewdavidmackenzie/anna/issues/368) |
 | Replication factor change       | Monitor can dynamically adjust replication                    | No            |
-| Metadata stored as KVS data     | Replication info under `METADATA\|replication\|<key>`         | No            |
+| Metadata stored as KVS data     | Replication info under `METADATA\|replication\|<key>`         | [#368](https://github.com/andrewdavidmackenzie/anna/issues/368) |
 | Gossip after replication change | Data redistributed to new responsible threads                 | No            |
 
 ### Gossip / Multicast
@@ -96,7 +96,7 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Feature                     | Description                                      | System Tested |
 |-----------------------------|--------------------------------------------------|---------------|
 | Periodic gossip (10s epoch) | Changesets multicast to all responsible replicas  | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
-| Merge-at-sender             | Batched updates merged before sending             | No            |
+| Merge-at-sender             | Batched updates merged before sending             | [#368](https://github.com/andrewdavidmackenzie/anna/issues/368) |
 | Gossip to caches            | Changed keys also sent to function executor nodes | No            |
 | Join gossip                 | Redistribute data to newly joined nodes           | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 | Cross-tier gossip           | Updates propagated between memory and disk tiers  | No            |
@@ -141,20 +141,13 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Pending request queue     | Queues requests while replication factor is unknown      | No            |
 | Multi-threaded routing    | Configurable number of routing threads                   | No            |
 
-## Monitoring & Policy Engine (#357)
+## Monitoring & Policy Engine — `anna-monitor` (#357)
 
-| Feature                     | Description                                                   | System Tested |
-|-----------------------------|---------------------------------------------------------------|---------------|
-| Statistics collection       | Per-key access frequency, per-node storage, CPU occupancy     | No            |
-| Elasticity policy           | Add/remove nodes based on storage/compute capacity            | No            |
-| Hot-key replication         | Selectively replicate hot keys across more threads/nodes      | No            |
-| Cross-tier data movement    | Promote hot data to memory, demote cold to disk               | No            |
-| SLO enforcement             | Latency-based scaling (target: 3ms)                           | No            |
-| Underutilization scale-down | Remove nodes when occupancy is low                            | No            |
-| Grace period                | Prevent over-correction during data redistribution            | No            |
-| Policy toggles              | `policy.elasticity`, `policy.selective-rep`, `policy.tiering` | No            |
+The monitoring system is a separate server process (`anna-monitor`) that
+collects statistics from KVS nodes, detects membership changes, and enforces
+autoscaling policies.
 
-## Server Internals (#358)
+### Statistics (reported by `anna-kvs` via `ServerThreadStatistics` protobuf)
 
 | Feature                              | Description                                  | System Tested |
 |--------------------------------------|----------------------------------------------|---------------|
@@ -165,16 +158,29 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Per-key size for primary replicas    | Size of data for keys this thread owns       | No            |
 | Per-event-type occupancy logging     | Performance profiling of event handlers      | No            |
 
+### Autoscaling Policies
+
+| Feature                     | Description                                                   | System Tested |
+|-----------------------------|---------------------------------------------------------------|---------------|
+| Statistics collection       | Monitor aggregates stats from all KVS nodes                   | No            |
+| Elasticity policy           | Add/remove nodes based on storage/compute capacity            | No            |
+| Hot-key replication         | Selectively replicate hot keys across more threads/nodes      | No            |
+| Cross-tier data movement    | Promote hot data to memory, demote cold to disk               | No            |
+| SLO enforcement             | Latency-based scaling (target: 3ms)                           | No            |
+| Underutilization scale-down | Remove nodes when occupancy is low                            | No            |
+| Grace period                | Prevent over-correction during data redistribution            | No            |
+| Policy toggles              | `policy.elasticity`, `policy.selective-rep`, `policy.tiering` | No            |
+
 ## Summary
 
-| Category                     | Total | System Tested | Coverage | Issue  |
-|------------------------------|-------|---------------|----------|--------|
-| Client Operations            | 15    | 15            | 100%     | —      |
-| Lattice Types                | 6     | 6             | 100%     | —      |
-| Single-Node Features         | 9     | 9             | 100%     | —      |
-| Error Handling               | 5     | 5             | 100%     | #355   |
-| Multi-Tiered Storage         | 4     | 0             | 0%       | #356   |
-| Multi-Node Features          | 31    | 14            | 45%      | #352   |
-| Monitoring & Policy Engine   | 8     | 0             | 0%       | #357   |
-| Server Internals             | 5     | 0             | 0%       | #358   |
-| **Total**                    | **83**| **48**        | **58%**  |        |
+| Category                               | Process        | Total | Tested | Coverage | Issue  |
+|----------------------------------------|----------------|-------|--------|----------|--------|
+| Client Operations                      | all clients    | 15    | 15     | 100%     | —      |
+| Lattice Types                          | `anna-kvs`     | 6     | 6      | 100%     | —      |
+| Single-Node Features                   | `anna-kvs`     | 9     | 9      | 100%     | —      |
+| Error Handling                         | `anna-kvs`     | 5     | 5      | 100%     | #355   |
+| Multi-Tiered Storage                   | `anna-kvs`     | 4     | 0      | 0%       | #356   |
+| Multi-Node Features                    | `anna-kvs`     | 25    | 15     | 60%      | #352   |
+| Routing Tier                           | `anna-route`   | 6     | 2      | 33%      | #371   |
+| Monitoring & Policy Engine             | `anna-monitor` | 14    | 0      | 0%       | #357   |
+| **Total**                              |                | **84**| **52** | **62%**  |        |
