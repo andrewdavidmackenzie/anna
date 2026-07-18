@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-11e1401d.js";
+            window.path_to_searchindex_js = "../searchindex-51d4c9e4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-7bb26e2b.js"></script>
@@ -332,7 +332,7 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tr><td>Failure detection via timeout</td><td>Nodes detect peer failures and update hash ring</td><td>No</td></tr>
 <tr><td>Automatic repartitioning</td><td>Data redistributed after node failure</td><td>No</td></tr>
 <tr><td>Stateless routing recovery</td><td>Routing rebuilds hash ring from KVS join messages</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/372">#372</a></td></tr>
-<tr><td>Key migration interleaved with requests</td><td>No downtime during reconfiguration</td><td>No</td></tr>
+<tr><td>Key migration interleaved with requests</td><td>No downtime during reconfiguration</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/380">#380</a></td></tr>
 </tbody>
 </table>
 </div>
@@ -416,10 +416,10 @@ autoscaling policies.</p>
 <tr><td>Single-Node Features</td><td><code>anna-kvs</code></td><td>9</td><td>9</td><td>100%</td><td>—</td></tr>
 <tr><td>Error Handling</td><td><code>anna-kvs</code></td><td>5</td><td>5</td><td>100%</td><td>#355</td></tr>
 <tr><td>Multi-Tiered Storage</td><td><code>anna-kvs</code></td><td>4</td><td>0</td><td>0%</td><td>#356</td></tr>
-<tr><td>Multi-Node Features</td><td><code>anna-kvs</code></td><td>25</td><td>15</td><td>60%</td><td>#352</td></tr>
+<tr><td>Multi-Node Features</td><td><code>anna-kvs</code></td><td>25</td><td>16</td><td>64%</td><td>#352</td></tr>
 <tr><td>Routing Tier</td><td><code>anna-route</code></td><td>6</td><td>5</td><td>83%</td><td>#371</td></tr>
 <tr><td>Monitoring &amp; Policy Engine</td><td><code>anna-monitor</code></td><td>14</td><td>0</td><td>0%</td><td>#357</td></tr>
-<tr><td><strong>Total</strong></td><td></td><td><strong>84</strong></td><td><strong>55</strong></td><td><strong>65%</strong></td><td></td></tr>
+<tr><td><strong>Total</strong></td><td></td><td><strong>84</strong></td><td><strong>56</strong></td><td><strong>67%</strong></td><td></td></tr>
 </tbody>
 </table>
 </div>
