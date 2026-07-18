@@ -108,7 +108,7 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Node join        | New node joins cluster, receives data via gossip     | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 | Node depart      | Node leaves, data redistributed                      | No            |
 | Self-depart      | Node gracefully removes itself, gossips all data out | No            |
-| Rejoin detection | Join counter distinguishes fresh joins from rejoins  | No            |
+| Rejoin detection | Join counter distinguishes fresh joins from rejoins  | [#372](https://github.com/andrewdavidmackenzie/anna/issues/372) |
 | Seed node        | First routing node serves cluster membership         | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 
 ### Fault Tolerance
@@ -118,7 +118,7 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | k-fault tolerance                       | k+1 replicas ensure k failures tolerable        | [#364](https://github.com/andrewdavidmackenzie/anna/issues/364) |
 | Failure detection via timeout           | Nodes detect peer failures and update hash ring  | No            |
 | Automatic repartitioning                | Data redistributed after node failure            | No            |
-| Stateless routing/monitoring            | Recovers by querying peers/storage               | No            |
+| Stateless routing recovery              | Routing rebuilds hash ring from KVS join messages | [#372](https://github.com/andrewdavidmackenzie/anna/issues/372) |
 | Key migration interleaved with requests | No downtime during reconfiguration               | No            |
 
 ### Consistent Hashing
@@ -174,7 +174,7 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Single-Node Features         | 9     | 9             | 100%     | —      |
 | Error Handling               | 5     | 5             | 100%     | #355   |
 | Multi-Tiered Storage         | 4     | 0             | 0%       | #356   |
-| Multi-Node Features          | 31    | 12            | 39%      | #352   |
+| Multi-Node Features          | 31    | 14            | 45%      | #352   |
 | Monitoring & Policy Engine   | 8     | 0             | 0%       | #357   |
 | Server Internals             | 5     | 0             | 0%       | #358   |
-| **Total**                    | **83**| **46**        | **55%**  |        |
+| **Total**                    | **83**| **48**        | **58%**  |        |
