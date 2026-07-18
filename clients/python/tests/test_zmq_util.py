@@ -35,21 +35,18 @@ class TestRecvResponse:
     def test_skips_non_matching_then_matches(self):
         resp_class = MagicMock()
 
-        call_count = [0]
-        def make_resp():
-            obj = MagicMock()
-            if call_count[0] == 0:
+        obj = MagicMock()
+        parse_count = [0]
+        def parse_side_effect(data):
+            if parse_count[0] == 0:
                 obj.response_id = "wrong-id"
-                obj.Clear = MagicMock()
-                def update_id(data):
-                    obj.response_id = "req-1"
-                obj.ParseFromString = MagicMock(side_effect=update_id)
             else:
                 obj.response_id = "req-1"
-            call_count[0] += 1
-            return obj
+            parse_count[0] += 1
 
-        resp_class.side_effect = make_resp
+        obj.ParseFromString = MagicMock(side_effect=parse_side_effect)
+        obj.Clear = MagicMock()
+        resp_class.return_value = obj
 
         sock = MagicMock()
         sock.poll.return_value = 1
@@ -57,6 +54,7 @@ class TestRecvResponse:
 
         responses = recv_response(["req-1"], sock, resp_class)
         assert len(responses) == 1
+        assert obj.Clear.called
 
     def test_collects_multiple_responses(self):
         resp_class = MagicMock()
