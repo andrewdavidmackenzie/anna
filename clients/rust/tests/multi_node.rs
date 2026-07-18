@@ -585,3 +585,56 @@ async fn virtual_nodes_key_distribution() {
         node2_pct
     );
 }
+
+/// Node depart: kill Node 2's KVS after data is replicated, verify data
+/// survives on Node 1 via client retry.
+/// Uses base_offset=12000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn multi_node_depart() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(12000);
+    cluster.start_full_node(NODE1_IP, 2);
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(57)).await;
+
+    client
+        .put("depart_key_1", "data_1")
+        .await
+        .expect("PUT depart_key_1 failed");
+    client
+        .put("depart_key_2", "data_2")
+        .await
+        .expect("PUT depart_key_2 failed");
+
+    // Wait for gossip to replicate to both nodes
+    std::thread::sleep(Duration::from_secs(TEST_GOSSIP_EPOCH as u64 + 2));
+
+    // Kill Node 2's KVS — simulates node departure
+    cluster.kill_process("anna-kvs@127.0.0.2");
+
+    // Data should survive on Node 1 via client retry
+    let mut reader = KVSClient::new(&config, Some(58)).await;
+    reader.set_timeout(Duration::from_secs(2));
+
+    let v1 = reader
+        .get("depart_key_1")
+        .await
+        .expect("GET depart_key_1 failed after node depart");
+    assert_eq!(v1, "data_1");
+
+    let v2 = reader
+        .get("depart_key_2")
+        .await
+        .expect("GET depart_key_2 failed after node depart");
+    assert_eq!(v2, "data_2");
+}

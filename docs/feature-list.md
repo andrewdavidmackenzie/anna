@@ -106,7 +106,7 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Feature          | Description                                          | System Tested |
 |------------------|------------------------------------------------------|---------------|
 | Node join        | New node joins cluster, receives data via gossip     | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
-| Node depart      | Node leaves, data redistributed                      | No            |
+| Node depart      | Node leaves, data redistributed                      | [#365](https://github.com/andrewdavidmackenzie/anna/issues/365) |
 | Self-depart      | Node gracefully removes itself, gossips all data out | No            |
 | Rejoin detection | Join counter distinguishes fresh joins from rejoins  | No            |
 | Seed node        | First routing node serves cluster membership         | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
@@ -174,7 +174,7 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Single-Node Features         | 9     | 9             | 100%     | —      |
 | Error Handling               | 5     | 5             | 100%     | #355   |
 | Multi-Tiered Storage         | 4     | 0             | 0%       | #356   |
-| Multi-Node Features          | 31    | 12            | 39%      | #352   |
+| Multi-Node Features          | 31    | 13            | 42%      | #352   |
 | Monitoring & Policy Engine   | 8     | 0             | 0%       | #357   |
 | Server Internals             | 5     | 0             | 0%       | #358   |
-| **Total**                    | **83**| **46**        | **55%**  |        |
+| **Total**                    | **83**| **47**        | **57%**  |        |
