@@ -70,10 +70,10 @@ It is a client-side construct — see `docs/client-feature-list.md`.
 
 | Feature                       | Description                                           | System Tested |
 |-------------------------------|-------------------------------------------------------|---------------|
-| Disk tier                     | File-based storage on configurable path               | No            |
-| Tier selection                | `SERVER_TYPE` env var selects storage medium           | No            |
-| Identical kernel across tiers | Same storage kernel, different serialization layer     | No            |
-| Node capacities               | `capacities.memory-cap`, `capacities.ebs-cap`         | No            |
+| Disk tier                     | File-based storage on configurable path               | [#387](https://github.com/andrewdavidmackenzie/anna/issues/387) |
+| Tier selection                | `SERVER_TYPE` env var selects storage medium           | [#387](https://github.com/andrewdavidmackenzie/anna/issues/387) |
+| Identical kernel across tiers | Same storage kernel, different serialization layer     | [#387](https://github.com/andrewdavidmackenzie/anna/issues/387) |
+| Node capacities               | `capacities.memory-cap`, `capacities.ebs-cap`         | [#387](https://github.com/andrewdavidmackenzie/anna/issues/387) |
 
 Note: `SERVER_TYPE` and `ebs` config should be renamed to storage-medium-agnostic
 terms (e.g., `STORAGE_MEDIUM=ram|file`).
@@ -136,7 +136,7 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 |---------------------------|----------------------------------------------------------|---------------|
 | Key address lookup        | Client queries routing for server addresses              | Yes           |
 | Hash ring caching         | Routing caches storage tier hash rings                   | Yes           |
-| Memory-tier preference    | Returns memory addresses when available                  | No            |
+| Memory-tier preference    | Returns memory addresses when available                  | [#387](https://github.com/andrewdavidmackenzie/anna/issues/387) |
 | Replication-aware routing | Uses replication vectors to find all responsible threads | [#371](https://github.com/andrewdavidmackenzie/anna/issues/371) |
 | Pending request queue     | Queues requests while replication factor is unknown      | [#371](https://github.com/andrewdavidmackenzie/anna/issues/371) |
 | Multi-threaded routing    | Configurable number of routing threads                   | [#371](https://github.com/andrewdavidmackenzie/anna/issues/371) |
@@ -179,8 +179,8 @@ autoscaling policies.
 | Lattice Types                          | `anna-kvs`     | 6     | 6      | 100%     | —      |
 | Single-Node Features                   | `anna-kvs`     | 9     | 9      | 100%     | —      |
 | Error Handling                         | `anna-kvs`     | 5     | 5      | 100%     | #355   |
-| Multi-Tiered Storage                   | `anna-kvs`     | 4     | 0      | 0%       | #356   |
+| Multi-Tiered Storage                   | `anna-kvs`     | 4     | 4      | 100%     | #387   |
 | Multi-Node Features                    | `anna-kvs`     | 25    | 19     | 76%      | #352   |
-| Routing Tier                           | `anna-route`   | 6     | 5      | 83%      | #371   |
+| Routing Tier                           | `anna-route`   | 6     | 6      | 100%     | #371   |
 | Monitoring & Policy Engine             | `anna-monitor` | 14    | 0      | 0%       | #357   |
-| **Total**                              |                | **84**| **59** | **70%**  |        |
+| **Total**                              |                | **84**| **64** | **76%**  |        |
