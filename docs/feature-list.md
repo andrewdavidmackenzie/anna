@@ -116,8 +116,8 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Feature                                 | Description                                     | System Tested |
 |-----------------------------------------|-------------------------------------------------|---------------|
 | k-fault tolerance                       | k+1 replicas ensure k failures tolerable        | [#364](https://github.com/andrewdavidmackenzie/anna/issues/364) |
-| Failure detection via timeout           | Nodes detect peer failures and update hash ring  | No            |
-| Automatic repartitioning                | Data redistributed after node failure            | No            |
+| Failure detection via timeout           | Nodes detect peer failures and update hash ring  | [#378](https://github.com/andrewdavidmackenzie/anna/issues/378) |
+| Automatic repartitioning                | Data redistributed after node failure            | [#378](https://github.com/andrewdavidmackenzie/anna/issues/378) |
 | Stateless routing recovery              | Routing rebuilds hash ring from KVS join messages | [#372](https://github.com/andrewdavidmackenzie/anna/issues/372) |
 | Key migration interleaved with requests | No downtime during reconfiguration               | [#380](https://github.com/andrewdavidmackenzie/anna/issues/380) |
 
@@ -162,7 +162,6 @@ autoscaling policies.
 
 | Feature                     | Description                                                   | System Tested |
 |-----------------------------|---------------------------------------------------------------|---------------|
-| Statistics collection       | Monitor aggregates stats from all KVS nodes                   | No            |
 | Elasticity policy           | Add/remove nodes based on storage/compute capacity            | No            |
 | Hot-key replication         | Selectively replicate hot keys across more threads/nodes      | No            |
 | Cross-tier data movement    | Promote hot data to memory, demote cold to disk               | No            |
@@ -180,7 +179,7 @@ autoscaling policies.
 | Single-Node Features                   | `anna-kvs`     | 9     | 9      | 100%     | —      |
 | Error Handling                         | `anna-kvs`     | 5     | 5      | 100%     | —      |
 | Multi-Tiered Storage                   | `anna-kvs`     | 4     | 4      | 100%     | —      |
-| Multi-Node Features                    | `anna-kvs`     | 25    | 20     | 80%      | #352   |
+| Multi-Node Features                    | `anna-kvs`     | 25    | 24     | 96%      | #378   |
 | Routing Tier                           | `anna-route`   | 6     | 6      | 100%     | —      |
-| Monitoring & Policy Engine             | `anna-monitor` | 14    | 0      | 0%       | #357   |
-| **Total**                              |                | **84**| **65** | **77%**  |        |
+| Monitoring & Policy Engine             | `anna-monitor` | 13    | 0      | 0%       | #357   |
+| **Total**                              |                | **83**| **69** | **83%**  |        |

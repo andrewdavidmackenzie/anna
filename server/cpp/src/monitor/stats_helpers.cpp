@@ -31,23 +31,22 @@ void collect_internal_stats(
 
     for (const ServerThread &st : hash_ring.get_unique_servers()) {
       for (unsigned i = 0; i < kTierMetadata[tier].thread_number_; i++) {
-        Key key = get_metadata_key(st, tier, i, MetadataType::server_stats);
-        prepare_metadata_get_request(key, global_hash_rings[Tier::MEMORY],
-                                     local_hash_rings[Tier::MEMORY],
-                                     addr_request_map,
-                                     mt.response_connect_address(), rid);
+        // Query each node directly for its own stats (stored locally)
+        Address target = ServerThread(st.public_ip(), st.private_ip(), i)
+                             .key_request_connect_address();
 
-        key = get_metadata_key(st, tier, i, MetadataType::key_access);
-        prepare_metadata_get_request(key, global_hash_rings[Tier::MEMORY],
-                                     local_hash_rings[Tier::MEMORY],
-                                     addr_request_map,
-                                     mt.response_connect_address(), rid);
+        kvs::KeyRequest &req = addr_request_map[target];
+        if (req.request_id().empty()) {
+          req.set_type(kvs::RequestType::GET);
+          req.set_request_id(mt.ip() + ":" + std::to_string(rid++));
+          req.set_response_address(mt.response_connect_address());
+        }
 
-        key = get_metadata_key(st, tier, i, MetadataType::key_size);
-        prepare_metadata_get_request(key, global_hash_rings[Tier::MEMORY],
-                                     local_hash_rings[Tier::MEMORY],
-                                     addr_request_map,
-                                     mt.response_connect_address(), rid);
+        for (auto type : {MetadataType::server_stats, MetadataType::key_access,
+                          MetadataType::key_size}) {
+          Key key = get_metadata_key(st, tier, i, type);
+          prepare_get_tuple(req, key, kvs::LatticeType::LWW);
+        }
       }
     }
   }

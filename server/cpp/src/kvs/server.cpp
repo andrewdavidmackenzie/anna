@@ -555,15 +555,12 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
       prepare_put_tuple(req, key, kvs::LatticeType::LWW,
                         serialize(ts, serialized_stat));
 
-      auto threads = kHashRingUtil->get_responsible_threads_metadata(
-          key, global_hash_rings[Tier::MEMORY], local_hash_rings[Tier::MEMORY]);
-      if (threads.size() != 0) {
-        Address target_address =
-            std::next(begin(threads), rand_r(&seed) % threads.size())
-                ->key_request_connect_address();
+      // Store stats locally so the monitor can query this node directly
+      {
         string serialized;
         req.SerializeToString(&serialized);
-        kZmqUtil->send_string(serialized, &pushers[target_address]);
+        kZmqUtil->send_string(serialized,
+                              &pushers[wt.key_request_connect_address()]);
       }
 
       // compute key access stats
@@ -600,16 +597,11 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
       prepare_put_tuple(req, key, kvs::LatticeType::LWW,
                         serialize(ts, serialized_access));
 
-      threads = kHashRingUtil->get_responsible_threads_metadata(
-          key, global_hash_rings[Tier::MEMORY], local_hash_rings[Tier::MEMORY]);
-
-      if (threads.size() != 0) {
-        Address target_address =
-            std::next(begin(threads), rand_r(&seed) % threads.size())
-                ->key_request_connect_address();
+      {
         string serialized;
         req.SerializeToString(&serialized);
-        kZmqUtil->send_string(serialized, &pushers[target_address]);
+        kZmqUtil->send_string(serialized,
+                              &pushers[wt.key_request_connect_address()]);
       }
 
       KeySizeData primary_key_size;
@@ -632,16 +624,11 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
       prepare_put_tuple(req, key, kvs::LatticeType::LWW,
                         serialize(ts, serialized_size));
 
-      threads = kHashRingUtil->get_responsible_threads_metadata(
-          key, global_hash_rings[Tier::MEMORY], local_hash_rings[Tier::MEMORY]);
-
-      if (threads.size() != 0) {
-        Address target_address =
-            std::next(begin(threads), rand_r(&seed) % threads.size())
-                ->key_request_connect_address();
+      {
         string serialized;
         req.SerializeToString(&serialized);
-        kZmqUtil->send_string(serialized, &pushers[target_address]);
+        kZmqUtil->send_string(serialized,
+                              &pushers[wt.key_request_connect_address()]);
       }
 
       report_start = std::chrono::system_clock::now();
