@@ -87,9 +87,9 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Per-key replication factors     | Independent replication per key per tier                      | [#385](https://github.com/andrewdavidmackenzie/anna/issues/385) |
 | Default replication from config | `replication.memory`, `replication.ebs`, `replication.local`  | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 | Replication factor request      | Server fetches unknown factors from metadata                  | [#368](https://github.com/andrewdavidmackenzie/anna/issues/368) |
-| Replication factor change       | Monitor can dynamically adjust replication                    | No            |
+| Replication factor change       | Monitor can dynamically adjust replication                    | [#394](https://github.com/andrewdavidmackenzie/anna/issues/394) |
 | Metadata stored as KVS data     | Replication info under `METADATA\|replication\|<key>`         | [#368](https://github.com/andrewdavidmackenzie/anna/issues/368) |
-| Gossip after replication change | Data redistributed to new responsible threads                 | No            |
+| Gossip after replication change | Data redistributed to new responsible threads                 | [#394](https://github.com/andrewdavidmackenzie/anna/issues/394) |
 
 ### Gossip / Multicast
 
@@ -180,7 +180,7 @@ autoscaling policies.
 | Single-Node Features                   | `anna-kvs`     | 9     | 9      | 100%     | —      |
 | Error Handling                         | `anna-kvs`     | 5     | 5      | 100%     | —      |
 | Multi-Tiered Storage                   | `anna-kvs`     | 4     | 4      | 100%     | —      |
-| Multi-Node Features                    | `anna-kvs`     | 25    | 20     | 80%      | #352   |
+| Multi-Node Features                    | `anna-kvs`     | 25    | 22     | 88%      | #352   |
 | Routing Tier                           | `anna-route`   | 6     | 6      | 100%     | —      |
 | Monitoring & Policy Engine             | `anna-monitor` | 14    | 0      | 0%       | #357   |
-| **Total**                              |                | **84**| **65** | **77%**  |        |
+| **Total**                              |                | **84**| **67** | **80%**  |        |

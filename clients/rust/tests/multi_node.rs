@@ -17,6 +17,7 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 const TEST_GOSSIP_EPOCH: u32 = 2;
+const ZMQ_SETTLE_MS: u64 = 500;
 const NODE1_IP: &str = "127.0.0.1";
 const NODE2_IP: &str = "127.0.0.2";
 
@@ -160,7 +161,7 @@ fn wait_for_port(ip: &str, port: u16, timeout_secs: u64) -> bool {
         if TcpStream::connect_timeout(&addr.parse().unwrap(), Duration::from_secs(1)).is_ok() {
             return true;
         }
-        std::thread::sleep(Duration::from_millis(500));
+        std::thread::sleep(Duration::from_millis(ZMQ_SETTLE_MS));
     }
     false
 }
@@ -319,6 +320,60 @@ impl MultiNodeCluster {
         );
     }
 
+    async fn send_replication_change(&self, routing_ip: &str, key: &str, memory_rep: u32) {
+        use annalib::proto::metadata::{
+            replication_factor::ReplicationValue, ReplicationFactor, ReplicationFactorUpdate, Tier,
+        };
+        use prost::Message;
+        use zeromq::{PushSocket, Socket, SocketSend};
+
+        let rep = ReplicationFactor {
+            key: key.to_string(),
+            global: vec![
+                ReplicationValue {
+                    tier: Tier::Memory as i32,
+                    value: memory_rep,
+                },
+                ReplicationValue {
+                    tier: Tier::Disk as i32,
+                    value: 0,
+                },
+            ],
+            local: vec![ReplicationValue {
+                tier: Tier::Memory as i32,
+                value: 1,
+            }],
+        };
+        let update = ReplicationFactorUpdate { updates: vec![rep] };
+        let encoded = update.encode_to_vec();
+
+        // Send to routing tier (port 6550)
+        let routing_port = 6550 + self.base_offset;
+        let routing_addr = format!("tcp://{}:{}", routing_ip, routing_port);
+        let mut rsock = PushSocket::new();
+        rsock
+            .connect(&routing_addr)
+            .await
+            .expect("Failed to connect to routing replication change port");
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        rsock
+            .send(encoded.clone().into())
+            .await
+            .expect("Failed to send to routing");
+
+        // Send to KVS nodes (port 6300) so they update local maps and gossip
+        for kvs_ip in [NODE1_IP, NODE2_IP] {
+            let kvs_port = 6300 + self.base_offset;
+            let kvs_addr = format!("tcp://{}:{}", kvs_ip, kvs_port);
+            let mut ksock = PushSocket::new();
+            if ksock.connect(&kvs_addr).await.is_ok() {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                ksock.send(encoded.clone().into()).await.ok();
+            }
+        }
+        std::thread::sleep(Duration::from_millis(ZMQ_SETTLE_MS));
+    }
+
     #[cfg(unix)]
     fn signal_self_depart(&self, label_substring: &str) {
         use nix::sys::signal::{kill, Signal};
@@ -344,7 +399,7 @@ impl MultiNodeCluster {
                 }
             }
         }
-        std::thread::sleep(Duration::from_millis(500));
+        std::thread::sleep(Duration::from_millis(ZMQ_SETTLE_MS));
         for proc in &mut self.processes {
             if proc.label.contains(label_substring) {
                 proc.child.kill().ok();
@@ -368,7 +423,7 @@ impl MultiNodeCluster {
                 kill(pid, Signal::SIGTERM).ok();
             }
         }
-        std::thread::sleep(Duration::from_millis(500));
+        std::thread::sleep(Duration::from_millis(ZMQ_SETTLE_MS));
         for proc in &mut self.processes {
             proc.child.kill().ok();
             proc.child.wait().ok();
@@ -1157,7 +1212,7 @@ async fn self_depart_signal() {
             kvs_exited = true;
             break;
         }
-        std::thread::sleep(Duration::from_millis(500));
+        std::thread::sleep(Duration::from_millis(ZMQ_SETTLE_MS));
     }
     assert!(kvs_exited, "KVS should have exited after SIGUSR1");
 }
@@ -1298,4 +1353,104 @@ async fn cross_tier_gossip() {
             .unwrap_or_else(|e| panic!("GET {} failed: {}", key, e));
         assert_eq!(val, format!("val_{}", i));
     }
+}
+
+/// Replication factor change: send ReplicationFactorUpdate directly to
+/// routing, verify it updates the number of responsible addresses.
+/// Uses base_offset=36000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn replication_factor_change() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(36000);
+    cluster.start_full_node(NODE1_IP, 1);
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(75)).await;
+
+    client
+        .put("rep_change_key", "initial")
+        .await
+        .expect("PUT failed");
+
+    let addrs_before = client.get_key_addresses("rep_change_key").await;
+    assert_eq!(
+        addrs_before.len(),
+        1,
+        "Expected 1 address before change, got {}",
+        addrs_before.len()
+    );
+
+    // Send ReplicationFactorUpdate to routing: change to replication=2
+    cluster
+        .send_replication_change(NODE1_IP, "rep_change_key", 2)
+        .await;
+
+    let addrs_after = client.get_key_addresses("rep_change_key").await;
+    assert!(
+        addrs_after.len() >= 2,
+        "Expected 2 addresses after replication change, got {}",
+        addrs_after.len()
+    );
+
+    // Wait for gossip to redistribute data to Node 2
+    std::thread::sleep(Duration::from_secs(TEST_GOSSIP_EPOCH as u64 + 2));
+
+    // Clear cache so routing re-resolves with updated replication
+    client.clear_cache();
+    let val = client
+        .get("rep_change_key")
+        .await
+        .expect("GET after replication change failed");
+    assert_eq!(val, "initial");
+}
+
+/// Gossip after replication change: change replication from 1 to 2,
+/// verify data is redistributed to the second node via gossip.
+/// Uses base_offset=38000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn gossip_after_replication_change() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(38000);
+    cluster.start_full_node(NODE1_IP, 1);
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(76)).await;
+
+    client
+        .put("gossip_rep_key", "redistributed")
+        .await
+        .expect("PUT failed");
+
+    // Change replication to 2 — KVS should gossip data to the second node
+    cluster
+        .send_replication_change(NODE1_IP, "gossip_rep_key", 2)
+        .await;
+
+    // Wait for gossip epoch to redistribute
+    std::thread::sleep(Duration::from_secs(TEST_GOSSIP_EPOCH as u64 + 2));
+
+    let mut reader = KVSClient::new(&config, Some(77)).await;
+    let val = reader
+        .get("gossip_rep_key")
+        .await
+        .expect("GET after replication change + gossip failed");
+    assert_eq!(val, "redistributed");
 }
