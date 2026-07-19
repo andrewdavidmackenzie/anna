@@ -306,6 +306,8 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
                           depart_done_addr, global_hash_rings, local_hash_rings,
                           stored_key_map, key_replication_map, routing_ips,
                           monitoring_ips, wt, pushers, serializers);
+      // Allow ZMQ to deliver depart notifications before process exits
+      std::this_thread::sleep_for(std::chrono::seconds(2));
       return;
     }
 
