@@ -1154,8 +1154,12 @@ async fn disk_tier_basic() {
 
     let mut cluster = MultiNodeCluster::new(30000);
 
-    // Start full cluster with monitor+route on Node 1 (memory tier)
-    cluster.start_full_node(NODE1_IP, 1);
+    // Start full cluster with replication_ebs=1 so routing assigns to disk tier
+    cluster.start_full_node_with_config(NodeConfig {
+        replication_ebs: 1,
+        base_offset: 30000,
+        ..Default::default()
+    });
 
     // Start a disk-tier KVS on Node 2
     cluster.start_disk_kvs_node(NODE2_IP, NODE1_IP);
@@ -1196,7 +1200,11 @@ async fn memory_tier_preference() {
     }
 
     let mut cluster = MultiNodeCluster::new(32000);
-    cluster.start_full_node(NODE1_IP, 1);
+    cluster.start_full_node_with_config(NodeConfig {
+        replication_ebs: 1,
+        base_offset: 32000,
+        ..Default::default()
+    });
     cluster.start_disk_kvs_node(NODE2_IP, NODE1_IP);
 
     let config =
