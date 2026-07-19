@@ -333,6 +333,18 @@ impl MultiNodeCluster {
     }
 
     fn kill_process(&mut self, label_substring: &str) {
+        #[cfg(unix)]
+        {
+            use nix::sys::signal::{kill, Signal};
+            use nix::unistd::Pid;
+            for proc in &mut self.processes {
+                if proc.label.contains(label_substring) {
+                    let pid = Pid::from_raw(proc.child.id() as i32);
+                    kill(pid, Signal::SIGTERM).ok();
+                }
+            }
+        }
+        std::thread::sleep(Duration::from_millis(500));
         for proc in &mut self.processes {
             if proc.label.contains(label_substring) {
                 proc.child.kill().ok();
@@ -347,6 +359,16 @@ impl MultiNodeCluster {
     }
 
     fn shutdown(&mut self) {
+        #[cfg(unix)]
+        {
+            use nix::sys::signal::{kill, Signal};
+            use nix::unistd::Pid;
+            for proc in &mut self.processes {
+                let pid = Pid::from_raw(proc.child.id() as i32);
+                kill(pid, Signal::SIGTERM).ok();
+            }
+        }
+        std::thread::sleep(Duration::from_millis(500));
         for proc in &mut self.processes {
             proc.child.kill().ok();
             proc.child.wait().ok();
