@@ -193,6 +193,11 @@ int main(int argc, char *argv[]) {
 
   unsigned server_monitoring_epoch = 0;
 
+  // Track last observed epoch per node for crash detection
+  map<Address, unsigned> last_observed_epoch;
+  map<Address, std::chrono::time_point<std::chrono::system_clock>>
+      last_epoch_change;
+
   unsigned rid = 0;
 
   while (!shutdown_requested.load()) {
@@ -200,6 +205,18 @@ int main(int argc, char *argv[]) {
 
     if (pollitems[0].revents & ZMQ_POLLIN) {
       string serialized = kZmqUtil->recv_string(&notify_puller);
+
+      // Track join time for crash detection
+      vector<string> parts;
+      split(serialized, ':', parts);
+      if (parts.size() >= 4 && parts[0] == "join") {
+        Address node_id = parts[2] + "/" + parts[3];
+        last_epoch_change[node_id] = std::chrono::system_clock::now();
+      } else if (parts.size() >= 4 && parts[0] == "depart") {
+        Address node_id = parts[2] + "/" + parts[3];
+        last_epoch_change.erase(node_id);
+      }
+
       membership_handler(log, serialized, global_hash_rings, new_memory_count,
                          new_ebs_count, grace_start, routing_ips,
                          memory_storage, ebs_storage, memory_occupancy,
@@ -249,6 +266,68 @@ int main(int argc, char *argv[]) {
           global_hash_rings, local_hash_rings, pushers, mt, response_puller,
           log, rid, key_access_frequency, key_size, memory_storage, ebs_storage,
           memory_occupancy, ebs_occupancy, memory_accesses, ebs_accesses);
+
+      // Crash detection: nodes that reported stats before but stopped
+      auto now = std::chrono::system_clock::now();
+
+      // Mark nodes that successfully reported stats this cycle
+      set<Address> reporting_nodes;
+      auto mark_reporting = [&](const OccupancyStats &occupancy) {
+        for (const auto &node_pair : occupancy) {
+          reporting_nodes.insert(node_pair.first);
+          last_epoch_change[node_pair.first] = now;
+        }
+      };
+      mark_reporting(memory_occupancy);
+      mark_reporting(ebs_occupancy);
+
+      // Only check nodes that were previously seen but stopped reporting
+      vector<Address> dead_nodes;
+      for (const auto &epoch_pair : last_epoch_change) {
+        if (reporting_nodes.find(epoch_pair.first) == reporting_nodes.end()) {
+          auto stale_duration =
+              std::chrono::duration_cast<std::chrono::seconds>(
+                  now - epoch_pair.second)
+                  .count();
+          if (stale_duration > kMonitoringThreshold) {
+            dead_nodes.push_back(epoch_pair.first);
+          }
+        }
+      }
+
+      for (const Address &node_id : dead_nodes) {
+        // node_id is "public_ip/private_ip"
+        vector<string> ips;
+        split(node_id, '/', ips);
+        if (ips.size() == 2) {
+          Address pub_ip = ips[0];
+          Address priv_ip = ips[1];
+
+          for (const Tier &tier : kAllTiers) {
+            if (global_hash_rings[tier].size() > 0) {
+              ServerThread st(pub_ip, priv_ip, 0);
+              auto servers = global_hash_rings[tier].get_unique_servers();
+              if (servers.find(st) != servers.end()) {
+                log->info("Detected dead node {}/{} (tier {}), sending depart.",
+                          pub_ip, priv_ip, Tier_Name(tier));
+
+                global_hash_rings[tier].remove(pub_ip, priv_ip, 0);
+
+                string msg =
+                    "depart:" + Tier_Name(tier) + ":" + pub_ip + ":" + priv_ip;
+                for (const string &routing_ip : routing_ips) {
+                  kZmqUtil->send_string(
+                      msg,
+                      &pushers[RoutingThread(routing_ip, 0)
+                                   .notify_connect_address()]);
+                }
+              }
+            }
+          }
+        }
+        last_observed_epoch.erase(node_id);
+        last_epoch_change.erase(node_id);
+      }
 
       compute_summary_stats(key_access_frequency, memory_storage, ebs_storage,
                             memory_occupancy, ebs_occupancy, memory_accesses,

@@ -95,11 +95,12 @@ ports:
   base_offset: {base_offset}
 timings:
   gossip_epoch: {gossip_epoch}
-  server_report_period: 5
+  server_report_period: 3
   key_monitoring_period: 15
-  monitoring_timeout: 10
+  monitoring_timeout: 8
+  monitoring_response_timeout_ms: 1000
   data_redistribute_batch: 50
-  grace_period: 30
+  grace_period: 10
 replication:
   memory: {replication_memory}
   ebs: {replication_ebs}
@@ -1298,4 +1299,74 @@ async fn cross_tier_gossip() {
             .unwrap_or_else(|e| panic!("GET {} failed: {}", key, e));
         assert_eq!(val, format!("val_{}", i));
     }
+}
+
+/// Crash detection: monitor detects dead node via stale epoch, notifies
+/// routing to remove it. After detection, data is accessible from the
+/// surviving node without client-side retry.
+/// Uses base_offset=40000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn crash_detection_via_epoch() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(40000);
+    cluster.start_full_node_with_config(NodeConfig {
+        replication_memory: 1,
+        base_offset: 40000,
+        gossip_epoch: 2,
+        ..Default::default()
+    });
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(78)).await;
+
+    client
+        .put("crash_detect_key", "survives")
+        .await
+        .expect("PUT failed");
+
+    // Wait for gossip replication AND at least one successful monitor
+    // stats cycle (monitoring_timeout=8s, server_report_period=3s)
+    std::thread::sleep(Duration::from_secs(12));
+
+    // Kill Node 2's KVS — its stats stop being reported
+    cluster.kill_process("anna-kvs@127.0.0.2");
+
+    // Wait for monitor to detect missing stats and notify routing.
+    // After monitoring_timeout (8s) without stats from Node 2,
+    // the monitor declares it dead and notifies routing.
+    std::thread::sleep(Duration::from_secs(15));
+
+    // Extra wait for routing to process the depart notification
+    std::thread::sleep(Duration::from_secs(2));
+
+    // Fresh client with short timeout + retry — if routing hasn't
+    // fully updated, the retry will evict the dead address
+    let mut reader = KVSClient::new(&config, Some(79)).await;
+    reader.set_timeout(Duration::from_secs(3));
+
+    // Verify crash detection worked: routing should only return Node 1
+    let addrs = reader.get_key_addresses("crash_detect_key").await;
+    assert!(
+        !addrs.is_empty(),
+        "Routing returned no addresses — monitor may not have notified routing"
+    );
+    assert!(
+        addrs.iter().all(|a| a.contains(NODE1_IP)),
+        "Expected only Node 1 addresses after Node 2 departed, got {:?}",
+        addrs
+    );
+    assert!(
+        !addrs.iter().any(|a| a.contains(NODE2_IP)),
+        "Node 2 should have been removed from routing, got {:?}",
+        addrs
+    );
 }

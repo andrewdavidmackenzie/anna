@@ -45,8 +45,15 @@ void user_request_handler(
         global_hash_rings, local_hash_rings, key_replication_map, pushers,
         kSelfTierIdVector, succeed, seed);
 
+    // Accept metadata keys that belong to this node (contain our IP)
+    // regardless of hash ring responsibility — enables direct stats queries
+    bool is_own_metadata = is_metadata(key) &&
+        key.find(wt.public_ip()) != string::npos &&
+        key.find(wt.private_ip()) != string::npos;
+
     if (succeed) {
-      if (std::find(threads.begin(), threads.end(), wt) == threads.end()) {
+      if (!is_own_metadata &&
+          std::find(threads.begin(), threads.end(), wt) == threads.end()) {
         if (is_metadata(key)) {
           // this means that this node is not responsible for this metadata key
           kvs::KeyTuple *tp = response.add_tuples();
