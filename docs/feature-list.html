@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-51d4c9e4.js";
+            window.path_to_searchindex_js = "../searchindex-40950dfe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-7bb26e2b.js"></script>
@@ -282,7 +282,7 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
 </thead>
 <tbody>
-<tr><td>Per-key replication factors</td><td>Independent replication per key per tier</td><td>No</td></tr>
+<tr><td>Per-key replication factors</td><td>Independent replication per key per tier</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/385">#385</a></td></tr>
 <tr><td>Default replication from config</td><td><code>replication.memory</code>, <code>replication.ebs</code>, <code>replication.local</code></td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
 <tr><td>Replication factor request</td><td>Server fetches unknown factors from metadata</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/368">#368</a></td></tr>
 <tr><td>Replication factor change</td><td>Monitor can dynamically adjust replication</td><td>No</td></tr>
@@ -416,10 +416,10 @@ autoscaling policies.</p>
 <tr><td>Single-Node Features</td><td><code>anna-kvs</code></td><td>9</td><td>9</td><td>100%</td><td>—</td></tr>
 <tr><td>Error Handling</td><td><code>anna-kvs</code></td><td>5</td><td>5</td><td>100%</td><td>#355</td></tr>
 <tr><td>Multi-Tiered Storage</td><td><code>anna-kvs</code></td><td>4</td><td>0</td><td>0%</td><td>#356</td></tr>
-<tr><td>Multi-Node Features</td><td><code>anna-kvs</code></td><td>25</td><td>16</td><td>64%</td><td>#352</td></tr>
+<tr><td>Multi-Node Features</td><td><code>anna-kvs</code></td><td>25</td><td>17</td><td>68%</td><td>#352</td></tr>
 <tr><td>Routing Tier</td><td><code>anna-route</code></td><td>6</td><td>5</td><td>83%</td><td>#371</td></tr>
 <tr><td>Monitoring &amp; Policy Engine</td><td><code>anna-monitor</code></td><td>14</td><td>0</td><td>0%</td><td>#357</td></tr>
-<tr><td><strong>Total</strong></td><td></td><td><strong>84</strong></td><td><strong>56</strong></td><td><strong>67%</strong></td><td></td></tr>
+<tr><td><strong>Total</strong></td><td></td><td><strong>84</strong></td><td><strong>57</strong></td><td><strong>68%</strong></td><td></td></tr>
 </tbody>
 </table>
 </div>
