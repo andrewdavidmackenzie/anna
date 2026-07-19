@@ -1068,11 +1068,22 @@ async fn self_depart_signal() {
 
     // Send SIGUSR1 to the KVS — triggers self_depart_handler which
     // notifies routing of departure and exits the process
-    cluster.signal_self_depart("anna-kvs@127.0.0.1");
+    let kvs_label = format!("anna-kvs@{}", NODE1_IP);
+    cluster.signal_self_depart(&kvs_label);
 
-    // Verify the KVS process exited
-    let kvs_exited = cluster.processes.iter_mut().any(|p| {
-        p.label.contains("anna-kvs@127.0.0.1") && p.child.try_wait().ok().flatten().is_some()
-    });
+    // Poll until the KVS process exits (server sleeps 2s after handler)
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut kvs_exited = false;
+    while Instant::now() < deadline {
+        if cluster
+            .processes
+            .iter_mut()
+            .any(|p| p.label == kvs_label && p.child.try_wait().ok().flatten().is_some())
+        {
+            kvs_exited = true;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
     assert!(kvs_exited, "KVS should have exited after SIGUSR1");
 }
