@@ -87,9 +87,9 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Per-key replication factors     | Independent replication per key per tier                      | [#385](https://github.com/andrewdavidmackenzie/anna/issues/385) |
 | Default replication from config | `replication.memory`, `replication.ebs`, `replication.local`  | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 | Replication factor request      | Server fetches unknown factors from metadata                  | [#368](https://github.com/andrewdavidmackenzie/anna/issues/368) |
-| Replication factor change       | Monitor can dynamically adjust replication                    | No            |
+| Replication factor change       | Monitor can dynamically adjust replication                    | [#394](https://github.com/andrewdavidmackenzie/anna/issues/394) |
 | Metadata stored as KVS data     | Replication info under `METADATA\|replication\|<key>`         | [#368](https://github.com/andrewdavidmackenzie/anna/issues/368) |
-| Gossip after replication change | Data redistributed to new responsible threads                 | No            |
+| Gossip after replication change | Data redistributed to new responsible threads                 | [#394](https://github.com/andrewdavidmackenzie/anna/issues/394) |
 
 ### Gossip / Multicast
 
