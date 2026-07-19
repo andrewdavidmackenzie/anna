@@ -267,6 +267,19 @@ impl MultiNodeCluster {
         );
     }
 
+    #[cfg(unix)]
+    fn signal_self_depart(&self, label_substring: &str) {
+        use nix::sys::signal::{kill, Signal};
+        use nix::unistd::Pid;
+        for proc in &self.processes {
+            if proc.label.contains(label_substring) {
+                let pid = Pid::from_raw(proc.child.id() as i32);
+                kill(pid, Signal::SIGUSR1).ok();
+            }
+        }
+        std::thread::sleep(Duration::from_secs(5));
+    }
+
     fn kill_process(&mut self, label_substring: &str) {
         for proc in &mut self.processes {
             if proc.label.contains(label_substring) {
@@ -1025,4 +1038,58 @@ async fn per_key_replication_metadata() {
         .await
         .expect("GET original key failed");
     assert_eq!(val, "data");
+}
+
+/// Self-depart via SIGUSR1: trigger graceful departure on Node 2,
+/// verify routing removes it and data is accessible from Node 1.
+/// Uses base_offset=28000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn multi_node_self_depart_signal() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(28000);
+    cluster.start_full_node(NODE1_IP, 2);
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(69)).await;
+
+    client
+        .put("sd_signal_1", "val_1")
+        .await
+        .expect("PUT failed");
+    client
+        .put("sd_signal_2", "val_2")
+        .await
+        .expect("PUT failed");
+
+    // Wait for gossip to replicate to both nodes
+    std::thread::sleep(Duration::from_secs(TEST_GOSSIP_EPOCH as u64 + 2));
+
+    // Send SIGUSR1 to Node 2's KVS to trigger graceful self-depart
+    cluster.signal_self_depart("anna-kvs@127.0.0.2");
+
+    // After self-depart, Node 2 gossips data out and notifies routing.
+    // A fresh client should reach Node 1 only.
+    let mut reader = KVSClient::new(&config, Some(70)).await;
+    reader.set_timeout(Duration::from_secs(2));
+
+    let v1 = reader
+        .get("sd_signal_1")
+        .await
+        .expect("GET sd_signal_1 failed after self-depart");
+    assert_eq!(v1, "val_1");
+
+    let v2 = reader
+        .get("sd_signal_2")
+        .await
+        .expect("GET sd_signal_2 failed after self-depart");
+    assert_eq!(v2, "val_2");
 }

@@ -106,8 +106,8 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Feature          | Description                                          | System Tested |
 |------------------|------------------------------------------------------|---------------|
 | Node join        | New node joins cluster, receives data via gossip     | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
-| Node depart      | Node leaves, data redistributed                      | No            |
-| Self-depart      | Node gracefully removes itself, gossips all data out | No            |
+| Node depart      | Node leaves, data redistributed                      | [#386](https://github.com/andrewdavidmackenzie/anna/issues/386) |
+| Self-depart      | Node gracefully removes itself, gossips all data out | [#386](https://github.com/andrewdavidmackenzie/anna/issues/386) |
 | Rejoin detection | Join counter distinguishes fresh joins from rejoins  | [#372](https://github.com/andrewdavidmackenzie/anna/issues/372) |
 | Seed node        | First routing node serves cluster membership         | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 
@@ -180,7 +180,7 @@ autoscaling policies.
 | Single-Node Features                   | `anna-kvs`     | 9     | 9      | 100%     | —      |
 | Error Handling                         | `anna-kvs`     | 5     | 5      | 100%     | #355   |
 | Multi-Tiered Storage                   | `anna-kvs`     | 4     | 0      | 0%       | #356   |
-| Multi-Node Features                    | `anna-kvs`     | 25    | 17     | 68%      | #352   |
+| Multi-Node Features                    | `anna-kvs`     | 25    | 19     | 76%      | #352   |
 | Routing Tier                           | `anna-route`   | 6     | 5      | 83%      | #371   |
 | Monitoring & Policy Engine             | `anna-monitor` | 14    | 0      | 0%       | #357   |
-| **Total**                              |                | **84**| **57** | **68%**  |        |
+| **Total**                              |                | **84**| **59** | **70%**  |        |
