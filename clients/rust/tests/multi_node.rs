@@ -277,7 +277,7 @@ impl MultiNodeCluster {
                 kill(pid, Signal::SIGUSR1).ok();
             }
         }
-        std::thread::sleep(Duration::from_secs(5));
+        std::thread::sleep(Duration::from_secs(8));
     }
 
     fn kill_process(&mut self, label_substring: &str) {
