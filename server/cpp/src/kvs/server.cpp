@@ -299,7 +299,7 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
 
   // enter event loop
   while (!shutdown_requested.load()) {
-    if (self_depart_requested.load()) {
+    if (self_depart_requested.load() && !monitoring_ips.empty()) {
       string depart_done_addr =
           MonitoringThread(monitoring_ips[0]).depart_done_connect_address();
       self_depart_handler(thread_id, seed, public_ip, private_ip, log,
