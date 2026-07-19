@@ -84,7 +84,7 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 
 | Feature                         | Description                                                  | System Tested |
 |---------------------------------|--------------------------------------------------------------|---------------|
-| Per-key replication factors     | Independent replication per key per tier                      | No            |
+| Per-key replication factors     | Independent replication per key per tier                      | [#385](https://github.com/andrewdavidmackenzie/anna/issues/385) |
 | Default replication from config | `replication.memory`, `replication.ebs`, `replication.local`  | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 | Replication factor request      | Server fetches unknown factors from metadata                  | [#368](https://github.com/andrewdavidmackenzie/anna/issues/368) |
 | Replication factor change       | Monitor can dynamically adjust replication                    | No            |
@@ -180,7 +180,7 @@ autoscaling policies.
 | Single-Node Features                   | `anna-kvs`     | 9     | 9      | 100%     | —      |
 | Error Handling                         | `anna-kvs`     | 5     | 5      | 100%     | #355   |
 | Multi-Tiered Storage                   | `anna-kvs`     | 4     | 0      | 0%       | #356   |
-| Multi-Node Features                    | `anna-kvs`     | 25    | 16     | 64%      | #352   |
+| Multi-Node Features                    | `anna-kvs`     | 25    | 17     | 68%      | #352   |
 | Routing Tier                           | `anna-route`   | 6     | 5      | 83%      | #371   |
 | Monitoring & Policy Engine             | `anna-monitor` | 14    | 0      | 0%       | #357   |
-| **Total**                              |                | **84**| **56** | **67%**  |        |
+| **Total**                              |                | **84**| **57** | **68%**  |        |

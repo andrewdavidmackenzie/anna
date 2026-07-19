@@ -15,3 +15,9 @@ pub mod kvs {
 pub mod causal {
     include!(concat!(env!("OUT_DIR"), "/causal.rs"));
 }
+
+// Include the `metadata` module, which is generated from metadata.proto.
+#[allow(warnings, missing_docs)]
+pub mod metadata {
+    include!(concat!(env!("OUT_DIR"), "/_.rs"));
+}

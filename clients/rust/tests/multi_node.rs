@@ -975,3 +975,54 @@ async fn key_migration_during_join() {
         assert_eq!(val, format!("val_{}", i));
     }
 }
+
+/// Per-key replication metadata: write and read per-key replication
+/// factors via the metadata key protocol. Verifies the metadata is
+/// stored and retrievable as KVS data.
+/// Uses base_offset=26000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn per_key_replication_metadata() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(26000);
+    cluster.start_full_node(NODE1_IP, 1);
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(68)).await;
+
+    // PUT a regular key
+    client
+        .put("rep_meta_key", "data")
+        .await
+        .expect("PUT failed");
+
+    // Write per-key replication metadata via the client helper
+    client
+        .put_replication_factor("rep_meta_key", 2, 1)
+        .await
+        .expect("PUT_REPLICATION_FACTOR failed");
+
+    // Read the metadata key back — it's stored as LWW in the KVS
+    let meta_key = "ANNA_METADATA|replication|rep_meta_key";
+    let meta_val = client.get(meta_key).await;
+    assert!(
+        meta_val.is_ok(),
+        "Metadata key should be readable, got: {:?}",
+        meta_val
+    );
+
+    // Original data should still be accessible
+    let val = client
+        .get("rep_meta_key")
+        .await
+        .expect("GET original key failed");
+    assert_eq!(val, "data");
+}

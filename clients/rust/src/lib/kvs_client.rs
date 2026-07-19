@@ -891,6 +891,68 @@ impl KVSClient {
         Ok(results)
     }
 
+    /// Set the per-key replication factor by writing to the metadata key.
+    ///
+    /// The replication metadata is stored as an LWW value containing a
+    /// serialized `ReplicationFactor` protobuf at key
+    /// `ANNA_METADATA|replication|<key>`.
+    pub async fn put_replication_factor(
+        &mut self,
+        key: &str,
+        memory_replication: u32,
+        local_replication: u32,
+    ) -> Result<()> {
+        use crate::proto::metadata::{
+            replication_factor::ReplicationValue, ReplicationFactor, Tier,
+        };
+
+        let rep = ReplicationFactor {
+            key: key.to_string(),
+            global: vec![
+                ReplicationValue {
+                    tier: Tier::Memory as i32,
+                    value: memory_replication,
+                },
+                ReplicationValue {
+                    tier: Tier::Disk as i32,
+                    value: 0,
+                },
+            ],
+            local: vec![
+                ReplicationValue {
+                    tier: Tier::Memory as i32,
+                    value: local_replication,
+                },
+                ReplicationValue {
+                    tier: Tier::Disk as i32,
+                    value: 0,
+                },
+            ],
+        };
+
+        let meta_key = format!("ANNA_METADATA|replication|{}", key);
+        let payload = rep.encode_to_vec();
+        let lww = LwwValue {
+            timestamp: Self::generate_timestamp(),
+            value: payload,
+        };
+
+        let response = self
+            .send_data_request(
+                &meta_key,
+                RequestType::Put as i32,
+                Some(LatticeType::Lww as i32),
+                Some(lww.encode_to_vec()),
+            )
+            .await
+            .ok_or_else(|| {
+                Error::Kvs("PUT_REPLICATION_FACTOR: request failed or timed out".into())
+            })?;
+
+        Self::validate_response(&response, "PUT_REPLICATION_FACTOR")?;
+        Ok(())
+    }
+
     /// Query routing for a key and return all responsible server addresses.
     pub async fn get_key_addresses(&mut self, key: &str) -> Vec<Address> {
         self.key_address_cache.remove(key);
@@ -1150,6 +1212,39 @@ mod tests {
             addrs
         );
         assert!(!client.key_address_cache.contains_key("stale_key"));
+    }
+
+    #[test]
+    fn replication_factor_protobuf_roundtrip() {
+        use crate::proto::metadata::{
+            replication_factor::ReplicationValue, ReplicationFactor, Tier,
+        };
+
+        let rep = ReplicationFactor {
+            key: "test_key".to_string(),
+            global: vec![
+                ReplicationValue {
+                    tier: Tier::Memory as i32,
+                    value: 2,
+                },
+                ReplicationValue {
+                    tier: Tier::Disk as i32,
+                    value: 0,
+                },
+            ],
+            local: vec![ReplicationValue {
+                tier: Tier::Memory as i32,
+                value: 1,
+            }],
+        };
+
+        let encoded = rep.encode_to_vec();
+        let decoded = ReplicationFactor::decode(encoded.as_slice())
+            .expect("failed to decode ReplicationFactor");
+        assert_eq!(decoded.key, "test_key");
+        assert_eq!(decoded.global.len(), 2);
+        assert_eq!(decoded.global[0].value, 2);
+        assert_eq!(decoded.local[0].value, 1);
     }
 
     #[test]
