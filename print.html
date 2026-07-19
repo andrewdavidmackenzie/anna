@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d793c76d.js";
+            window.path_to_searchindex_js = "searchindex-9b4f54f1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7bb26e2b.js"></script>
@@ -959,10 +959,10 @@ It is a client-side construct — see <code>docs/client-feature-list.md</code>.<
 <tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
 </thead>
 <tbody>
-<tr><td>Disk tier</td><td>File-based storage on configurable path</td><td>No</td></tr>
-<tr><td>Tier selection</td><td><code>SERVER_TYPE</code> env var selects storage medium</td><td>No</td></tr>
-<tr><td>Identical kernel across tiers</td><td>Same storage kernel, different serialization layer</td><td>No</td></tr>
-<tr><td>Node capacities</td><td><code>capacities.memory-cap</code>, <code>capacities.ebs-cap</code></td><td>No</td></tr>
+<tr><td>Disk tier</td><td>File-based storage on configurable path</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/387">#387</a></td></tr>
+<tr><td>Tier selection</td><td><code>SERVER_TYPE</code> env var selects storage medium</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/387">#387</a></td></tr>
+<tr><td>Identical kernel across tiers</td><td>Same storage kernel, different serialization layer</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/387">#387</a></td></tr>
+<tr><td>Node capacities</td><td><code>capacities.memory-cap</code>, <code>capacities.ebs-cap</code></td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/387">#387</a></td></tr>
 </tbody>
 </table>
 </div>
@@ -1053,7 +1053,7 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tbody>
 <tr><td>Key address lookup</td><td>Client queries routing for server addresses</td><td>Yes</td></tr>
 <tr><td>Hash ring caching</td><td>Routing caches storage tier hash rings</td><td>Yes</td></tr>
-<tr><td>Memory-tier preference</td><td>Returns memory addresses when available</td><td>No</td></tr>
+<tr><td>Memory-tier preference</td><td>Returns memory addresses when available</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/387">#387</a></td></tr>
 <tr><td>Replication-aware routing</td><td>Uses replication vectors to find all responsible threads</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/371">#371</a></td></tr>
 <tr><td>Pending request queue</td><td>Queues requests while replication factor is unknown</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/371">#371</a></td></tr>
 <tr><td>Multi-threaded routing</td><td>Configurable number of routing threads</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/371">#371</a></td></tr>
@@ -1109,11 +1109,11 @@ autoscaling policies.</p>
 <tr><td>Lattice Types</td><td><code>anna-kvs</code></td><td>6</td><td>6</td><td>100%</td><td>—</td></tr>
 <tr><td>Single-Node Features</td><td><code>anna-kvs</code></td><td>9</td><td>9</td><td>100%</td><td>—</td></tr>
 <tr><td>Error Handling</td><td><code>anna-kvs</code></td><td>5</td><td>5</td><td>100%</td><td>#355</td></tr>
-<tr><td>Multi-Tiered Storage</td><td><code>anna-kvs</code></td><td>4</td><td>0</td><td>0%</td><td>#356</td></tr>
+<tr><td>Multi-Tiered Storage</td><td><code>anna-kvs</code></td><td>4</td><td>4</td><td>100%</td><td>#387</td></tr>
 <tr><td>Multi-Node Features</td><td><code>anna-kvs</code></td><td>25</td><td>19</td><td>76%</td><td>#352</td></tr>
-<tr><td>Routing Tier</td><td><code>anna-route</code></td><td>6</td><td>5</td><td>83%</td><td>#371</td></tr>
+<tr><td>Routing Tier</td><td><code>anna-route</code></td><td>6</td><td>6</td><td>100%</td><td>#371</td></tr>
 <tr><td>Monitoring &amp; Policy Engine</td><td><code>anna-monitor</code></td><td>14</td><td>0</td><td>0%</td><td>#357</td></tr>
-<tr><td><strong>Total</strong></td><td></td><td><strong>84</strong></td><td><strong>59</strong></td><td><strong>70%</strong></td><td></td></tr>
+<tr><td><strong>Total</strong></td><td></td><td><strong>84</strong></td><td><strong>64</strong></td><td><strong>76%</strong></td><td></td></tr>
 </tbody>
 </table>
 </div>
