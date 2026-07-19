@@ -299,6 +299,18 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
 
   // enter event loop
   while (!shutdown_requested.load()) {
+    if (self_depart_requested.load() && !monitoring_ips.empty()) {
+      string depart_done_addr =
+          MonitoringThread(monitoring_ips[0]).depart_done_connect_address();
+      self_depart_handler(thread_id, seed, public_ip, private_ip, log,
+                          depart_done_addr, global_hash_rings, local_hash_rings,
+                          stored_key_map, key_replication_map, routing_ips,
+                          monitoring_ips, wt, pushers, serializers);
+      // Allow ZMQ to deliver depart notifications before process exits
+      std::this_thread::sleep_for(std::chrono::seconds(2));
+      return;
+    }
+
     kZmqUtil->poll(&pollitems, std::chrono::milliseconds{0});
 
     // receives a node join

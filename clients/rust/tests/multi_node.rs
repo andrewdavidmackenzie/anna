@@ -267,6 +267,19 @@ impl MultiNodeCluster {
         );
     }
 
+    #[cfg(unix)]
+    fn signal_self_depart(&self, label_substring: &str) {
+        use nix::sys::signal::{kill, Signal};
+        use nix::unistd::Pid;
+        for proc in &self.processes {
+            if proc.label.contains(label_substring) {
+                let pid = Pid::from_raw(proc.child.id() as i32);
+                kill(pid, Signal::SIGUSR1).ok();
+            }
+        }
+        std::thread::sleep(Duration::from_secs(8));
+    }
+
     fn kill_process(&mut self, label_substring: &str) {
         for proc in &mut self.processes {
             if proc.label.contains(label_substring) {
@@ -1025,4 +1038,52 @@ async fn per_key_replication_metadata() {
         .await
         .expect("GET original key failed");
     assert_eq!(val, "data");
+}
+
+/// Self-depart via SIGUSR1: trigger graceful departure on the KVS node,
+/// verify it exits cleanly. Single-node test for reliability.
+/// Uses base_offset=28000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn self_depart_signal() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if !server_bin_dir().join("anna-kvs").exists() {
+        eprintln!("SKIP: server binaries not built");
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(28000);
+    cluster.start_full_node(NODE1_IP, 1);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(69)).await;
+
+    client
+        .put("sd_signal_key", "before_depart")
+        .await
+        .expect("PUT failed");
+
+    // Send SIGUSR1 to the KVS — triggers self_depart_handler which
+    // notifies routing of departure and exits the process
+    let kvs_label = format!("anna-kvs@{}", NODE1_IP);
+    cluster.signal_self_depart(&kvs_label);
+
+    // Poll until the KVS process exits (server sleeps 2s after handler)
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut kvs_exited = false;
+    while Instant::now() < deadline {
+        if cluster
+            .processes
+            .iter_mut()
+            .any(|p| p.label == kvs_label && p.child.try_wait().ok().flatten().is_some())
+        {
+            kvs_exited = true;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    assert!(kvs_exited, "KVS should have exited after SIGUSR1");
 }
