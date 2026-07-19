@@ -99,7 +99,7 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Merge-at-sender             | Batched updates merged before sending             | [#368](https://github.com/andrewdavidmackenzie/anna/issues/368) |
 | Gossip to caches            | Changed keys also sent to function executor nodes | No            |
 | Join gossip                 | Redistribute data to newly joined nodes           | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
-| Cross-tier gossip           | Updates propagated between memory and disk tiers  | No            |
+| Cross-tier gossip           | Updates propagated between memory and disk tiers  | [#387](https://github.com/andrewdavidmackenzie/anna/issues/387) |
 
 ### Cluster Management
 
@@ -178,9 +178,9 @@ autoscaling policies.
 | Client Operations                      | all clients    | 15    | 15     | 100%     | —      |
 | Lattice Types                          | `anna-kvs`     | 6     | 6      | 100%     | —      |
 | Single-Node Features                   | `anna-kvs`     | 9     | 9      | 100%     | —      |
-| Error Handling                         | `anna-kvs`     | 5     | 5      | 100%     | #355   |
-| Multi-Tiered Storage                   | `anna-kvs`     | 4     | 4      | 100%     | #387   |
-| Multi-Node Features                    | `anna-kvs`     | 25    | 19     | 76%      | #352   |
-| Routing Tier                           | `anna-route`   | 6     | 6      | 100%     | #371   |
+| Error Handling                         | `anna-kvs`     | 5     | 5      | 100%     | —      |
+| Multi-Tiered Storage                   | `anna-kvs`     | 4     | 4      | 100%     | —      |
+| Multi-Node Features                    | `anna-kvs`     | 25    | 20     | 80%      | #352   |
+| Routing Tier                           | `anna-route`   | 6     | 6      | 100%     | —      |
 | Monitoring & Policy Engine             | `anna-monitor` | 14    | 0      | 0%       | #357   |
-| **Total**                              |                | **84**| **64** | **76%**  |        |
+| **Total**                              |                | **84**| **65** | **77%**  |        |

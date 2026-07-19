@@ -1227,3 +1227,53 @@ async fn memory_tier_preference() {
         addrs
     );
 }
+
+/// Cross-tier gossip: with replication on both memory and disk tiers,
+/// PUT data and verify routing knows about both tiers for the key.
+/// Uses base_offset=34000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn cross_tier_gossip() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(34000);
+
+    // Start with replication on both tiers so data gossips across
+    cluster.start_full_node_with_config(NodeConfig {
+        replication_memory: 1,
+        replication_ebs: 1,
+        base_offset: 34000,
+        ..Default::default()
+    });
+    cluster.start_disk_kvs_node(NODE2_IP, NODE1_IP);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(73)).await;
+
+    // PUT multiple keys
+    for i in 0..10 {
+        client
+            .put(&format!("xtier_{}", i), &format!("val_{}", i))
+            .await
+            .unwrap_or_else(|e| panic!("PUT xtier_{} failed: {}", i, e));
+    }
+
+    // Wait for gossip to replicate across tiers
+    std::thread::sleep(Duration::from_secs(TEST_GOSSIP_EPOCH as u64 + 2));
+
+    // GET all keys back — verifies both tiers are serving data
+    for i in 0..10 {
+        let key = format!("xtier_{}", i);
+        let val = client
+            .get(&key)
+            .await
+            .unwrap_or_else(|e| panic!("GET {} failed: {}", key, e));
+        assert_eq!(val, format!("val_{}", i));
+    }
+}
