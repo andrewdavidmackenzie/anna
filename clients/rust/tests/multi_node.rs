@@ -29,9 +29,11 @@ struct NodeConfig {
     node_ip: &'static str,
     seed_ip: &'static str,
     replication_memory: u32,
+    replication_ebs: u32,
     base_offset: u32,
     gossip_epoch: u32,
     routing_threads: u32,
+    ebs_path: String,
 }
 
 impl Default for NodeConfig {
@@ -40,9 +42,11 @@ impl Default for NodeConfig {
             node_ip: NODE1_IP,
             seed_ip: NODE1_IP,
             replication_memory: 1,
+            replication_ebs: 0,
             base_offset: 0,
             gossip_epoch: TEST_GOSSIP_EPOCH,
             routing_threads: 1,
+            ebs_path: "./".to_string(),
         }
     }
 }
@@ -78,10 +82,10 @@ policy:
   elasticity: false
   selective-rep: false
   tiering: false
-ebs: ./
+ebs: {ebs_path}
 capacities:
   memory-cap: 1
-  ebs-cap: 0
+  ebs-cap: 256
 threads:
   memory: 1
   ebs: 1
@@ -98,16 +102,18 @@ timings:
   grace_period: 30
 replication:
   memory: {replication_memory}
-  ebs: 0
+  ebs: {replication_ebs}
   minimum: 1
   local: 1
 ",
         seed_ip = cfg.seed_ip,
         node_ip = cfg.node_ip,
         replication_memory = cfg.replication_memory,
+        replication_ebs = cfg.replication_ebs,
         base_offset = cfg.base_offset,
         gossip_epoch = cfg.gossip_epoch,
         routing_threads = cfg.routing_threads,
+        ebs_path = cfg.ebs_path,
     )
     .expect("Failed to write config");
 }
@@ -120,15 +126,28 @@ fn server_bin_dir() -> PathBuf {
 }
 
 fn spawn_server(name: &str, config: &Path, extra_path: &str) -> Option<Child> {
+    spawn_server_with_env(name, config, extra_path, &[])
+}
+
+fn spawn_server_with_env(
+    name: &str,
+    config: &Path,
+    extra_path: &str,
+    env_vars: &[(&str, &str)],
+) -> Option<Child> {
     let bin = server_bin_dir().join(name);
     if !bin.exists() {
         return None;
     }
-    let child = Command::new(&bin)
-        .args(["--config", &config.to_string_lossy()])
+    let mut cmd = Command::new(&bin);
+    cmd.args(["--config", &config.to_string_lossy()])
         .env("PATH", extra_path)
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::null());
+    for (k, v) in env_vars {
+        cmd.env(k, v);
+    }
+    let child = cmd
         .spawn()
         .unwrap_or_else(|e| panic!("Failed to spawn {}: {}", name, e));
     Some(child)
@@ -234,6 +253,39 @@ impl MultiNodeCluster {
             self.processes.push(ServerProcess {
                 child,
                 label: format!("anna-kvs@{}", cfg.node_ip),
+            });
+        } else {
+            self.shutdown();
+            panic!("Server binary anna-kvs not found");
+        }
+        std::thread::sleep(Duration::from_secs(3));
+    }
+
+    fn start_disk_kvs_node(&mut self, node_ip: &'static str, seed_ip: &'static str) {
+        let ebs_dir = self.config_dir.join(format!("ebs-{}", node_ip));
+        fs::create_dir_all(&ebs_dir).expect("Failed to create ebs dir");
+        let cfg = NodeConfig {
+            node_ip,
+            seed_ip,
+            replication_ebs: 1,
+            base_offset: self.base_offset,
+            ebs_path: ebs_dir.to_string_lossy().to_string(),
+            ..Default::default()
+        };
+        let config = self
+            .config_dir
+            .join(format!("node-disk-{}.yml", cfg.node_ip));
+        write_node_config(&config, &cfg);
+
+        if let Some(child) = spawn_server_with_env(
+            "anna-kvs",
+            &config,
+            &server_path(),
+            &[("SERVER_TYPE", "ebs")],
+        ) {
+            self.processes.push(ServerProcess {
+                child,
+                label: format!("anna-kvs-disk@{}", cfg.node_ip),
             });
         } else {
             self.shutdown();
@@ -1086,4 +1138,84 @@ async fn self_depart_signal() {
         std::thread::sleep(Duration::from_millis(500));
     }
     assert!(kvs_exited, "KVS should have exited after SIGUSR1");
+}
+
+/// Disk tier: start a KVS node with SERVER_TYPE=ebs, verify PUT/GET works.
+/// Uses base_offset=30000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn disk_tier_basic() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(30000);
+
+    // Start full cluster with monitor+route on Node 1 (memory tier)
+    cluster.start_full_node(NODE1_IP, 1);
+
+    // Start a disk-tier KVS on Node 2
+    cluster.start_disk_kvs_node(NODE2_IP, NODE1_IP);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(71)).await;
+
+    // PUT and GET data — routing may direct to either memory or disk node
+    for i in 0..5 {
+        client
+            .put(&format!("disk_key_{}", i), &format!("disk_val_{}", i))
+            .await
+            .unwrap_or_else(|e| panic!("PUT disk_key_{} failed: {}", i, e));
+    }
+
+    for i in 0..5 {
+        let key = format!("disk_key_{}", i);
+        let val = client
+            .get(&key)
+            .await
+            .unwrap_or_else(|e| panic!("GET {} failed: {}", key, e));
+        assert_eq!(val, format!("disk_val_{}", i));
+    }
+}
+
+/// Memory-tier preference: with both memory and disk tier nodes,
+/// routing should return memory-tier addresses first.
+/// Uses base_offset=32000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn memory_tier_preference() {
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(32000);
+    cluster.start_full_node(NODE1_IP, 1);
+    cluster.start_disk_kvs_node(NODE2_IP, NODE1_IP);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let mut client = KVSClient::new(&config, Some(72)).await;
+
+    client
+        .put("tier_pref_key", "value")
+        .await
+        .expect("PUT failed");
+
+    // Query routing — with both tiers available and replication.memory=1,
+    // routing should prefer the memory tier (Node 1) address
+    let addrs = client.get_key_addresses("tier_pref_key").await;
+    assert!(!addrs.is_empty(), "Expected at least one address");
+    assert!(
+        addrs.iter().any(|a| a.contains(NODE1_IP)),
+        "Expected memory-tier address ({}), got {:?}",
+        NODE1_IP,
+        addrs
+    );
 }
