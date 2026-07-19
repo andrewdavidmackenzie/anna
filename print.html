@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-40950dfe.js";
+            window.path_to_searchindex_js = "searchindex-d793c76d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7bb26e2b.js"></script>
@@ -1008,8 +1008,8 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 </thead>
 <tbody>
 <tr><td>Node join</td><td>New node joins cluster, receives data via gossip</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
-<tr><td>Node depart</td><td>Node leaves, data redistributed</td><td>No</td></tr>
-<tr><td>Self-depart</td><td>Node gracefully removes itself, gossips all data out</td><td>No</td></tr>
+<tr><td>Node depart</td><td>Node leaves, data redistributed</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/386">#386</a></td></tr>
+<tr><td>Self-depart</td><td>Node gracefully removes itself, gossips all data out</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/386">#386</a></td></tr>
 <tr><td>Rejoin detection</td><td>Join counter distinguishes fresh joins from rejoins</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/372">#372</a></td></tr>
 <tr><td>Seed node</td><td>First routing node serves cluster membership</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
 </tbody>
@@ -1110,10 +1110,10 @@ autoscaling policies.</p>
 <tr><td>Single-Node Features</td><td><code>anna-kvs</code></td><td>9</td><td>9</td><td>100%</td><td>—</td></tr>
 <tr><td>Error Handling</td><td><code>anna-kvs</code></td><td>5</td><td>5</td><td>100%</td><td>#355</td></tr>
 <tr><td>Multi-Tiered Storage</td><td><code>anna-kvs</code></td><td>4</td><td>0</td><td>0%</td><td>#356</td></tr>
-<tr><td>Multi-Node Features</td><td><code>anna-kvs</code></td><td>25</td><td>17</td><td>68%</td><td>#352</td></tr>
+<tr><td>Multi-Node Features</td><td><code>anna-kvs</code></td><td>25</td><td>19</td><td>76%</td><td>#352</td></tr>
 <tr><td>Routing Tier</td><td><code>anna-route</code></td><td>6</td><td>5</td><td>83%</td><td>#371</td></tr>
 <tr><td>Monitoring &amp; Policy Engine</td><td><code>anna-monitor</code></td><td>14</td><td>0</td><td>0%</td><td>#357</td></tr>
-<tr><td><strong>Total</strong></td><td></td><td><strong>84</strong></td><td><strong>57</strong></td><td><strong>68%</strong></td><td></td></tr>
+<tr><td><strong>Total</strong></td><td></td><td><strong>84</strong></td><td><strong>59</strong></td><td><strong>70%</strong></td><td></td></tr>
 </tbody>
 </table>
 </div>
