@@ -252,4 +252,33 @@ mod tests {
     fn cache_update_port_constant() {
         assert_eq!(K_CACHE_UPDATE_PORT, 7150);
     }
+
+    #[test]
+    fn decode_lww_value_invalid_proto() {
+        let result = CacheClient::decode_lww_value(b"not valid protobuf");
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn new_cache_client() {
+        let config = crate::config::Config::default();
+        let cache = CacheClient::new(&config, Some(90)).await;
+        assert!(cache.is_ok());
+        let cache = cache.unwrap();
+        assert!(cache.watched_keys().is_empty());
+        assert!(cache.get_cached("nonexistent").is_none());
+    }
+
+    #[tokio::test]
+    async fn recv_update_timeout() {
+        let config = crate::config::Config::default();
+        let mut cache = CacheClient::new(&config, Some(91))
+            .await
+            .expect("Failed to create cache client");
+        let result = cache
+            .recv_update(Duration::from_millis(100))
+            .await
+            .expect("recv_update error");
+        assert!(result.is_none());
+    }
 }

@@ -1554,7 +1554,7 @@ async fn gossip_to_caches() {
         .expect("Watch failed");
 
     // PUT a value via a normal client
-    let mut client = KVSClient::new(&config, Some(78)).await;
+    let mut client = KVSClient::new(&config, Some(80)).await;
     client
         .put("cache_test_key", "cache_value_1")
         .await

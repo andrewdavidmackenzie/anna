@@ -44,3 +44,37 @@ func TestCacheClientWatchedKeysInitiallyEmpty(t *testing.T) {
 		t.Error("expected empty watched keys")
 	}
 }
+
+func TestNewCacheClient(t *testing.T) {
+	cc, err := NewCacheClient("127.0.0.1", "127.0.0.1", 1, 51000, 0)
+	if err != nil {
+		t.Fatalf("NewCacheClient failed: %v", err)
+	}
+	defer cc.Close()
+
+	if cc.serverIP != "127.0.0.1" {
+		t.Errorf("expected server IP 127.0.0.1, got %s", cc.serverIP)
+	}
+	if cc.memoryThreads != 1 {
+		t.Errorf("expected 1 memory thread, got %d", cc.memoryThreads)
+	}
+	if len(cc.WatchedKeys()) != 0 {
+		t.Error("expected no watched keys initially")
+	}
+}
+
+func TestCacheClientWatch(t *testing.T) {
+	cc, err := NewCacheClient("127.0.0.1", "127.0.0.1", 1, 51100, 0)
+	if err != nil {
+		t.Fatalf("NewCacheClient failed: %v", err)
+	}
+	defer cc.Close()
+
+	err = cc.Watch([]string{"key1", "key2"})
+	if err != nil {
+		t.Fatalf("Watch failed: %v", err)
+	}
+	if len(cc.WatchedKeys()) != 2 {
+		t.Errorf("expected 2 watched keys, got %d", len(cc.WatchedKeys()))
+	}
+}
