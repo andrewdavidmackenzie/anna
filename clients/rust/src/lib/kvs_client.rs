@@ -396,6 +396,63 @@ impl KVSClient {
         Ok(lww.value)
     }
 
+    /// Retrieve server thread statistics for a specific node and thread.
+    ///
+    /// Reads the metadata key `ANNA_METADATA|stats|<ip>|<ip>|<tid>|<tier>`
+    /// and decodes the `ServerThreadStatistics` protobuf.
+    pub async fn get_storage_stats(
+        &mut self,
+        node_ip: &str,
+        tid: u32,
+        tier: &str,
+    ) -> Result<crate::proto::metadata::ServerThreadStatistics> {
+        let key = format!(
+            "ANNA_METADATA|stats|{}|{}|{}|{}",
+            node_ip, node_ip, tid, tier
+        );
+        let bytes = self.get_bytes(&key).await?;
+        crate::proto::metadata::ServerThreadStatistics::decode(bytes.as_slice())
+            .map_err(|e| Error::Kvs(format!("Failed to decode ServerThreadStatistics: {}", e)))
+    }
+
+    /// Retrieve per-key access frequency data for a specific node and thread.
+    ///
+    /// Reads the metadata key `ANNA_METADATA|access|<ip>|<ip>|<tid>|<tier>`
+    /// and decodes the `KeyAccessData` protobuf.
+    pub async fn get_key_access_stats(
+        &mut self,
+        node_ip: &str,
+        tid: u32,
+        tier: &str,
+    ) -> Result<crate::proto::metadata::KeyAccessData> {
+        let key = format!(
+            "ANNA_METADATA|access|{}|{}|{}|{}",
+            node_ip, node_ip, tid, tier
+        );
+        let bytes = self.get_bytes(&key).await?;
+        crate::proto::metadata::KeyAccessData::decode(bytes.as_slice())
+            .map_err(|e| Error::Kvs(format!("Failed to decode KeyAccessData: {}", e)))
+    }
+
+    /// Retrieve per-key size data for a specific node and thread.
+    ///
+    /// Reads the metadata key `ANNA_METADATA|size|<ip>|<ip>|<tid>|<tier>`
+    /// and decodes the `KeySizeData` protobuf.
+    pub async fn get_key_size_stats(
+        &mut self,
+        node_ip: &str,
+        tid: u32,
+        tier: &str,
+    ) -> Result<crate::proto::metadata::KeySizeData> {
+        let key = format!(
+            "ANNA_METADATA|size|{}|{}|{}|{}",
+            node_ip, node_ip, tid, tier
+        );
+        let bytes = self.get_bytes(&key).await?;
+        crate::proto::metadata::KeySizeData::decode(bytes.as_slice())
+            .map_err(|e| Error::Kvs(format!("Failed to decode KeySizeData: {}", e)))
+    }
+
     /// Store a key-value pair (Last-Writer-Wins lattice).
     ///
     /// ```rust

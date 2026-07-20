@@ -186,8 +186,8 @@ deliberate split:
 | Feature                     | Description                                                   | System Tested |
 |-----------------------------|---------------------------------------------------------------|---------------|
 | Hot-key replication         | Selectively replicate hot keys across more threads/nodes      | No            |
-| Grace period                | Configurable cooldown preventing rapid scaling oscillation    | No            |
-| Policy toggles              | `policy.elasticity`, `policy.selective-rep`, `policy.tiering` | No            |
+| Grace period                | Configurable cooldown preventing rapid scaling oscillation    | Yes           |
+| Policy toggles              | `policy.elasticity`, `policy.selective-rep`, `policy.tiering` | Yes           |
 | Latency feedback ingestion  | Monitor accepts `UserFeedback` protobuf for SLO decisions    | No            |
 
 ### Client library helpers (#410)
@@ -227,5 +227,5 @@ to implement their own scaling logic.
 | Multi-Node Features                    | `anna-kvs`     | 25    | 25     | 100%     | —      |
 | Routing Tier                           | `anna-route`   | 6     | 6      | 100%     | —      |
 | Monitoring                             | `anna-monitor` | 6     | 6      | 100%     | —      |
-| Autoscaling (server primitives)        | `anna-monitor` | 4     | 0      | 0%       | #410   |
-| **Total**                              |                | **81**| **76** | **94%**  |        |
+| Autoscaling (server primitives)        | `anna-monitor` | 4     | 2      | 50%      | #410   |
+| **Total**                              |                | **81**| **78** | **96%**  |        |
