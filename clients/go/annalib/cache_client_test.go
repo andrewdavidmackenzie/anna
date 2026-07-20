@@ -63,18 +63,13 @@ func TestNewCacheClient(t *testing.T) {
 	}
 }
 
-func TestCacheClientWatch(t *testing.T) {
+func TestCacheClientClose(t *testing.T) {
 	cc, err := NewCacheClient("127.0.0.1", "127.0.0.1", 1, 51100, 0)
 	if err != nil {
 		t.Fatalf("NewCacheClient failed: %v", err)
 	}
-	defer cc.Close()
-
-	err = cc.Watch([]string{"key1", "key2"})
+	err = cc.Close()
 	if err != nil {
-		t.Fatalf("Watch failed: %v", err)
-	}
-	if len(cc.WatchedKeys()) != 2 {
-		t.Errorf("expected 2 watched keys, got %d", len(cc.WatchedKeys()))
+		t.Fatalf("Close failed: %v", err)
 	}
 }

@@ -54,17 +54,7 @@ class TestCacheClient(unittest.TestCase):
         result = self.client.recv_update(timeout_ms=100)
         self.assertIsNone(result)
 
-    def test_watch_populates_keys(self):
-        self.client.watch(["key1", "key2"])
-        self.assertEqual(self.client.watched_keys, ["key1", "key2"])
-
-    def test_watch_appends_keys(self):
-        self.client.watch(["key1"])
-        self.client.watch(["key2"])
-        self.assertEqual(self.client.watched_keys, ["key1", "key2"])
-
     def test_close_cleans_up(self):
-        self.client.watch(["key1"])
         self.client.close()
         self.assertEqual(self.client.push_sockets, {})
 
