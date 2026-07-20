@@ -1531,6 +1531,14 @@ async fn gossip_to_caches() {
     let mut cluster = MultiNodeCluster::new(42000);
     cluster.start_full_node(NODE1_IP, 1);
 
+    // Wait for the cache registration port to be bindable
+    let cache_reg_port = 42000 + 7200;
+    assert!(
+        wait_for_port(NODE1_IP, cache_reg_port as u16, 30),
+        "Cache registration port {} did not open",
+        cache_reg_port
+    );
+
     let config =
         Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
 
@@ -1539,21 +1547,11 @@ async fn gossip_to_caches() {
         .await
         .expect("Failed to create cache client");
 
-    // Register interest in a specific key (retry on connect timeout)
-    let mut watch_ok = false;
-    for attempt in 0..3 {
-        match cache.watch(&["cache_test_key".to_string()]).await {
-            Ok(()) => {
-                watch_ok = true;
-                break;
-            }
-            Err(e) => {
-                eprintln!("Watch attempt {} failed: {}, retrying...", attempt + 1, e);
-                std::thread::sleep(Duration::from_secs(2));
-            }
-        }
-    }
-    assert!(watch_ok, "Watch failed after 3 attempts");
+    // Register interest in a specific key
+    cache
+        .watch(&["cache_test_key".to_string()])
+        .await
+        .expect("Watch failed");
 
     // PUT a value via a normal client
     let mut client = KVSClient::new(&config, Some(78)).await;
