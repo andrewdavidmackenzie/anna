@@ -283,7 +283,10 @@ async fn monitor_stats_collection() {
     let deadline = Instant::now() + Duration::from_secs(15);
     let mut stats_ok = false;
     while Instant::now() < deadline {
-        if let Ok(s) = client.get_storage_stats(NODE_IP, 0, "MEMORY").await {
+        if let Ok(s) = client
+            .get_storage_stats(NODE_IP, NODE_IP, 0, "MEMORY")
+            .await
+        {
             assert!(
                 s.storage_consumption > 0,
                 "storage_consumption should be > 0"
@@ -302,7 +305,10 @@ async fn monitor_stats_collection() {
     let deadline = Instant::now() + Duration::from_secs(10);
     let mut access_ok = false;
     while Instant::now() < deadline {
-        if let Ok(a) = client.get_key_access_stats(NODE_IP, 0, "MEMORY").await {
+        if let Ok(a) = client
+            .get_key_access_stats(NODE_IP, NODE_IP, 0, "MEMORY")
+            .await
+        {
             if a.keys.iter().any(|k| k.key.starts_with("stats_test_key_")) {
                 let total: u32 = a
                     .keys
@@ -323,7 +329,10 @@ async fn monitor_stats_collection() {
     let deadline = Instant::now() + Duration::from_secs(10);
     let mut size_ok = false;
     while Instant::now() < deadline {
-        if let Ok(s) = client.get_key_size_stats(NODE_IP, 0, "MEMORY").await {
+        if let Ok(s) = client
+            .get_key_size_stats(NODE_IP, NODE_IP, 0, "MEMORY")
+            .await
+        {
             let test_sizes: Vec<_> = s
                 .key_sizes
                 .iter()
@@ -342,14 +351,10 @@ async fn monitor_stats_collection() {
     assert!(size_ok, "Failed to read valid size metadata");
 }
 
-/// Test that policy toggles work: start a cluster with selective-rep
-/// and tiering enabled, verify the monitor runs correctly (doesn't crash)
-/// and still collects stats. This exercises the policy toggle config
-/// parsing and the grace period timer.
-///
-/// Covers: policy toggles, grace period (monitor respects grace_period
-/// config and doesn't take premature action).
-/// Uses base_offset=2500.
+/// Test that policy toggle config is parsed and the monitor runs correctly
+/// with selective-rep enabled. Verifies the monitor processes stats and
+/// policy code paths without crashing.
+/// Uses base_offset=3700.
 #[tokio::test]
 #[cfg(unix)]
 async fn policy_toggles_and_grace_period() {
@@ -391,7 +396,10 @@ async fn policy_toggles_and_grace_period() {
     let deadline = Instant::now() + Duration::from_secs(15);
     let mut stats_ok = false;
     while Instant::now() < deadline {
-        if let Ok(s) = client.get_storage_stats(NODE_IP, 0, "MEMORY").await {
+        if let Ok(s) = client
+            .get_storage_stats(NODE_IP, NODE_IP, 0, "MEMORY")
+            .await
+        {
             if s.access_count > 0 {
                 stats_ok = true;
                 break;
@@ -466,7 +474,10 @@ async fn cross_tier_data_movement() {
     let deadline = Instant::now() + Duration::from_secs(15);
     let mut stats_ok = false;
     while Instant::now() < deadline {
-        if let Ok(s) = client.get_storage_stats(NODE_IP, 0, "MEMORY").await {
+        if let Ok(s) = client
+            .get_storage_stats(NODE_IP, NODE_IP, 0, "MEMORY")
+            .await
+        {
             if s.access_count > 0 {
                 stats_ok = true;
                 break;
@@ -562,7 +573,10 @@ async fn latency_feedback_ingestion() {
     let deadline = Instant::now() + Duration::from_secs(15);
     let mut stats_ok = false;
     while Instant::now() < deadline {
-        if let Ok(s) = client.get_storage_stats(NODE_IP, 0, "MEMORY").await {
+        if let Ok(s) = client
+            .get_storage_stats(NODE_IP, NODE_IP, 0, "MEMORY")
+            .await
+        {
             if s.access_count > 0 {
                 stats_ok = true;
                 break;
@@ -640,7 +654,10 @@ async fn hot_key_selective_replication() {
     let deadline = Instant::now() + Duration::from_secs(15);
     let mut access_ok = false;
     while Instant::now() < deadline {
-        if let Ok(a) = client.get_key_access_stats(NODE_IP, 0, "MEMORY").await {
+        if let Ok(a) = client
+            .get_key_access_stats(NODE_IP, NODE_IP, 0, "MEMORY")
+            .await
+        {
             let hot = a.keys.iter().find(|k| k.key == "hot_key");
             let cold = a.keys.iter().find(|k| k.key == "cold_key_0");
             if let (Some(h), Some(c)) = (hot, cold) {

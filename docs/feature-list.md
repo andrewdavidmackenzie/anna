@@ -194,9 +194,9 @@ deliberate split:
 
 | Feature                          | Description                                            | Implemented |
 |----------------------------------|--------------------------------------------------------|-------------|
-| Read storage/occupancy stats     | Helper to GET and decode `ServerThreadStatistics`      | No          |
-| Read per-key access stats        | Helper to GET and decode `KeyAccessData`               | No          |
-| Read per-key size stats          | Helper to GET and decode `KeySizeData`                 | No          |
+| Read storage/occupancy stats     | Helper to GET and decode `ServerThreadStatistics`      | Yes (Rust)  |
+| Read per-key access stats        | Helper to GET and decode `KeyAccessData`               | Yes (Rust)  |
+| Read per-key size stats          | Helper to GET and decode `KeySizeData`                 | Yes (Rust)  |
 | Report latency feedback          | Send `UserFeedback` to monitor for SLO enforcement    | No          |
 
 ### Operator responsibility (not project features)

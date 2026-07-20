@@ -398,17 +398,19 @@ impl KVSClient {
 
     /// Retrieve server thread statistics for a specific node and thread.
     ///
-    /// Reads the metadata key `ANNA_METADATA|stats|<ip>|<ip>|<tid>|<tier>`
+    /// Reads the metadata key
+    /// `ANNA_METADATA|stats|<public_ip>|<private_ip>|<tid>|<tier>`
     /// and decodes the `ServerThreadStatistics` protobuf.
     pub async fn get_storage_stats(
         &mut self,
-        node_ip: &str,
+        public_ip: &str,
+        private_ip: &str,
         tid: u32,
         tier: &str,
     ) -> Result<crate::proto::metadata::ServerThreadStatistics> {
         let key = format!(
             "ANNA_METADATA|stats|{}|{}|{}|{}",
-            node_ip, node_ip, tid, tier
+            public_ip, private_ip, tid, tier
         );
         let bytes = self.get_bytes(&key).await?;
         crate::proto::metadata::ServerThreadStatistics::decode(bytes.as_slice())
@@ -417,17 +419,19 @@ impl KVSClient {
 
     /// Retrieve per-key access frequency data for a specific node and thread.
     ///
-    /// Reads the metadata key `ANNA_METADATA|access|<ip>|<ip>|<tid>|<tier>`
+    /// Reads the metadata key
+    /// `ANNA_METADATA|access|<public_ip>|<private_ip>|<tid>|<tier>`
     /// and decodes the `KeyAccessData` protobuf.
     pub async fn get_key_access_stats(
         &mut self,
-        node_ip: &str,
+        public_ip: &str,
+        private_ip: &str,
         tid: u32,
         tier: &str,
     ) -> Result<crate::proto::metadata::KeyAccessData> {
         let key = format!(
             "ANNA_METADATA|access|{}|{}|{}|{}",
-            node_ip, node_ip, tid, tier
+            public_ip, private_ip, tid, tier
         );
         let bytes = self.get_bytes(&key).await?;
         crate::proto::metadata::KeyAccessData::decode(bytes.as_slice())
@@ -436,17 +440,19 @@ impl KVSClient {
 
     /// Retrieve per-key size data for a specific node and thread.
     ///
-    /// Reads the metadata key `ANNA_METADATA|size|<ip>|<ip>|<tid>|<tier>`
+    /// Reads the metadata key
+    /// `ANNA_METADATA|size|<public_ip>|<private_ip>|<tid>|<tier>`
     /// and decodes the `KeySizeData` protobuf.
     pub async fn get_key_size_stats(
         &mut self,
-        node_ip: &str,
+        public_ip: &str,
+        private_ip: &str,
         tid: u32,
         tier: &str,
     ) -> Result<crate::proto::metadata::KeySizeData> {
         let key = format!(
             "ANNA_METADATA|size|{}|{}|{}|{}",
-            node_ip, node_ip, tid, tier
+            public_ip, private_ip, tid, tier
         );
         let bytes = self.get_bytes(&key).await?;
         crate::proto::metadata::KeySizeData::decode(bytes.as_slice())
@@ -1487,5 +1493,41 @@ mod tests {
         assert_eq!(decoded.vector_clock["node2"], 3);
         assert_eq!(decoded.values.len(), 1);
         assert_eq!(decoded.values[0], b"causal_data");
+    }
+
+    #[test]
+    fn stats_metadata_key_format() {
+        let key = format!(
+            "ANNA_METADATA|stats|{}|{}|{}|{}",
+            "10.0.0.1", "192.168.1.1", 0, "MEMORY"
+        );
+        assert_eq!(key, "ANNA_METADATA|stats|10.0.0.1|192.168.1.1|0|MEMORY");
+    }
+
+    #[test]
+    fn stats_metadata_key_same_ip() {
+        let key = format!(
+            "ANNA_METADATA|stats|{}|{}|{}|{}",
+            "127.0.0.1", "127.0.0.1", 0, "MEMORY"
+        );
+        assert_eq!(key, "ANNA_METADATA|stats|127.0.0.1|127.0.0.1|0|MEMORY");
+    }
+
+    #[test]
+    fn access_metadata_key_format() {
+        let key = format!(
+            "ANNA_METADATA|access|{}|{}|{}|{}",
+            "10.0.0.1", "192.168.1.1", 2, "DISK"
+        );
+        assert_eq!(key, "ANNA_METADATA|access|10.0.0.1|192.168.1.1|2|DISK");
+    }
+
+    #[test]
+    fn size_metadata_key_format() {
+        let key = format!(
+            "ANNA_METADATA|size|{}|{}|{}|{}",
+            "10.0.0.1", "10.0.0.1", 1, "MEMORY"
+        );
+        assert_eq!(key, "ANNA_METADATA|size|10.0.0.1|10.0.0.1|1|MEMORY");
     }
 }
