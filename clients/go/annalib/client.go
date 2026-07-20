@@ -6,6 +6,8 @@ import (
 	"hash/fnv"
 	"log"
 	"math/rand"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-zeromq/zmq4"
@@ -40,24 +42,25 @@ type zmqTransport struct {
 }
 
 // NewKVSClient creates a new KVS client from config and thread ID.
-func NewKVSClient(config *Config, tid int) (*KVSClient, error) {
+func NewKVSClient(config *ClientConfig, tid int) (*KVSClient, error) {
 	if config == nil {
 		return nil, fmt.Errorf("config must not be nil")
 	}
-	routingIPs := config.GetRoutingIPs()
-	threadCount := config.GetRoutingThreadCount()
-	if len(routingIPs) == 0 || threadCount <= 0 {
-		return nil, fmt.Errorf("config must have at least one routing IP and positive thread count")
-	}
-	routingThreads := make([]*UserRoutingThread, 0, len(routingIPs)*threadCount)
-	for _, ip := range routingIPs {
-		for i := 0; i < threadCount; i++ {
-			routingThreads = append(routingThreads, NewUserRoutingThread(ip, i))
-		}
+	if len(config.RoutingAddresses) == 0 {
+		return nil, fmt.Errorf("config must have at least one routing address")
 	}
 
-	ut := NewUserThread(config.GetUserIP(), tid)
-	seed := generateSeed(config.GetUserIP(), tid)
+	routingThreads := make([]*UserRoutingThread, 0, len(config.RoutingAddresses))
+	for _, addr := range config.RoutingAddresses {
+		ip, tid, err := parseRoutingAddress(addr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid routing address %q: %w", addr, err)
+		}
+		routingThreads = append(routingThreads, NewUserRoutingThread(ip, tid))
+	}
+
+	ut := NewUserThread(config.ClientIP, tid)
+	seed := generateSeed(config.ClientIP, tid)
 	rng := rand.New(rand.NewSource(seed))
 
 	ctx := context.Background()
@@ -112,6 +115,27 @@ func generateSeed(ip string, tid int) int64 {
 	seed += int64(h.Sum64())
 	seed += int64(tid)
 	return seed
+}
+
+// parseRoutingAddress extracts the IP and thread ID from a ZMQ routing address
+// like "tcp://10.0.0.1:6450". The thread ID is derived from the port offset
+// relative to the base key address port.
+func parseRoutingAddress(addr string) (string, int, error) {
+	trimmed := strings.TrimPrefix(addr, "tcp://")
+	parts := strings.Split(trimmed, ":")
+	if len(parts) != 2 {
+		return "", 0, fmt.Errorf("expected tcp://IP:PORT format")
+	}
+	ip := parts[0]
+	port, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return "", 0, fmt.Errorf("invalid port: %w", err)
+	}
+	tid := port - kKeyAddressPort
+	if tid < 0 {
+		tid = 0
+	}
+	return ip, tid, nil
 }
 
 func (c *KVSClient) getRequestID() string {

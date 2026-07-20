@@ -17,7 +17,7 @@ func serverBinaryDir() string {
 	return filepath.Join(root, "server", "cpp", "build", "target", "kvs")
 }
 
-func configFile() string {
+func serverConfigFile() string {
 	root := filepath.Join("..", "..", "..")
 	return filepath.Join(root, "conf", "anna-config.yml")
 }
@@ -31,7 +31,7 @@ func startServers(t *testing.T) {
 	}
 
 	path := fmt.Sprintf("%s:%s", os.Getenv("PATH"), binDir)
-	config := configFile()
+	config := serverConfigFile()
 
 	for _, proc := range []string{"anna-monitor", "anna-route", "anna-kvs"} {
 		cmd := exec.Command(proc, "--config", config)
@@ -68,11 +68,7 @@ func TestSystemKVSClient(t *testing.T) {
 	startServers(t)
 	defer stopServers()
 
-	config, err := annalib.ReadConfig(configFile())
-	if err != nil {
-		t.Fatalf("Failed to read config: %v", err)
-	}
-
+	config := annalib.DefaultClientConfig()
 	client, err := annalib.NewKVSClient(config, 60)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)

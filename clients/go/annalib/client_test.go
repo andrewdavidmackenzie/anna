@@ -145,7 +145,7 @@ func TestValidateResponseSuccess(t *testing.T) {
 }
 
 func TestNewKVSClient(t *testing.T) {
-	config := DefaultConfig()
+	config := DefaultClientConfig()
 	client, err := NewKVSClient(config, 500)
 	if err != nil {
 		t.Fatalf("NewKVSClient failed: %v", err)
@@ -161,7 +161,7 @@ func TestNewKVSClient(t *testing.T) {
 }
 
 func TestClearCache(t *testing.T) {
-	config := DefaultConfig()
+	config := DefaultClientConfig()
 	client, err := NewKVSClient(config, 501)
 	if err != nil {
 		t.Fatalf("NewKVSClient failed: %v", err)
@@ -176,7 +176,7 @@ func TestClearCache(t *testing.T) {
 }
 
 func TestRequestIDFormat(t *testing.T) {
-	config := DefaultConfig()
+	config := DefaultClientConfig()
 	client, err := NewKVSClient(config, 502)
 	if err != nil {
 		t.Fatalf("NewKVSClient failed: %v", err)
@@ -781,25 +781,18 @@ func TestNewKVSClientNilConfig(t *testing.T) {
 }
 
 func TestNewKVSClientEmptyRouting(t *testing.T) {
-	config := DefaultConfig()
-	config.User.Routing = nil
-	_, err := NewKVSClient(config, 0)
-	if err == nil {
-		t.Error("expected error for empty routing IPs")
+	config := &ClientConfig{
+		RoutingAddresses: nil,
+		ClientIP:         "127.0.0.1",
 	}
-}
-
-func TestNewKVSClientZeroThreads(t *testing.T) {
-	config := DefaultConfig()
-	config.Threads.Routing = 0
 	_, err := NewKVSClient(config, 0)
 	if err == nil {
-		t.Error("expected error for zero routing threads")
+		t.Error("expected error for empty routing addresses")
 	}
 }
 
 func TestCloseClient(t *testing.T) {
-	config := DefaultConfig()
+	config := DefaultClientConfig()
 	client, err := NewKVSClient(config, 506)
 	if err != nil {
 		t.Fatalf("NewKVSClient failed: %v", err)
