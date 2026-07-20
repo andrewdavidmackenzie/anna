@@ -6,7 +6,7 @@ Usage:
 
 Example:
     python3 run_smoke_test.py ./target/anna-go --config conf/anna-config.yml cli
-    python3 run_smoke_test.py python3 -m anna --config conf/anna-config.yml cli
+    python3 run_smoke_test.py python3 -m anna --routing 127.0.0.1 --client-ip 127.0.0.1 cli
     python3 run_smoke_test.py ./target/debug/anna --config conf/anna-config.yml cli
     python3 run_smoke_test.py ./clients/cpp/build/cli/anna-cli --config test_config.yml cli
 

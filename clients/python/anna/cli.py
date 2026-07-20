@@ -1,28 +1,7 @@
 import argparse
 import sys
 
-import yaml
-
 from .process_mgmt import start, stop, status, PROCESS_LIST
-
-
-def load_config(config_path):
-    with open(config_path) as f:
-        conf = yaml.safe_load(f)
-
-    routing_thread_count = conf["threads"]["routing"]
-
-    user = conf["user"]
-    ip = user["ip"]
-
-    if "routing-elb" in conf:
-        elb_addr = conf["routing-elb"]
-    elif "routing-elb" in user:
-        elb_addr = user["routing-elb"]
-    else:
-        elb_addr = user["routing"][0]
-
-    return elb_addr, ip, routing_thread_count
 
 
 def cli_usage():
@@ -180,7 +159,9 @@ def cli_file(client, config_path, filename):
 
 def main():
     parser = argparse.ArgumentParser(prog="anna-py", description="Anna KVS Python client")
-    parser.add_argument("--config", "-c", required=True, help="Path to config file")
+    parser.add_argument("--routing", help="Routing node IP address")
+    parser.add_argument("--client-ip", help="Client IP address")
+    parser.add_argument("--server-config", help="Path to server config file (for start command)")
     parser.add_argument("command", choices=["start", "stop", "status", "cli", "help"],
                         help="Command to run")
     parser.add_argument("input_file", nargs="?", help="Input file for cli command")
@@ -192,7 +173,9 @@ def main():
         return
 
     if args.command == "start":
-        count = start(args.config)
+        if not args.server_config:
+            parser.error("--server-config is required for the start command")
+        count = start(args.server_config)
         print(f"{count} anna processes were started")
         return
 
@@ -215,14 +198,17 @@ def main():
         return
 
     if args.command == "cli":
+        if not args.routing:
+            parser.error("--routing is required for the cli command")
+        if not args.client_ip:
+            parser.error("--client-ip is required for the cli command")
         from .client import AnnaTcpClient
-        elb_addr, ip, _ = load_config(args.config)
-        client = AnnaTcpClient(elb_addr, ip, local=True)
+        client = AnnaTcpClient(args.routing, args.client_ip, local=True)
 
         if args.input_file:
-            cli_file(client, args.config, args.input_file)
+            cli_file(client, args.server_config, args.input_file)
         else:
-            cli_interactive(client, args.config)
+            cli_interactive(client, args.server_config)
 
 
 if __name__ == "__main__":

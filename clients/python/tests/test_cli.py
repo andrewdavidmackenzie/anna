@@ -20,12 +20,12 @@ class TestCliInvocation:
         assert "stop" in r.stdout
 
     def test_stop_with_nothing_running(self):
-        r = run_cli("--config", "/dev/null", "stop")
+        r = run_cli("stop")
         assert r.returncode == 0
         assert "0 anna processes were stopped" in r.stdout
 
     def test_status_with_nothing_running(self):
-        r = run_cli("--config", "/dev/null", "status")
+        r = run_cli("status")
         assert r.returncode == 0
         assert "not running" in r.stdout
 
@@ -74,34 +74,6 @@ class TestProcessMgmt:
                 del os.environ["ANNA_SERVER_PATH"]
         finally:
             os.unlink(config_path)
-
-
-class TestLoadConfig:
-    def test_load_config_with_routing_list(self):
-        from anna.cli import load_config
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
-            f.write("threads:\n  routing: 1\nuser:\n  ip: 127.0.0.1\n  routing:\n    - 10.0.0.1\n")
-            path = f.name
-        try:
-            elb, ip, count = load_config(path)
-            assert ip == "127.0.0.1"
-            assert elb == "10.0.0.1"
-            assert count == 1
-        finally:
-            os.unlink(path)
-
-    def test_load_config_with_elb(self):
-        from anna.cli import load_config
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
-            f.write("threads:\n  routing: 2\nrouting-elb: elb.example.com\nuser:\n  ip: 10.0.0.5\n  routing:\n    - unused\n")
-            path = f.name
-        try:
-            elb, ip, count = load_config(path)
-            assert elb == "elb.example.com"
-            assert ip == "10.0.0.5"
-            assert count == 2
-        finally:
-            os.unlink(path)
 
 
 class TestCliUsage:

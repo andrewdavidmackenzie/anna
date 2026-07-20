@@ -25,7 +25,8 @@ class TestCliSmoke:
 
         result = subprocess.run(
             [sys.executable, SHARED_RUNNER,
-             sys.executable, "-m", "anna", "--config", "{CONFIG}", "cli"],
+             sys.executable, "-m", "anna",
+             "--routing", "127.0.0.1", "--client-ip", "127.0.0.1", "cli"],
             capture_output=True, text=True, timeout=120,
             cwd=os.path.join(REPO_ROOT, "clients", "python"),
         )
