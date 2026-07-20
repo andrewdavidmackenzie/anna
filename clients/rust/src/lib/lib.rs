@@ -48,6 +48,8 @@ mod errors;
 pub mod info;
 /// `kvs_client` connects to key-value-store server to perform operations
 pub mod kvs_client;
+/// Reports client-observed latency to the monitor for SLO enforcement.
+pub mod latency_reporter;
 /// `proto` module holds definition of protobufs for communication between client and server
 pub mod proto;
 /// `threads` provides helper methods related to anna threads

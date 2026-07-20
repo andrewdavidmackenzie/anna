@@ -1033,6 +1033,20 @@ impl KVSClient {
         self.query_routing(key).await
     }
 
+    /// Return the port base offset derived from the routing addresses.
+    pub fn base_offset(&self) -> usize {
+        if let Some(rt) = self.routing_threads.first() {
+            let addr = rt.key_address_connect_address();
+            addr.rsplit(':')
+                .next()
+                .and_then(|p| p.parse::<usize>().ok())
+                .map(|p| p.saturating_sub(6450))
+                .unwrap_or(0)
+        } else {
+            0
+        }
+    }
+
     /// Clear the key-address cache.
     pub fn clear_cache(&mut self) {
         self.key_address_cache.clear()
