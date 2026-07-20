@@ -374,17 +374,8 @@ impl KVSClient {
     /// # }
     /// ```
     pub async fn get<K: AsRef<str> + Display>(&mut self, key: K) -> Result<String> {
-        debug!("GET: {}", key);
-        let response = self
-            .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
-            .await
-            .ok_or_else(|| Error::Kvs("GET: request failed or timed out".into()))?;
-
-        let tuple = Self::validate_response(&response, "GET")?;
-
-        let lww = LwwValue::decode(tuple.payload.as_slice())
-            .map_err(|e| Error::Kvs(format!("GET: failed to decode LWW value: {}", e)))?;
-        Ok(String::from_utf8_lossy(&lww.value).to_string())
+        let bytes = self.get_bytes(key).await?;
+        Ok(String::from_utf8_lossy(&bytes).to_string())
     }
 
     /// Retrieve a raw binary value by key (LWW lattice, no UTF-8 conversion).

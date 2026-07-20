@@ -253,6 +253,11 @@ async fn monitor_stats_collection() {
                     "access_count should be > 0, got {}",
                     s.access_count
                 );
+                assert!(
+                    s.occupancy >= 0.0,
+                    "occupancy should be >= 0, got {}",
+                    s.occupancy
+                );
                 stats_ok = true;
                 break;
             }
