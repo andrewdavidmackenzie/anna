@@ -311,10 +311,7 @@ mod tests {
             .await
             .expect("create failed");
 
-        let update_addr = format!(
-            "tcp://127.0.0.1:{}",
-            92 + K_CACHE_UPDATE_PORT
-        );
+        let update_addr = format!("tcp://127.0.0.1:{}", 92 + K_CACHE_UPDATE_PORT);
         let mut pusher = PushSocket::new();
         pusher.connect(&update_addr).await.expect("connect failed");
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -354,10 +351,7 @@ mod tests {
             .await
             .expect("create failed");
 
-        let update_addr = format!(
-            "tcp://127.0.0.1:{}",
-            93 + K_CACHE_UPDATE_PORT
-        );
+        let update_addr = format!("tcp://127.0.0.1:{}", 93 + K_CACHE_UPDATE_PORT);
         let mut pusher = PushSocket::new();
         pusher.connect(&update_addr).await.expect("connect failed");
         tokio::time::sleep(Duration::from_millis(100)).await;
