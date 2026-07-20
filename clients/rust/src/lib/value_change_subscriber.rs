@@ -301,4 +301,98 @@ mod tests {
             .expect("recv_update error");
         assert!(result.is_none());
     }
+
+    #[tokio::test]
+    async fn recv_update_receives_pushed_value() {
+        use crate::proto::kvs::{KeyResponse, KeyTuple};
+
+        let config = crate::config::Config::default();
+        let mut sub = ValueChangeSubscriber::new(&config, Some(92))
+            .await
+            .expect("create failed");
+
+        let update_addr = format!(
+            "tcp://127.0.0.1:{}",
+            92 + K_CACHE_UPDATE_PORT
+        );
+        let mut pusher = PushSocket::new();
+        pusher.connect(&update_addr).await.expect("connect failed");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let response = KeyResponse {
+            tuples: vec![KeyTuple {
+                key: "pushed_key".into(),
+                payload: b"pushed_value".to_vec(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let bytes = response.encode_to_vec();
+        pusher
+            .send(zeromq::ZmqMessage::from(bytes))
+            .await
+            .expect("send failed");
+
+        let result = sub
+            .recv_update(Duration::from_secs(5))
+            .await
+            .expect("recv error");
+        assert!(result.is_some());
+        let (key, payload) = result.unwrap();
+        assert_eq!(key, "pushed_key");
+        assert_eq!(payload, b"pushed_value");
+        assert!(sub.get_cached("pushed_key").is_some());
+        assert_eq!(sub.get_cached("pushed_key").unwrap(), b"pushed_value");
+    }
+
+    #[tokio::test]
+    async fn recv_update_skips_empty_payload() {
+        use crate::proto::kvs::{KeyResponse, KeyTuple};
+
+        let config = crate::config::Config::default();
+        let mut sub = ValueChangeSubscriber::new(&config, Some(93))
+            .await
+            .expect("create failed");
+
+        let update_addr = format!(
+            "tcp://127.0.0.1:{}",
+            93 + K_CACHE_UPDATE_PORT
+        );
+        let mut pusher = PushSocket::new();
+        pusher.connect(&update_addr).await.expect("connect failed");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let response = KeyResponse {
+            tuples: vec![KeyTuple {
+                key: "empty_key".into(),
+                payload: vec![],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        pusher
+            .send(zeromq::ZmqMessage::from(response.encode_to_vec()))
+            .await
+            .expect("send failed");
+
+        let result = sub
+            .recv_update(Duration::from_secs(2))
+            .await
+            .expect("recv error");
+        assert!(result.is_none());
+        assert!(sub.get_cached("empty_key").is_none());
+    }
+
+    #[tokio::test]
+    async fn watched_keys_accumulate() {
+        let config = crate::config::Config::default();
+        let mut sub = ValueChangeSubscriber::new(&config, Some(94))
+            .await
+            .expect("create failed");
+        assert!(sub.watched_keys().is_empty());
+
+        sub.watched_keys = vec!["a".into(), "b".into()];
+        assert_eq!(sub.watched_keys().len(), 2);
+        assert_eq!(sub.watched_keys()[0], "a");
+    }
 }
