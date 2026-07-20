@@ -85,6 +85,9 @@ const unsigned kBenchmarkCommandPort = 6900;
 // management system.
 const unsigned kKopsRestartCountPort = 7000;
 
+// The port on which KVS servers listen for direct cache registration messages.
+const unsigned kCacheRegistrationPort = 7200;
+
 // The port on which the management server will listen for requests for
 // executor nodes.
 const unsigned kKopsFuncNodesPort = 7002;
@@ -199,6 +202,14 @@ public:
 
   Address replication_change_bind_address() const {
     return private_base_ + std::to_string(tid_ + kServerReplicationChangePort + kBaseOffset);
+  }
+
+  Address cache_registration_connect_address() const {
+    return public_base_ + std::to_string(tid_ + kCacheRegistrationPort + kBaseOffset);
+  }
+
+  Address cache_registration_bind_address() const {
+    return private_base_ + std::to_string(tid_ + kCacheRegistrationPort + kBaseOffset);
   }
 };
 

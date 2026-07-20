@@ -276,6 +276,10 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
   management_node_response_puller.bind(
       wt.management_node_response_bind_address());
 
+  // responsible for listening for direct cache registration messages.
+  zmq::socket_t cache_registration_puller(context, ZMQ_PULL);
+  cache_registration_puller.bind(wt.cache_registration_bind_address());
+
   //  Initialize poll set
   vector<zmq::pollitem_t> pollitems = {
       {static_cast<void *>(join_puller), 0, ZMQ_POLLIN, 0},
@@ -286,7 +290,8 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
       {static_cast<void *>(replication_response_puller), 0, ZMQ_POLLIN, 0},
       {static_cast<void *>(replication_change_puller), 0, ZMQ_POLLIN, 0},
       {static_cast<void *>(cache_ip_response_puller), 0, ZMQ_POLLIN, 0},
-      {static_cast<void *>(management_node_response_puller), 0, ZMQ_POLLIN, 0}};
+      {static_cast<void *>(management_node_response_puller), 0, ZMQ_POLLIN, 0},
+      {static_cast<void *>(cache_registration_puller), 0, ZMQ_POLLIN, 0}};
 
   auto gossip_start = std::chrono::system_clock::now();
   auto gossip_end = std::chrono::system_clock::now();
@@ -294,7 +299,7 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
   auto report_end = std::chrono::system_clock::now();
 
   unsigned long long working_time = 0;
-  unsigned long long working_time_map[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+  unsigned long long working_time_map[11] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   unsigned epoch = 0;
 
   // enter event loop
@@ -453,6 +458,21 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
       working_time_map[8] += time_elapsed;
     }
 
+    // Receive direct cache registration.
+    if (pollitems[9].revents & ZMQ_POLLIN) {
+      auto work_start = std::chrono::system_clock::now();
+
+      string serialized = kZmqUtil->recv_string(&cache_registration_puller);
+      cache_registration_handler(serialized, extant_caches, cache_ip_to_keys,
+                                 key_to_cache_ips, log);
+
+      auto time_elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+                              std::chrono::system_clock::now() - work_start)
+                              .count();
+      working_time += time_elapsed;
+      working_time_map[9] += time_elapsed;
+    }
+
     // gossip updates to other threads
     gossip_end = std::chrono::system_clock::now();
     if (std::chrono::duration_cast<std::chrono::microseconds>(gossip_end -
@@ -501,7 +521,7 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
                               .count();
 
       working_time += time_elapsed;
-      working_time_map[9] += time_elapsed;
+      working_time_map[10] += time_elapsed;
     }
 
     // Collect and store internal statistics,
@@ -633,11 +653,10 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
 
       report_start = std::chrono::system_clock::now();
 
-      // Get the most recent list of cache IPs.
-      // (Actually gets the list of all current function executor nodes.)
-      // (The message content doesn't matter here; it's an argless RPC call.)
-      // Only do this if a management_ip is set -- i.e., we are not running in
-      // local mode.
+      // Get the most recent list of cache IPs from the management node.
+      // Only used when a management_ip is set (Kubernetes mode).
+      // In standalone mode, caches register directly via the cache
+      // registration port.
       if (management_ip != "NULL") {
         kZmqUtil->send_string(
             wt.management_node_response_connect_address(),

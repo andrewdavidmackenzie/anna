@@ -246,6 +246,16 @@ impl Config {
     pub fn get_monitoring_timeout(&self) -> usize {
         self.timings.monitoring_timeout
     }
+
+    /// Return the server's public IP address
+    pub fn get_server_public_ip(&self) -> &Address {
+        &self.server.public_ip
+    }
+
+    /// Return the number of memory threads
+    pub fn get_memory_thread_count(&self) -> usize {
+        self.threads.memory
+    }
 }
 
 #[cfg(test)]

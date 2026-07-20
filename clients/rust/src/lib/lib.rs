@@ -38,6 +38,8 @@ use std::path::Path;
 use std::process::Command;
 use sysinfo::System;
 
+/// Subscribe to value changes for specific keys via the KVS gossip mechanism.
+pub mod value_change_subscriber;
 /// Tab-completion for the anna CLI.
 pub mod completer;
 /// `config` of anna - read from config file or created via API calls.

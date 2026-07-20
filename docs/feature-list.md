@@ -25,8 +25,8 @@ mocks.
 | PUT_SINGLE_CAUSAL          | Store with single-key causal metadata                        | Yes           |
 | GET_PRIORITY               | Retrieve a priority-valued key                               | Yes           |
 | PUT_PRIORITY               | Store a priority-value pair (lowest priority wins)           | Yes           |
-| Address cache invalidation | Server signals client to refresh address cache               | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
-| Multi-key GET              | Retrieve multiple keys in one request                        | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
+| Address cache invalidation | Server signals client to refresh address cache               | Yes           |
+| Multi-key GET              | Retrieve multiple keys in one request                        | Yes           |
 
 ## Lattice Types
 
@@ -46,7 +46,7 @@ mocks.
 | YAML config file  | All settings in a single YAML file                    | Yes           |
 | Thread counts     | `threads.memory`, `threads.ebs`, `threads.routing`    | Yes           |
 | Standalone mode   | `mgmt_ip: "NULL"` for local/non-k8s deployment       | Yes           |
-| Cluster topology  | seed_ip, mgmt_ip, monitoring/routing IPs              | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
+| Cluster topology  | seed_ip, mgmt_ip, monitoring/routing IPs              | Yes           |
 | ZeroMQ PUSH/PULL  | Async messaging between all components                | Yes           |
 | Protocol Buffers  | Structured message serialization                      | Yes           |
 | Socket cache      | Lazy-created, cached ZMQ push sockets                 | Yes           |
@@ -58,10 +58,10 @@ mocks.
 | Error Code   | Description                                      | System Tested |
 |--------------|--------------------------------------------------|---------------|
 | NO_ERROR     | Operation succeeded                              | Yes           |
-| KEY_DNE      | Key does not exist                                | [#355](https://github.com/andrewdavidmackenzie/anna/issues/355) |
-| WRONG_THREAD | This thread is not responsible for the key        | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
-| LATTICE      | Lattice type mismatch                             | [#355](https://github.com/andrewdavidmackenzie/anna/issues/355) |
-| NO_SERVERS   | No servers available (routing tier)               | [#355](https://github.com/andrewdavidmackenzie/anna/issues/355) |
+| KEY_DNE      | Key does not exist                                | Yes           |
+| WRONG_THREAD | This thread is not responsible for the key        | Yes           |
+| LATTICE      | Lattice type mismatch                             | Yes           |
+| NO_SERVERS   | No servers available (routing tier)               | Yes           |
 
 Note: The protobuf defines a `TIMEOUT` error code but the server never sets it.
 It is a client-side construct — see `docs/client-feature-list.md`.
@@ -70,10 +70,10 @@ It is a client-side construct — see `docs/client-feature-list.md`.
 
 | Feature                       | Description                                           | System Tested |
 |-------------------------------|-------------------------------------------------------|---------------|
-| Disk tier                     | File-based storage on configurable path               | [#387](https://github.com/andrewdavidmackenzie/anna/issues/387) |
-| Tier selection                | `SERVER_TYPE` env var selects storage medium           | [#387](https://github.com/andrewdavidmackenzie/anna/issues/387) |
-| Identical kernel across tiers | Same storage kernel, different serialization layer     | [#387](https://github.com/andrewdavidmackenzie/anna/issues/387) |
-| Node capacities               | `capacities.memory-cap`, `capacities.ebs-cap`         | [#387](https://github.com/andrewdavidmackenzie/anna/issues/387) |
+| Disk tier                     | File-based storage on configurable path               | Yes           |
+| Tier selection                | `SERVER_TYPE` env var selects storage medium           | Yes           |
+| Identical kernel across tiers | Same storage kernel, different serialization layer     | Yes           |
+| Node capacities               | `capacities.memory-cap`, `capacities.ebs-cap`         | Yes           |
 
 Note: `SERVER_TYPE` and `ebs` config should be renamed to storage-medium-agnostic
 terms (e.g., `STORAGE_MEDIUM=ram|file`).
@@ -84,51 +84,51 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 
 | Feature                         | Description                                                  | System Tested |
 |---------------------------------|--------------------------------------------------------------|---------------|
-| Per-key replication factors     | Independent replication per key per tier                      | [#385](https://github.com/andrewdavidmackenzie/anna/issues/385) |
-| Default replication from config | `replication.memory`, `replication.ebs`, `replication.local`  | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
-| Replication factor request      | Server fetches unknown factors from metadata                  | [#368](https://github.com/andrewdavidmackenzie/anna/issues/368) |
-| Replication factor change       | Monitor can dynamically adjust replication                    | [#394](https://github.com/andrewdavidmackenzie/anna/issues/394) |
-| Metadata stored as KVS data     | Replication info under `METADATA\|replication\|<key>`         | [#368](https://github.com/andrewdavidmackenzie/anna/issues/368) |
-| Gossip after replication change | Data redistributed to new responsible threads                 | [#394](https://github.com/andrewdavidmackenzie/anna/issues/394) |
+| Per-key replication factors     | Independent replication per key per tier                      | Yes           |
+| Default replication from config | `replication.memory`, `replication.ebs`, `replication.local`  | Yes           |
+| Replication factor request      | Server fetches unknown factors from metadata                  | Yes           |
+| Replication factor change       | Monitor can dynamically adjust replication                    | Yes           |
+| Metadata stored as KVS data     | Replication info under `METADATA\|replication\|<key>`         | Yes           |
+| Gossip after replication change | Data redistributed to new responsible threads                 | Yes           |
 
 ### Gossip / Multicast
 
 | Feature                     | Description                                      | System Tested |
 |-----------------------------|--------------------------------------------------|---------------|
-| Periodic gossip (10s epoch) | Changesets multicast to all responsible replicas  | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
-| Merge-at-sender             | Batched updates merged before sending             | [#368](https://github.com/andrewdavidmackenzie/anna/issues/368) |
-| Gossip to caches            | Changed keys also sent to function executor nodes | No            |
-| Join gossip                 | Redistribute data to newly joined nodes           | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
-| Cross-tier gossip           | Updates propagated between memory and disk tiers  | [#387](https://github.com/andrewdavidmackenzie/anna/issues/387) |
+| Periodic gossip (10s epoch) | Changesets multicast to all responsible replicas  | Yes           |
+| Merge-at-sender             | Batched updates merged before sending             | Yes           |
+| Gossip to caches            | Changed keys pushed to registered cache clients   | Yes           |
+| Join gossip                 | Redistribute data to newly joined nodes           | Yes           |
+| Cross-tier gossip           | Updates propagated between memory and disk tiers  | Yes           |
 
 ### Cluster Management
 
 | Feature          | Description                                          | System Tested |
 |------------------|------------------------------------------------------|---------------|
-| Node join        | New node joins cluster, receives data via gossip     | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
-| Node depart      | Node leaves, data redistributed                      | [#386](https://github.com/andrewdavidmackenzie/anna/issues/386) |
-| Self-depart      | Node gracefully removes itself, gossips all data out | [#386](https://github.com/andrewdavidmackenzie/anna/issues/386) |
-| Rejoin detection | Join counter distinguishes fresh joins from rejoins  | [#372](https://github.com/andrewdavidmackenzie/anna/issues/372) |
-| Seed node        | First routing node serves cluster membership         | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
+| Node join        | New node joins cluster, receives data via gossip     | Yes           |
+| Node depart      | Node leaves, data redistributed                      | Yes           |
+| Self-depart      | Node gracefully removes itself, gossips all data out | Yes           |
+| Rejoin detection | Join counter distinguishes fresh joins from rejoins  | Yes           |
+| Seed node        | First routing node serves cluster membership         | Yes           |
 
 ### Fault Tolerance
 
 | Feature                                 | Description                                     | System Tested |
 |-----------------------------------------|-------------------------------------------------|---------------|
-| k-fault tolerance                       | k+1 replicas ensure k failures tolerable        | [#364](https://github.com/andrewdavidmackenzie/anna/issues/364) |
-| Failure detection via timeout           | Nodes detect peer failures and update hash ring  | [#378](https://github.com/andrewdavidmackenzie/anna/issues/378) |
-| Automatic repartitioning                | Data redistributed after node failure            | [#378](https://github.com/andrewdavidmackenzie/anna/issues/378) |
-| Stateless routing recovery              | Routing rebuilds hash ring from KVS join messages | [#372](https://github.com/andrewdavidmackenzie/anna/issues/372) |
-| Key migration interleaved with requests | No downtime during reconfiguration               | [#380](https://github.com/andrewdavidmackenzie/anna/issues/380) |
+| k-fault tolerance                       | k+1 replicas ensure k failures tolerable        | Yes           |
+| Failure detection via timeout           | Nodes detect peer failures and update hash ring  | Yes           |
+| Automatic repartitioning                | Data redistributed after node failure            | Yes           |
+| Stateless routing recovery              | Routing rebuilds hash ring from KVS join messages | Yes           |
+| Key migration interleaved with requests | No downtime during reconfiguration               | Yes           |
 
 ### Consistent Hashing
 
 | Feature                         | Description                                  | System Tested |
 |---------------------------------|----------------------------------------------|---------------|
-| Two-level hash ring             | Global (nodes) + Local (threads within node) | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
-| Virtual nodes (3000 per thread) | Even distribution across physical threads    | [#373](https://github.com/andrewdavidmackenzie/anna/issues/373) |
-| CRC32 hashing                   | Hash function for key-to-ring mapping        | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
-| Thread responsibility lookup    | Determines which threads handle a key        | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
+| Two-level hash ring             | Global (nodes) + Local (threads within node) | Yes           |
+| Virtual nodes (3000 per thread) | Even distribution across physical threads    | Yes           |
+| CRC32 hashing                   | Hash function for key-to-ring mapping        | Yes           |
+| Thread responsibility lookup    | Determines which threads handle a key        | Yes           |
 
 ### Routing Tier
 
@@ -136,10 +136,10 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 |---------------------------|----------------------------------------------------------|---------------|
 | Key address lookup        | Client queries routing for server addresses              | Yes           |
 | Hash ring caching         | Routing caches storage tier hash rings                   | Yes           |
-| Memory-tier preference    | Returns memory addresses when available                  | [#387](https://github.com/andrewdavidmackenzie/anna/issues/387) |
-| Replication-aware routing | Uses replication vectors to find all responsible threads | [#371](https://github.com/andrewdavidmackenzie/anna/issues/371) |
-| Pending request queue     | Queues requests while replication factor is unknown      | [#371](https://github.com/andrewdavidmackenzie/anna/issues/371) |
-| Multi-threaded routing    | Configurable number of routing threads                   | [#371](https://github.com/andrewdavidmackenzie/anna/issues/371) |
+| Memory-tier preference    | Returns memory addresses when available                  | Yes           |
+| Replication-aware routing | Uses replication vectors to find all responsible threads | Yes           |
+| Pending request queue     | Queues requests while replication factor is unknown      | Yes           |
+| Multi-threaded routing    | Configurable number of routing threads                   | Yes           |
 
 ## Monitoring & Policy Engine — `anna-monitor` (#357)
 
@@ -179,7 +179,7 @@ autoscaling policies.
 | Single-Node Features                   | `anna-kvs`     | 9     | 9      | 100%     | —      |
 | Error Handling                         | `anna-kvs`     | 5     | 5      | 100%     | —      |
 | Multi-Tiered Storage                   | `anna-kvs`     | 4     | 4      | 100%     | —      |
-| Multi-Node Features                    | `anna-kvs`     | 25    | 24     | 96%      | #378   |
+| Multi-Node Features                    | `anna-kvs`     | 25    | 25     | 100%     | —      |
 | Routing Tier                           | `anna-route`   | 6     | 6      | 100%     | —      |
 | Monitoring & Policy Engine             | `anna-monitor` | 13    | 0      | 0%       | #357   |
-| **Total**                              |                | **83**| **69** | **83%**  |        |
+| **Total**                              |                | **83**| **70** | **84%**  |        |

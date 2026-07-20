@@ -1,0 +1,398 @@
+use crate::config::Config;
+use crate::errors::{Error, Result};
+use crate::proto::kvs::{KeyResponse, LwwValue};
+use crate::proto::shared::StringSet;
+use crate::types::{Address, Key};
+use log::{debug, info};
+use prost::Message;
+use std::collections::HashMap;
+use std::time::Duration;
+use zeromq::{PullSocket, PushSocket, Socket, SocketRecv, SocketSend};
+
+// The port on which KVS servers listen for direct cache registration.
+const K_CACHE_REGISTRATION_PORT: usize = 7200;
+
+// The port on which cache nodes receive updates from the KVS.
+const K_CACHE_UPDATE_PORT: usize = 7150;
+
+/// Subscribes to value changes for specific keys via the KVS gossip mechanism.
+///
+/// Registers with KVS server threads to watch specific keys. When those keys
+/// are updated (including deletes), the KVS pushes the new values during its
+/// gossip epoch. Applications can use this for caching, event-driven updates,
+/// or any pub-sub pattern over KVS keys.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// # #[tokio::main]
+/// # async fn main() -> annalib::Result<()> {
+/// use std::time::Duration;
+/// use annalib::config::Config;
+/// use annalib::value_change_subscriber::ValueChangeSubscriber;
+///
+/// let config = Config::default();
+/// let mut cache = ValueChangeSubscriber::new(&config, None).await?;
+/// cache.watch(&["my-key".to_string()]).await?;
+///
+/// // After a gossip epoch, receive updates pushed from KVS
+/// if let Some((key, value)) = cache.recv_update(Duration::from_secs(15)).await? {
+///     println!("Got update for {}: {} bytes", key, value.len());
+/// }
+///
+/// // Read from local cache
+/// if let Some(value) = cache.get_cached("my-key") {
+///     println!("Cached value: {} bytes", value.len());
+/// }
+/// # Ok(())
+/// # }
+/// ```
+pub struct ValueChangeSubscriber {
+    cache_ip: Address,
+    base_offset: usize,
+    server_ip: Address,
+    memory_threads: usize,
+    socket_cache: HashMap<Address, PushSocket>,
+    update_puller: PullSocket,
+    local_cache: HashMap<Key, Vec<u8>>,
+    watched_keys: Vec<Key>,
+}
+
+impl ValueChangeSubscriber {
+    /// Create a new cache client.
+    ///
+    /// The `tid` parameter selects which port to listen on for updates.
+    /// Pass `None` for the default (tid=0).
+    pub async fn new(config: &Config, tid: Option<usize>) -> Result<Self> {
+        let tid = tid.unwrap_or(0);
+        let base_offset = config.get_base_offset();
+        let cache_ip = config.get_user_ip().clone();
+        let server_ip = config.get_server_public_ip().clone();
+        let memory_threads = config.get_memory_thread_count();
+
+        let bind_addr = format!(
+            "tcp://{}:{}",
+            cache_ip,
+            tid + K_CACHE_UPDATE_PORT + base_offset
+        );
+        let mut update_puller = PullSocket::new();
+        update_puller.bind(&bind_addr).await.map_err(|e| {
+            Error::Kvs(format!(
+                "Failed to bind cache update puller on {}: {}",
+                bind_addr, e
+            ))
+        })?;
+
+        info!("Cache client listening for updates on {}", bind_addr);
+
+        Ok(ValueChangeSubscriber {
+            cache_ip,
+            base_offset,
+            server_ip,
+            memory_threads,
+            socket_cache: HashMap::new(),
+            update_puller,
+            local_cache: HashMap::new(),
+            watched_keys: Vec::new(),
+        })
+    }
+
+    /// Register interest in the given keys with all KVS server threads.
+    ///
+    /// The registration message is sent to each KVS thread's cache registration
+    /// port. The server will then include these keys in its gossip-to-caches
+    /// during each gossip epoch.
+    pub async fn watch(&mut self, keys: &[Key]) -> Result<()> {
+        self.watched_keys.extend(keys.iter().cloned());
+
+        let mut msg = StringSet::default();
+        msg.keys.push(self.cache_ip.clone());
+        for key in keys {
+            msg.keys.push(key.clone());
+        }
+        let payload = msg.encode_to_vec();
+
+        for tid in 0..self.memory_threads {
+            let addr = format!(
+                "tcp://{}:{}",
+                self.server_ip,
+                tid + K_CACHE_REGISTRATION_PORT + self.base_offset
+            );
+            let socket = self.get_or_connect(&addr).await?;
+            socket
+                .send(zeromq::ZmqMessage::from(payload.clone()))
+                .await
+                .map_err(|e| {
+                    Error::Kvs(format!("Failed to send registration to {}: {}", addr, e))
+                })?;
+            debug!(
+                "Registered {} keys with KVS thread {} at {}",
+                keys.len(),
+                tid,
+                addr
+            );
+        }
+
+        info!(
+            "Registered {} keys with {} KVS threads",
+            keys.len(),
+            self.memory_threads
+        );
+        Ok(())
+    }
+
+    /// Receive the next update pushed from the KVS.
+    ///
+    /// Blocks up to `timeout` waiting for a gossip push. Returns `None` if
+    /// the timeout expires without receiving an update.
+    ///
+    /// Updates are `KeyResponse` protobuf messages containing the key and
+    /// its new serialized value.
+    pub async fn recv_update(&mut self, timeout: Duration) -> Result<Option<(Key, Vec<u8>)>> {
+        let result = tokio::time::timeout(timeout, self.update_puller.recv()).await;
+
+        match result {
+            Ok(Ok(msg)) => {
+                let bytes: Vec<u8> = msg
+                    .into_vec()
+                    .into_iter()
+                    .flat_map(|frame| frame.to_vec())
+                    .collect();
+
+                let response = KeyResponse::decode(bytes.as_slice())
+                    .map_err(|e| Error::Kvs(format!("Failed to decode cache update: {}", e)))?;
+
+                for tuple in &response.tuples {
+                    let key = tuple.key.clone();
+                    let payload = tuple.payload.clone();
+
+                    if !payload.is_empty() {
+                        self.local_cache.insert(key.clone(), payload.clone());
+                        debug!("Cache updated for key: {}", key);
+                        return Ok(Some((key, payload)));
+                    }
+                }
+
+                Ok(None)
+            }
+            Ok(Err(e)) => Err(Error::Kvs(format!("ZMQ recv error: {}", e))),
+            Err(_) => Ok(None),
+        }
+    }
+
+    /// Read a value from the local cache.
+    ///
+    /// Returns `None` if the key has not been received via a gossip update yet.
+    pub fn get_cached(&self, key: &str) -> Option<&Vec<u8>> {
+        self.local_cache.get(key)
+    }
+
+    /// Decode a cached LWW payload into its string value.
+    ///
+    /// The raw cache payload is a serialized `LwwValue` protobuf. This helper
+    /// decodes it and returns the inner value bytes.
+    pub fn decode_lww_value(payload: &[u8]) -> Result<Vec<u8>> {
+        let lww = LwwValue::decode(payload)
+            .map_err(|e| Error::Kvs(format!("Failed to decode LWW value: {}", e)))?;
+        Ok(lww.value)
+    }
+
+    /// Return the list of currently watched keys.
+    pub fn watched_keys(&self) -> &[Key] {
+        &self.watched_keys
+    }
+
+    async fn get_or_connect(&mut self, addr: &str) -> Result<&mut PushSocket> {
+        if !self.socket_cache.contains_key(addr) {
+            let mut last_err = None;
+            for attempt in 0..5 {
+                let mut sock = PushSocket::new();
+                match tokio::time::timeout(Duration::from_secs(5), sock.connect(addr)).await {
+                    Ok(Ok(())) => {
+                        self.socket_cache.insert(addr.to_string(), sock);
+                        last_err = None;
+                        break;
+                    }
+                    Ok(Err(e)) => {
+                        last_err = Some(format!("attempt {}: {}", attempt + 1, e));
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    }
+                    Err(_) => {
+                        last_err = Some(format!("attempt {}: connect timed out", attempt + 1));
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    }
+                }
+            }
+            if let Some(err) = last_err {
+                return Err(Error::Kvs(format!(
+                    "Failed to connect to {} after retries: {}",
+                    addr, err
+                )));
+            }
+        }
+        Ok(self
+            .socket_cache
+            .get_mut(addr)
+            .expect("socket was just inserted"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decode_lww_value_roundtrip() {
+        let lww = LwwValue {
+            timestamp: 12345,
+            value: b"hello world".to_vec(),
+        };
+        let encoded = lww.encode_to_vec();
+        let decoded = ValueChangeSubscriber::decode_lww_value(&encoded).expect("decode failed");
+        assert_eq!(decoded, b"hello world");
+    }
+
+    #[test]
+    fn decode_lww_value_empty() {
+        let lww = LwwValue {
+            timestamp: 0,
+            value: vec![],
+        };
+        let encoded = lww.encode_to_vec();
+        let decoded = ValueChangeSubscriber::decode_lww_value(&encoded).expect("decode failed");
+        assert!(decoded.is_empty());
+    }
+
+    #[test]
+    fn cache_registration_port_constant() {
+        assert_eq!(K_CACHE_REGISTRATION_PORT, 7200);
+    }
+
+    #[test]
+    fn cache_update_port_constant() {
+        assert_eq!(K_CACHE_UPDATE_PORT, 7150);
+    }
+
+    #[test]
+    fn decode_lww_value_invalid_proto() {
+        let result = ValueChangeSubscriber::decode_lww_value(b"not valid protobuf");
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn new_value_change_subscriber() {
+        let config = crate::config::Config::default();
+        let cache = ValueChangeSubscriber::new(&config, Some(90)).await;
+        assert!(cache.is_ok());
+        let cache = cache.unwrap();
+        assert!(cache.watched_keys().is_empty());
+        assert!(cache.get_cached("nonexistent").is_none());
+    }
+
+    #[tokio::test]
+    async fn recv_update_timeout() {
+        let config = crate::config::Config::default();
+        let mut cache = ValueChangeSubscriber::new(&config, Some(91))
+            .await
+            .expect("Failed to create cache client");
+        let result = cache
+            .recv_update(Duration::from_millis(100))
+            .await
+            .expect("recv_update error");
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn recv_update_receives_pushed_value() {
+        use crate::proto::kvs::{KeyResponse, KeyTuple};
+
+        let config = crate::config::Config::default();
+        let mut sub = ValueChangeSubscriber::new(&config, Some(92))
+            .await
+            .expect("create failed");
+
+        let update_addr = format!(
+            "tcp://127.0.0.1:{}",
+            92 + K_CACHE_UPDATE_PORT
+        );
+        let mut pusher = PushSocket::new();
+        pusher.connect(&update_addr).await.expect("connect failed");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let response = KeyResponse {
+            tuples: vec![KeyTuple {
+                key: "pushed_key".into(),
+                payload: b"pushed_value".to_vec(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let bytes = response.encode_to_vec();
+        pusher
+            .send(zeromq::ZmqMessage::from(bytes))
+            .await
+            .expect("send failed");
+
+        let result = sub
+            .recv_update(Duration::from_secs(5))
+            .await
+            .expect("recv error");
+        assert!(result.is_some());
+        let (key, payload) = result.unwrap();
+        assert_eq!(key, "pushed_key");
+        assert_eq!(payload, b"pushed_value");
+        assert!(sub.get_cached("pushed_key").is_some());
+        assert_eq!(sub.get_cached("pushed_key").unwrap(), b"pushed_value");
+    }
+
+    #[tokio::test]
+    async fn recv_update_skips_empty_payload() {
+        use crate::proto::kvs::{KeyResponse, KeyTuple};
+
+        let config = crate::config::Config::default();
+        let mut sub = ValueChangeSubscriber::new(&config, Some(93))
+            .await
+            .expect("create failed");
+
+        let update_addr = format!(
+            "tcp://127.0.0.1:{}",
+            93 + K_CACHE_UPDATE_PORT
+        );
+        let mut pusher = PushSocket::new();
+        pusher.connect(&update_addr).await.expect("connect failed");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let response = KeyResponse {
+            tuples: vec![KeyTuple {
+                key: "empty_key".into(),
+                payload: vec![],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        pusher
+            .send(zeromq::ZmqMessage::from(response.encode_to_vec()))
+            .await
+            .expect("send failed");
+
+        let result = sub
+            .recv_update(Duration::from_secs(2))
+            .await
+            .expect("recv error");
+        assert!(result.is_none());
+        assert!(sub.get_cached("empty_key").is_none());
+    }
+
+    #[tokio::test]
+    async fn watched_keys_accumulate() {
+        let config = crate::config::Config::default();
+        let mut sub = ValueChangeSubscriber::new(&config, Some(94))
+            .await
+            .expect("create failed");
+        assert!(sub.watched_keys().is_empty());
+
+        sub.watched_keys = vec!["a".into(), "b".into()];
+        assert_eq!(sub.watched_keys().len(), 2);
+        assert_eq!(sub.watched_keys()[0], "a");
+    }
+}

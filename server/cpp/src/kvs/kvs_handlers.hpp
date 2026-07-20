@@ -87,6 +87,12 @@ void cache_ip_response_handler(string &serialized,
                                map<Address, set<Key>> &cache_ip_to_keys,
                                map<Key, set<Address>> &key_to_cache_ips);
 
+void cache_registration_handler(string &serialized,
+                                set<Address> &extant_caches,
+                                map<Address, set<Key>> &cache_ip_to_keys,
+                                map<Key, set<Address>> &key_to_cache_ips,
+                                logger log);
+
 void management_node_response_handler(string &serialized,
                                       set<Address> &extant_caches,
                                       map<Address, set<Key>> &cache_ip_to_keys,
