@@ -74,9 +74,14 @@ It is a client-side construct — see `docs/client-feature-list.md`.
 | Tier selection                | `SERVER_TYPE` env var selects storage medium           | Yes           |
 | Identical kernel across tiers | Same storage kernel, different serialization layer     | Yes           |
 | Node capacities               | `capacities.memory-cap`, `capacities.ebs-cap`         | Yes           |
+| Cross-tier data movement      | Promote hot data to memory, demote cold to disk       | No            |
 
 Note: `SERVER_TYPE` and `ebs` config should be renamed to storage-medium-agnostic
 terms (e.g., `STORAGE_MEDIUM=ram|file`).
+
+Cross-tier data movement is triggered by `anna-monitor` when `policy.tiering`
+is enabled, but the mechanism is a replication factor change — a storage
+feature, not an autoscaling decision.
 
 ## Multi-Node Features (#352)
 
@@ -160,22 +165,55 @@ by `anna-monitor` each monitoring cycle.
 | Per-key size for primary replicas    | Size of data for keys this thread owns       | Yes           |
 | Per-event-type occupancy logging     | Performance profiling of event handlers      | Yes           |
 
-## Autoscaling Policy Engine — `anna-monitor`
+## Autoscaling Support
 
-The policy engine runs inside `anna-monitor` and makes active decisions
-based on the collected statistics: scaling the cluster, changing replication
-factors, and moving data between tiers. Policies require a management node
-for node addition/removal.
+Anna provides the **primitives** for autoscaling but delegates the scaling
+**decisions** and **infrastructure lifecycle** to the operator. This is a
+deliberate split:
+
+- **Server features** — the cluster primitives that enable scaling (node
+  join/depart, replication changes, stats reporting). These are implemented
+  in `anna-kvs`, `anna-route`, and `anna-monitor`.
+- **Client library helpers** — convenience methods for reading stats and
+  triggering scaling actions. These make it easy to build an autoscaler
+  in any language.
+- **Operator responsibility** — the decision logic (when to add/remove
+  nodes) and the infrastructure lifecycle (provisioning/deprovisioning
+  machines). Not part of the Anna project.
+
+### Server features (autoscaling primitives)
 
 | Feature                     | Description                                                   | System Tested |
 |-----------------------------|---------------------------------------------------------------|---------------|
-| Elasticity policy           | Add/remove nodes based on storage/compute capacity            | No            |
 | Hot-key replication         | Selectively replicate hot keys across more threads/nodes      | No            |
-| Cross-tier data movement    | Promote hot data to memory, demote cold to disk               | No            |
-| SLO enforcement             | Latency-based scaling (target: 3ms)                           | No            |
-| Underutilization scale-down | Remove nodes when occupancy is low                            | No            |
-| Grace period                | Prevent over-correction during data redistribution            | No            |
+| Grace period                | Configurable cooldown preventing rapid scaling oscillation    | No            |
 | Policy toggles              | `policy.elasticity`, `policy.selective-rep`, `policy.tiering` | No            |
+| Latency feedback ingestion  | Monitor accepts `UserFeedback` protobuf for SLO decisions    | No            |
+
+### Client library helpers (#410)
+
+| Feature                          | Description                                            | Implemented |
+|----------------------------------|--------------------------------------------------------|-------------|
+| Read storage/occupancy stats     | Helper to GET and decode `ServerThreadStatistics`      | No          |
+| Read per-key access stats        | Helper to GET and decode `KeyAccessData`               | No          |
+| Read per-key size stats          | Helper to GET and decode `KeySizeData`                 | No          |
+| Report latency feedback          | Send `UserFeedback` to monitor for SLO enforcement    | No          |
+
+### Operator responsibility (not project features)
+
+The following are **not features of Anna** — they are the operator's domain,
+documented with examples and tested via system tests that simulate an
+external autoscaler:
+
+- **Elasticity decisions** — when to add/remove nodes based on stats
+- **Infrastructure provisioning** — starting/stopping server processes or VMs
+- **SLO policy logic** — latency thresholds and scaling formulas
+
+`anna-monitor` contains a built-in policy engine (`storage_policy.cpp`,
+`slo_policy.cpp`, `movement_policy.cpp`) that implements reference decision
+logic, but it depends on a management node (`tcp://<mgmt_ip>:7001`) that
+is not part of the project. Operators can use the client library helpers
+to implement their own scaling logic.
 
 ## Summary
 
@@ -185,9 +223,9 @@ for node addition/removal.
 | Lattice Types                          | `anna-kvs`     | 6     | 6      | 100%     | —      |
 | Single-Node Features                   | `anna-kvs`     | 9     | 9      | 100%     | —      |
 | Error Handling                         | `anna-kvs`     | 5     | 5      | 100%     | —      |
-| Multi-Tiered Storage                   | `anna-kvs`     | 4     | 4      | 100%     | —      |
+| Multi-Tiered Storage                   | `anna-kvs`     | 5     | 4      | 80%      | —      |
 | Multi-Node Features                    | `anna-kvs`     | 25    | 25     | 100%     | —      |
 | Routing Tier                           | `anna-route`   | 6     | 6      | 100%     | —      |
 | Monitoring                             | `anna-monitor` | 6     | 6      | 100%     | —      |
-| Autoscaling Policy Engine              | `anna-monitor` | 7     | 0      | 0%       | #357   |
-| **Total**                              |                | **83**| **76** | **92%**  |        |
+| Autoscaling (server primitives)        | `anna-monitor` | 4     | 0      | 0%       | #410   |
+| **Total**                              |                | **81**| **76** | **94%**  |        |
