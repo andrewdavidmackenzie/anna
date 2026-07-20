@@ -844,7 +844,7 @@ async fn multi_node_rejoin() {
         .expect("PUT rejoin_proof failed");
 
     // Wait for gossip to replicate to Node 2, then kill Node 1 to prove it
-    std::thread::sleep(Duration::from_secs(TEST_GOSSIP_EPOCH as u64 + 2));
+    std::thread::sleep(Duration::from_secs(TEST_GOSSIP_EPOCH as u64 * 2 + 2));
     cluster.kill_process("anna-kvs@127.0.0.1");
 
     // Poll Node 2 — routing may still try the dead Node 1 first,
@@ -1530,9 +1530,9 @@ async fn gossip_after_replication_change() {
 #[tokio::test]
 #[cfg(unix)]
 async fn gossip_to_caches() {
-    use annalib::value_change_subscriber::ValueChangeSubscriber;
     use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
+    use annalib::value_change_subscriber::ValueChangeSubscriber;
 
     if skip_unless_multi_ip() {
         return;
