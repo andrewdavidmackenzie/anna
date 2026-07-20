@@ -31,7 +31,7 @@ fn cli_golden_tests() {
     let result = Command::new("python3")
         .arg(&shared_runner)
         .arg(anna.to_str().unwrap())
-        .args(["--config", "{CONFIG}", "cli"])
+        .args(["--server-config", "{CONFIG}", "cli"])
         .output()
         .expect("Failed to run shared smoke test");
 

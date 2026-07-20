@@ -5,15 +5,6 @@ pub enum Error {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 
-    /// Config file could not be loaded
-    #[error("Could not load config from '{path}': {detail}")]
-    ConfigFile {
-        /// Path to the config file
-        path: String,
-        /// What went wrong
-        detail: String,
-    },
-
     /// A KVS operation failed
     #[error("KVS error: {0}")]
     Kvs(String),
@@ -35,16 +26,6 @@ mod tests {
         let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file missing");
         let err: Error = io_err.into();
         assert!(err.to_string().contains("I/O error"));
-    }
-
-    #[test]
-    fn config_file_error_display() {
-        let err = Error::ConfigFile {
-            path: "/etc/anna.yml".into(),
-            detail: "not found".into(),
-        };
-        assert!(err.to_string().contains("/etc/anna.yml"));
-        assert!(err.to_string().contains("not found"));
     }
 
     #[test]

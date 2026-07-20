@@ -8,10 +8,10 @@
 //! ```rust
 //! # #[tokio::main]
 //! # async fn main() {
-//! use annalib::config::Config;
+//! use annalib::client_config::ClientConfig;
 //! use annalib::kvs_client::KVSClient;
 //!
-//! let config = Config::default();
+//! let config = ClientConfig::default();
 //! let client = KVSClient::new(&config, Some(106)).await;
 //! // Use client.get("key") and client.put("key", "value") with a running server
 //! # }
@@ -38,10 +38,10 @@ use std::path::Path;
 use std::process::Command;
 use sysinfo::System;
 
+/// Minimal client-side configuration for connecting to an anna cluster.
+pub mod client_config;
 /// Tab-completion for the anna CLI.
 pub mod completer;
-/// `config` of anna - read from config file or created via API calls.
-pub mod config;
 /// put all error types and methods into an `errors` module
 mod errors;
 /// `info` module provides additional information about this anna client and server components running

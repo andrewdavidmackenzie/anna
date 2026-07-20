@@ -2,16 +2,15 @@
 
 mod common;
 
-use common::{config_file, server_path, start_servers, ServerGuard};
+use common::{client_config, generate_config, server_path, start_servers, ServerGuard};
 
 #[tokio::test]
 #[cfg(unix)]
 async fn system_test_kvs_client() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     let path = server_path();
-    let config_path = config_file();
+    let config_path = generate_config(0);
 
     start_servers(&path, &config_path);
     let _guard = ServerGuard {
@@ -19,8 +18,7 @@ async fn system_test_kvs_client() {
         config: config_path,
     };
 
-    let config =
-        Config::read(&std::path::PathBuf::from(&_guard.config)).expect("Failed to read config");
+    let config = client_config(0);
     let mut client = KVSClient::new(&config, Some(50)).await;
 
     // PUT and GET a LWW value

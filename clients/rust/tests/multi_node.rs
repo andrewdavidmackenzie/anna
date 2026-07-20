@@ -358,8 +358,15 @@ impl MultiNodeCluster {
         std::thread::sleep(Duration::from_secs(1));
     }
 
-    fn client_config_path(&self, node_ip: &str) -> PathBuf {
-        self.config_dir.join(format!("node-{}.yml", node_ip))
+    fn client_config(&self) -> annalib::client_config::ClientConfig {
+        annalib::client_config::ClientConfig {
+            routing_addresses: vec![format!(
+                "tcp://{}:{}",
+                NODE1_IP,
+                6450 + self.base_offset as usize
+            )],
+            client_ip: NODE1_IP.to_string(),
+        }
     }
 
     fn shutdown(&mut self) {
@@ -460,7 +467,6 @@ fn skip_unless_multi_ip() -> bool {
 #[tokio::test]
 #[cfg(unix)]
 async fn multi_node_cluster_join_and_data_access() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if skip_unless_multi_ip() {
@@ -472,8 +478,7 @@ async fn multi_node_cluster_join_and_data_access() {
     cluster.start_full_node(NODE1_IP, 1);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(50)).await;
 
     for i in 0..10 {
@@ -508,7 +513,6 @@ async fn multi_node_cluster_join_and_data_access() {
 #[tokio::test]
 #[cfg(unix)]
 async fn multi_node_gossip_replication() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if skip_unless_multi_ip() {
@@ -520,8 +524,7 @@ async fn multi_node_gossip_replication() {
     cluster.start_full_node(NODE1_IP, 2);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(51)).await;
 
     client
@@ -557,7 +560,6 @@ async fn multi_node_gossip_replication() {
 #[tokio::test]
 #[cfg(unix)]
 async fn multi_node_address_cache_invalidation() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if skip_unless_multi_ip() {
@@ -568,8 +570,7 @@ async fn multi_node_address_cache_invalidation() {
 
     cluster.start_full_node(NODE1_IP, 1);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(52)).await;
 
     for i in 0..5 {
@@ -610,7 +611,6 @@ async fn multi_node_address_cache_invalidation() {
 #[tokio::test]
 #[cfg(unix)]
 async fn multi_node_fault_tolerance() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if skip_unless_multi_ip() {
@@ -622,8 +622,7 @@ async fn multi_node_fault_tolerance() {
     cluster.start_full_node(NODE1_IP, 2);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(53)).await;
 
     // PUT data and wait for gossip to replicate to both nodes
@@ -665,7 +664,6 @@ async fn multi_node_fault_tolerance() {
 #[tokio::test]
 #[cfg(unix)]
 async fn no_servers_error() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if !server_bin_dir().join("anna-route").exists() {
@@ -676,8 +674,7 @@ async fn no_servers_error() {
     let mut cluster = MultiNodeCluster::new(4804);
     cluster.start_routing_only(NODE1_IP);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(55)).await;
     client.set_timeout(Duration::from_secs(3));
 
@@ -696,7 +693,6 @@ async fn no_servers_error() {
 #[tokio::test]
 #[cfg(unix)]
 async fn virtual_nodes_key_distribution() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
     use std::collections::HashMap;
 
@@ -708,8 +704,7 @@ async fn virtual_nodes_key_distribution() {
     cluster.start_full_node(NODE1_IP, 1);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(56)).await;
 
     let mut node_counts: HashMap<String, usize> = HashMap::new();
@@ -761,7 +756,6 @@ async fn virtual_nodes_key_distribution() {
 #[tokio::test]
 #[cfg(unix)]
 async fn multi_node_replica_survival() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if skip_unless_multi_ip() {
@@ -772,8 +766,7 @@ async fn multi_node_replica_survival() {
     cluster.start_full_node(NODE1_IP, 2);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(57)).await;
 
     client
@@ -816,7 +809,6 @@ async fn multi_node_replica_survival() {
 #[tokio::test]
 #[cfg(unix)]
 async fn multi_node_rejoin() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if skip_unless_multi_ip() {
@@ -827,8 +819,7 @@ async fn multi_node_rejoin() {
     cluster.start_full_node(NODE1_IP, 2);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
 
     // Kill Node 2
     cluster.kill_process("anna-kvs@127.0.0.2");
@@ -873,7 +864,6 @@ async fn multi_node_rejoin() {
 #[tokio::test]
 #[cfg(unix)]
 async fn stateless_routing_recovery() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if skip_unless_multi_ip() {
@@ -883,8 +873,7 @@ async fn stateless_routing_recovery() {
     let mut cluster = MultiNodeCluster::new(9608);
     cluster.start_full_node(NODE1_IP, 1);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(61)).await;
 
     client
@@ -932,7 +921,6 @@ async fn stateless_routing_recovery() {
 #[tokio::test]
 #[cfg(unix)]
 async fn multi_threaded_routing() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if !server_bin_dir().join("anna-kvs").exists() {
@@ -947,8 +935,7 @@ async fn multi_threaded_routing() {
         ..Default::default()
     });
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(63)).await;
 
     for i in 0..10 {
@@ -975,7 +962,6 @@ async fn multi_threaded_routing() {
 #[tokio::test]
 #[cfg(unix)]
 async fn replication_aware_routing() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if skip_unless_multi_ip() {
@@ -986,8 +972,7 @@ async fn replication_aware_routing() {
     cluster.start_full_node(NODE1_IP, 2);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(64)).await;
 
     // PUT a key so routing resolves it
@@ -1021,7 +1006,6 @@ async fn replication_aware_routing() {
 #[tokio::test]
 #[cfg(unix)]
 async fn pending_request_queue() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if skip_unless_multi_ip() {
@@ -1032,8 +1016,7 @@ async fn pending_request_queue() {
     cluster.start_full_node(NODE1_IP, 1);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(65)).await;
 
     // Rapidly PUT many new keys — each triggers a replication factor lookup
@@ -1063,7 +1046,6 @@ async fn pending_request_queue() {
 #[tokio::test]
 #[cfg(unix)]
 async fn key_migration_during_join() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if skip_unless_multi_ip() {
@@ -1073,8 +1055,7 @@ async fn key_migration_during_join() {
     let mut cluster = MultiNodeCluster::new(14412);
     cluster.start_full_node(NODE1_IP, 1);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(66)).await;
 
     // PUT initial data on single node
@@ -1134,7 +1115,6 @@ async fn key_migration_during_join() {
 #[tokio::test]
 #[cfg(unix)]
 async fn per_key_replication_metadata() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if skip_unless_multi_ip() {
@@ -1145,8 +1125,7 @@ async fn per_key_replication_metadata() {
     cluster.start_full_node(NODE1_IP, 1);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(68)).await;
 
     // PUT a regular key
@@ -1184,7 +1163,6 @@ async fn per_key_replication_metadata() {
 #[tokio::test]
 #[cfg(unix)]
 async fn self_depart_signal() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if !server_bin_dir().join("anna-kvs").exists() {
@@ -1195,8 +1173,7 @@ async fn self_depart_signal() {
     let mut cluster = MultiNodeCluster::new(16814);
     cluster.start_full_node(NODE1_IP, 1);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(69)).await;
 
     client
@@ -1231,7 +1208,6 @@ async fn self_depart_signal() {
 #[tokio::test]
 #[cfg(unix)]
 async fn disk_tier_basic() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if skip_unless_multi_ip() {
@@ -1250,8 +1226,7 @@ async fn disk_tier_basic() {
     // Start a disk-tier KVS on Node 2
     cluster.start_disk_kvs_node(NODE2_IP, NODE1_IP);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(71)).await;
 
     // PUT and GET data — routing may direct to either memory or disk node
@@ -1278,7 +1253,6 @@ async fn disk_tier_basic() {
 #[tokio::test]
 #[cfg(unix)]
 async fn memory_tier_preference() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if skip_unless_multi_ip() {
@@ -1293,8 +1267,7 @@ async fn memory_tier_preference() {
     });
     cluster.start_disk_kvs_node(NODE2_IP, NODE1_IP);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(72)).await;
 
     client
@@ -1320,7 +1293,6 @@ async fn memory_tier_preference() {
 #[tokio::test]
 #[cfg(unix)]
 async fn cross_tier_gossip() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if skip_unless_multi_ip() {
@@ -1338,8 +1310,7 @@ async fn cross_tier_gossip() {
     });
     cluster.start_disk_kvs_node(NODE2_IP, NODE1_IP);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(73)).await;
 
     // PUT multiple keys
@@ -1371,7 +1342,6 @@ async fn cross_tier_gossip() {
 #[tokio::test]
 #[cfg(unix)]
 async fn crash_detection_via_epoch() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if skip_unless_multi_ip() {
@@ -1387,8 +1357,7 @@ async fn crash_detection_via_epoch() {
     });
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(78)).await;
 
     client
@@ -1440,7 +1409,6 @@ async fn crash_detection_via_epoch() {
 #[tokio::test]
 #[cfg(unix)]
 async fn replication_factor_change() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if skip_unless_multi_ip() {
@@ -1451,8 +1419,7 @@ async fn replication_factor_change() {
     cluster.start_full_node(NODE1_IP, 1);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(75)).await;
 
     client
@@ -1490,7 +1457,6 @@ async fn replication_factor_change() {
 #[tokio::test]
 #[cfg(unix)]
 async fn gossip_after_replication_change() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if skip_unless_multi_ip() {
@@ -1501,8 +1467,7 @@ async fn gossip_after_replication_change() {
     cluster.start_full_node(NODE1_IP, 1);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(76)).await;
 
     client
@@ -1530,7 +1495,6 @@ async fn gossip_after_replication_change() {
 #[tokio::test]
 #[cfg(unix)]
 async fn gossip_to_caches() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
     use annalib::value_change_subscriber::ValueChangeSubscriber;
 
@@ -1541,8 +1505,7 @@ async fn gossip_to_caches() {
     let mut cluster = MultiNodeCluster::new(25221);
     cluster.start_full_node(NODE1_IP, 1);
 
-    let config =
-        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+    let config = cluster.client_config();
 
     let mut cache = ValueChangeSubscriber::new(&config, Some(0))
         .await
