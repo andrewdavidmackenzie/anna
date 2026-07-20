@@ -141,15 +141,11 @@ fn spawn_server_with_env(
     if !bin.exists() {
         return None;
     }
-    let log_dir = config.parent().unwrap_or(Path::new("/tmp"));
-    let stderr_path = log_dir.join(format!("{}.stderr", name));
-    let stderr_file = fs::File::create(&stderr_path)
-        .unwrap_or_else(|e| panic!("Failed to create {}: {}", stderr_path.display(), e));
     let mut cmd = Command::new(&bin);
     cmd.args(["--config", &config.to_string_lossy()])
         .env("PATH", extra_path)
         .stdout(Stdio::null())
-        .stderr(Stdio::from(stderr_file));
+        .stderr(Stdio::null());
     for (k, v) in env_vars {
         cmd.env(k, v);
     }
@@ -223,10 +219,6 @@ impl MultiNodeCluster {
     fn start_full_node_with_config(&mut self, cfg: NodeConfig) {
         let config = self.config_dir.join(format!("node-{}.yml", cfg.node_ip));
         write_node_config(&config, &cfg);
-        eprintln!(
-            "[start] Starting full node on {} with offset {} (routing port {})",
-            cfg.node_ip, cfg.base_offset, 6450 + cfg.base_offset
-        );
 
         for name in ["anna-monitor", "anna-route", "anna-kvs"] {
             if let Some(child) = spawn_server(name, &config, &server_path()) {
@@ -242,45 +234,13 @@ impl MultiNodeCluster {
         }
 
         let routing_port = (6450 + cfg.base_offset) as u16;
-        if !wait_for_port(cfg.node_ip, routing_port, 30) {
-            self.dump_diagnostics(&cfg);
-            panic!(
-                "Routing tier on {} did not start within 30 seconds (port {})",
-                cfg.node_ip,
-                routing_port
-            );
-        }
+        assert!(
+            wait_for_port(cfg.node_ip, routing_port, 30),
+            "Routing tier on {} did not start within 30 seconds (port {})",
+            cfg.node_ip,
+            routing_port
+        );
         std::thread::sleep(Duration::from_secs(1));
-    }
-
-    fn dump_diagnostics(&mut self, cfg: &NodeConfig) {
-        eprintln!("=== DIAGNOSTICS for cluster at offset {} ===", self.base_offset);
-        for proc in &mut self.processes {
-            let alive = proc.child.try_wait().ok();
-            match alive {
-                Some(Some(status)) => {
-                    eprintln!("  {} (pid {}): EXITED with {}", proc.label, proc.child.id(), status);
-                }
-                Some(None) => {
-                    eprintln!("  {} (pid {}): still running", proc.label, proc.child.id());
-                }
-                None => {
-                    eprintln!("  {} (pid {}): status unknown", proc.label, proc.child.id());
-                }
-            }
-        }
-        for name in ["anna-monitor", "anna-route", "anna-kvs"] {
-            let stderr_path = self.config_dir.join(format!("{}.stderr", name));
-            if let Ok(content) = fs::read_to_string(&stderr_path) {
-                let lines: Vec<&str> = content.lines().collect();
-                let tail: Vec<&&str> = lines.iter().rev().take(20).collect();
-                eprintln!("  --- {} stderr (last {} lines) ---", name, tail.len());
-                for line in tail.iter().rev() {
-                    eprintln!("    {}", line);
-                }
-            }
-        }
-        eprintln!("=== END DIAGNOSTICS ===");
     }
 
     fn start_kvs_node(
@@ -367,23 +327,11 @@ impl MultiNodeCluster {
     fn signal_self_depart(&self, label_substring: &str) {
         use nix::sys::signal::{kill, Signal};
         use nix::unistd::Pid;
-        let mut signaled = false;
         for proc in &self.processes {
             if proc.label.contains(label_substring) {
                 let pid = Pid::from_raw(proc.child.id() as i32);
-                match kill(pid, Signal::SIGUSR1) {
-                    Ok(()) => {
-                        eprintln!("[signal] Sent SIGUSR1 to {} (pid {})", proc.label, proc.child.id());
-                        signaled = true;
-                    }
-                    Err(e) => {
-                        eprintln!("[signal] Failed to send SIGUSR1 to {} (pid {}): {}", proc.label, proc.child.id(), e);
-                    }
-                }
+                kill(pid, Signal::SIGUSR1).ok();
             }
-        }
-        if !signaled {
-            eprintln!("[signal] WARNING: no process matched '{}'", label_substring);
         }
         std::thread::sleep(Duration::from_secs(8));
     }
@@ -415,18 +363,12 @@ impl MultiNodeCluster {
     }
 
     fn shutdown(&mut self) {
-        eprintln!(
-            "[shutdown] Stopping {} processes for cluster at offset {}",
-            self.processes.len(),
-            self.base_offset
-        );
         #[cfg(unix)]
         {
             use nix::sys::signal::{kill, Signal};
             use nix::unistd::Pid;
             for proc in &mut self.processes {
                 let pid = Pid::from_raw(proc.child.id() as i32);
-                eprintln!("[shutdown] SIGTERM {} (pid {})", proc.label, proc.child.id());
                 kill(pid, Signal::SIGTERM).ok();
             }
         }
@@ -434,7 +376,6 @@ impl MultiNodeCluster {
         for proc in &mut self.processes {
             proc.child.kill().ok();
             proc.child.wait().ok();
-            eprintln!("[shutdown] Reaped {}", proc.label);
         }
         self.processes.clear();
     }
@@ -1274,27 +1215,7 @@ async fn self_depart_signal() {
         }
         std::thread::sleep(Duration::from_millis(500));
     }
-    if !kvs_exited {
-        for proc in &mut cluster.processes {
-            if proc.label == kvs_label {
-                let status = proc.child.try_wait().ok();
-                eprintln!(
-                    "[self_depart] KVS pid {} status: {:?}",
-                    proc.child.id(),
-                    status
-                );
-            }
-        }
-        let stderr_path = cluster.config_dir.join("anna-kvs.stderr");
-        if let Ok(content) = fs::read_to_string(&stderr_path) {
-            let lines: Vec<&str> = content.lines().rev().take(10).collect();
-            eprintln!("[self_depart] anna-kvs stderr (last {} lines):", lines.len());
-            for line in lines.iter().rev() {
-                eprintln!("  {}", line);
-            }
-        }
-        panic!("KVS should have exited after SIGUSR1");
-    }
+    assert!(kvs_exited, "KVS should have exited after SIGUSR1");
 }
 
 /// Disk tier: start a KVS node with SERVER_TYPE=ebs, verify PUT/GET works.
@@ -1615,18 +1536,15 @@ async fn gossip_to_caches() {
     let config =
         Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
 
-    eprintln!("[gossip_to_caches] Creating cache client (update port={})", 7150 + 25221);
     let mut cache = ValueChangeSubscriber::new(&config, Some(0))
         .await
         .expect("Failed to create cache client");
 
-    eprintln!("[gossip_to_caches] Registering watch (registration port={})", 7200 + 25221);
     cache
         .watch(&["cache_test_key".to_string()])
         .await
         .expect("Watch failed");
 
-    eprintln!("[gossip_to_caches] Creating KVS client (tid=82, resp={}, ka={})", 6800+25221+82, 6850+25221+82);
     let mut client = KVSClient::new(&config, Some(82)).await;
     client
         .put("cache_test_key", "cache_value_1")

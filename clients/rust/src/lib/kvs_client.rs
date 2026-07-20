@@ -81,21 +81,17 @@ impl KVSClient {
 
         let ut = UserThread::with_offset(config.get_user_ip(), tid, base_offset);
 
-        let ka_addr = ut.key_address_bind_address();
-        let resp_addr = ut.response_bind_address();
-        info!("KVSClient binding key_address={}, response={}", ka_addr, resp_addr);
-
         let mut key_address_puller = PullSocket::new();
         key_address_puller
-            .bind(&ka_addr)
+            .bind(&ut.key_address_bind_address())
             .await
-            .unwrap_or_else(|e| panic!("Failed to bind key address puller on {}: {}", ka_addr, e));
+            .expect("Failed to bind key address puller");
 
         let mut response_puller = PullSocket::new();
         response_puller
-            .bind(&resp_addr)
+            .bind(&ut.response_bind_address())
             .await
-            .unwrap_or_else(|e| panic!("Failed to bind response puller on {}: {}", resp_addr, e));
+            .expect("Failed to bind response puller");
 
         KVSClient {
             routing_threads,
