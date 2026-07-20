@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7c872a86.js";
+            window.path_to_searchindex_js = "../searchindex-2f3ceda7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-7bb26e2b.js"></script>
@@ -269,7 +269,7 @@ It is a client-side construct — see <code>docs/client-feature-list.md</code>.<
 <tr><td>Tier selection</td><td><code>SERVER_TYPE</code> env var selects storage medium</td><td>Yes</td></tr>
 <tr><td>Identical kernel across tiers</td><td>Same storage kernel, different serialization layer</td><td>Yes</td></tr>
 <tr><td>Node capacities</td><td><code>capacities.memory-cap</code>, <code>capacities.ebs-cap</code></td><td>Yes</td></tr>
-<tr><td>Cross-tier data movement</td><td>Promote hot data to memory, demote cold to disk</td><td>No</td></tr>
+<tr><td>Cross-tier data movement</td><td>Promote hot data to memory, demote cold to disk</td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
@@ -414,10 +414,10 @@ machines). Not part of the Anna project.</li>
 <tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
 </thead>
 <tbody>
-<tr><td>Hot-key replication</td><td>Selectively replicate hot keys across more threads/nodes</td><td>No</td></tr>
-<tr><td>Grace period</td><td>Configurable cooldown preventing rapid scaling oscillation</td><td>No</td></tr>
-<tr><td>Policy toggles</td><td><code>policy.elasticity</code>, <code>policy.selective-rep</code>, <code>policy.tiering</code></td><td>No</td></tr>
-<tr><td>Latency feedback ingestion</td><td>Monitor accepts <code>UserFeedback</code> protobuf for SLO decisions</td><td>No</td></tr>
+<tr><td>Hot-key replication</td><td>Selectively replicate hot keys across more threads/nodes</td><td>Yes</td></tr>
+<tr><td>Grace period</td><td>Configurable cooldown preventing rapid scaling oscillation</td><td>Yes</td></tr>
+<tr><td>Policy toggles</td><td><code>policy.elasticity</code>, <code>policy.selective-rep</code>, <code>policy.tiering</code></td><td>Yes</td></tr>
+<tr><td>Latency feedback ingestion</td><td>Monitor accepts <code>UserFeedback</code> protobuf for SLO decisions</td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
@@ -428,9 +428,9 @@ machines). Not part of the Anna project.</li>
 <tr><th>Feature</th><th>Description</th><th>Implemented</th></tr>
 </thead>
 <tbody>
-<tr><td>Read storage/occupancy stats</td><td>Helper to GET and decode <code>ServerThreadStatistics</code></td><td>No</td></tr>
-<tr><td>Read per-key access stats</td><td>Helper to GET and decode <code>KeyAccessData</code></td><td>No</td></tr>
-<tr><td>Read per-key size stats</td><td>Helper to GET and decode <code>KeySizeData</code></td><td>No</td></tr>
+<tr><td>Read storage/occupancy stats</td><td>Helper to GET and decode <code>ServerThreadStatistics</code></td><td>Yes (Rust)</td></tr>
+<tr><td>Read per-key access stats</td><td>Helper to GET and decode <code>KeyAccessData</code></td><td>Yes (Rust)</td></tr>
+<tr><td>Read per-key size stats</td><td>Helper to GET and decode <code>KeySizeData</code></td><td>Yes (Rust)</td></tr>
 <tr><td>Report latency feedback</td><td>Send <code>UserFeedback</code> to monitor for SLO enforcement</td><td>No</td></tr>
 </tbody>
 </table>
@@ -460,12 +460,12 @@ to implement their own scaling logic.</p>
 <tr><td>Lattice Types</td><td><code>anna-kvs</code></td><td>6</td><td>6</td><td>100%</td><td>—</td></tr>
 <tr><td>Single-Node Features</td><td><code>anna-kvs</code></td><td>9</td><td>9</td><td>100%</td><td>—</td></tr>
 <tr><td>Error Handling</td><td><code>anna-kvs</code></td><td>5</td><td>5</td><td>100%</td><td>—</td></tr>
-<tr><td>Multi-Tiered Storage</td><td><code>anna-kvs</code></td><td>5</td><td>4</td><td>80%</td><td>—</td></tr>
+<tr><td>Multi-Tiered Storage</td><td><code>anna-kvs</code></td><td>5</td><td>5</td><td>100%</td><td>—</td></tr>
 <tr><td>Multi-Node Features</td><td><code>anna-kvs</code></td><td>25</td><td>25</td><td>100%</td><td>—</td></tr>
 <tr><td>Routing Tier</td><td><code>anna-route</code></td><td>6</td><td>6</td><td>100%</td><td>—</td></tr>
 <tr><td>Monitoring</td><td><code>anna-monitor</code></td><td>6</td><td>6</td><td>100%</td><td>—</td></tr>
-<tr><td>Autoscaling (server primitives)</td><td><code>anna-monitor</code></td><td>4</td><td>0</td><td>0%</td><td>#410</td></tr>
-<tr><td><strong>Total</strong></td><td></td><td><strong>81</strong></td><td><strong>76</strong></td><td><strong>94%</strong></td><td></td></tr>
+<tr><td>Autoscaling (server primitives)</td><td><code>anna-monitor</code></td><td>4</td><td>4</td><td>100%</td><td>—</td></tr>
+<tr><td><strong>Total</strong></td><td></td><td><strong>81</strong></td><td><strong>81</strong></td><td><strong>100%</strong></td><td></td></tr>
 </tbody>
 </table>
 </div>
