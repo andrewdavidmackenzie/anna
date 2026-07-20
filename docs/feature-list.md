@@ -97,7 +97,7 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 |-----------------------------|--------------------------------------------------|---------------|
 | Periodic gossip (10s epoch) | Changesets multicast to all responsible replicas  | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 | Merge-at-sender             | Batched updates merged before sending             | [#368](https://github.com/andrewdavidmackenzie/anna/issues/368) |
-| Gossip to caches            | Changed keys pushed to registered cache clients   | [#399](https://github.com/andrewdavidmackenzie/anna/issues/399) |
+| Gossip to caches            | Changed keys pushed to registered cache clients   | Yes           |
 | Join gossip                 | Redistribute data to newly joined nodes           | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 | Cross-tier gossip           | Updates propagated between memory and disk tiers  | [#387](https://github.com/andrewdavidmackenzie/anna/issues/387) |
 

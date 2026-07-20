@@ -22,7 +22,7 @@ TEST(CacheClientTest, PortConstants) {
 
 TEST(CacheClientTest, GetCachedMissing) {
   CacheClient client("127.0.0.1", "127.0.0.1", 1, 50000);
-  string value;
+  std::string value;
   EXPECT_FALSE(client.get_cached("nonexistent", value));
 }
 

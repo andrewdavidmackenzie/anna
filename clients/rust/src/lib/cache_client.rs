@@ -27,6 +27,7 @@ const K_CACHE_UPDATE_PORT: usize = 7150;
 /// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> annalib::Result<()> {
+/// use std::time::Duration;
 /// use annalib::config::Config;
 /// use annalib::cache_client::CacheClient;
 ///

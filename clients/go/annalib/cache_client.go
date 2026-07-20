@@ -92,32 +92,39 @@ func (cc *CacheClient) Watch(keys []string) error {
 // RecvUpdate receives the next gossip update from the KVS.
 // Returns key, payload, and whether an update was received.
 func (cc *CacheClient) RecvUpdate(timeout time.Duration) (string, []byte, bool, error) {
-	ctx, cancel := context.WithTimeout(cc.ctx, timeout)
-	defer cancel()
+	type recvResult struct {
+		msg zmq4.Msg
+		err error
+	}
 
-	msg, err := cc.updatePuller.Recv()
-	if err != nil {
-		select {
-		case <-ctx.Done():
-			return "", nil, false, nil
-		default:
-			return "", nil, false, fmt.Errorf("recv error: %w", err)
+	ch := make(chan recvResult, 1)
+	go func() {
+		msg, err := cc.updatePuller.Recv()
+		ch <- recvResult{msg, err}
+	}()
+
+	select {
+	case <-time.After(timeout):
+		return "", nil, false, nil
+	case res := <-ch:
+		if res.err != nil {
+			return "", nil, false, fmt.Errorf("recv error: %w", res.err)
 		}
-	}
 
-	response := &kvspb.KeyResponse{}
-	if err := proto.Unmarshal(msg.Frames[0], response); err != nil {
-		return "", nil, false, fmt.Errorf("failed to decode cache update: %w", err)
-	}
-
-	for _, tuple := range response.Tuples {
-		if len(tuple.Payload) > 0 {
-			cc.localCache[tuple.Key] = tuple.Payload
-			return tuple.Key, tuple.Payload, true, nil
+		response := &kvspb.KeyResponse{}
+		if err := proto.Unmarshal(res.msg.Frames[0], response); err != nil {
+			return "", nil, false, fmt.Errorf("failed to decode cache update: %w", err)
 		}
-	}
 
-	return "", nil, false, nil
+		for _, tuple := range response.Tuples {
+			if len(tuple.Payload) > 0 {
+				cc.localCache[tuple.Key] = tuple.Payload
+				return tuple.Key, tuple.Payload, true, nil
+			}
+		}
+
+		return "", nil, false, nil
+	}
 }
 
 // GetCached reads a value from the local cache.

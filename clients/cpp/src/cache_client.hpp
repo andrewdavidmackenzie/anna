@@ -17,18 +17,13 @@
 
 #include "kvs.pb.h"
 #include "shared.pb.h"
-#include "types.hpp"
 
+#include <chrono>
 #include <map>
-#include <set>
+#include <memory>
 #include <string>
 #include <vector>
 #include <zmq.hpp>
-
-using std::map;
-using std::set;
-using std::string;
-using std::vector;
 
 const unsigned kClientCacheRegistrationPort = 7200;
 const unsigned kClientCacheUpdatePort = 7150;
@@ -39,7 +34,7 @@ const unsigned kClientCacheUpdatePort = 7150;
 /// are updated, the KVS pushes new values during its gossip epoch.
 class CacheClient {
  public:
-  CacheClient(const string &server_ip, const string &cache_ip,
+  CacheClient(const std::string &server_ip, const std::string &cache_ip,
               unsigned memory_threads = 1, unsigned offset = 0,
               unsigned tid = 0)
       : server_ip_(server_ip),
@@ -49,13 +44,13 @@ class CacheClient {
         tid_(tid),
         context_(1),
         update_puller_(context_, ZMQ_PULL) {
-    string bind_addr = "tcp://" + cache_ip_ + ":" +
+    std::string bind_addr = "tcp://" + cache_ip_ + ":" +
                        std::to_string(tid_ + kClientCacheUpdatePort + offset_);
     update_puller_.bind(bind_addr);
   }
 
   /// Register interest in keys with all KVS server threads.
-  void watch(const vector<string> &keys) {
+  void watch(const std::vector<std::string> &keys) {
     watched_keys_.insert(watched_keys_.end(), keys.begin(), keys.end());
 
     shared::StringSet msg;
@@ -64,11 +59,11 @@ class CacheClient {
       msg.add_keys(key);
     }
 
-    string payload;
+    std::string payload;
     msg.SerializeToString(&payload);
 
     for (unsigned tid = 0; tid < memory_threads_; tid++) {
-      string addr = "tcp://" + server_ip_ + ":" +
+      std::string addr = "tcp://" + server_ip_ + ":" +
                     std::to_string(tid + kClientCacheRegistrationPort + offset_);
       if (push_sockets_.find(addr) == push_sockets_.end()) {
         push_sockets_[addr] =
@@ -84,11 +79,11 @@ class CacheClient {
 
   /// Receive the next update pushed from the KVS.
   /// Returns true if an update was received, false on timeout.
-  bool recv_update(string &key_out, string &payload_out,
+  bool recv_update(std::string &key_out, std::string &payload_out,
                    long timeout_ms = 15000) {
     zmq::pollitem_t item = {static_cast<void *>(update_puller_), 0,
                             ZMQ_POLLIN, 0};
-    zmq::poll(&item, 1, timeout_ms);
+    zmq::poll(&item, 1, std::chrono::milliseconds(timeout_ms));
 
     if (item.revents & ZMQ_POLLIN) {
       zmq::message_t msg;
@@ -96,7 +91,7 @@ class CacheClient {
       if (result) {
         kvs::KeyResponse response;
         response.ParseFromString(
-            string(static_cast<char *>(msg.data()), msg.size()));
+            std::string(static_cast<char *>(msg.data()), msg.size()));
 
         for (const auto &tuple : response.tuples()) {
           if (!tuple.payload().empty()) {
@@ -112,7 +107,7 @@ class CacheClient {
   }
 
   /// Read a value from the local cache.
-  bool get_cached(const string &key, string &value_out) const {
+  bool get_cached(const std::string &key, std::string &value_out) const {
     auto it = local_cache_.find(key);
     if (it != local_cache_.end()) {
       value_out = it->second;
@@ -122,19 +117,19 @@ class CacheClient {
   }
 
   /// Return the list of watched keys.
-  const vector<string> &watched_keys() const { return watched_keys_; }
+  const std::vector<std::string> &watched_keys() const { return watched_keys_; }
 
  private:
-  string server_ip_;
-  string cache_ip_;
+  std::string server_ip_;
+  std::string cache_ip_;
   unsigned memory_threads_;
   unsigned offset_;
   unsigned tid_;
   zmq::context_t context_;
   zmq::socket_t update_puller_;
-  map<string, std::unique_ptr<zmq::socket_t>> push_sockets_;
-  map<string, string> local_cache_;
-  vector<string> watched_keys_;
+  std::map<std::string, std::unique_ptr<zmq::socket_t>> push_sockets_;
+  std::map<std::string, std::string> local_cache_;
+  std::vector<std::string> watched_keys_;
 };
 
 #endif  // INCLUDE_CACHE_CLIENT_HPP_
