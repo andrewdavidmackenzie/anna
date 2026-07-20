@@ -16,7 +16,9 @@ pub mod causal {
     include!(concat!(env!("OUT_DIR"), "/causal.rs"));
 }
 
-// Include the `metadata` module, which is generated from metadata.proto.
+// Include the `metadata` module, which is generated from metadata.proto
+// and benchmark.proto (both have no package declaration, so prost merges
+// them into _.rs).
 #[allow(warnings, missing_docs)]
 pub mod metadata {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));

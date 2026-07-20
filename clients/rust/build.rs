@@ -5,6 +5,7 @@ const PROTO_FILES: &[&str] = &[
     "kvs.proto",
     "causal.proto",
     "metadata.proto",
+    "benchmark.proto",
 ];
 
 fn main() -> io::Result<()> {
