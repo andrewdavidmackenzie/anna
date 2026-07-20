@@ -367,11 +367,23 @@ impl MultiNodeCluster {
     fn signal_self_depart(&self, label_substring: &str) {
         use nix::sys::signal::{kill, Signal};
         use nix::unistd::Pid;
+        let mut signaled = false;
         for proc in &self.processes {
             if proc.label.contains(label_substring) {
                 let pid = Pid::from_raw(proc.child.id() as i32);
-                kill(pid, Signal::SIGUSR1).ok();
+                match kill(pid, Signal::SIGUSR1) {
+                    Ok(()) => {
+                        eprintln!("[signal] Sent SIGUSR1 to {} (pid {})", proc.label, proc.child.id());
+                        signaled = true;
+                    }
+                    Err(e) => {
+                        eprintln!("[signal] Failed to send SIGUSR1 to {} (pid {}): {}", proc.label, proc.child.id(), e);
+                    }
+                }
             }
+        }
+        if !signaled {
+            eprintln!("[signal] WARNING: no process matched '{}'", label_substring);
         }
         std::thread::sleep(Duration::from_secs(8));
     }
@@ -1262,7 +1274,27 @@ async fn self_depart_signal() {
         }
         std::thread::sleep(Duration::from_millis(500));
     }
-    assert!(kvs_exited, "KVS should have exited after SIGUSR1");
+    if !kvs_exited {
+        for proc in &mut cluster.processes {
+            if proc.label == kvs_label {
+                let status = proc.child.try_wait().ok();
+                eprintln!(
+                    "[self_depart] KVS pid {} status: {:?}",
+                    proc.child.id(),
+                    status
+                );
+            }
+        }
+        let stderr_path = cluster.config_dir.join("anna-kvs.stderr");
+        if let Ok(content) = fs::read_to_string(&stderr_path) {
+            let lines: Vec<&str> = content.lines().rev().take(10).collect();
+            eprintln!("[self_depart] anna-kvs stderr (last {} lines):", lines.len());
+            for line in lines.iter().rev() {
+                eprintln!("  {}", line);
+            }
+        }
+        panic!("KVS should have exited after SIGUSR1");
+    }
 }
 
 /// Disk tier: start a KVS node with SERVER_TYPE=ebs, verify PUT/GET works.
