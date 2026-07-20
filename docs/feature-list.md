@@ -74,7 +74,7 @@ It is a client-side construct — see `docs/client-feature-list.md`.
 | Tier selection                | `SERVER_TYPE` env var selects storage medium           | Yes           |
 | Identical kernel across tiers | Same storage kernel, different serialization layer     | Yes           |
 | Node capacities               | `capacities.memory-cap`, `capacities.ebs-cap`         | Yes           |
-| Cross-tier data movement      | Promote hot data to memory, demote cold to disk       | No            |
+| Cross-tier data movement      | Promote hot data to memory, demote cold to disk       | Yes           |
 
 Note: `SERVER_TYPE` and `ebs` config should be renamed to storage-medium-agnostic
 terms (e.g., `STORAGE_MEDIUM=ram|file`).
@@ -185,18 +185,18 @@ deliberate split:
 
 | Feature                     | Description                                                   | System Tested |
 |-----------------------------|---------------------------------------------------------------|---------------|
-| Hot-key replication         | Selectively replicate hot keys across more threads/nodes      | No            |
-| Grace period                | Configurable cooldown preventing rapid scaling oscillation    | No            |
-| Policy toggles              | `policy.elasticity`, `policy.selective-rep`, `policy.tiering` | No            |
-| Latency feedback ingestion  | Monitor accepts `UserFeedback` protobuf for SLO decisions    | No            |
+| Hot-key replication         | Selectively replicate hot keys across more threads/nodes      | Yes           |
+| Grace period                | Configurable cooldown preventing rapid scaling oscillation    | Yes           |
+| Policy toggles              | `policy.elasticity`, `policy.selective-rep`, `policy.tiering` | Yes           |
+| Latency feedback ingestion  | Monitor accepts `UserFeedback` protobuf for SLO decisions    | Yes           |
 
 ### Client library helpers (#410)
 
 | Feature                          | Description                                            | Implemented |
 |----------------------------------|--------------------------------------------------------|-------------|
-| Read storage/occupancy stats     | Helper to GET and decode `ServerThreadStatistics`      | No          |
-| Read per-key access stats        | Helper to GET and decode `KeyAccessData`               | No          |
-| Read per-key size stats          | Helper to GET and decode `KeySizeData`                 | No          |
+| Read storage/occupancy stats     | Helper to GET and decode `ServerThreadStatistics`      | Yes (Rust)  |
+| Read per-key access stats        | Helper to GET and decode `KeyAccessData`               | Yes (Rust)  |
+| Read per-key size stats          | Helper to GET and decode `KeySizeData`                 | Yes (Rust)  |
 | Report latency feedback          | Send `UserFeedback` to monitor for SLO enforcement    | No          |
 
 ### Operator responsibility (not project features)
@@ -223,9 +223,9 @@ to implement their own scaling logic.
 | Lattice Types                          | `anna-kvs`     | 6     | 6      | 100%     | —      |
 | Single-Node Features                   | `anna-kvs`     | 9     | 9      | 100%     | —      |
 | Error Handling                         | `anna-kvs`     | 5     | 5      | 100%     | —      |
-| Multi-Tiered Storage                   | `anna-kvs`     | 5     | 4      | 80%      | —      |
+| Multi-Tiered Storage                   | `anna-kvs`     | 5     | 5      | 100%     | —      |
 | Multi-Node Features                    | `anna-kvs`     | 25    | 25     | 100%     | —      |
 | Routing Tier                           | `anna-route`   | 6     | 6      | 100%     | —      |
 | Monitoring                             | `anna-monitor` | 6     | 6      | 100%     | —      |
-| Autoscaling (server primitives)        | `anna-monitor` | 4     | 0      | 0%       | #410   |
-| **Total**                              |                | **81**| **76** | **94%**  |        |
+| Autoscaling (server primitives)        | `anna-monitor` | 4     | 4      | 100%     | —      |
+| **Total**                              |                | **81**| **81** | **100%** |        |
