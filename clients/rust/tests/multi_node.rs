@@ -843,19 +843,27 @@ async fn multi_node_rejoin() {
         .await
         .expect("PUT rejoin_proof failed");
 
-    // Wait for gossip to replicate
+    // Wait for gossip to replicate to Node 2, then kill Node 1 to prove it
     std::thread::sleep(Duration::from_secs(TEST_GOSSIP_EPOCH as u64 + 2));
-
-    // Kill Node 1 — forces reads through Node 2, proving it rejoined
     cluster.kill_process("anna-kvs@127.0.0.1");
 
+    // Poll Node 2 — routing may still try the dead Node 1 first,
+    // so retry until the client's address cache updates
     let mut reader = KVSClient::new(&config, Some(60)).await;
     reader.set_timeout(Duration::from_secs(2));
-    let v = reader
-        .get("rejoin_proof")
-        .await
-        .expect("GET rejoin_proof failed — Node 2 did not rejoin");
-    assert_eq!(v, "on_both_nodes");
+
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let mut got_value = false;
+    while Instant::now() < deadline {
+        if let Ok(v) = reader.get("rejoin_proof").await {
+            if v == "on_both_nodes" {
+                got_value = true;
+                break;
+            }
+        }
+        std::thread::sleep(Duration::from_secs(1));
+    }
+    assert!(got_value, "GET rejoin_proof failed — Node 2 did not rejoin");
 }
 
 /// Stateless routing recovery: kill routing and KVS, restart both, verify
