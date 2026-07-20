@@ -97,7 +97,7 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 |-----------------------------|--------------------------------------------------|---------------|
 | Periodic gossip (10s epoch) | Changesets multicast to all responsible replicas  | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 | Merge-at-sender             | Batched updates merged before sending             | [#368](https://github.com/andrewdavidmackenzie/anna/issues/368) |
-| Gossip to caches            | Changed keys also sent to function executor nodes | No            |
+| Gossip to caches            | Changed keys pushed to registered cache clients   | [#399](https://github.com/andrewdavidmackenzie/anna/issues/399) |
 | Join gossip                 | Redistribute data to newly joined nodes           | [#352](https://github.com/andrewdavidmackenzie/anna/issues/352) |
 | Cross-tier gossip           | Updates propagated between memory and disk tiers  | [#387](https://github.com/andrewdavidmackenzie/anna/issues/387) |
 
@@ -179,7 +179,7 @@ autoscaling policies.
 | Single-Node Features                   | `anna-kvs`     | 9     | 9      | 100%     | —      |
 | Error Handling                         | `anna-kvs`     | 5     | 5      | 100%     | —      |
 | Multi-Tiered Storage                   | `anna-kvs`     | 4     | 4      | 100%     | —      |
-| Multi-Node Features                    | `anna-kvs`     | 25    | 24     | 96%      | #378   |
+| Multi-Node Features                    | `anna-kvs`     | 25    | 25     | 100%     | —      |
 | Routing Tier                           | `anna-route`   | 6     | 6      | 100%     | —      |
 | Monitoring & Policy Engine             | `anna-monitor` | 13    | 0      | 0%       | #357   |
-| **Total**                              |                | **83**| **69** | **83%**  |        |
+| **Total**                              |                | **83**| **70** | **84%**  |        |

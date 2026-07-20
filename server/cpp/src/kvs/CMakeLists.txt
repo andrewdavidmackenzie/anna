@@ -24,6 +24,7 @@ SET(KVS_SOURCE
   replication_response_handler.cpp
   replication_change_handler.cpp
   cache_ip_response_handler.cpp
+  cache_registration_handler.cpp
   management_node_response_handler.cpp
   utils.cpp)
 

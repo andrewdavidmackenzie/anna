@@ -1513,3 +1513,64 @@ async fn gossip_after_replication_change() {
         .expect("GET after replication change + gossip failed");
     assert_eq!(val, "redistributed");
 }
+
+/// Test gossip-to-caches: register a cache client, PUT a value, and verify
+/// the cache client receives the update during gossip.
+/// Uses base_offset=42000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn gossip_to_caches() {
+    use annalib::cache_client::CacheClient;
+    use annalib::config::Config;
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(42000);
+    cluster.start_full_node(NODE1_IP, 1);
+
+    let config =
+        Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
+
+    // Create a cache client on NODE2_IP so it doesn't conflict with the KVS
+    let mut cache = CacheClient::new(&config, Some(0))
+        .await
+        .expect("Failed to create cache client");
+
+    // Register interest in a specific key
+    cache
+        .watch(&["cache_test_key".to_string()])
+        .await
+        .expect("Watch failed");
+
+    // PUT a value via a normal client
+    let mut client = KVSClient::new(&config, Some(78)).await;
+    client
+        .put("cache_test_key", "cache_value_1")
+        .await
+        .expect("PUT failed");
+
+    // Wait for gossip epoch to push to caches
+    let gossip_wait = Duration::from_secs(TEST_GOSSIP_EPOCH as u64 + 3);
+    let result = cache
+        .recv_update(gossip_wait)
+        .await
+        .expect("recv_update failed");
+
+    assert!(
+        result.is_some(),
+        "Cache client did not receive gossip update within {:?}",
+        gossip_wait
+    );
+
+    let (key, _payload) = result.unwrap();
+    assert_eq!(key, "cache_test_key");
+
+    // Verify the local cache has the value
+    assert!(
+        cache.get_cached("cache_test_key").is_some(),
+        "Local cache should have the key"
+    );
+}

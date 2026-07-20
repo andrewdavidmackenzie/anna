@@ -12,6 +12,9 @@ const K_USER_KEY_ADDRESS_PORT: usize = 6850;
 // The port on which cache nodes listen for updates from the KVS.
 const K_CACHE_UPDATE_PORT: usize = 7150;
 
+// The port on which KVS servers listen for direct cache registration messages.
+const K_CACHE_REGISTRATION_PORT: usize = 7200;
+
 /// `Thread` is a base type for a number of other thread types
 pub struct Thread {
     ip: Address,
@@ -46,6 +49,15 @@ impl Thread {
             "{}{}",
             self.ip_base,
             self.tid + K_USER_KEY_ADDRESS_PORT + self.base_offset
+        )
+    }
+
+    /// return the ZMQ `Address` to connect to for sending cache registration messages
+    pub fn cache_registration_connect_address(&self) -> Address {
+        format!(
+            "{}{}",
+            self.ip_base,
+            self.tid + K_CACHE_REGISTRATION_PORT + self.base_offset
         )
     }
 }

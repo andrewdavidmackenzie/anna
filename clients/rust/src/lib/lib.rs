@@ -38,6 +38,8 @@ use std::path::Path;
 use std::process::Command;
 use sysinfo::System;
 
+/// Cache subscription client for receiving gossip-pushed key updates.
+pub mod cache_client;
 /// Tab-completion for the anna CLI.
 pub mod completer;
 /// `config` of anna - read from config file or created via API calls.
