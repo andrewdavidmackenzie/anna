@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e1b6eef0.js";
+            window.path_to_searchindex_js = "searchindex-7c872a86.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7bb26e2b.js"></script>
@@ -963,11 +963,15 @@ It is a client-side construct — see <code>docs/client-feature-list.md</code>.<
 <tr><td>Tier selection</td><td><code>SERVER_TYPE</code> env var selects storage medium</td><td>Yes</td></tr>
 <tr><td>Identical kernel across tiers</td><td>Same storage kernel, different serialization layer</td><td>Yes</td></tr>
 <tr><td>Node capacities</td><td><code>capacities.memory-cap</code>, <code>capacities.ebs-cap</code></td><td>Yes</td></tr>
+<tr><td>Cross-tier data movement</td><td>Promote hot data to memory, demote cold to disk</td><td>No</td></tr>
 </tbody>
 </table>
 </div>
 <p>Note: <code>SERVER_TYPE</code> and <code>ebs</code> config should be renamed to storage-medium-agnostic
 terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
+<p>Cross-tier data movement is triggered by <code>anna-monitor</code> when <code>policy.tiering</code>
+is enabled, but the mechanism is a replication factor change — a storage
+feature, not an autoscaling decision.</p>
 <h2 id="multi-node-features-352"><a class="header" href="#multi-node-features-352">Multi-Node Features (#352)</a></h2>
 <h3 id="replication"><a class="header" href="#replication">Replication</a></h3>
 <div class="table-wrapper">
@@ -1082,27 +1086,63 @@ by <code>anna-monitor</code> each monitoring cycle.</p>
 </tbody>
 </table>
 </div>
-<h2 id="autoscaling-policy-engine--anna-monitor"><a class="header" href="#autoscaling-policy-engine--anna-monitor">Autoscaling Policy Engine — <code>anna-monitor</code></a></h2>
-<p>The policy engine runs inside <code>anna-monitor</code> and makes active decisions
-based on the collected statistics: scaling the cluster, changing replication
-factors, and moving data between tiers. Policies require a management node
-for node addition/removal.</p>
+<h2 id="autoscaling-support"><a class="header" href="#autoscaling-support">Autoscaling Support</a></h2>
+<p>Anna provides the <strong>primitives</strong> for autoscaling but delegates the scaling
+<strong>decisions</strong> and <strong>infrastructure lifecycle</strong> to the operator. This is a
+deliberate split:</p>
+<ul>
+<li><strong>Server features</strong> — the cluster primitives that enable scaling (node
+join/depart, replication changes, stats reporting). These are implemented
+in <code>anna-kvs</code>, <code>anna-route</code>, and <code>anna-monitor</code>.</li>
+<li><strong>Client library helpers</strong> — convenience methods for reading stats and
+triggering scaling actions. These make it easy to build an autoscaler
+in any language.</li>
+<li><strong>Operator responsibility</strong> — the decision logic (when to add/remove
+nodes) and the infrastructure lifecycle (provisioning/deprovisioning
+machines). Not part of the Anna project.</li>
+</ul>
+<h3 id="server-features-autoscaling-primitives"><a class="header" href="#server-features-autoscaling-primitives">Server features (autoscaling primitives)</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
 </thead>
 <tbody>
-<tr><td>Elasticity policy</td><td>Add/remove nodes based on storage/compute capacity</td><td>No</td></tr>
 <tr><td>Hot-key replication</td><td>Selectively replicate hot keys across more threads/nodes</td><td>No</td></tr>
-<tr><td>Cross-tier data movement</td><td>Promote hot data to memory, demote cold to disk</td><td>No</td></tr>
-<tr><td>SLO enforcement</td><td>Latency-based scaling (target: 3ms)</td><td>No</td></tr>
-<tr><td>Underutilization scale-down</td><td>Remove nodes when occupancy is low</td><td>No</td></tr>
-<tr><td>Grace period</td><td>Prevent over-correction during data redistribution</td><td>No</td></tr>
+<tr><td>Grace period</td><td>Configurable cooldown preventing rapid scaling oscillation</td><td>No</td></tr>
 <tr><td>Policy toggles</td><td><code>policy.elasticity</code>, <code>policy.selective-rep</code>, <code>policy.tiering</code></td><td>No</td></tr>
+<tr><td>Latency feedback ingestion</td><td>Monitor accepts <code>UserFeedback</code> protobuf for SLO decisions</td><td>No</td></tr>
 </tbody>
 </table>
 </div>
+<h3 id="client-library-helpers-410"><a class="header" href="#client-library-helpers-410">Client library helpers (#410)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Description</th><th>Implemented</th></tr>
+</thead>
+<tbody>
+<tr><td>Read storage/occupancy stats</td><td>Helper to GET and decode <code>ServerThreadStatistics</code></td><td>No</td></tr>
+<tr><td>Read per-key access stats</td><td>Helper to GET and decode <code>KeyAccessData</code></td><td>No</td></tr>
+<tr><td>Read per-key size stats</td><td>Helper to GET and decode <code>KeySizeData</code></td><td>No</td></tr>
+<tr><td>Report latency feedback</td><td>Send <code>UserFeedback</code> to monitor for SLO enforcement</td><td>No</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="operator-responsibility-not-project-features"><a class="header" href="#operator-responsibility-not-project-features">Operator responsibility (not project features)</a></h3>
+<p>The following are <strong>not features of Anna</strong> — they are the operator’s domain,
+documented with examples and tested via system tests that simulate an
+external autoscaler:</p>
+<ul>
+<li><strong>Elasticity decisions</strong> — when to add/remove nodes based on stats</li>
+<li><strong>Infrastructure provisioning</strong> — starting/stopping server processes or VMs</li>
+<li><strong>SLO policy logic</strong> — latency thresholds and scaling formulas</li>
+</ul>
+<p><code>anna-monitor</code> contains a built-in policy engine (<code>storage_policy.cpp</code>,
+<code>slo_policy.cpp</code>, <code>movement_policy.cpp</code>) that implements reference decision
+logic, but it depends on a management node (<code>tcp://&lt;mgmt_ip&gt;:7001</code>) that
+is not part of the project. Operators can use the client library helpers
+to implement their own scaling logic.</p>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <div class="table-wrapper">
 <table>
@@ -1114,12 +1154,12 @@ for node addition/removal.</p>
 <tr><td>Lattice Types</td><td><code>anna-kvs</code></td><td>6</td><td>6</td><td>100%</td><td>—</td></tr>
 <tr><td>Single-Node Features</td><td><code>anna-kvs</code></td><td>9</td><td>9</td><td>100%</td><td>—</td></tr>
 <tr><td>Error Handling</td><td><code>anna-kvs</code></td><td>5</td><td>5</td><td>100%</td><td>—</td></tr>
-<tr><td>Multi-Tiered Storage</td><td><code>anna-kvs</code></td><td>4</td><td>4</td><td>100%</td><td>—</td></tr>
+<tr><td>Multi-Tiered Storage</td><td><code>anna-kvs</code></td><td>5</td><td>4</td><td>80%</td><td>—</td></tr>
 <tr><td>Multi-Node Features</td><td><code>anna-kvs</code></td><td>25</td><td>25</td><td>100%</td><td>—</td></tr>
 <tr><td>Routing Tier</td><td><code>anna-route</code></td><td>6</td><td>6</td><td>100%</td><td>—</td></tr>
 <tr><td>Monitoring</td><td><code>anna-monitor</code></td><td>6</td><td>6</td><td>100%</td><td>—</td></tr>
-<tr><td>Autoscaling Policy Engine</td><td><code>anna-monitor</code></td><td>7</td><td>0</td><td>0%</td><td>#357</td></tr>
-<tr><td><strong>Total</strong></td><td></td><td><strong>83</strong></td><td><strong>76</strong></td><td><strong>92%</strong></td><td></td></tr>
+<tr><td>Autoscaling (server primitives)</td><td><code>anna-monitor</code></td><td>4</td><td>0</td><td>0%</td><td>#410</td></tr>
+<tr><td><strong>Total</strong></td><td></td><td><strong>81</strong></td><td><strong>76</strong></td><td><strong>94%</strong></td><td></td></tr>
 </tbody>
 </table>
 </div>
