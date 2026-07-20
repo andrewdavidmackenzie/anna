@@ -150,9 +150,7 @@ impl LatencyReporter {
             socket
                 .send(zeromq::ZmqMessage::from(payload.clone()))
                 .await
-                .map_err(|e| {
-                    Error::Kvs(format!("Failed to send feedback to {}: {}", addr, e))
-                })?;
+                .map_err(|e| Error::Kvs(format!("Failed to send feedback to {}: {}", addr, e)))?;
         }
 
         Ok(())
@@ -245,8 +243,7 @@ mod tests {
 
     #[test]
     fn with_monitoring_ips_constructor() {
-        let reporter =
-            LatencyReporter::with_monitoring_ips(vec!["10.0.0.1".into()], 100, Some(5));
+        let reporter = LatencyReporter::with_monitoring_ips(vec!["10.0.0.1".into()], 100, Some(5));
         assert_eq!(reporter.uid, "rust_client:5");
         assert_eq!(reporter.base_offset, 100);
         assert_eq!(reporter.monitoring_ips, vec!["10.0.0.1"]);
@@ -255,8 +252,7 @@ mod tests {
 
     #[test]
     fn set_warmup_flag() {
-        let mut reporter =
-            LatencyReporter::with_monitoring_ips(vec!["10.0.0.1".into()], 0, None);
+        let mut reporter = LatencyReporter::with_monitoring_ips(vec!["10.0.0.1".into()], 0, None);
         assert!(!reporter.warmup);
         reporter.set_warmup(true);
         assert!(reporter.warmup);
