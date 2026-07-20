@@ -219,6 +219,10 @@ impl MultiNodeCluster {
     fn start_full_node_with_config(&mut self, cfg: NodeConfig) {
         let config = self.config_dir.join(format!("node-{}.yml", cfg.node_ip));
         write_node_config(&config, &cfg);
+        eprintln!(
+            "[start] Starting full node on {} with offset {} (routing port {})",
+            cfg.node_ip, cfg.base_offset, 6450 + cfg.base_offset
+        );
 
         for name in ["anna-monitor", "anna-route", "anna-kvs"] {
             if let Some(child) = spawn_server(name, &config, &server_path()) {
@@ -361,12 +365,18 @@ impl MultiNodeCluster {
     }
 
     fn shutdown(&mut self) {
+        eprintln!(
+            "[shutdown] Stopping {} processes for cluster at offset {}",
+            self.processes.len(),
+            self.base_offset
+        );
         #[cfg(unix)]
         {
             use nix::sys::signal::{kill, Signal};
             use nix::unistd::Pid;
             for proc in &mut self.processes {
                 let pid = Pid::from_raw(proc.child.id() as i32);
+                eprintln!("[shutdown] SIGTERM {} (pid {})", proc.label, proc.child.id());
                 kill(pid, Signal::SIGTERM).ok();
             }
         }
@@ -374,6 +384,7 @@ impl MultiNodeCluster {
         for proc in &mut self.processes {
             proc.child.kill().ok();
             proc.child.wait().ok();
+            eprintln!("[shutdown] Reaped {}", proc.label);
         }
         self.processes.clear();
     }
@@ -1534,18 +1545,18 @@ async fn gossip_to_caches() {
     let config =
         Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
 
-    // Create a cache client
+    eprintln!("[gossip_to_caches] Creating cache client (update port={})", 7150 + 42000);
     let mut cache = CacheClient::new(&config, Some(0))
         .await
         .expect("Failed to create cache client");
 
-    // Register interest in a specific key
+    eprintln!("[gossip_to_caches] Registering watch (registration port={})", 7200 + 42000);
     cache
         .watch(&["cache_test_key".to_string()])
         .await
         .expect("Watch failed");
 
-    // PUT a value via a normal client
+    eprintln!("[gossip_to_caches] Creating KVS client (tid=82, resp={}, ka={})", 6800+42000+82, 6850+42000+82);
     let mut client = KVSClient::new(&config, Some(82)).await;
     client
         .put("cache_test_key", "cache_value_1")
