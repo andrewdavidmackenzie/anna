@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-13430f98.js";
+            window.path_to_searchindex_js = "../searchindex-a077a50e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-7bb26e2b.js"></script>
@@ -285,9 +285,9 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tr><td>Per-key replication factors</td><td>Independent replication per key per tier</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/385">#385</a></td></tr>
 <tr><td>Default replication from config</td><td><code>replication.memory</code>, <code>replication.ebs</code>, <code>replication.local</code></td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
 <tr><td>Replication factor request</td><td>Server fetches unknown factors from metadata</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/368">#368</a></td></tr>
-<tr><td>Replication factor change</td><td>Monitor can dynamically adjust replication</td><td>No</td></tr>
+<tr><td>Replication factor change</td><td>Monitor can dynamically adjust replication</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/394">#394</a></td></tr>
 <tr><td>Metadata stored as KVS data</td><td>Replication info under <code>METADATA|replication|&lt;key&gt;</code></td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/368">#368</a></td></tr>
-<tr><td>Gossip after replication change</td><td>Data redistributed to new responsible threads</td><td>No</td></tr>
+<tr><td>Gossip after replication change</td><td>Data redistributed to new responsible threads</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/394">#394</a></td></tr>
 </tbody>
 </table>
 </div>
