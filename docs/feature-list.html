@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a077a50e.js";
+            window.path_to_searchindex_js = "../searchindex-48d06bbf.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-7bb26e2b.js"></script>
@@ -201,8 +201,8 @@ mocks.</p>
 <tr><td>PUT_SINGLE_CAUSAL</td><td>Store with single-key causal metadata</td><td>Yes</td></tr>
 <tr><td>GET_PRIORITY</td><td>Retrieve a priority-valued key</td><td>Yes</td></tr>
 <tr><td>PUT_PRIORITY</td><td>Store a priority-value pair (lowest priority wins)</td><td>Yes</td></tr>
-<tr><td>Address cache invalidation</td><td>Server signals client to refresh address cache</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
-<tr><td>Multi-key GET</td><td>Retrieve multiple keys in one request</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
+<tr><td>Address cache invalidation</td><td>Server signals client to refresh address cache</td><td>Yes</td></tr>
+<tr><td>Multi-key GET</td><td>Retrieve multiple keys in one request</td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
@@ -232,7 +232,7 @@ mocks.</p>
 <tr><td>YAML config file</td><td>All settings in a single YAML file</td><td>Yes</td></tr>
 <tr><td>Thread counts</td><td><code>threads.memory</code>, <code>threads.ebs</code>, <code>threads.routing</code></td><td>Yes</td></tr>
 <tr><td>Standalone mode</td><td><code>mgmt_ip: "NULL"</code> for local/non-k8s deployment</td><td>Yes</td></tr>
-<tr><td>Cluster topology</td><td>seed_ip, mgmt_ip, monitoring/routing IPs</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
+<tr><td>Cluster topology</td><td>seed_ip, mgmt_ip, monitoring/routing IPs</td><td>Yes</td></tr>
 <tr><td>ZeroMQ PUSH/PULL</td><td>Async messaging between all components</td><td>Yes</td></tr>
 <tr><td>Protocol Buffers</td><td>Structured message serialization</td><td>Yes</td></tr>
 <tr><td>Socket cache</td><td>Lazy-created, cached ZMQ push sockets</td><td>Yes</td></tr>
@@ -249,10 +249,10 @@ mocks.</p>
 </thead>
 <tbody>
 <tr><td>NO_ERROR</td><td>Operation succeeded</td><td>Yes</td></tr>
-<tr><td>KEY_DNE</td><td>Key does not exist</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/355">#355</a></td></tr>
-<tr><td>WRONG_THREAD</td><td>This thread is not responsible for the key</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
-<tr><td>LATTICE</td><td>Lattice type mismatch</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/355">#355</a></td></tr>
-<tr><td>NO_SERVERS</td><td>No servers available (routing tier)</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/355">#355</a></td></tr>
+<tr><td>KEY_DNE</td><td>Key does not exist</td><td>Yes</td></tr>
+<tr><td>WRONG_THREAD</td><td>This thread is not responsible for the key</td><td>Yes</td></tr>
+<tr><td>LATTICE</td><td>Lattice type mismatch</td><td>Yes</td></tr>
+<tr><td>NO_SERVERS</td><td>No servers available (routing tier)</td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
@@ -265,10 +265,10 @@ It is a client-side construct — see <code>docs/client-feature-list.md</code>.<
 <tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
 </thead>
 <tbody>
-<tr><td>Disk tier</td><td>File-based storage on configurable path</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/387">#387</a></td></tr>
-<tr><td>Tier selection</td><td><code>SERVER_TYPE</code> env var selects storage medium</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/387">#387</a></td></tr>
-<tr><td>Identical kernel across tiers</td><td>Same storage kernel, different serialization layer</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/387">#387</a></td></tr>
-<tr><td>Node capacities</td><td><code>capacities.memory-cap</code>, <code>capacities.ebs-cap</code></td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/387">#387</a></td></tr>
+<tr><td>Disk tier</td><td>File-based storage on configurable path</td><td>Yes</td></tr>
+<tr><td>Tier selection</td><td><code>SERVER_TYPE</code> env var selects storage medium</td><td>Yes</td></tr>
+<tr><td>Identical kernel across tiers</td><td>Same storage kernel, different serialization layer</td><td>Yes</td></tr>
+<tr><td>Node capacities</td><td><code>capacities.memory-cap</code>, <code>capacities.ebs-cap</code></td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
@@ -282,12 +282,12 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
 </thead>
 <tbody>
-<tr><td>Per-key replication factors</td><td>Independent replication per key per tier</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/385">#385</a></td></tr>
-<tr><td>Default replication from config</td><td><code>replication.memory</code>, <code>replication.ebs</code>, <code>replication.local</code></td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
-<tr><td>Replication factor request</td><td>Server fetches unknown factors from metadata</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/368">#368</a></td></tr>
-<tr><td>Replication factor change</td><td>Monitor can dynamically adjust replication</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/394">#394</a></td></tr>
-<tr><td>Metadata stored as KVS data</td><td>Replication info under <code>METADATA|replication|&lt;key&gt;</code></td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/368">#368</a></td></tr>
-<tr><td>Gossip after replication change</td><td>Data redistributed to new responsible threads</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/394">#394</a></td></tr>
+<tr><td>Per-key replication factors</td><td>Independent replication per key per tier</td><td>Yes</td></tr>
+<tr><td>Default replication from config</td><td><code>replication.memory</code>, <code>replication.ebs</code>, <code>replication.local</code></td><td>Yes</td></tr>
+<tr><td>Replication factor request</td><td>Server fetches unknown factors from metadata</td><td>Yes</td></tr>
+<tr><td>Replication factor change</td><td>Monitor can dynamically adjust replication</td><td>Yes</td></tr>
+<tr><td>Metadata stored as KVS data</td><td>Replication info under <code>METADATA|replication|&lt;key&gt;</code></td><td>Yes</td></tr>
+<tr><td>Gossip after replication change</td><td>Data redistributed to new responsible threads</td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
@@ -298,11 +298,11 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
 </thead>
 <tbody>
-<tr><td>Periodic gossip (10s epoch)</td><td>Changesets multicast to all responsible replicas</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
-<tr><td>Merge-at-sender</td><td>Batched updates merged before sending</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/368">#368</a></td></tr>
-<tr><td>Gossip to caches</td><td>Changed keys also sent to function executor nodes</td><td>No</td></tr>
-<tr><td>Join gossip</td><td>Redistribute data to newly joined nodes</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
-<tr><td>Cross-tier gossip</td><td>Updates propagated between memory and disk tiers</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/387">#387</a></td></tr>
+<tr><td>Periodic gossip (10s epoch)</td><td>Changesets multicast to all responsible replicas</td><td>Yes</td></tr>
+<tr><td>Merge-at-sender</td><td>Batched updates merged before sending</td><td>Yes</td></tr>
+<tr><td>Gossip to caches</td><td>Changed keys pushed to registered cache clients</td><td>Yes</td></tr>
+<tr><td>Join gossip</td><td>Redistribute data to newly joined nodes</td><td>Yes</td></tr>
+<tr><td>Cross-tier gossip</td><td>Updates propagated between memory and disk tiers</td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
@@ -313,11 +313,11 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
 </thead>
 <tbody>
-<tr><td>Node join</td><td>New node joins cluster, receives data via gossip</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
-<tr><td>Node depart</td><td>Node leaves, data redistributed</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/386">#386</a></td></tr>
-<tr><td>Self-depart</td><td>Node gracefully removes itself, gossips all data out</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/386">#386</a></td></tr>
-<tr><td>Rejoin detection</td><td>Join counter distinguishes fresh joins from rejoins</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/372">#372</a></td></tr>
-<tr><td>Seed node</td><td>First routing node serves cluster membership</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
+<tr><td>Node join</td><td>New node joins cluster, receives data via gossip</td><td>Yes</td></tr>
+<tr><td>Node depart</td><td>Node leaves, data redistributed</td><td>Yes</td></tr>
+<tr><td>Self-depart</td><td>Node gracefully removes itself, gossips all data out</td><td>Yes</td></tr>
+<tr><td>Rejoin detection</td><td>Join counter distinguishes fresh joins from rejoins</td><td>Yes</td></tr>
+<tr><td>Seed node</td><td>First routing node serves cluster membership</td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
@@ -328,11 +328,11 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
 </thead>
 <tbody>
-<tr><td>k-fault tolerance</td><td>k+1 replicas ensure k failures tolerable</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/364">#364</a></td></tr>
-<tr><td>Failure detection via timeout</td><td>Nodes detect peer failures and update hash ring</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/378">#378</a></td></tr>
-<tr><td>Automatic repartitioning</td><td>Data redistributed after node failure</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/378">#378</a></td></tr>
-<tr><td>Stateless routing recovery</td><td>Routing rebuilds hash ring from KVS join messages</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/372">#372</a></td></tr>
-<tr><td>Key migration interleaved with requests</td><td>No downtime during reconfiguration</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/380">#380</a></td></tr>
+<tr><td>k-fault tolerance</td><td>k+1 replicas ensure k failures tolerable</td><td>Yes</td></tr>
+<tr><td>Failure detection via timeout</td><td>Nodes detect peer failures and update hash ring</td><td>Yes</td></tr>
+<tr><td>Automatic repartitioning</td><td>Data redistributed after node failure</td><td>Yes</td></tr>
+<tr><td>Stateless routing recovery</td><td>Routing rebuilds hash ring from KVS join messages</td><td>Yes</td></tr>
+<tr><td>Key migration interleaved with requests</td><td>No downtime during reconfiguration</td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
@@ -343,10 +343,10 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
 </thead>
 <tbody>
-<tr><td>Two-level hash ring</td><td>Global (nodes) + Local (threads within node)</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
-<tr><td>Virtual nodes (3000 per thread)</td><td>Even distribution across physical threads</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/373">#373</a></td></tr>
-<tr><td>CRC32 hashing</td><td>Hash function for key-to-ring mapping</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
-<tr><td>Thread responsibility lookup</td><td>Determines which threads handle a key</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/352">#352</a></td></tr>
+<tr><td>Two-level hash ring</td><td>Global (nodes) + Local (threads within node)</td><td>Yes</td></tr>
+<tr><td>Virtual nodes (3000 per thread)</td><td>Even distribution across physical threads</td><td>Yes</td></tr>
+<tr><td>CRC32 hashing</td><td>Hash function for key-to-ring mapping</td><td>Yes</td></tr>
+<tr><td>Thread responsibility lookup</td><td>Determines which threads handle a key</td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
@@ -359,10 +359,10 @@ terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <tbody>
 <tr><td>Key address lookup</td><td>Client queries routing for server addresses</td><td>Yes</td></tr>
 <tr><td>Hash ring caching</td><td>Routing caches storage tier hash rings</td><td>Yes</td></tr>
-<tr><td>Memory-tier preference</td><td>Returns memory addresses when available</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/387">#387</a></td></tr>
-<tr><td>Replication-aware routing</td><td>Uses replication vectors to find all responsible threads</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/371">#371</a></td></tr>
-<tr><td>Pending request queue</td><td>Queues requests while replication factor is unknown</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/371">#371</a></td></tr>
-<tr><td>Multi-threaded routing</td><td>Configurable number of routing threads</td><td><a href="https://github.com/andrewdavidmackenzie/anna/issues/371">#371</a></td></tr>
+<tr><td>Memory-tier preference</td><td>Returns memory addresses when available</td><td>Yes</td></tr>
+<tr><td>Replication-aware routing</td><td>Uses replication vectors to find all responsible threads</td><td>Yes</td></tr>
+<tr><td>Pending request queue</td><td>Queues requests while replication factor is unknown</td><td>Yes</td></tr>
+<tr><td>Multi-threaded routing</td><td>Configurable number of routing threads</td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
@@ -415,10 +415,10 @@ autoscaling policies.</p>
 <tr><td>Single-Node Features</td><td><code>anna-kvs</code></td><td>9</td><td>9</td><td>100%</td><td>—</td></tr>
 <tr><td>Error Handling</td><td><code>anna-kvs</code></td><td>5</td><td>5</td><td>100%</td><td>—</td></tr>
 <tr><td>Multi-Tiered Storage</td><td><code>anna-kvs</code></td><td>4</td><td>4</td><td>100%</td><td>—</td></tr>
-<tr><td>Multi-Node Features</td><td><code>anna-kvs</code></td><td>25</td><td>24</td><td>96%</td><td>#378</td></tr>
+<tr><td>Multi-Node Features</td><td><code>anna-kvs</code></td><td>25</td><td>25</td><td>100%</td><td>—</td></tr>
 <tr><td>Routing Tier</td><td><code>anna-route</code></td><td>6</td><td>6</td><td>100%</td><td>—</td></tr>
 <tr><td>Monitoring &amp; Policy Engine</td><td><code>anna-monitor</code></td><td>13</td><td>0</td><td>0%</td><td>#357</td></tr>
-<tr><td><strong>Total</strong></td><td></td><td><strong>83</strong></td><td><strong>69</strong></td><td><strong>83%</strong></td><td></td></tr>
+<tr><td><strong>Total</strong></td><td></td><td><strong>83</strong></td><td><strong>70</strong></td><td><strong>84%</strong></td><td></td></tr>
 </tbody>
 </table>
 </div>
