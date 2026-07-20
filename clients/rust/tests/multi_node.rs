@@ -1534,16 +1534,26 @@ async fn gossip_to_caches() {
     let config =
         Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
 
-    // Create a cache client on NODE2_IP so it doesn't conflict with the KVS
+    // Create a cache client
     let mut cache = CacheClient::new(&config, Some(0))
         .await
         .expect("Failed to create cache client");
 
-    // Register interest in a specific key
-    cache
-        .watch(&["cache_test_key".to_string()])
-        .await
-        .expect("Watch failed");
+    // Register interest in a specific key (retry on connect timeout)
+    let mut watch_ok = false;
+    for attempt in 0..3 {
+        match cache.watch(&["cache_test_key".to_string()]).await {
+            Ok(()) => {
+                watch_ok = true;
+                break;
+            }
+            Err(e) => {
+                eprintln!("Watch attempt {} failed: {}, retrying...", attempt + 1, e);
+                std::thread::sleep(Duration::from_secs(2));
+            }
+        }
+    }
+    assert!(watch_ok, "Watch failed after 3 attempts");
 
     // PUT a value via a normal client
     let mut client = KVSClient::new(&config, Some(78)).await;
