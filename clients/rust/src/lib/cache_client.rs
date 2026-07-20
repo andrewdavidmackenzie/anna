@@ -204,11 +204,31 @@ impl CacheClient {
 
     async fn get_or_connect(&mut self, addr: &str) -> Result<&mut PushSocket> {
         if !self.socket_cache.contains_key(addr) {
-            let mut sock = PushSocket::new();
-            sock.connect(addr)
-                .await
-                .map_err(|e| Error::Kvs(format!("Failed to connect to {}: {}", addr, e)))?;
-            self.socket_cache.insert(addr.to_string(), sock);
+            let mut last_err = None;
+            for attempt in 0..5 {
+                let mut sock = PushSocket::new();
+                match tokio::time::timeout(Duration::from_secs(5), sock.connect(addr)).await {
+                    Ok(Ok(())) => {
+                        self.socket_cache.insert(addr.to_string(), sock);
+                        last_err = None;
+                        break;
+                    }
+                    Ok(Err(e)) => {
+                        last_err = Some(format!("attempt {}: {}", attempt + 1, e));
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    }
+                    Err(_) => {
+                        last_err = Some(format!("attempt {}: connect timed out", attempt + 1));
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    }
+                }
+            }
+            if let Some(err) = last_err {
+                return Err(Error::Kvs(format!(
+                    "Failed to connect to {} after retries: {}",
+                    addr, err
+                )));
+            }
         }
         Ok(self
             .socket_cache
