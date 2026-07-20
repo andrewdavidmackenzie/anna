@@ -374,17 +374,26 @@ impl KVSClient {
     /// # }
     /// ```
     pub async fn get<K: AsRef<str> + Display>(&mut self, key: K) -> Result<String> {
-        debug!("GET: {}", key);
+        let bytes = self.get_bytes(key).await?;
+        Ok(String::from_utf8_lossy(&bytes).to_string())
+    }
+
+    /// Retrieve a raw binary value by key (LWW lattice, no UTF-8 conversion).
+    ///
+    /// Returns the inner value bytes from the LWW wrapper. Useful for reading
+    /// metadata keys that contain serialized protobuf payloads.
+    pub async fn get_bytes<K: AsRef<str> + Display>(&mut self, key: K) -> Result<Vec<u8>> {
+        debug!("GET_BYTES: {}", key);
         let response = self
             .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
             .await
-            .ok_or_else(|| Error::Kvs("GET: request failed or timed out".into()))?;
+            .ok_or_else(|| Error::Kvs("GET_BYTES: request failed or timed out".into()))?;
 
-        let tuple = Self::validate_response(&response, "GET")?;
+        let tuple = Self::validate_response(&response, "GET_BYTES")?;
 
         let lww = LwwValue::decode(tuple.payload.as_slice())
-            .map_err(|e| Error::Kvs(format!("GET: failed to decode LWW value: {}", e)))?;
-        Ok(String::from_utf8_lossy(&lww.value).to_string())
+            .map_err(|e| Error::Kvs(format!("GET_BYTES: failed to decode LWW value: {}", e)))?;
+        Ok(lww.value)
     }
 
     /// Store a key-value pair (Last-Writer-Wins lattice).

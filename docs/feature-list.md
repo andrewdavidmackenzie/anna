@@ -141,24 +141,31 @@ terms (e.g., `STORAGE_MEDIUM=ram|file`).
 | Pending request queue     | Queues requests while replication factor is unknown      | Yes           |
 | Multi-threaded routing    | Configurable number of routing threads                   | Yes           |
 
-## Monitoring & Policy Engine — `anna-monitor` (#357)
+## Monitoring — `anna-monitor` (#357)
 
 The monitoring system is a separate server process (`anna-monitor`) that
-collects statistics from KVS nodes, detects membership changes, and enforces
-autoscaling policies.
+passively collects statistics from KVS nodes and detects membership changes.
 
-### Statistics (reported by `anna-kvs` via `ServerThreadStatistics` protobuf)
+Statistics are reported by `anna-kvs` via `ServerThreadStatistics` protobuf
+messages, stored as internal metadata keys
+(`ANNA_METADATA|<type>|<public_ip>|<private_ip>|<tid>|<tier>`), and read
+by `anna-monitor` each monitoring cycle.
 
 | Feature                              | Description                                  | System Tested |
 |--------------------------------------|----------------------------------------------|---------------|
-| Storage consumption reporting        | Per-thread storage size in KB                | No            |
-| CPU occupancy reporting              | Ratio of working time to wall-clock time     | No            |
-| Access count reporting               | Total accesses per epoch                     | No            |
-| Per-key access frequency             | Tracked over 60-second window                | No            |
-| Per-key size for primary replicas    | Size of data for keys this thread owns       | No            |
-| Per-event-type occupancy logging     | Performance profiling of event handlers      | No            |
+| Storage consumption reporting        | Per-thread storage size in KB                | Yes           |
+| CPU occupancy reporting              | Ratio of working time to wall-clock time     | Yes           |
+| Access count reporting               | Total accesses per epoch                     | Yes           |
+| Per-key access frequency             | Tracked over 60-second window                | Yes           |
+| Per-key size for primary replicas    | Size of data for keys this thread owns       | Yes           |
+| Per-event-type occupancy logging     | Performance profiling of event handlers      | Yes           |
 
-### Autoscaling Policies
+## Autoscaling Policy Engine — `anna-monitor`
+
+The policy engine runs inside `anna-monitor` and makes active decisions
+based on the collected statistics: scaling the cluster, changing replication
+factors, and moving data between tiers. Policies require a management node
+for node addition/removal.
 
 | Feature                     | Description                                                   | System Tested |
 |-----------------------------|---------------------------------------------------------------|---------------|
@@ -181,5 +188,6 @@ autoscaling policies.
 | Multi-Tiered Storage                   | `anna-kvs`     | 4     | 4      | 100%     | —      |
 | Multi-Node Features                    | `anna-kvs`     | 25    | 25     | 100%     | —      |
 | Routing Tier                           | `anna-route`   | 6     | 6      | 100%     | —      |
-| Monitoring & Policy Engine             | `anna-monitor` | 13    | 0      | 0%       | #357   |
-| **Total**                              |                | **83**| **70** | **84%**  |        |
+| Monitoring                             | `anna-monitor` | 6     | 6      | 100%     | —      |
+| Autoscaling Policy Engine              | `anna-monitor` | 7     | 0      | 0%       | #357   |
+| **Total**                              |                | **83**| **76** | **92%**  |        |
