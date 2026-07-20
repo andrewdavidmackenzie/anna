@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-"""Cache subscription client for receiving gossip-pushed key updates."""
+"""Subscribe to value changes for specific keys via the KVS gossip mechanism."""
 
 import logging
 
@@ -27,7 +27,7 @@ CACHE_UPDATE_PORT = 7150
 logger = logging.getLogger(__name__)
 
 
-class CacheClient:
+class ValueChangeSubscriber:
     """A client that receives key updates pushed from the KVS during gossip.
 
     The cache client registers with KVS server threads to watch specific keys.

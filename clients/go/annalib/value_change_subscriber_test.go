@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestCacheClientConstants(t *testing.T) {
+func TestValueChangeSubscriberConstants(t *testing.T) {
 	if kCacheRegistrationPort != 7200 {
 		t.Errorf("expected registration port 7200, got %d", kCacheRegistrationPort)
 	}
@@ -13,8 +13,8 @@ func TestCacheClientConstants(t *testing.T) {
 	}
 }
 
-func TestCacheClientGetCachedMissing(t *testing.T) {
-	cc := &CacheClient{
+func TestValueChangeSubscriberGetCachedMissing(t *testing.T) {
+	cc := &ValueChangeSubscriber{
 		localCache: make(map[string][]byte),
 	}
 	_, ok := cc.GetCached("nonexistent")
@@ -23,8 +23,8 @@ func TestCacheClientGetCachedMissing(t *testing.T) {
 	}
 }
 
-func TestCacheClientGetCachedPresent(t *testing.T) {
-	cc := &CacheClient{
+func TestValueChangeSubscriberGetCachedPresent(t *testing.T) {
+	cc := &ValueChangeSubscriber{
 		localCache: map[string][]byte{
 			"test-key": []byte("test-value"),
 		},
@@ -38,17 +38,17 @@ func TestCacheClientGetCachedPresent(t *testing.T) {
 	}
 }
 
-func TestCacheClientWatchedKeysInitiallyEmpty(t *testing.T) {
-	cc := &CacheClient{}
+func TestValueChangeSubscriberWatchedKeysInitiallyEmpty(t *testing.T) {
+	cc := &ValueChangeSubscriber{}
 	if len(cc.WatchedKeys()) != 0 {
 		t.Error("expected empty watched keys")
 	}
 }
 
-func TestNewCacheClient(t *testing.T) {
-	cc, err := NewCacheClient("127.0.0.1", "127.0.0.1", 1, 51000, 0)
+func TestNewValueChangeSubscriber(t *testing.T) {
+	cc, err := NewValueChangeSubscriber("127.0.0.1", "127.0.0.1", 1, 51000, 0)
 	if err != nil {
-		t.Fatalf("NewCacheClient failed: %v", err)
+		t.Fatalf("NewValueChangeSubscriber failed: %v", err)
 	}
 	defer cc.Close()
 
@@ -63,10 +63,10 @@ func TestNewCacheClient(t *testing.T) {
 	}
 }
 
-func TestCacheClientClose(t *testing.T) {
-	cc, err := NewCacheClient("127.0.0.1", "127.0.0.1", 1, 51100, 0)
+func TestValueChangeSubscriberClose(t *testing.T) {
+	cc, err := NewValueChangeSubscriber("127.0.0.1", "127.0.0.1", 1, 51100, 0)
 	if err != nil {
-		t.Fatalf("NewCacheClient failed: %v", err)
+		t.Fatalf("NewValueChangeSubscriber failed: %v", err)
 	}
 	err = cc.Close()
 	if err != nil {

@@ -14,11 +14,11 @@
 
 import unittest
 
-from anna.cache_client import CacheClient, CACHE_REGISTRATION_PORT, \
+from anna.value_change_subscriber import ValueChangeSubscriber, CACHE_REGISTRATION_PORT, \
     CACHE_UPDATE_PORT
 
 
-class TestCacheClientConstants(unittest.TestCase):
+class TestValueChangeSubscriberConstants(unittest.TestCase):
     def test_registration_port(self):
         self.assertEqual(CACHE_REGISTRATION_PORT, 7200)
 
@@ -26,9 +26,9 @@ class TestCacheClientConstants(unittest.TestCase):
         self.assertEqual(CACHE_UPDATE_PORT, 7150)
 
 
-class TestCacheClient(unittest.TestCase):
+class TestValueChangeSubscriber(unittest.TestCase):
     def setUp(self):
-        self.client = CacheClient(
+        self.client = ValueChangeSubscriber(
             server_ip="127.0.0.1",
             cache_ip="127.0.0.1",
             memory_threads=1,

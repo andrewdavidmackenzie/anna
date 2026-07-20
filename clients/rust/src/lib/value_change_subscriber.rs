@@ -15,12 +15,12 @@ const K_CACHE_REGISTRATION_PORT: usize = 7200;
 // The port on which cache nodes receive updates from the KVS.
 const K_CACHE_UPDATE_PORT: usize = 7150;
 
-/// A cache client that receives key updates pushed from the KVS during gossip.
+/// Subscribes to value changes for specific keys via the KVS gossip mechanism.
 ///
-/// The cache client registers with KVS server threads to watch specific keys.
-/// When those keys are updated, the KVS pushes the new values during its
-/// gossip epoch. The cache client receives these updates and stores them
-/// locally for fast reads.
+/// Registers with KVS server threads to watch specific keys. When those keys
+/// are updated (including deletes), the KVS pushes the new values during its
+/// gossip epoch. Applications can use this for caching, event-driven updates,
+/// or any pub-sub pattern over KVS keys.
 ///
 /// # Example
 ///
@@ -29,10 +29,10 @@ const K_CACHE_UPDATE_PORT: usize = 7150;
 /// # async fn main() -> annalib::Result<()> {
 /// use std::time::Duration;
 /// use annalib::config::Config;
-/// use annalib::cache_client::CacheClient;
+/// use annalib::value_change_subscriber::ValueChangeSubscriber;
 ///
 /// let config = Config::default();
-/// let mut cache = CacheClient::new(&config, None).await?;
+/// let mut cache = ValueChangeSubscriber::new(&config, None).await?;
 /// cache.watch(&["my-key".to_string()]).await?;
 ///
 /// // After a gossip epoch, receive updates pushed from KVS
@@ -47,7 +47,7 @@ const K_CACHE_UPDATE_PORT: usize = 7150;
 /// # Ok(())
 /// # }
 /// ```
-pub struct CacheClient {
+pub struct ValueChangeSubscriber {
     cache_ip: Address,
     base_offset: usize,
     server_ip: Address,
@@ -58,7 +58,7 @@ pub struct CacheClient {
     watched_keys: Vec<Key>,
 }
 
-impl CacheClient {
+impl ValueChangeSubscriber {
     /// Create a new cache client.
     ///
     /// The `tid` parameter selects which port to listen on for updates.
@@ -85,7 +85,7 @@ impl CacheClient {
 
         info!("Cache client listening for updates on {}", bind_addr);
 
-        Ok(CacheClient {
+        Ok(ValueChangeSubscriber {
             cache_ip,
             base_offset,
             server_ip,
@@ -248,7 +248,7 @@ mod tests {
             value: b"hello world".to_vec(),
         };
         let encoded = lww.encode_to_vec();
-        let decoded = CacheClient::decode_lww_value(&encoded).expect("decode failed");
+        let decoded = ValueChangeSubscriber::decode_lww_value(&encoded).expect("decode failed");
         assert_eq!(decoded, b"hello world");
     }
 
@@ -259,7 +259,7 @@ mod tests {
             value: vec![],
         };
         let encoded = lww.encode_to_vec();
-        let decoded = CacheClient::decode_lww_value(&encoded).expect("decode failed");
+        let decoded = ValueChangeSubscriber::decode_lww_value(&encoded).expect("decode failed");
         assert!(decoded.is_empty());
     }
 
@@ -275,14 +275,14 @@ mod tests {
 
     #[test]
     fn decode_lww_value_invalid_proto() {
-        let result = CacheClient::decode_lww_value(b"not valid protobuf");
+        let result = ValueChangeSubscriber::decode_lww_value(b"not valid protobuf");
         assert!(result.is_err());
     }
 
     #[tokio::test]
-    async fn new_cache_client() {
+    async fn new_value_change_subscriber() {
         let config = crate::config::Config::default();
-        let cache = CacheClient::new(&config, Some(90)).await;
+        let cache = ValueChangeSubscriber::new(&config, Some(90)).await;
         assert!(cache.is_ok());
         let cache = cache.unwrap();
         assert!(cache.watched_keys().is_empty());
@@ -292,7 +292,7 @@ mod tests {
     #[tokio::test]
     async fn recv_update_timeout() {
         let config = crate::config::Config::default();
-        let mut cache = CacheClient::new(&config, Some(91))
+        let mut cache = ValueChangeSubscriber::new(&config, Some(91))
             .await
             .expect("Failed to create cache client");
         let result = cache

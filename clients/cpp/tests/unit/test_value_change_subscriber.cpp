@@ -13,20 +13,20 @@
 //  limitations under the License.
 
 #include "gtest/gtest.h"
-#include "cache_client.hpp"
+#include "value_change_subscriber.hpp"
 
-TEST(CacheClientTest, PortConstants) {
+TEST(ValueChangeSubscriberTest, PortConstants) {
   EXPECT_EQ(kClientCacheRegistrationPort, 7200u);
   EXPECT_EQ(kClientCacheUpdatePort, 7150u);
 }
 
-TEST(CacheClientTest, GetCachedMissing) {
-  CacheClient client("127.0.0.1", "127.0.0.1", 1, 50000);
+TEST(ValueChangeSubscriberTest, GetCachedMissing) {
+  ValueChangeSubscriber client("127.0.0.1", "127.0.0.1", 1, 50000);
   std::string value;
   EXPECT_FALSE(client.get_cached("nonexistent", value));
 }
 
-TEST(CacheClientTest, WatchedKeysInitiallyEmpty) {
-  CacheClient client("127.0.0.1", "127.0.0.1", 1, 50100);
+TEST(ValueChangeSubscriberTest, WatchedKeysInitiallyEmpty) {
+  ValueChangeSubscriber client("127.0.0.1", "127.0.0.1", 1, 50100);
   EXPECT_TRUE(client.watched_keys().empty());
 }

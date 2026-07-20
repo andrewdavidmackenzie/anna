@@ -141,11 +141,15 @@ fn spawn_server_with_env(
     if !bin.exists() {
         return None;
     }
+    let log_dir = config.parent().unwrap_or(Path::new("/tmp"));
+    let stderr_path = log_dir.join(format!("{}.stderr", name));
+    let stderr_file = fs::File::create(&stderr_path)
+        .unwrap_or_else(|e| panic!("Failed to create {}: {}", stderr_path.display(), e));
     let mut cmd = Command::new(&bin);
     cmd.args(["--config", &config.to_string_lossy()])
         .env("PATH", extra_path)
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stderr(Stdio::from(stderr_file));
     for (k, v) in env_vars {
         cmd.env(k, v);
     }
@@ -237,12 +241,45 @@ impl MultiNodeCluster {
             std::thread::sleep(Duration::from_secs(1));
         }
 
-        assert!(
-            wait_for_port(cfg.node_ip, self.routing_port(), 30),
-            "Routing tier on {} did not start within 30 seconds",
-            cfg.node_ip
-        );
+        if !wait_for_port(cfg.node_ip, self.routing_port(), 30) {
+            self.dump_diagnostics(&cfg);
+            panic!(
+                "Routing tier on {} did not start within 30 seconds (port {})",
+                cfg.node_ip,
+                self.routing_port()
+            );
+        }
         std::thread::sleep(Duration::from_secs(1));
+    }
+
+    fn dump_diagnostics(&mut self, cfg: &NodeConfig) {
+        eprintln!("=== DIAGNOSTICS for cluster at offset {} ===", self.base_offset);
+        for proc in &mut self.processes {
+            let alive = proc.child.try_wait().ok();
+            match alive {
+                Some(Some(status)) => {
+                    eprintln!("  {} (pid {}): EXITED with {}", proc.label, proc.child.id(), status);
+                }
+                Some(None) => {
+                    eprintln!("  {} (pid {}): still running", proc.label, proc.child.id());
+                }
+                None => {
+                    eprintln!("  {} (pid {}): status unknown", proc.label, proc.child.id());
+                }
+            }
+        }
+        for name in ["anna-monitor", "anna-route", "anna-kvs"] {
+            let stderr_path = self.config_dir.join(format!("{}.stderr", name));
+            if let Ok(content) = fs::read_to_string(&stderr_path) {
+                let lines: Vec<&str> = content.lines().collect();
+                let tail: Vec<&&str> = lines.iter().rev().take(20).collect();
+                eprintln!("  --- {} stderr (last {} lines) ---", name, tail.len());
+                for line in tail.iter().rev() {
+                    eprintln!("    {}", line);
+                }
+            }
+        }
+        eprintln!("=== END DIAGNOSTICS ===");
     }
 
     fn start_kvs_node(
@@ -1531,7 +1568,7 @@ async fn gossip_after_replication_change() {
 #[tokio::test]
 #[cfg(unix)]
 async fn gossip_to_caches() {
-    use annalib::cache_client::CacheClient;
+    use annalib::value_change_subscriber::ValueChangeSubscriber;
     use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
@@ -1546,7 +1583,7 @@ async fn gossip_to_caches() {
         Config::read(&cluster.client_config_path(NODE1_IP)).expect("Failed to read config");
 
     eprintln!("[gossip_to_caches] Creating cache client (update port={})", 7150 + 42000);
-    let mut cache = CacheClient::new(&config, Some(0))
+    let mut cache = ValueChangeSubscriber::new(&config, Some(0))
         .await
         .expect("Failed to create cache client");
 

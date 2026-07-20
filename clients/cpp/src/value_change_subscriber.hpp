@@ -12,8 +12,8 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#ifndef INCLUDE_CACHE_CLIENT_HPP_
-#define INCLUDE_CACHE_CLIENT_HPP_
+#ifndef INCLUDE_VALUE_CHANGE_SUBSCRIBER_HPP_
+#define INCLUDE_VALUE_CHANGE_SUBSCRIBER_HPP_
 
 #include "kvs.pb.h"
 #include "shared.pb.h"
@@ -32,9 +32,9 @@ const unsigned kClientCacheUpdatePort = 7150;
 ///
 /// Registers with KVS server threads to watch specific keys. When those keys
 /// are updated, the KVS pushes new values during its gossip epoch.
-class CacheClient {
+class ValueChangeSubscriber {
  public:
-  CacheClient(const std::string &server_ip, const std::string &cache_ip,
+  ValueChangeSubscriber(const std::string &server_ip, const std::string &cache_ip,
               unsigned memory_threads = 1, unsigned offset = 0,
               unsigned tid = 0)
       : server_ip_(server_ip),
@@ -132,4 +132,4 @@ class CacheClient {
   std::vector<std::string> watched_keys_;
 };
 
-#endif  // INCLUDE_CACHE_CLIENT_HPP_
+#endif  // INCLUDE_VALUE_CHANGE_SUBSCRIBER_HPP_

@@ -18,8 +18,8 @@ const (
 	kCacheUpdatePort       = 7150
 )
 
-// CacheClient receives key updates pushed from the KVS during gossip.
-type CacheClient struct {
+// ValueChangeSubscriber subscribes to value changes for specific keys via the KVS gossip mechanism.
+type ValueChangeSubscriber struct {
 	serverIP      string
 	cacheIP       string
 	memoryThreads int
@@ -32,8 +32,8 @@ type CacheClient struct {
 	ctx           context.Context
 }
 
-// NewCacheClient creates a cache client that listens for gossip updates.
-func NewCacheClient(serverIP, cacheIP string, memoryThreads, offset, tid int) (*CacheClient, error) {
+// NewValueChangeSubscriber creates a subscriber that listens for key value changes via gossip.
+func NewValueChangeSubscriber(serverIP, cacheIP string, memoryThreads, offset, tid int) (*ValueChangeSubscriber, error) {
 	ctx := context.Background()
 
 	bindAddr := fmt.Sprintf("tcp://%s:%d", cacheIP, tid+kCacheUpdatePort+offset)
@@ -43,7 +43,7 @@ func NewCacheClient(serverIP, cacheIP string, memoryThreads, offset, tid int) (*
 	}
 	log.Printf("Cache client listening for updates on %s", bindAddr)
 
-	return &CacheClient{
+	return &ValueChangeSubscriber{
 		serverIP:      serverIP,
 		cacheIP:       cacheIP,
 		memoryThreads: memoryThreads,
@@ -57,7 +57,7 @@ func NewCacheClient(serverIP, cacheIP string, memoryThreads, offset, tid int) (*
 }
 
 // Watch registers interest in keys with all KVS server threads.
-func (cc *CacheClient) Watch(keys []string) error {
+func (cc *ValueChangeSubscriber) Watch(keys []string) error {
 	cc.watchedKeys = append(cc.watchedKeys, keys...)
 
 	msg := &sharedpb.StringSet{}
@@ -91,7 +91,7 @@ func (cc *CacheClient) Watch(keys []string) error {
 
 // RecvUpdate receives the next gossip update from the KVS.
 // Returns key, payload, and whether an update was received.
-func (cc *CacheClient) RecvUpdate(timeout time.Duration) (string, []byte, bool, error) {
+func (cc *ValueChangeSubscriber) RecvUpdate(timeout time.Duration) (string, []byte, bool, error) {
 	type recvResult struct {
 		msg zmq4.Msg
 		err error
@@ -128,18 +128,18 @@ func (cc *CacheClient) RecvUpdate(timeout time.Duration) (string, []byte, bool, 
 }
 
 // GetCached reads a value from the local cache.
-func (cc *CacheClient) GetCached(key string) ([]byte, bool) {
+func (cc *ValueChangeSubscriber) GetCached(key string) ([]byte, bool) {
 	val, ok := cc.localCache[key]
 	return val, ok
 }
 
 // WatchedKeys returns the list of watched keys.
-func (cc *CacheClient) WatchedKeys() []string {
+func (cc *ValueChangeSubscriber) WatchedKeys() []string {
 	return cc.watchedKeys
 }
 
 // Close cleans up ZMQ sockets.
-func (cc *CacheClient) Close() error {
+func (cc *ValueChangeSubscriber) Close() error {
 	if err := cc.updatePuller.Close(); err != nil {
 		return err
 	}
