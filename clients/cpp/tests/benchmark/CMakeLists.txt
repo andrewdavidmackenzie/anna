@@ -14,6 +14,8 @@
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 
+FIND_PACKAGE(yaml-cpp REQUIRED)
+
 SET(BENCHMARK_DEPENDENCIES
     protobuf::libprotobuf
     kvs-proto
@@ -25,7 +27,7 @@ SET(BENCHMARK_DEPENDENCIES
 SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/target/benchmark)
 
 ADD_EXECUTABLE(anna-bench benchmark.cpp)
-TARGET_LINK_LIBRARIES(anna-bench spdlog::spdlog fmt::fmt ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES} ${BENCHMARK_DEPENDENCIES} anna-bench-proto)
+TARGET_LINK_LIBRARIES(anna-bench spdlog::spdlog fmt::fmt ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES} ${BENCHMARK_DEPENDENCIES})
 
 ADD_EXECUTABLE(anna-bench-trigger trigger.cpp)
-TARGET_LINK_LIBRARIES(anna-bench-trigger spdlog::spdlog fmt::fmt ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES} ${BENCHMARK_DEPENDENCIES} anna-bench-proto)
+TARGET_LINK_LIBRARIES(anna-bench-trigger spdlog::spdlog fmt::fmt ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES} ${BENCHMARK_DEPENDENCIES})

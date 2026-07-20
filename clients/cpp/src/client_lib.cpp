@@ -22,8 +22,6 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
-#include "yaml-cpp/yaml.h"
-
 // kZmqUtil is declared `extern` (in the global namespace) by
 // zmq/zmq_util.hpp and used by KvsClient/requests.hpp; this is its one
 // definition for any binary that links against this library.
@@ -36,34 +34,6 @@ namespace annalib {
 
 const vector<string> kProcessList = {"anna-monitor", "anna-route",
                                       "anna-kvs"};
-
-ClientConfig load_config(const string& config_file_path) {
-  YAML::Node conf = YAML::LoadFile(config_file_path);
-  unsigned routing_thread_count = conf["threads"]["routing"].as<unsigned>();
-
-  YAML::Node user = conf["user"];
-  Address ip = user["ip"].as<Address>();
-
-  vector<Address> routing_ips;
-  if (YAML::Node elb = user["routing-elb"]) {
-    routing_ips.push_back(elb.as<string>());
-  } else {
-    YAML::Node routing = user["routing"];
-    for (const YAML::Node& node : routing) {
-      routing_ips.push_back(node.as<Address>());
-    }
-  }
-
-  ClientConfig config;
-  config.ip = ip;
-  for (const Address& addr : routing_ips) {
-    for (unsigned i = 0; i < routing_thread_count; i++) {
-      config.routing_threads.push_back(UserRoutingThread(addr, i));
-    }
-  }
-
-  return config;
-}
 
 std::unique_ptr<KvsClient> make_client(const ClientConfig& config,
                                         unsigned tid, unsigned timeout) {

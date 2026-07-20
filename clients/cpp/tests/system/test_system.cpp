@@ -2,19 +2,29 @@
 #include "client_lib.hpp"
 #include <iostream>
 #include <filesystem>
+#include <cstdlib>
 
 namespace fs = std::filesystem;
 
 class SystemTest : public ::testing::Test {
 protected:
-  // We rely on the environment variable to know where the server binary is.
-  // But for the test itself, we just use the library.
+  // Build a ClientConfig from environment variables or defaults.
+  // The system test runner sets ANNA_ROUTING_IP and ANNA_CLIENT_IP.
+  annalib::ClientConfig make_test_config() {
+    annalib::ClientConfig config;
+
+    const char* routing_ip = std::getenv("ANNA_ROUTING_IP");
+    config.ip = "127.0.0.1";
+
+    std::string rip = routing_ip ? routing_ip : "127.0.0.1";
+    config.routing_threads.push_back(UserRoutingThread(rip, 0));
+
+    return config;
+  }
 };
 
 TEST_F(SystemTest, BasicPutGet) {
-  std::string config_path = "test_config.yml";
-  annalib::ClientConfig config = annalib::load_config(config_path);
-  config.ip = "127.0.0.1";
+  annalib::ClientConfig config = make_test_config();
 
   auto client = annalib::make_client(config, 0, 5000);
   ASSERT_NE(client, nullptr);
@@ -32,9 +42,7 @@ TEST_F(SystemTest, BasicPutGet) {
 }
 
 TEST_F(SystemTest, PutSetGetSet) {
-  std::string config_path = "test_config.yml";
-  annalib::ClientConfig config = annalib::load_config(config_path);
-  config.ip = "127.0.0.1";
+  annalib::ClientConfig config = make_test_config();
 
   auto client = annalib::make_client(config, 0, 5000);
   ASSERT_NE(client, nullptr);
@@ -52,9 +60,7 @@ TEST_F(SystemTest, PutSetGetSet) {
 }
 
 TEST_F(SystemTest, OrderedSetPutGet) {
-  std::string config_path = "test_config.yml";
-  annalib::ClientConfig config = annalib::load_config(config_path);
-  config.ip = "127.0.0.1";
+  annalib::ClientConfig config = make_test_config();
 
   auto client = annalib::make_client(config, 0, 5000);
   ASSERT_NE(client, nullptr);
@@ -72,9 +78,7 @@ TEST_F(SystemTest, OrderedSetPutGet) {
 }
 
 TEST_F(SystemTest, SingleCausalPutGet) {
-  std::string config_path = "test_config.yml";
-  annalib::ClientConfig config = annalib::load_config(config_path);
-  config.ip = "127.0.0.1";
+  annalib::ClientConfig config = make_test_config();
 
   auto client = annalib::make_client(config, 0, 5000);
   ASSERT_NE(client, nullptr);
@@ -103,9 +107,7 @@ TEST_F(SystemTest, SingleCausalPutGet) {
 }
 
 TEST_F(SystemTest, MultiCausalPutGet) {
-  std::string config_path = "test_config.yml";
-  annalib::ClientConfig config = annalib::load_config(config_path);
-  config.ip = "127.0.0.1";
+  annalib::ClientConfig config = make_test_config();
 
   auto client = annalib::make_client(config, 0, 5000);
   ASSERT_NE(client, nullptr);
@@ -123,9 +125,7 @@ TEST_F(SystemTest, MultiCausalPutGet) {
 }
 
 TEST_F(SystemTest, PriorityPutGet) {
-  std::string config_path = "test_config.yml";
-  annalib::ClientConfig config = annalib::load_config(config_path);
-  config.ip = "127.0.0.1";
+  annalib::ClientConfig config = make_test_config();
 
   auto client = annalib::make_client(config, 0, 5000);
   ASSERT_NE(client, nullptr);
@@ -146,9 +146,7 @@ TEST_F(SystemTest, PriorityPutGet) {
 }
 
 TEST_F(SystemTest, DeleteKey) {
-  std::string config_path = "test_config.yml";
-  annalib::ClientConfig config = annalib::load_config(config_path);
-  config.ip = "127.0.0.1";
+  annalib::ClientConfig config = make_test_config();
 
   auto client = annalib::make_client(config, 0, 5000);
   ASSERT_NE(client, nullptr);
