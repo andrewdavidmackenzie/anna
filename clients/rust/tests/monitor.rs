@@ -676,3 +676,53 @@ async fn hot_key_selective_replication() {
         "Hot key should have higher access count than cold keys"
     );
 }
+
+/// Verify that the KVS server publishes monitoring IPs as a metadata key
+/// that clients can read to discover monitor addresses.
+///
+/// Uses base_offset=8900 to avoid conflicts with other monitor tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn monitoring_ips_metadata() {
+    use annalib::kvs_client::KVSClient;
+    use annalib::proto::shared::StringSet;
+    use prost::Message;
+
+    if !server_bin_dir().join("anna-kvs").exists() {
+        eprintln!("SKIP: server binaries not built");
+        return;
+    }
+
+    let mut cluster = MonitorTestCluster::new(8900);
+    cluster.start();
+
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(96)).await;
+
+    // The KVS writes monitoring IPs every server_report_period (3s in test config).
+    // Poll until the metadata key appears.
+    let meta_key = "ANNA_METADATA|monitoring_ips";
+    let mut found = false;
+    for _ in 0..10 {
+        std::thread::sleep(Duration::from_secs(2));
+        if let Ok(bytes) = client.get_bytes(meta_key).await {
+            let string_set =
+                StringSet::decode(bytes.as_slice()).expect("Failed to decode StringSet");
+            assert!(
+                !string_set.keys.is_empty(),
+                "monitoring_ips StringSet should not be empty"
+            );
+            assert!(
+                string_set.keys.contains(&NODE_IP.to_string()),
+                "monitoring_ips should contain {}",
+                NODE_IP
+            );
+            found = true;
+            break;
+        }
+    }
+    assert!(
+        found,
+        "ANNA_METADATA|monitoring_ips was not written within timeout"
+    );
+}

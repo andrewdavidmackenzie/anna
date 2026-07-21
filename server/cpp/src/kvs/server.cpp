@@ -651,6 +651,29 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
                               &pushers[wt.key_request_connect_address()]);
       }
 
+      // Publish monitoring IPs as a metadata key so clients can discover them
+      if (!monitoring_ips.empty()) {
+        shared::StringSet monitoring_set;
+        for (const auto &ip : monitoring_ips) {
+          monitoring_set.add_keys(ip);
+        }
+        string serialized_monitoring;
+        monitoring_set.SerializeToString(&serialized_monitoring);
+
+        req.Clear();
+        req.set_type(kvs::RequestType::PUT);
+        prepare_put_tuple(
+            req, kMetadataIdentifier + kMetadataDelimiter + "monitoring_ips",
+            kvs::LatticeType::LWW, serialize(ts, serialized_monitoring));
+
+        {
+          string serialized;
+          req.SerializeToString(&serialized);
+          kZmqUtil->send_string(serialized,
+                                &pushers[wt.key_request_connect_address()]);
+        }
+      }
+
       report_start = std::chrono::system_clock::now();
 
       // Get the most recent list of cache IPs from the management node.
