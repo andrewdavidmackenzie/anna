@@ -404,4 +404,13 @@ mod tests {
         assert_eq!(sub.watched_keys().len(), 2);
         assert_eq!(sub.watched_keys()[0], "a");
     }
+
+    #[tokio::test]
+    async fn with_memory_threads_sets_count() {
+        let config = crate::client_config::ClientConfig::default();
+        let sub = ValueChangeSubscriber::with_memory_threads(&config, Some(89), 4)
+            .await
+            .expect("create failed");
+        assert_eq!(sub.memory_threads, 4);
+    }
 }

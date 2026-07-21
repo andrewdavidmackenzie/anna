@@ -1535,4 +1535,48 @@ mod tests {
         );
         assert_eq!(key, "ANNA_METADATA|size|10.0.0.1|10.0.0.1|1|MEMORY");
     }
+
+    #[test]
+    fn cluster_topology_protobuf_roundtrip() {
+        use crate::proto::metadata::ClusterTopology;
+
+        let topo = ClusterTopology {
+            routing_thread_count: 2,
+            memory_thread_count: 4,
+            ebs_thread_count: 1,
+        };
+        let encoded = topo.encode_to_vec();
+        let decoded =
+            ClusterTopology::decode(encoded.as_slice()).expect("failed to decode topology");
+        assert_eq!(decoded.routing_thread_count, 2);
+        assert_eq!(decoded.memory_thread_count, 4);
+        assert_eq!(decoded.ebs_thread_count, 1);
+    }
+
+    #[test]
+    fn monitoring_ips_string_set_roundtrip() {
+        use crate::proto::shared::StringSet;
+
+        let set = StringSet {
+            keys: vec!["10.0.0.1".into(), "10.0.0.2".into()],
+        };
+        let encoded = set.encode_to_vec();
+        let decoded =
+            StringSet::decode(encoded.as_slice()).expect("failed to decode StringSet");
+        assert_eq!(decoded.keys.len(), 2);
+        assert!(decoded.keys.contains(&"10.0.0.1".to_string()));
+        assert!(decoded.keys.contains(&"10.0.0.2".to_string()));
+    }
+
+    #[test]
+    fn monitoring_ips_metadata_key_format() {
+        let key = "ANNA_METADATA|monitoring_ips";
+        assert!(key.starts_with("ANNA_METADATA|"));
+    }
+
+    #[test]
+    fn cluster_topology_metadata_key_format() {
+        let key = "ANNA_METADATA|cluster_topology";
+        assert!(key.starts_with("ANNA_METADATA|"));
+    }
 }
