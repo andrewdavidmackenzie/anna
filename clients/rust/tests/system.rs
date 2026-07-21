@@ -2,7 +2,11 @@
 
 mod common;
 
-use common::{client_config, generate_config, server_path, start_servers, ServerGuard};
+use common::{
+    client_config, generate_config, server_path, start_servers_with_offset, ServerGuard,
+};
+
+const BASE_OFFSET: u16 = 200;
 
 #[tokio::test]
 #[cfg(unix)]
@@ -10,15 +14,15 @@ async fn system_test_kvs_client() {
     use annalib::kvs_client::KVSClient;
 
     let path = server_path();
-    let config_path = generate_config(0);
+    let config_path = generate_config(BASE_OFFSET);
 
-    start_servers(&path, &config_path);
+    start_servers_with_offset(&path, &config_path, BASE_OFFSET);
     let _guard = ServerGuard {
         path,
         config: config_path,
     };
 
-    let config = client_config(0);
+    let config = client_config(BASE_OFFSET);
     let mut client = KVSClient::new(&config, Some(50)).await;
 
     // PUT and GET a LWW value
