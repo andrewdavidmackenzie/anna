@@ -63,12 +63,27 @@ impl ValueChangeSubscriber {
     ///
     /// The `tid` parameter selects which port to listen on for updates.
     /// Pass `None` for the default (tid=0).
+    ///
+    /// Memory thread count defaults to 1. Use
+    /// [`KVSClient::get_cluster_topology()`] to discover the actual count
+    /// at runtime, then pass it to [`Self::with_memory_threads()`].
     pub async fn new(config: &ClientConfig, tid: Option<usize>) -> Result<Self> {
+        Self::with_memory_threads(config, tid, 1).await
+    }
+
+    /// Create a cache client with an explicit memory thread count.
+    ///
+    /// Use this when you've queried the cluster topology and know the
+    /// actual number of memory threads per KVS node.
+    pub async fn with_memory_threads(
+        config: &ClientConfig,
+        tid: Option<usize>,
+        memory_threads: usize,
+    ) -> Result<Self> {
         let tid = tid.unwrap_or(0);
         let base_offset = config.base_offset();
         let cache_ip = config.client_ip.clone();
         let server_ip = config.routing_ip().unwrap_or("127.0.0.1").to_string();
-        let memory_threads = 1;
 
         let bind_addr = format!(
             "tcp://{}:{}",

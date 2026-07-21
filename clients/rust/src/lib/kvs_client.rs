@@ -461,6 +461,31 @@ impl KVSClient {
             .map_err(|e| Error::Kvs(format!("Failed to decode KeySizeData: {}", e)))
     }
 
+    /// Retrieve cluster topology (thread counts) from the metadata key.
+    ///
+    /// Returns `None` if the metadata key hasn't been written yet.
+    pub async fn get_cluster_topology(
+        &mut self,
+    ) -> Option<crate::proto::metadata::ClusterTopology> {
+        let bytes = self
+            .get_bytes("ANNA_METADATA|cluster_topology")
+            .await
+            .ok()?;
+        crate::proto::metadata::ClusterTopology::decode(bytes.as_slice()).ok()
+    }
+
+    /// Retrieve monitoring IPs from the metadata key.
+    ///
+    /// Returns an empty vec if the metadata key hasn't been written yet.
+    pub async fn get_monitoring_ips(&mut self) -> Vec<String> {
+        match self.get_bytes("ANNA_METADATA|monitoring_ips").await {
+            Ok(bytes) => crate::proto::shared::StringSet::decode(bytes.as_slice())
+                .map(|s| s.keys)
+                .unwrap_or_default(),
+            Err(_) => vec![],
+        }
+    }
+
     /// Store a key-value pair (Last-Writer-Wins lattice).
     ///
     /// ```rust
