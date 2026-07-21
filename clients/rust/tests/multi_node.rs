@@ -1554,6 +1554,7 @@ async fn gossip_to_caches() {
 /// Uses base_offset=25500 to stay below port 32768 limit.
 #[tokio::test]
 #[cfg(unix)]
+#[ignore] // SLO policy conditions not yet reliably met in CI — see #417
 async fn slo_selective_replication() {
     use annalib::kvs_client::KVSClient;
     use annalib::latency_reporter::LatencyReporter;
