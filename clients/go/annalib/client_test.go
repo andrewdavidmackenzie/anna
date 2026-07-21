@@ -8,6 +8,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	kvspb "github.com/andrewdavidmackenzie/anna/clients/go/annalib/proto/kvs"
+	metadatapb "github.com/andrewdavidmackenzie/anna/clients/go/annalib/proto/metadata"
 )
 
 func TestGenerateSeed(t *testing.T) {
@@ -1045,5 +1046,389 @@ func TestDeleteWithMock(t *testing.T) {
 	err := client.Delete("k")
 	if err != nil {
 		t.Fatalf("Delete failed: %v", err)
+	}
+}
+
+// --- Metadata stats key format tests ---
+
+func TestMetadataStatsKeyFormat(t *testing.T) {
+	key := metadataStatsKey("stats", "10.0.0.1", "192.168.1.1", 0, "MEMORY")
+	if key != "ANNA_METADATA|stats|10.0.0.1|192.168.1.1|0|MEMORY" {
+		t.Errorf("unexpected key: %s", key)
+	}
+}
+
+func TestMetadataStatsKeySameIP(t *testing.T) {
+	key := metadataStatsKey("stats", "127.0.0.1", "127.0.0.1", 0, "MEMORY")
+	if key != "ANNA_METADATA|stats|127.0.0.1|127.0.0.1|0|MEMORY" {
+		t.Errorf("unexpected key: %s", key)
+	}
+}
+
+func TestAccessMetadataKeyFormat(t *testing.T) {
+	key := metadataStatsKey("access", "10.0.0.1", "192.168.1.1", 2, "DISK")
+	if key != "ANNA_METADATA|access|10.0.0.1|192.168.1.1|2|DISK" {
+		t.Errorf("unexpected key: %s", key)
+	}
+}
+
+func TestSizeMetadataKeyFormat(t *testing.T) {
+	key := metadataStatsKey("size", "10.0.0.1", "10.0.0.1", 1, "MEMORY")
+	if key != "ANNA_METADATA|size|10.0.0.1|10.0.0.1|1|MEMORY" {
+		t.Errorf("unexpected key: %s", key)
+	}
+}
+
+// --- Protobuf roundtrip tests for metadata types ---
+
+func TestServerThreadStatisticsRoundtrip(t *testing.T) {
+	original := &metadatapb.ServerThreadStatistics{
+		StorageConsumption: 42000,
+		Occupancy:          0.75,
+		Epoch:              10,
+		AccessCount:        500,
+	}
+
+	encoded, err := proto.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to encode: %v", err)
+	}
+
+	var decoded metadatapb.ServerThreadStatistics
+	if err := proto.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+
+	if decoded.StorageConsumption != 42000 {
+		t.Errorf("expected storage_consumption 42000, got %d", decoded.StorageConsumption)
+	}
+	if decoded.Occupancy != 0.75 {
+		t.Errorf("expected occupancy 0.75, got %f", decoded.Occupancy)
+	}
+	if decoded.Epoch != 10 {
+		t.Errorf("expected epoch 10, got %d", decoded.Epoch)
+	}
+	if decoded.AccessCount != 500 {
+		t.Errorf("expected access_count 500, got %d", decoded.AccessCount)
+	}
+}
+
+func TestKeyAccessDataRoundtrip(t *testing.T) {
+	original := &metadatapb.KeyAccessData{
+		Keys: []*metadatapb.KeyAccessData_KeyCount{
+			{Key: "key1", AccessCount: 100},
+			{Key: "key2", AccessCount: 200},
+		},
+	}
+
+	encoded, err := proto.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to encode: %v", err)
+	}
+
+	var decoded metadatapb.KeyAccessData
+	if err := proto.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+
+	if len(decoded.Keys) != 2 {
+		t.Fatalf("expected 2 keys, got %d", len(decoded.Keys))
+	}
+	if decoded.Keys[0].Key != "key1" || decoded.Keys[0].AccessCount != 100 {
+		t.Errorf("unexpected first key: %v", decoded.Keys[0])
+	}
+	if decoded.Keys[1].Key != "key2" || decoded.Keys[1].AccessCount != 200 {
+		t.Errorf("unexpected second key: %v", decoded.Keys[1])
+	}
+}
+
+func TestKeySizeDataRoundtrip(t *testing.T) {
+	original := &metadatapb.KeySizeData{
+		KeySizes: []*metadatapb.KeySizeData_KeySize{
+			{Key: "big_key", Size: 1024},
+			{Key: "small_key", Size: 16},
+		},
+	}
+
+	encoded, err := proto.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to encode: %v", err)
+	}
+
+	var decoded metadatapb.KeySizeData
+	if err := proto.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+
+	if len(decoded.KeySizes) != 2 {
+		t.Fatalf("expected 2 key sizes, got %d", len(decoded.KeySizes))
+	}
+	if decoded.KeySizes[0].Key != "big_key" || decoded.KeySizes[0].Size != 1024 {
+		t.Errorf("unexpected first key size: %v", decoded.KeySizes[0])
+	}
+}
+
+func TestReplicationFactorRoundtrip(t *testing.T) {
+	original := &metadatapb.ReplicationFactor{
+		Key: "test_key",
+		Global: []*metadatapb.ReplicationFactor_ReplicationValue{
+			{Tier: metadatapb.Tier_MEMORY, Value: 3},
+			{Tier: metadatapb.Tier_DISK, Value: 0},
+		},
+		Local: []*metadatapb.ReplicationFactor_ReplicationValue{
+			{Tier: metadatapb.Tier_MEMORY, Value: 1},
+			{Tier: metadatapb.Tier_DISK, Value: 0},
+		},
+	}
+
+	encoded, err := proto.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to encode: %v", err)
+	}
+
+	var decoded metadatapb.ReplicationFactor
+	if err := proto.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+
+	if decoded.Key != "test_key" {
+		t.Errorf("expected key 'test_key', got '%s'", decoded.Key)
+	}
+	if len(decoded.Global) != 2 {
+		t.Fatalf("expected 2 global entries, got %d", len(decoded.Global))
+	}
+	if decoded.Global[0].Tier != metadatapb.Tier_MEMORY || decoded.Global[0].Value != 3 {
+		t.Errorf("unexpected global[0]: %v", decoded.Global[0])
+	}
+	if len(decoded.Local) != 2 {
+		t.Fatalf("expected 2 local entries, got %d", len(decoded.Local))
+	}
+	if decoded.Local[0].Tier != metadatapb.Tier_MEMORY || decoded.Local[0].Value != 1 {
+		t.Errorf("unexpected local[0]: %v", decoded.Local[0])
+	}
+}
+
+// --- GetBytes / metadata helper integration tests with mock ---
+
+func TestParseLWWBytes(t *testing.T) {
+	lww := &kvspb.LWWValue{Timestamp: 100, Value: []byte("raw_bytes")}
+	lwwBytes, _ := proto.Marshal(lww)
+
+	result, err := parseLWWBytes(lwwBytes)
+	if err != nil {
+		t.Fatalf("parseLWWBytes failed: %v", err)
+	}
+	if string(result) != "raw_bytes" {
+		t.Errorf("expected 'raw_bytes', got '%s'", result)
+	}
+}
+
+func TestParseLWWBytesInvalid(t *testing.T) {
+	_, err := parseLWWBytes([]byte{0xff, 0xff})
+	if err == nil {
+		t.Error("expected error for invalid LWW bytes")
+	}
+}
+
+func TestGetBytesWithMock(t *testing.T) {
+	innerPayload := []byte("inner_data")
+	lww := &kvspb.LWWValue{Timestamp: 100, Value: innerPayload}
+	lwwBytes, _ := proto.Marshal(lww)
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "k", Error: kvspb.AnnaError_NO_ERROR, Payload: lwwBytes}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "k", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	result, err := client.GetBytes("k")
+	if err != nil {
+		t.Fatalf("GetBytes failed: %v", err)
+	}
+	if string(result) != "inner_data" {
+		t.Errorf("expected 'inner_data', got '%s'", result)
+	}
+}
+
+func TestGetStorageStatsWithMock(t *testing.T) {
+	stats := &metadatapb.ServerThreadStatistics{
+		StorageConsumption: 5000,
+		Occupancy:          0.5,
+		Epoch:              3,
+		AccessCount:        42,
+	}
+	statsBytes, _ := proto.Marshal(stats)
+
+	lww := &kvspb.LWWValue{Timestamp: 100, Value: statsBytes}
+	lwwBytes, _ := proto.Marshal(lww)
+
+	metaKey := "ANNA_METADATA|stats|10.0.0.1|192.168.1.1|0|MEMORY"
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: metaKey, Error: kvspb.AnnaError_NO_ERROR, Payload: lwwBytes}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: metaKey, Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	result, err := client.GetStorageStats("10.0.0.1", "192.168.1.1", 0, "MEMORY")
+	if err != nil {
+		t.Fatalf("GetStorageStats failed: %v", err)
+	}
+	if result.StorageConsumption != 5000 {
+		t.Errorf("expected storage_consumption 5000, got %d", result.StorageConsumption)
+	}
+	if result.Occupancy != 0.5 {
+		t.Errorf("expected occupancy 0.5, got %f", result.Occupancy)
+	}
+	if result.Epoch != 3 {
+		t.Errorf("expected epoch 3, got %d", result.Epoch)
+	}
+	if result.AccessCount != 42 {
+		t.Errorf("expected access_count 42, got %d", result.AccessCount)
+	}
+}
+
+func TestGetKeyAccessStatsWithMock(t *testing.T) {
+	data := &metadatapb.KeyAccessData{
+		Keys: []*metadatapb.KeyAccessData_KeyCount{
+			{Key: "hot_key", AccessCount: 999},
+		},
+	}
+	dataBytes, _ := proto.Marshal(data)
+
+	lww := &kvspb.LWWValue{Timestamp: 100, Value: dataBytes}
+	lwwBytes, _ := proto.Marshal(lww)
+
+	metaKey := "ANNA_METADATA|access|10.0.0.1|10.0.0.1|0|MEMORY"
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: metaKey, Error: kvspb.AnnaError_NO_ERROR, Payload: lwwBytes}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: metaKey, Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	result, err := client.GetKeyAccessStats("10.0.0.1", "10.0.0.1", 0, "MEMORY")
+	if err != nil {
+		t.Fatalf("GetKeyAccessStats failed: %v", err)
+	}
+	if len(result.Keys) != 1 || result.Keys[0].Key != "hot_key" || result.Keys[0].AccessCount != 999 {
+		t.Errorf("unexpected access data: %v", result)
+	}
+}
+
+func TestGetKeySizeStatsWithMock(t *testing.T) {
+	data := &metadatapb.KeySizeData{
+		KeySizes: []*metadatapb.KeySizeData_KeySize{
+			{Key: "large_key", Size: 4096},
+		},
+	}
+	dataBytes, _ := proto.Marshal(data)
+
+	lww := &kvspb.LWWValue{Timestamp: 100, Value: dataBytes}
+	lwwBytes, _ := proto.Marshal(lww)
+
+	metaKey := "ANNA_METADATA|size|10.0.0.1|10.0.0.1|1|MEMORY"
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: metaKey, Error: kvspb.AnnaError_NO_ERROR, Payload: lwwBytes}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: metaKey, Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	result, err := client.GetKeySizeStats("10.0.0.1", "10.0.0.1", 1, "MEMORY")
+	if err != nil {
+		t.Fatalf("GetKeySizeStats failed: %v", err)
+	}
+	if len(result.KeySizes) != 1 || result.KeySizes[0].Key != "large_key" || result.KeySizes[0].Size != 4096 {
+		t.Errorf("unexpected size data: %v", result)
+	}
+}
+
+func TestPutReplicationFactorWithMock(t *testing.T) {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "ANNA_METADATA|replication|my_key", Error: kvspb.AnnaError_NO_ERROR}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error: kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{
+			{Key: "ANNA_METADATA|replication|my_key", Ips: []string{"tcp://10.0.0.1:6800"}},
+		},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	err := client.PutReplicationFactor("my_key", 3, 1)
+	if err != nil {
+		t.Fatalf("PutReplicationFactor failed: %v", err)
+	}
+
+	// Verify the sent data request contains a valid LWW(ReplicationFactor)
+	if len(tp.sentMessages) < 2 {
+		t.Fatalf("expected at least 2 sent messages, got %d", len(tp.sentMessages))
+	}
+	// The second message is the data request
+	var req kvspb.KeyRequest
+	if err := proto.Unmarshal(tp.sentMessages[1].data, &req); err != nil {
+		t.Fatalf("failed to unmarshal data request: %v", err)
+	}
+	if req.Type != kvspb.RequestType_PUT {
+		t.Errorf("expected PUT request type, got %v", req.Type)
+	}
+	if len(req.Tuples) != 1 {
+		t.Fatalf("expected 1 tuple, got %d", len(req.Tuples))
+	}
+	if req.Tuples[0].LatticeType != kvspb.LatticeType_LWW {
+		t.Errorf("expected LWW lattice type, got %v", req.Tuples[0].LatticeType)
+	}
+
+	// Decode the LWW wrapper and inner ReplicationFactor
+	var lww kvspb.LWWValue
+	if err := proto.Unmarshal(req.Tuples[0].Payload, &lww); err != nil {
+		t.Fatalf("failed to decode LWW payload: %v", err)
+	}
+	var rep metadatapb.ReplicationFactor
+	if err := proto.Unmarshal(lww.Value, &rep); err != nil {
+		t.Fatalf("failed to decode ReplicationFactor: %v", err)
+	}
+	if rep.Key != "my_key" {
+		t.Errorf("expected key 'my_key', got '%s'", rep.Key)
+	}
+	if len(rep.Global) != 2 || rep.Global[0].Value != 3 {
+		t.Errorf("unexpected global replication: %v", rep.Global)
+	}
+	if len(rep.Local) != 2 || rep.Local[0].Value != 1 {
+		t.Errorf("unexpected local replication: %v", rep.Local)
 	}
 }

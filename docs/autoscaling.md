@@ -119,6 +119,92 @@ sudo ifconfig lo0 alias 127.0.0.2
 ```
 Linux supports the full 127.0.0.0/8 range by default.
 
+## Operator's Guide to Autoscaling
+
+Anna's autoscaling is a split-responsibility architecture:
+
+- **Anna provides**: metrics collection, cluster primitives (join, depart,
+  replication changes), and a built-in policy engine
+- **The operator provides**: infrastructure lifecycle (provisioning and
+  deprovisioning nodes) and optionally custom decision logic
+
+### Reading Scaling Metrics via Client Libraries
+
+All client libraries provide helper methods to read the metadata keys
+that the KVS server writes every `server_report_period` seconds:
+
+```python
+# Python example
+stats = client.get_storage_stats("10.0.0.1", "10.0.0.1", 0, "MEMORY")
+print(f"Storage: {stats.storage_consumption} KB")
+print(f"Occupancy: {stats.occupancy}")
+print(f"Access count: {stats.access_count}")
+
+access = client.get_key_access_stats("10.0.0.1", "10.0.0.1", 0, "MEMORY")
+for key_count in access.keys:
+    print(f"Key {key_count.key}: {key_count.access_count} accesses")
+
+sizes = client.get_key_size_stats("10.0.0.1", "10.0.0.1", 0, "MEMORY")
+for key_size in sizes.key_sizes:
+    print(f"Key {key_size.key}: {key_size.size} bytes")
+```
+
+Available in all four client libraries (Rust, Python, Go, C++):
+
+| Method | Returns | Metadata Key |
+|--------|---------|-------------|
+| `get_storage_stats(ip, ip, tid, tier)` | `ServerThreadStatistics` | `ANNA_METADATA\|stats\|...\|...\|tid\|tier` |
+| `get_key_access_stats(ip, ip, tid, tier)` | `KeyAccessData` | `ANNA_METADATA\|access\|...\|...\|tid\|tier` |
+| `get_key_size_stats(ip, ip, tid, tier)` | `KeySizeData` | `ANNA_METADATA\|size\|...\|...\|tid\|tier` |
+| `put_replication_factor(key, mem_rep, local_rep)` | — | `ANNA_METADATA\|replication\|key` |
+| `get_cluster_topology()` | `ClusterTopology` | `ANNA_METADATA\|cluster_topology` |
+| `get_monitoring_ips()` | list of IPs | `ANNA_METADATA\|monitoring_ips` |
+
+### Scaling Actions
+
+| Action | How |
+|--------|-----|
+| **Scale out** | Start a new `anna-kvs` process with `seed_ip` pointing to an existing node. Data redistributes automatically via consistent hashing. |
+| **Scale in** | Send `SIGUSR1` to the node to trigger graceful self-departure. The node transfers its data to remaining nodes before exiting. |
+| **Hot-key replication** | Call `put_replication_factor(key, N, 1)` to increase the memory replication factor for a specific key. |
+
+### Example: Simple Autoscaler
+
+```python
+import time
+
+CAPACITY_GB = 1  # per-node capacity from config
+SCALE_OUT_THRESHOLD = 0.6
+SCALE_IN_THRESHOLD = 0.05
+CHECK_INTERVAL = 30  # seconds
+
+while True:
+    stats = client.get_storage_stats(node_ip, node_ip, 0, "MEMORY")
+    consumption_pct = stats.storage_consumption / (CAPACITY_GB * 1_000_000)
+
+    if consumption_pct > SCALE_OUT_THRESHOLD:
+        # Start a new anna-kvs pointing at the seed node
+        start_new_node(seed_ip)
+
+    if stats.occupancy < SCALE_IN_THRESHOLD and node_count > 1:
+        # Signal the least-busy node to depart
+        signal_depart(least_busy_node_pid)
+
+    time.sleep(CHECK_INTERVAL)
+```
+
+### Management Node Protocol
+
+The built-in policy engine communicates with an external management node
+via ZMQ PUSH on port 7001:
+
+- **Add nodes**: sends `"add:<count>:<tier>"` (e.g., `"add:2:memory"`)
+- **Remove nodes**: sends self-depart signal directly to the KVS node
+  (no management node involvement)
+
+The management node is not part of Anna — it's the operator's responsibility
+to implement infrastructure provisioning in response to these messages.
+
 ## Performance Results
 
 From the VLDB 2019 evaluation:

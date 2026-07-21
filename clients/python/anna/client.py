@@ -14,15 +14,25 @@
 
 import random
 import socket
+import time
 import zmq
 
 from .kvs_pb2 import (
     GET, PUT,  # Anna's request types
+    LWW,  # Anna's lattice types
     NO_ERROR,  # Anna's error modes
     KeyAddressRequest,
     KeyAddressResponse,
     KeyResponse,
-    KeyRequest
+    KeyRequest,
+    LWWValue,
+)
+from .metadata_pb2 import (
+    MEMORY, DISK,
+    KeyAccessData,
+    KeySizeData,
+    ReplicationFactor,
+    ServerThreadStatistics,
 )
 from .base_client import BaseAnnaClient
 from .common import UserThread
@@ -284,7 +294,6 @@ class AnnaTcpClient(BaseAnnaClient):
 
 
     def delete(self, key):
-        import time
         ts = time.time_ns()
         val = LWWPairLattice(ts, b"")
         return self.put(key, val)
@@ -317,6 +326,134 @@ class AnnaTcpClient(BaseAnnaClient):
         lattice = PriorityLattice(float(priority), value.encode()
                                   if isinstance(value, str) else value)
         return self.put(key, lattice)
+
+    def get_bytes(self, key):
+        """
+        Performs a GET for the given key and returns the raw inner value bytes
+        from the LWW wrapper, without lattice deserialization.
+
+        This is used internally by metadata/stats helpers where the payload
+        is a domain-specific protobuf rather than a lattice type.
+
+        Returns None if the key does not exist or an error occurs.
+        """
+        worker_address = self._get_worker_address(key)
+        if not worker_address:
+            return None
+
+        send_sock = self.pusher_cache.get(worker_address)
+        req, _ = self._prepare_data_request([key])
+        req.type = GET
+
+        send_request(req, send_sock)
+        responses = recv_response([req.request_id], self.response_puller,
+                                  KeyResponse)
+
+        for response in responses:
+            for tup in response.tuples:
+                if tup.invalidate:
+                    self._invalidate_cache(tup.key)
+                if tup.error == NO_ERROR:
+                    lww_val = LWWValue()
+                    lww_val.ParseFromString(tup.payload)
+                    return lww_val.value
+
+        return None
+
+    def get_storage_stats(self, public_ip, private_ip, tid, tier):
+        """
+        Retrieves storage statistics for a server thread.
+
+        Returns a dict with storage_consumption, occupancy, epoch,
+        access_count, or None if the key does not exist.
+        """
+        key = (f"ANNA_METADATA|stats|{public_ip}|{private_ip}"
+               f"|{tid}|{tier}")
+        raw = self.get_bytes(key)
+        if raw is None:
+            return None
+
+        stats = ServerThreadStatistics()
+        stats.ParseFromString(raw)
+        return {
+            'storage_consumption': stats.storage_consumption,
+            'occupancy': stats.occupancy,
+            'epoch': stats.epoch,
+            'access_count': stats.access_count,
+        }
+
+    def get_key_access_stats(self, public_ip, private_ip, tid, tier):
+        """
+        Retrieves per-key access frequency data for a server thread.
+
+        Returns a list of dicts with key and access_count, or None if the
+        key does not exist.
+        """
+        key = (f"ANNA_METADATA|access|{public_ip}|{private_ip}"
+               f"|{tid}|{tier}")
+        raw = self.get_bytes(key)
+        if raw is None:
+            return None
+
+        data = KeyAccessData()
+        data.ParseFromString(raw)
+        return [{'key': kc.key, 'access_count': kc.access_count}
+                for kc in data.keys]
+
+    def get_key_size_stats(self, public_ip, private_ip, tid, tier):
+        """
+        Retrieves per-key size data for a server thread.
+
+        Returns a list of dicts with key and size, or None if the key does
+        not exist.
+        """
+        key = (f"ANNA_METADATA|size|{public_ip}|{private_ip}"
+               f"|{tid}|{tier}")
+        raw = self.get_bytes(key)
+        if raw is None:
+            return None
+
+        data = KeySizeData()
+        data.ParseFromString(raw)
+        return [{'key': ks.key, 'size': ks.size}
+                for ks in data.key_sizes]
+
+    def put_replication_factor(self, key, memory_rep, local_rep):
+        """
+        Sets the replication factor for a key by writing a ReplicationFactor
+        protobuf wrapped in an LWW value to the metadata key.
+
+        Returns the result dict from put() (key -> bool).
+        """
+        rep = ReplicationFactor()
+        rep.key = key
+
+        # 'global' is a Python keyword, so we access the repeated field
+        # via getattr.
+        global_field = getattr(rep, 'global')
+
+        mem_global = global_field.add()
+        mem_global.tier = MEMORY
+        mem_global.value = memory_rep
+
+        disk_global = global_field.add()
+        disk_global.tier = DISK
+        disk_global.value = 0
+
+        mem_local = rep.local.add()
+        mem_local.tier = MEMORY
+        mem_local.value = local_rep
+
+        disk_local = rep.local.add()
+        disk_local.tier = DISK
+        disk_local.value = 0
+
+        meta_key = f"ANNA_METADATA|replication|{key}"
+        payload = rep.SerializeToString()
+
+        ts = time.time_ns()
+        val = LWWPairLattice(ts, payload)
+        return self.put(meta_key, val)
 
     # Returns and increments a request ID. Loops back after 10,000 requests.
     def _get_request_id(self):

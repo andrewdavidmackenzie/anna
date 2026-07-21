@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	kvspb "github.com/andrewdavidmackenzie/anna/clients/go/annalib/proto/kvs"
+	metadatapb "github.com/andrewdavidmackenzie/anna/clients/go/annalib/proto/metadata"
 	sharedpb "github.com/andrewdavidmackenzie/anna/clients/go/annalib/proto/shared"
 )
 
@@ -710,6 +711,125 @@ func (c *KVSClient) PutPriority(key string, priority float64, value string) erro
 	return err
 }
 
+
+// --- Metadata / stats helpers ---
+
+func parseLWWBytes(payload []byte) ([]byte, error) {
+	var lww kvspb.LWWValue
+	if err := proto.Unmarshal(payload, &lww); err != nil {
+		return nil, fmt.Errorf("failed to decode LWW value: %w", err)
+	}
+	return lww.Value, nil
+}
+
+// GetBytes retrieves the raw binary value for a key (LWW lattice, no UTF-8 conversion).
+// Useful for reading metadata keys that contain serialized protobuf payloads.
+func (c *KVSClient) GetBytes(key string) ([]byte, error) {
+	response, err := c.sendDataRequest(key, kvspb.RequestType_GET, kvspb.LatticeType_NONE, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	tuple, err := validateResponse(response, "GET_BYTES")
+	if err != nil {
+		return nil, err
+	}
+
+	return parseLWWBytes(tuple.Payload)
+}
+
+// metadataStatsKey builds a metadata key for stats/access/size queries.
+func metadataStatsKey(category, publicIP, privateIP string, tid uint32, tier string) string {
+	return fmt.Sprintf("ANNA_METADATA|%s|%s|%s|%d|%s", category, publicIP, privateIP, tid, tier)
+}
+
+// GetStorageStats retrieves server thread statistics for a specific node and thread.
+// Reads the metadata key ANNA_METADATA|stats|<publicIP>|<privateIP>|<tid>|<tier>
+// and decodes the ServerThreadStatistics protobuf.
+func (c *KVSClient) GetStorageStats(publicIP, privateIP string, tid uint32, tier string) (*metadatapb.ServerThreadStatistics, error) {
+	key := metadataStatsKey("stats", publicIP, privateIP, tid, tier)
+	bytes, err := c.GetBytes(key)
+	if err != nil {
+		return nil, err
+	}
+	var stats metadatapb.ServerThreadStatistics
+	if err := proto.Unmarshal(bytes, &stats); err != nil {
+		return nil, &KVSError{Message: fmt.Sprintf("failed to decode ServerThreadStatistics: %v", err)}
+	}
+	return &stats, nil
+}
+
+// GetKeyAccessStats retrieves per-key access frequency data for a specific node and thread.
+// Reads the metadata key ANNA_METADATA|access|<publicIP>|<privateIP>|<tid>|<tier>
+// and decodes the KeyAccessData protobuf.
+func (c *KVSClient) GetKeyAccessStats(publicIP, privateIP string, tid uint32, tier string) (*metadatapb.KeyAccessData, error) {
+	key := metadataStatsKey("access", publicIP, privateIP, tid, tier)
+	bytes, err := c.GetBytes(key)
+	if err != nil {
+		return nil, err
+	}
+	var data metadatapb.KeyAccessData
+	if err := proto.Unmarshal(bytes, &data); err != nil {
+		return nil, &KVSError{Message: fmt.Sprintf("failed to decode KeyAccessData: %v", err)}
+	}
+	return &data, nil
+}
+
+// GetKeySizeStats retrieves per-key size data for a specific node and thread.
+// Reads the metadata key ANNA_METADATA|size|<publicIP>|<privateIP>|<tid>|<tier>
+// and decodes the KeySizeData protobuf.
+func (c *KVSClient) GetKeySizeStats(publicIP, privateIP string, tid uint32, tier string) (*metadatapb.KeySizeData, error) {
+	key := metadataStatsKey("size", publicIP, privateIP, tid, tier)
+	bytes, err := c.GetBytes(key)
+	if err != nil {
+		return nil, err
+	}
+	var data metadatapb.KeySizeData
+	if err := proto.Unmarshal(bytes, &data); err != nil {
+		return nil, &KVSError{Message: fmt.Sprintf("failed to decode KeySizeData: %v", err)}
+	}
+	return &data, nil
+}
+
+// PutReplicationFactor sets the replication factor for a key by writing
+// a serialized ReplicationFactor protobuf wrapped in LWW to
+// ANNA_METADATA|replication|<key>.
+func (c *KVSClient) PutReplicationFactor(key string, memoryRep, localRep uint32) error {
+	rep := &metadatapb.ReplicationFactor{
+		Key: key,
+		Global: []*metadatapb.ReplicationFactor_ReplicationValue{
+			{Tier: metadatapb.Tier_MEMORY, Value: memoryRep},
+			{Tier: metadatapb.Tier_DISK, Value: 0},
+		},
+		Local: []*metadatapb.ReplicationFactor_ReplicationValue{
+			{Tier: metadatapb.Tier_MEMORY, Value: localRep},
+			{Tier: metadatapb.Tier_DISK, Value: 0},
+		},
+	}
+
+	repBytes, err := proto.Marshal(rep)
+	if err != nil {
+		return &KVSError{Message: fmt.Sprintf("PUT_REPLICATION: failed to encode ReplicationFactor: %v", err)}
+	}
+
+	lww := &kvspb.LWWValue{
+		Timestamp: generateTimestamp(),
+		Value:     repBytes,
+	}
+	payload, err := proto.Marshal(lww)
+	if err != nil {
+		return &KVSError{Message: fmt.Sprintf("PUT_REPLICATION: failed to encode LWW: %v", err)}
+	}
+
+	metaKey := fmt.Sprintf("ANNA_METADATA|replication|%s", key)
+	response, err := c.sendDataRequest(metaKey, kvspb.RequestType_PUT, kvspb.LatticeType_LWW, payload)
+	if err != nil {
+		return err
+	}
+
+	_, err = validateResponse(response, "PUT_REPLICATION")
+	return err
+}
 
 // Delete removes a key by writing an empty LWW value with a dominating timestamp.
 func (c *KVSClient) Delete(key string) error {

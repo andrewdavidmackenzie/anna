@@ -355,6 +355,94 @@ PriorityResult get_priority(KvsClientInterface* client, const string& key) {
   return result;
 }
 
+string get_bytes(KvsClientInterface* client, const string& key) {
+  return get(client, key);
+}
+
+namespace {
+
+// Build a metadata key for per-thread stats/access/size data:
+//   ANNA_METADATA|<type>|<public_ip>|<private_ip>|<tid>|<tier>
+string make_stats_metadata_key(const string& type, const string& public_ip,
+                               const string& private_ip, unsigned tid,
+                               const string& tier) {
+  return kMetadataIdentifier + kMetadataDelimiter + type +
+         kMetadataDelimiter + public_ip + kMetadataDelimiter + private_ip +
+         kMetadataDelimiter + std::to_string(tid) + kMetadataDelimiter + tier;
+}
+
+}  // namespace
+
+ServerThreadStatistics get_storage_stats(KvsClientInterface* client,
+                                         const string& public_ip,
+                                         const string& private_ip,
+                                         unsigned tid,
+                                         const string& tier) {
+  string key = make_stats_metadata_key("stats", public_ip, private_ip, tid, tier);
+  string bytes = get_bytes(client, key);
+
+  ServerThreadStatistics stats;
+  stats.ParseFromString(bytes);
+  return stats;
+}
+
+KeyAccessData get_key_access_stats(KvsClientInterface* client,
+                                   const string& public_ip,
+                                   const string& private_ip,
+                                   unsigned tid,
+                                   const string& tier) {
+  string key = make_stats_metadata_key("access", public_ip, private_ip, tid, tier);
+  string bytes = get_bytes(client, key);
+
+  KeyAccessData data;
+  data.ParseFromString(bytes);
+  return data;
+}
+
+KeySizeData get_key_size_stats(KvsClientInterface* client,
+                               const string& public_ip,
+                               const string& private_ip,
+                               unsigned tid,
+                               const string& tier) {
+  string key = make_stats_metadata_key("size", public_ip, private_ip, tid, tier);
+  string bytes = get_bytes(client, key);
+
+  KeySizeData data;
+  data.ParseFromString(bytes);
+  return data;
+}
+
+void put_replication_factor(KvsClientInterface* client,
+                            const string& key,
+                            unsigned memory_rep,
+                            unsigned local_rep) {
+  ReplicationFactor rep;
+  rep.set_key(key);
+
+  // Global replication: MEMORY tier gets the requested factor, DISK gets 0.
+  auto* gm = rep.add_global();
+  gm->set_tier(MEMORY);
+  gm->set_value(memory_rep);
+  auto* gd = rep.add_global();
+  gd->set_tier(DISK);
+  gd->set_value(0);
+
+  // Local replication: MEMORY tier gets the requested factor, DISK gets 0.
+  auto* lm = rep.add_local();
+  lm->set_tier(MEMORY);
+  lm->set_value(local_rep);
+  auto* ld = rep.add_local();
+  ld->set_tier(DISK);
+  ld->set_value(0);
+
+  string payload;
+  rep.SerializeToString(&payload);
+
+  string meta_key = kMetadataIdentifier + kMetadataDelimiter +
+                    string("replication") + kMetadataDelimiter + key;
+  put(client, meta_key, payload);
+}
+
 namespace {
 
 vector<int> pids_from_name(const string& name) {
