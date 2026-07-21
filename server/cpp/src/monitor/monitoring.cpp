@@ -89,8 +89,16 @@ int main(int argc, char *argv[]) {
   kEbsThreadCount = threads["ebs"].as<unsigned>();
 
   YAML::Node capacities = conf["capacities"];
-  kMemoryNodeCapacity = capacities["memory-cap"].as<unsigned>() * 1000000;
-  kEbsNodeCapacity = capacities["ebs-cap"].as<unsigned>() * 1000000;
+  if (capacities["memory-cap-kb"]) {
+    kMemoryNodeCapacity = capacities["memory-cap-kb"].as<unsigned>();
+  } else {
+    kMemoryNodeCapacity = capacities["memory-cap"].as<unsigned>() * 1000000;
+  }
+  if (capacities["ebs-cap-kb"]) {
+    kEbsNodeCapacity = capacities["ebs-cap-kb"].as<unsigned>();
+  } else {
+    kEbsNodeCapacity = capacities["ebs-cap"].as<unsigned>() * 1000000;
+  }
 
   YAML::Node replication = conf["replication"];
   kDefaultGlobalMemoryReplication = replication["memory"].as<unsigned>();

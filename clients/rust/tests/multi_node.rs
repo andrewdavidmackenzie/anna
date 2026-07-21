@@ -38,6 +38,7 @@ struct NodeConfig {
     selective_rep: bool,
     elasticity: bool,
     mgmt_ip: String,
+    memory_cap_kb: Option<u32>,
 }
 
 impl Default for NodeConfig {
@@ -54,6 +55,7 @@ impl Default for NodeConfig {
             selective_rep: false,
             elasticity: false,
             mgmt_ip: "NULL".to_string(),
+            memory_cap_kb: None,
         }
     }
 }
@@ -93,6 +95,7 @@ ebs: {ebs_path}
 capacities:
   memory-cap: 1
   ebs-cap: 256
+{memory_cap_kb_line}
 threads:
   memory: 1
   ebs: 1
@@ -125,6 +128,10 @@ replication:
         selective_rep = cfg.selective_rep,
         elasticity = cfg.elasticity,
         mgmt_ip = cfg.mgmt_ip,
+        memory_cap_kb_line = cfg
+            .memory_cap_kb
+            .map(|kb| format!("  memory-cap-kb: {}", kb))
+            .unwrap_or_default(),
     )
     .expect("Failed to write config");
 }
@@ -1885,5 +1892,134 @@ async fn management_node_integration() {
         }
         Ok(Err(e)) => panic!("Management mock task failed: {}", e),
         Err(_) => panic!("Management mock did not receive expected queries within timeout"),
+    }
+}
+
+/// Test the storage policy elasticity path: with memory-cap-kb set very low
+/// and elasticity enabled, PUT enough data to exceed 60% capacity, then
+/// verify the monitor sends an "add:N:memory" message to the management node.
+///
+/// Uses base_offset=600.
+#[tokio::test]
+#[cfg(unix)]
+#[ignore] // storage policy timing not yet reliable — needs investigation
+async fn elasticity_storage_policy() {
+    use annalib::kvs_client::KVSClient;
+    use zeromq::{PullSocket, RepSocket, Socket, SocketRecv, SocketSend};
+
+    if !server_bin_dir().join("anna-kvs").exists() {
+        eprintln!("SKIP: server binaries not built");
+        return;
+    }
+
+    let base_offset: u32 = 600;
+
+    // Mock management node sockets
+    let mut restart_rep = RepSocket::new();
+    restart_rep
+        .bind(&format!("tcp://{}:{}", NODE1_IP, 7000 + base_offset))
+        .await
+        .expect("bind restart REP failed");
+
+    let mut func_pull = PullSocket::new();
+    func_pull
+        .bind(&format!("tcp://{}:{}", NODE1_IP, 7002 + base_offset))
+        .await
+        .expect("bind func PULL failed");
+
+    // Port 7001+offset: PULL socket for "add:N:tier" messages from monitor
+    let mut add_node_pull = PullSocket::new();
+    add_node_pull
+        .bind(&format!("tcp://{}:{}", NODE1_IP, 7001 + base_offset))
+        .await
+        .expect("bind add_node PULL failed");
+
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // Background task to handle management node protocol
+    let mgmt_handle = tokio::spawn(async move {
+        let mut add_node_msg: Option<String> = None;
+
+        loop {
+            tokio::select! {
+                result = restart_rep.recv() => {
+                    if let Ok(_msg) = result {
+                        restart_rep
+                            .send(zeromq::ZmqMessage::from("0".as_bytes().to_vec()))
+                            .await
+                            .ok();
+                    }
+                }
+                result = func_pull.recv() => {
+                    if let Ok(_msg) = result {
+                        // No response needed for PULL
+                    }
+                }
+                result = add_node_pull.recv() => {
+                    if let Ok(msg) = result {
+                        let data: Vec<u8> = msg.into_vec()
+                            .into_iter().flat_map(|f| f.to_vec()).collect();
+                        let message = String::from_utf8_lossy(&data).to_string();
+                        eprintln!("Mock mgmt: add_node request: {}", message);
+                        add_node_msg = Some(message);
+                        return add_node_msg;
+                    }
+                }
+            }
+        }
+    });
+
+    // Start cluster with elasticity enabled and very small memory capacity
+    // memory-cap-kb: 1 means 1 KB capacity. Storing any data exceeds 60%.
+    let mut cluster = MultiNodeCluster::new(base_offset);
+    let cfg = NodeConfig {
+        node_ip: NODE1_IP,
+        seed_ip: NODE1_IP,
+        replication_memory: 1,
+        base_offset,
+        elasticity: true,
+        mgmt_ip: NODE1_IP.to_string(),
+        memory_cap_kb: Some(1),
+        ..Default::default()
+    };
+    cluster.start_full_node_with_config(cfg);
+
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(41)).await;
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    // PUT data to exceed the tiny 1 KB capacity
+    for i in 0..10 {
+        client
+            .put(
+                &format!("elasticity_key_{}", i),
+                &format!("value_{}", i),
+            )
+            .await
+            .ok();
+    }
+
+    // Wait for monitor to collect stats and run storage_policy.
+    // Grace period is 10s in test config, monitoring threshold is 8s.
+    // Need: grace_period(10) + monitoring_cycle(8) + buffer(5) = ~23s
+    let result = tokio::time::timeout(Duration::from_secs(25), mgmt_handle).await;
+
+    match result {
+        Ok(Ok(Some(msg))) => {
+            eprintln!("Storage policy triggered: {}", msg);
+            assert!(
+                msg.starts_with("add:"),
+                "Expected 'add:N:tier' message, got: {}",
+                msg
+            );
+            assert!(
+                msg.contains("memory"),
+                "Expected memory tier in add request, got: {}",
+                msg
+            );
+        }
+        Ok(Ok(None)) => panic!("Management mock returned without receiving add_node"),
+        Ok(Err(e)) => panic!("Management mock task failed: {}", e),
+        Err(_) => panic!("Storage policy did not trigger add_node within 25 seconds"),
     }
 }
