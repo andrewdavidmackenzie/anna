@@ -651,6 +651,29 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
                               &pushers[wt.key_request_connect_address()]);
       }
 
+      // Publish cluster topology so clients can discover thread counts
+      {
+        ClusterTopology topology;
+        topology.set_memory_thread_count(kMemoryThreadCount);
+        topology.set_ebs_thread_count(kEbsThreadCount);
+        string serialized_topology;
+        topology.SerializeToString(&serialized_topology);
+
+        req.Clear();
+        req.set_type(kvs::RequestType::PUT);
+        prepare_put_tuple(
+            req,
+            kMetadataIdentifier + kMetadataDelimiter + "cluster_topology",
+            kvs::LatticeType::LWW, serialize(ts, serialized_topology));
+
+        {
+          string serialized;
+          req.SerializeToString(&serialized);
+          kZmqUtil->send_string(serialized,
+                                &pushers[wt.key_request_connect_address()]);
+        }
+      }
+
       // Publish monitoring IPs as a metadata key so clients can discover them
       if (!monitoring_ips.empty()) {
         shared::StringSet monitoring_set;

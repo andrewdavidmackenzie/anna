@@ -461,6 +461,43 @@ impl KVSClient {
             .map_err(|e| Error::Kvs(format!("Failed to decode KeySizeData: {}", e)))
     }
 
+    /// Retrieve cluster topology (thread counts) from the metadata key.
+    ///
+    /// Returns `None` if the metadata key hasn't been written yet.
+    pub async fn get_cluster_topology(
+        &mut self,
+    ) -> Option<crate::proto::metadata::ClusterTopology> {
+        let bytes = self
+            .get_bytes("ANNA_METADATA|cluster_topology")
+            .await
+            .ok()?;
+        Self::decode_cluster_topology(&bytes)
+    }
+
+    /// Decode a `ClusterTopology` protobuf from raw LWW value bytes.
+    pub fn decode_cluster_topology(
+        bytes: &[u8],
+    ) -> Option<crate::proto::metadata::ClusterTopology> {
+        crate::proto::metadata::ClusterTopology::decode(bytes).ok()
+    }
+
+    /// Retrieve monitoring IPs from the metadata key.
+    ///
+    /// Returns an empty vec if the metadata key hasn't been written yet.
+    pub async fn get_monitoring_ips(&mut self) -> Vec<String> {
+        match self.get_bytes("ANNA_METADATA|monitoring_ips").await {
+            Ok(bytes) => Self::decode_monitoring_ips(&bytes),
+            Err(_) => vec![],
+        }
+    }
+
+    /// Decode monitoring IPs from a serialized `StringSet`.
+    pub fn decode_monitoring_ips(bytes: &[u8]) -> Vec<String> {
+        crate::proto::shared::StringSet::decode(bytes)
+            .map(|s| s.keys)
+            .unwrap_or_default()
+    }
+
     /// Store a key-value pair (Last-Writer-Wins lattice).
     ///
     /// ```rust
@@ -1509,5 +1546,57 @@ mod tests {
             "10.0.0.1", "10.0.0.1", 1, "MEMORY"
         );
         assert_eq!(key, "ANNA_METADATA|size|10.0.0.1|10.0.0.1|1|MEMORY");
+    }
+
+    #[test]
+    fn decode_cluster_topology_roundtrip() {
+        use crate::proto::metadata::ClusterTopology;
+
+        let topo = ClusterTopology {
+            routing_thread_count: 2,
+            memory_thread_count: 4,
+            ebs_thread_count: 1,
+        };
+        let encoded = topo.encode_to_vec();
+        let decoded =
+            KVSClient::decode_cluster_topology(&encoded).expect("failed to decode topology");
+        assert_eq!(decoded.routing_thread_count, 2);
+        assert_eq!(decoded.memory_thread_count, 4);
+        assert_eq!(decoded.ebs_thread_count, 1);
+    }
+
+    #[test]
+    fn decode_cluster_topology_invalid() {
+        assert!(KVSClient::decode_cluster_topology(b"not valid").is_none());
+    }
+
+    #[test]
+    fn decode_monitoring_ips_roundtrip() {
+        use crate::proto::shared::StringSet;
+
+        let set = StringSet {
+            keys: vec!["10.0.0.1".into(), "10.0.0.2".into()],
+        };
+        let encoded = set.encode_to_vec();
+        let decoded = KVSClient::decode_monitoring_ips(&encoded);
+        assert_eq!(decoded.len(), 2);
+        assert!(decoded.contains(&"10.0.0.1".to_string()));
+        assert!(decoded.contains(&"10.0.0.2".to_string()));
+    }
+
+    #[test]
+    fn decode_monitoring_ips_invalid() {
+        let decoded = KVSClient::decode_monitoring_ips(b"not valid");
+        assert!(decoded.is_empty());
+    }
+
+    #[test]
+    fn decode_monitoring_ips_empty() {
+        use crate::proto::shared::StringSet;
+
+        let set = StringSet { keys: vec![] };
+        let encoded = set.encode_to_vec();
+        let decoded = KVSClient::decode_monitoring_ips(&encoded);
+        assert!(decoded.is_empty());
     }
 }

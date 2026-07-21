@@ -130,3 +130,16 @@ message ReplicationFactorUpdate {
   // The set of replication factor updates being sent.
   repeated ReplicationFactor updates = 1;
 }
+
+// Cluster topology information published as ANNA_METADATA|cluster_topology
+// so clients can discover thread counts at runtime.
+message ClusterTopology {
+  // Number of routing threads per routing node.
+  uint32 routing_thread_count = 1;
+
+  // Number of memory-tier threads per KVS node.
+  uint32 memory_thread_count = 2;
+
+  // Number of EBS-tier threads per KVS node.
+  uint32 ebs_thread_count = 3;
+}

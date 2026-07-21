@@ -726,3 +726,44 @@ async fn monitoring_ips_metadata() {
         "ANNA_METADATA|monitoring_ips was not written within timeout"
     );
 }
+
+/// Verify that the KVS server publishes cluster topology (thread counts)
+/// as a metadata key that clients can read to discover the cluster shape.
+///
+/// Uses base_offset=10100 to avoid conflicts with other monitor tests.
+#[tokio::test]
+#[cfg(unix)]
+async fn cluster_topology_metadata() {
+    use annalib::kvs_client::KVSClient;
+
+    if !server_bin_dir().join("anna-kvs").exists() {
+        eprintln!("SKIP: server binaries not built");
+        return;
+    }
+
+    let mut cluster = MonitorTestCluster::new(10100);
+    cluster.start();
+
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(97)).await;
+
+    // Poll until the topology metadata key appears.
+    let mut topology = None;
+    for _ in 0..10 {
+        std::thread::sleep(Duration::from_secs(2));
+        topology = client.get_cluster_topology().await;
+        if topology.is_some() {
+            break;
+        }
+    }
+
+    let topo = topology.expect("ANNA_METADATA|cluster_topology was not written within timeout");
+    assert_eq!(
+        topo.memory_thread_count, 1,
+        "Expected 1 memory thread in test config"
+    );
+    assert_eq!(
+        topo.ebs_thread_count, 1,
+        "Expected 1 ebs thread in test config"
+    );
+}
