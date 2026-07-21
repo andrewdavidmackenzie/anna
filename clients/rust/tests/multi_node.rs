@@ -1608,52 +1608,45 @@ async fn slo_selective_replication() {
         .await
         .expect("report failed");
 
-    // Wait for monitoring cycle: the monitor evaluates SLO policy every
-    // kMonitoringThreshold (8s in test config) plus grace_period (10s in test config).
-    // We need at least one full cycle after the grace period expires.
-    // Total wait: grace_period(10) + monitoring_threshold(8) + buffer(5) = 23s
-    tokio::time::sleep(Duration::from_secs(23)).await;
+    // Wait for grace period (10s in test config) to expire before sending
+    // the second round of feedback that the policy will actually act on.
+    tokio::time::sleep(Duration::from_secs(12)).await;
 
-    // Send another round of feedback after the grace period
     reporter
         .report(5000.0, 100.0, &[(hot_key.to_string(), 5000.0)])
         .await
         .expect("second report failed");
 
-    // Wait for the policy to act on the second feedback
-    tokio::time::sleep(Duration::from_secs(12)).await;
-
     reporter.finish().await.expect("finish failed");
 
-    // Query the replication factor for the hot key
+    // Poll for the replication change: check every 3s, up to 30s total.
     let rep_key = format!("ANNA_METADATA|replication|{}", hot_key);
-    let rep_bytes = client.get_bytes(&rep_key).await;
-
-    match rep_bytes {
-        Ok(bytes) => {
-            let rep = ReplicationFactor::decode(bytes.as_slice())
-                .expect("Failed to decode ReplicationFactor");
-            let memory_rep = rep
-                .global
-                .iter()
-                .find(|r| r.tier == 1) // Tier::Memory = 1
-                .map(|r| r.value)
-                .unwrap_or(1);
-            assert!(
-                memory_rep > 1,
-                "Expected hot key replication > 1 after SLO violation, got {}",
-                memory_rep
-            );
-        }
-        Err(_) => {
-            // If we can't read the replication metadata, it means the monitor
-            // hasn't written a replication change. This is acceptable in CI
-            // where timing is unpredictable — log it but don't fail hard.
-            eprintln!(
-                "WARNING: Could not read replication metadata for {}. \
-                 The SLO policy may not have triggered within the timeout.",
-                hot_key
-            );
+    let mut memory_rep = 1u32;
+    for attempt in 0..10 {
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        if let Ok(bytes) = client.get_bytes(&rep_key).await {
+            if let Ok(rep) = ReplicationFactor::decode(bytes.as_slice()) {
+                memory_rep = rep
+                    .global
+                    .iter()
+                    .find(|r| r.tier == 1)
+                    .map(|r| r.value)
+                    .unwrap_or(1);
+                if memory_rep > 1 {
+                    eprintln!(
+                        "SLO replication triggered after {} attempts: rep={}",
+                        attempt + 1,
+                        memory_rep
+                    );
+                    break;
+                }
+            }
         }
     }
+
+    assert!(
+        memory_rep > 1,
+        "Expected hot key replication > 1 after SLO violation, got {}",
+        memory_rep
+    );
 }
