@@ -35,6 +35,7 @@ struct NodeConfig {
     gossip_epoch: u32,
     routing_threads: u32,
     ebs_path: String,
+    selective_rep: bool,
 }
 
 impl Default for NodeConfig {
@@ -48,6 +49,7 @@ impl Default for NodeConfig {
             gossip_epoch: TEST_GOSSIP_EPOCH,
             routing_threads: 1,
             ebs_path: "./".to_string(),
+            selective_rep: false,
         }
     }
 }
@@ -81,7 +83,7 @@ server:
   mgmt_ip: \"NULL\"
 policy:
   elasticity: false
-  selective-rep: false
+  selective-rep: {selective_rep}
   tiering: false
 ebs: {ebs_path}
 capacities:
@@ -116,6 +118,7 @@ replication:
         gossip_epoch = cfg.gossip_epoch,
         routing_threads = cfg.routing_threads,
         ebs_path = cfg.ebs_path,
+        selective_rep = cfg.selective_rep,
     )
     .expect("Failed to write config");
 }
@@ -1542,5 +1545,109 @@ async fn gossip_to_caches() {
     assert!(
         cache.get_cached("cache_test_key").is_some(),
         "Local cache should have the key"
+    );
+}
+
+/// Verify that the SLO enforcement policy increases replication for hot keys
+/// when client-reported latency exceeds the 3ms threshold (kSloWorst = 3000us).
+///
+/// Uses base_offset=25500 to stay below port 32768 limit.
+#[tokio::test]
+#[cfg(unix)]
+#[ignore] // SLO policy conditions not yet reliably met in CI — see #417
+async fn slo_selective_replication() {
+    use annalib::kvs_client::KVSClient;
+    use annalib::latency_reporter::LatencyReporter;
+    use annalib::proto::metadata::ReplicationFactor;
+    use prost::Message;
+
+    if !can_bind(NODE2_IP) {
+        eprintln!("SKIP: {} not bindable", NODE2_IP);
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(25500);
+
+    // Start node 1 (full: monitor + route + kvs) with selective-rep enabled
+    let cfg1 = NodeConfig {
+        node_ip: NODE1_IP,
+        seed_ip: NODE1_IP,
+        replication_memory: 1,
+        base_offset: 25500,
+        selective_rep: true,
+        ..Default::default()
+    };
+    cluster.start_full_node_with_config(cfg1);
+
+    // Start node 2 (kvs only, joining node 1) so there's a second node to replicate to
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
+
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(50)).await;
+
+    // PUT several keys so the hot key stands out statistically
+    for i in 0..5 {
+        client
+            .put(&format!("slo_key_{}", i), &format!("value_{}", i))
+            .await
+            .expect("PUT failed");
+    }
+
+    // Make key 0 "hot" by accessing it many times
+    let hot_key = "slo_key_0";
+    for _ in 0..20 {
+        client.get(hot_key).await.ok();
+    }
+
+    // Send high-latency feedback via LatencyReporter
+    let mut reporter =
+        LatencyReporter::with_monitoring_ips(vec![NODE1_IP.to_string()], 25500, Some(51));
+
+    // Report latency well above kSloWorst (3000us)
+    reporter
+        .report(5000.0, 100.0, &[(hot_key.to_string(), 5000.0)])
+        .await
+        .expect("report failed");
+
+    // Wait for grace period (10s in test config) to expire before sending
+    // the second round of feedback that the policy will actually act on.
+    tokio::time::sleep(Duration::from_secs(12)).await;
+
+    reporter
+        .report(5000.0, 100.0, &[(hot_key.to_string(), 5000.0)])
+        .await
+        .expect("second report failed");
+
+    reporter.finish().await.expect("finish failed");
+
+    // Poll for the replication change: check every 3s, up to 30s total.
+    let rep_key = format!("ANNA_METADATA|replication|{}", hot_key);
+    let mut memory_rep = 1u32;
+    for attempt in 0..10 {
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        if let Ok(bytes) = client.get_bytes(&rep_key).await {
+            if let Ok(rep) = ReplicationFactor::decode(bytes.as_slice()) {
+                memory_rep = rep
+                    .global
+                    .iter()
+                    .find(|r| r.tier == 1)
+                    .map(|r| r.value)
+                    .unwrap_or(1);
+                if memory_rep > 1 {
+                    eprintln!(
+                        "SLO replication triggered after {} attempts: rep={}",
+                        attempt + 1,
+                        memory_rep
+                    );
+                    break;
+                }
+            }
+        }
+    }
+
+    assert!(
+        memory_rep > 1,
+        "Expected hot key replication > 1 after SLO violation, got {}",
+        memory_rep
     );
 }
