@@ -133,7 +133,7 @@ client-rust:
 .PHONY: client-python
 client-python:
 	@echo "Compiling python client"
-	@cd clients/python/anna && protoc -I=../../../server/protobuf/ --python_out=. kvs.proto shared.proto causal.proto benchmark.proto
+	@cd clients/python/anna && protoc -I=../../../server/protobuf/ --python_out=. kvs.proto shared.proto causal.proto benchmark.proto metadata.proto
 	@cd clients/python/anna && sed -i.bak 's/^import shared_pb2/from . import shared_pb2/;s/^import kvs_pb2/from . import kvs_pb2/' causal_pb2.py kvs_pb2.py benchmark_pb2.py && rm -f causal_pb2.py.bak kvs_pb2.py.bak benchmark_pb2.py.bak
 
 .PHONY: client-go
