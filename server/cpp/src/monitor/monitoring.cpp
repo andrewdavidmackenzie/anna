@@ -258,10 +258,6 @@ int main(int argc, char *argv[]) {
 
       ss.clear();
 
-      user_latency.clear();
-      user_throughput.clear();
-      latency_miss_ratio_map.clear();
-
       collect_internal_stats(
           global_hash_rings, local_hash_rings, pushers, mt, response_puller,
           log, rid, key_access_frequency, key_size, memory_storage, ebs_storage,
@@ -361,6 +357,11 @@ int main(int argc, char *argv[]) {
                  management_ip, key_replication_map, key_access_summary, mt,
                  departing_node_map, pushers, response_puller, routing_ips, rid,
                  latency_miss_ratio_map);
+
+      // Clear feedback maps after all policies have consumed them
+      user_latency.clear();
+      user_throughput.clear();
+      latency_miss_ratio_map.clear();
 
       report_start = std::chrono::system_clock::now();
     }

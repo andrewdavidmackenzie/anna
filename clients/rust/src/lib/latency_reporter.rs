@@ -93,6 +93,20 @@ impl LatencyReporter {
         }
     }
 
+    /// Pre-connect to all monitoring threads.
+    ///
+    /// ZMQ connections are asynchronous — calling `connect()` initiates the
+    /// TCP/ZMTP handshake but messages sent before it completes may be queued
+    /// or dropped. Call this method and wait briefly before the first `report()`
+    /// to ensure connections are established.
+    pub async fn connect(&mut self) -> Result<()> {
+        for ip in self.monitoring_ips.clone() {
+            let addr = format!("tcp://{}:{}", ip, K_FEEDBACK_REPORT_PORT + self.base_offset);
+            self.get_or_connect(&addr).await?;
+        }
+        Ok(())
+    }
+
     /// Set the warmup flag for subsequent reports.
     ///
     /// When warmup is true, the monitor ignores policy decisions (e.g.

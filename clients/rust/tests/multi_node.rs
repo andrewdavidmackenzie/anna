@@ -60,7 +60,7 @@ fn write_node_config(path: &Path, cfg: &NodeConfig) {
         f,
         "\
 monitoring:
-  mgmt_ip: {seed_ip}
+  mgmt_ip: \"NULL\"
   ip: {seed_ip}
 routing:
   monitoring:
@@ -1551,99 +1551,138 @@ async fn gossip_to_caches() {
 /// Verify that the SLO enforcement policy increases replication for hot keys
 /// when client-reported latency exceeds the 3ms threshold (kSloWorst = 3000us).
 ///
+/// The SLO policy requires these conditions simultaneously:
+/// 1. avg_latency > 3000us (from UserFeedback)
+/// 2. kEnableSelectiveRep = true
+/// 3. key access count > mean + std (from KVS access tracking)
+/// 4. key present in latency_miss_ratio_map (from UserFeedback per-key data)
+/// 5. current_mem_rep < memory_node_count (room to replicate)
+/// 6. grace_period elapsed (10s in test config)
+///
+/// The test continuously sends feedback and accesses to keep all conditions
+/// met across multiple monitoring cycles (8s each in test config).
+///
 /// Uses base_offset=25500 to stay below port 32768 limit.
 #[tokio::test]
 #[cfg(unix)]
-#[ignore] // SLO policy conditions not yet reliably met in CI — see #417
 async fn slo_selective_replication() {
     use annalib::kvs_client::KVSClient;
-    use annalib::latency_reporter::LatencyReporter;
-    use annalib::proto::metadata::ReplicationFactor;
+    use annalib::proto::metadata::user_feedback::KeyLatency;
+    use annalib::proto::metadata::{ReplicationFactor, UserFeedback};
     use prost::Message;
+    use zeromq::{PushSocket, Socket, SocketSend};
 
     if !can_bind(NODE2_IP) {
         eprintln!("SKIP: {} not bindable", NODE2_IP);
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(25500);
+    let mut cluster = MultiNodeCluster::new(400);
 
     // Start node 1 (full: monitor + route + kvs) with selective-rep enabled
     let cfg1 = NodeConfig {
         node_ip: NODE1_IP,
         seed_ip: NODE1_IP,
         replication_memory: 1,
-        base_offset: 25500,
+        base_offset: 400,
         selective_rep: true,
         ..Default::default()
     };
     cluster.start_full_node_with_config(cfg1);
 
-    // Start node 2 (kvs only, joining node 1) so there's a second node to replicate to
+    // Start node 2 (kvs only, joining node 1) so there's a second node
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
     let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(50)).await;
 
-    // PUT several keys so the hot key stands out statistically
-    for i in 0..5 {
+    let hot_key = "slo_key_0";
+
+    // PUT several keys: the hot key must stand out above mean + std
+    for i in 0..10 {
         client
             .put(&format!("slo_key_{}", i), &format!("value_{}", i))
             .await
             .expect("PUT failed");
     }
 
-    // Make key 0 "hot" by accessing it many times
-    let hot_key = "slo_key_0";
-    for _ in 0..20 {
-        client.get(hot_key).await.ok();
-    }
-
-    // Send high-latency feedback via LatencyReporter
-    let mut reporter =
-        LatencyReporter::with_monitoring_ips(vec![NODE1_IP.to_string()], 25500, Some(51));
-
-    // Report latency well above kSloWorst (3000us)
-    reporter
-        .report(5000.0, 100.0, &[(hot_key.to_string(), 5000.0)])
+    // Connect directly to monitor feedback port using raw ZMQ (same pattern
+    // as the latency_feedback_ingestion test which is known to work).
+    let feedback_addr = format!("tcp://{}:{}", NODE1_IP, 6750 + 400);
+    let mut feedback_pusher = PushSocket::new();
+    feedback_pusher
+        .connect(&feedback_addr)
         .await
-        .expect("report failed");
+        .expect("feedback connect failed");
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
-    // Wait for grace period (10s in test config) to expire before sending
-    // the second round of feedback that the policy will actually act on.
-    tokio::time::sleep(Duration::from_secs(12)).await;
-
-    reporter
-        .report(5000.0, 100.0, &[(hot_key.to_string(), 5000.0)])
-        .await
-        .expect("second report failed");
-
-    reporter.finish().await.expect("finish failed");
-
-    // Poll for the replication change: check every 3s, up to 30s total.
+    // The monitor clears user_latency at the START of each monitoring cycle,
+    // then collects internal stats, then reads the accumulated feedback.
+    // Feedback must arrive DURING the collection phase to be counted.
+    // Send feedback every second to ensure overlap with every cycle.
+    //
+    // Timeline: grace_period(10s) must elapse first, then we need at least
+    // one cycle where both access stats AND latency feedback are present.
     let rep_key = format!("ANNA_METADATA|replication|{}", hot_key);
     let mut memory_rep = 1u32;
-    for attempt in 0..10 {
-        tokio::time::sleep(Duration::from_secs(3)).await;
-        if let Ok(bytes) = client.get_bytes(&rep_key).await {
-            if let Ok(rep) = ReplicationFactor::decode(bytes.as_slice()) {
-                memory_rep = rep
-                    .global
-                    .iter()
-                    .find(|r| r.tier == 1)
-                    .map(|r| r.value)
-                    .unwrap_or(1);
-                if memory_rep > 1 {
-                    eprintln!(
-                        "SLO replication triggered after {} attempts: rep={}",
-                        attempt + 1,
-                        memory_rep
-                    );
-                    break;
+
+    for attempt in 0..40 {
+        // Continuously access hot key to keep access stats fresh
+        for _ in 0..5 {
+            client.get(hot_key).await.ok();
+        }
+
+        // Send feedback every iteration using raw ZMQ
+        let feedback = UserFeedback {
+            uid: "slo_test_client".into(),
+            latency: 5000.0,
+            throughput: 100.0,
+            finish: false,
+            warmup: false,
+            key_latency: vec![KeyLatency {
+                key: hot_key.to_string(),
+                latency: 5000.0,
+            }],
+        };
+        feedback_pusher
+            .send(zeromq::ZmqMessage::from(feedback.encode_to_vec()))
+            .await
+            .expect("feedback send failed");
+
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        // Check replication every few iterations
+        if attempt % 3 == 2 {
+            if let Ok(bytes) = client.get_bytes(&rep_key).await {
+                if let Ok(rep) = ReplicationFactor::decode(bytes.as_slice()) {
+                    memory_rep = rep
+                        .global
+                        .iter()
+                        .find(|r| r.tier == 1)
+                        .map(|r| r.value)
+                        .unwrap_or(1);
+                    if memory_rep > 1 {
+                        eprintln!(
+                            "SLO replication triggered after {}s: rep={}",
+                            (attempt + 1) * 2,
+                            memory_rep
+                        );
+                        break;
+                    }
                 }
             }
         }
     }
+
+    let finish_msg = UserFeedback {
+        uid: "slo_test_client".into(),
+        finish: true,
+        ..Default::default()
+    };
+    feedback_pusher
+        .send(zeromq::ZmqMessage::from(finish_msg.encode_to_vec()))
+        .await
+        .ok();
 
     assert!(
         memory_rep > 1,
