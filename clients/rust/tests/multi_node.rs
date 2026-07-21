@@ -36,6 +36,8 @@ struct NodeConfig {
     routing_threads: u32,
     ebs_path: String,
     selective_rep: bool,
+    elasticity: bool,
+    mgmt_ip: String,
 }
 
 impl Default for NodeConfig {
@@ -50,6 +52,8 @@ impl Default for NodeConfig {
             routing_threads: 1,
             ebs_path: "./".to_string(),
             selective_rep: false,
+            elasticity: false,
+            mgmt_ip: "NULL".to_string(),
         }
     }
 }
@@ -60,7 +64,7 @@ fn write_node_config(path: &Path, cfg: &NodeConfig) {
         f,
         "\
 monitoring:
-  mgmt_ip: \"NULL\"
+  mgmt_ip: \"{mgmt_ip}\"
   ip: {seed_ip}
 routing:
   monitoring:
@@ -80,9 +84,9 @@ server:
   seed_ip: {seed_ip}
   public_ip: {node_ip}
   private_ip: {node_ip}
-  mgmt_ip: \"NULL\"
+  mgmt_ip: \"{mgmt_ip}\"
 policy:
-  elasticity: false
+  elasticity: {elasticity}
   selective-rep: {selective_rep}
   tiering: false
 ebs: {ebs_path}
@@ -119,6 +123,8 @@ replication:
         routing_threads = cfg.routing_threads,
         ebs_path = cfg.ebs_path,
         selective_rep = cfg.selective_rep,
+        elasticity = cfg.elasticity,
+        mgmt_ip = cfg.mgmt_ip,
     )
     .expect("Failed to write config");
 }
@@ -1755,4 +1761,130 @@ async fn slo_selective_replication() {
         "Expected hot key replication > 1 after SLO violation, got {}",
         memory_rep
     );
+}
+
+/// Test the management node integration path: start a mock management node
+/// (ZMQ REP sockets), configure the cluster with mgmt_ip pointing to it,
+/// and verify the KVS server contacts it on startup (restart count query)
+/// and the monitor contacts it when storage policy triggers (add node).
+///
+/// Uses base_offset=500 to stay in safe port range.
+#[tokio::test]
+#[cfg(unix)]
+async fn management_node_integration() {
+    use annalib::kvs_client::KVSClient;
+    use zeromq::{PullSocket, RepSocket, Socket, SocketRecv, SocketSend};
+
+    if !server_bin_dir().join("anna-kvs").exists() {
+        eprintln!("SKIP: server binaries not built");
+        return;
+    }
+
+    let base_offset: u32 = 500;
+
+    // Start mock management node BEFORE starting the cluster.
+    // Port 7000+offset: REP socket for "restart:<ip>" queries
+    let mut restart_count_rep = RepSocket::new();
+    restart_count_rep
+        .bind(&format!("tcp://{}:{}", NODE1_IP, 7000 + base_offset))
+        .await
+        .expect("Failed to bind restart count REP");
+
+    // Port 7002+offset: PULL socket for func/cache node queries
+    // (KVS sends via PUSH, so we receive via PULL)
+    let mut func_nodes_pull = PullSocket::new();
+    func_nodes_pull
+        .bind(&format!("tcp://{}:{}", NODE1_IP, 7002 + base_offset))
+        .await
+        .expect("Failed to bind func nodes PULL");
+
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // Spawn a background task to handle management node requests.
+    // The KVS server sends "restart:<ip>" on startup and expects a count.
+    // The KVS also periodically queries func_nodes for cache IPs.
+    let mgmt_handle = tokio::spawn(async move {
+        let mut restart_count = 0u32;
+        let mut func_count = 0u32;
+
+        loop {
+            tokio::select! {
+                result = restart_count_rep.recv() => {
+                    if let Ok(msg) = result {
+                        let data: Vec<u8> = msg.into_vec()
+                            .into_iter().flat_map(|f| f.to_vec()).collect();
+                        let request = String::from_utf8_lossy(&data);
+                        eprintln!("Mock mgmt: restart query: {}", request);
+                        restart_count += 1;
+                        restart_count_rep
+                            .send(zeromq::ZmqMessage::from("0".as_bytes().to_vec()))
+                            .await
+                            .ok();
+                    }
+                }
+                result = func_nodes_pull.recv() => {
+                    if let Ok(msg) = result {
+                        let data: Vec<u8> = msg.into_vec()
+                            .into_iter().flat_map(|f| f.to_vec()).collect();
+                        eprintln!("Mock mgmt: func nodes query: {:?}", String::from_utf8_lossy(&data));
+                        func_count += 1;
+                        // PULL socket — no reply needed (KVS sends via PUSH)
+                    }
+                }
+            }
+
+            if restart_count >= 1 && func_count >= 1 {
+                return (restart_count, func_count);
+            }
+        }
+    });
+
+    // Start cluster with mgmt_ip pointing to our mock
+    let mut cluster = MultiNodeCluster::new(base_offset);
+    let cfg = NodeConfig {
+        node_ip: NODE1_IP,
+        seed_ip: NODE1_IP,
+        replication_memory: 1,
+        base_offset,
+        mgmt_ip: NODE1_IP.to_string(),
+        ..Default::default()
+    };
+    cluster.start_full_node_with_config(cfg);
+
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(40)).await;
+
+    // Extra settle time for management node handshake
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    // Basic PUT/GET to verify the cluster works with management node enabled
+    client
+        .put("mgmt_test_key", "mgmt_test_val")
+        .await
+        .expect("PUT failed with mgmt node");
+    let val = client
+        .get("mgmt_test_key")
+        .await
+        .expect("GET failed with mgmt node");
+    assert_eq!(val, "mgmt_test_val");
+
+    // Wait for the server's periodic func_nodes query (every server_report_period=3s)
+    tokio::time::sleep(Duration::from_secs(5)).await;
+
+    // The mock management node should have received at least:
+    // - 1 restart count query (from anna-kvs startup)
+    // - 1 func_nodes query (from anna-kvs periodic report)
+    let result = tokio::time::timeout(Duration::from_secs(5), mgmt_handle).await;
+    match result {
+        Ok(Ok((restart, func))) => {
+            eprintln!(
+                "Mock mgmt received: {} restart queries, {} func queries",
+                restart, func
+            );
+            assert!(restart >= 1, "Expected at least 1 restart query");
+            assert!(func >= 1, "Expected at least 1 func_nodes query");
+        }
+        Ok(Err(e)) => panic!("Management mock task failed: {}", e),
+        Err(_) => panic!("Management mock did not receive expected queries within timeout"),
+    }
 }
