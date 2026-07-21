@@ -28,6 +28,35 @@ This feature replaces the original Cloudburst management-node-based cache
 registration with direct client-to-server registration, enabling
 subscribers in standalone mode (`mgmt_ip: "NULL"`).
 
+## Latency Feedback (LatencyReporter)
+
+All four clients provide a `LatencyReporter` API for sending latency
+feedback to the monitoring system, enabling SLO enforcement (selective
+replication of hot keys when latency exceeds 3ms).
+
+| Operation                  | Description                                     |
+|----------------------------|-------------------------------------------------|
+| Create reporter            | Connect to monitoring threads (explicit IPs or metadata discovery) |
+| `report(latency, throughput, key_latencies)` | Send `UserFeedback` protobuf to all monitors |
+| `set_warmup(bool)`         | Toggle warmup flag (monitor ignores policy during warmup) |
+| `finish()`                 | Signal that this client is done reporting        |
+
+## Monitoring and Autoscaling Helpers
+
+All four clients provide helper methods for reading cluster metrics and
+managing replication factors, enabling operator-driven autoscaling.
+
+| Operation                  | Description                                     |
+|----------------------------|-------------------------------------------------|
+| `get_storage_stats(ip, ip, tid, tier)` | Read `ServerThreadStatistics` (consumption, occupancy, epoch) |
+| `get_key_access_stats(ip, ip, tid, tier)` | Read `KeyAccessData` (per-key access counts) |
+| `get_key_size_stats(ip, ip, tid, tier)` | Read `KeySizeData` (per-key sizes) |
+| `put_replication_factor(key, mem_rep, local_rep)` | Set per-key replication factor |
+| `get_cluster_topology()`   | Read `ClusterTopology` (thread counts) |
+| `get_monitoring_ips()`     | Read monitoring node IP addresses |
+
+See [autoscaling.md](autoscaling.md) for the full operator's guide.
+
 ## Rust Client (`clients/rust`)
 
 | Feature                    | Tested |
@@ -47,6 +76,11 @@ subscribers in standalone mode (`mgmt_ip: "NULL"`).
 | Port base_offset support   | Yes    |
 | Process management (start/stop/status) | Yes |
 | Value change subscription (watch/recv/get_cached) | Yes |
+| Latency feedback (LatencyReporter) | Yes |
+| Monitoring stats helpers (get_storage_stats etc.) | Yes |
+| Replication factor management (put_replication_factor) | Yes |
+| Cluster topology discovery (get_cluster_topology) | Yes |
+| Monitoring IP discovery (get_monitoring_ips) | Yes |
 
 ## C++ Client (`clients/cpp`)
 
@@ -57,6 +91,9 @@ subscribers in standalone mode (`mgmt_ip: "NULL"`).
 | WRONG_THREAD auto-retry    | Yes    |
 | Timeout (generate_bad_response) | Yes |
 | Value change subscription (watch/recv/get_cached) | Yes |
+| Latency feedback (LatencyReporter) | Yes |
+| Monitoring stats helpers (get_storage_stats etc.) | Yes |
+| Replication factor management (put_replication_factor) | Yes |
 
 ## Go Client (`clients/go`)
 
@@ -70,6 +107,9 @@ subscribers in standalone mode (`mgmt_ip: "NULL"`).
 | Error code mapping         | Yes    |
 | Timeout error code         | Yes    |
 | Value change subscription (watch/recv/get_cached) | Yes |
+| Latency feedback (LatencyReporter) | Yes |
+| Monitoring stats helpers (get_storage_stats etc.) | Yes |
+| Replication factor management (put_replication_factor) | Yes |
 
 ## Python Client (`clients/python`)
 
@@ -83,3 +123,6 @@ subscribers in standalone mode (`mgmt_ip: "NULL"`).
 | Timeout (poll-based)       | Yes    |
 | Process management (start/stop) | Yes |
 | Value change subscription (watch/recv/get_cached) | Yes |
+| Latency feedback (LatencyReporter) | Yes |
+| Monitoring stats helpers (get_storage_stats etc.) | Yes |
+| Replication factor management (put_replication_factor) | Yes |
