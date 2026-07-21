@@ -18,6 +18,18 @@ use std::hash::{Hash, Hasher};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use zeromq::{PullSocket, PushSocket, Socket, SocketRecv, SocketSend};
 
+enum Transport {
+    Zmq {
+        socket_cache: HashMap<Address, PushSocket>,
+        key_address_puller: PullSocket,
+        response_puller: PullSocket,
+    },
+    #[cfg(test)]
+    Mock {
+        responses: std::collections::VecDeque<(bool, Option<Vec<u8>>)>,
+    },
+}
+
 /// Async client for the Anna Key-Value Store.
 ///
 /// Communicates with the routing tier to discover worker addresses and
@@ -45,9 +57,7 @@ pub struct KVSClient {
     rng: StdRng,
     key_address_cache: HashMap<Key, HashSet<Address>>,
     timeout: Duration,
-    socket_cache: HashMap<Address, PushSocket>,
-    key_address_puller: PullSocket,
-    response_puller: PullSocket,
+    transport: Transport,
 }
 
 impl KVSClient {
@@ -103,9 +113,35 @@ impl KVSClient {
             rng,
             key_address_cache: HashMap::new(),
             timeout: Duration::from_secs(10),
-            socket_cache: HashMap::new(),
-            key_address_puller,
-            response_puller,
+            transport: Transport::Zmq {
+                socket_cache: HashMap::new(),
+                key_address_puller,
+                response_puller,
+            },
+        }
+    }
+
+    #[cfg(test)]
+    fn new_mock(routing_ip: &str, tid: ThreadID) -> Self {
+        let seed = Self::generate_seed(&routing_ip.to_string(), tid);
+        KVSClient {
+            routing_threads: vec![UserRoutingThread::new(&routing_ip.to_string(), 0)],
+            rid: 0,
+            ut: UserThread::new(&routing_ip.to_string(), tid),
+            seed,
+            rng: StdRng::seed_from_u64(seed),
+            key_address_cache: HashMap::new(),
+            timeout: Duration::from_secs(1),
+            transport: Transport::Mock {
+                responses: std::collections::VecDeque::new(),
+            },
+        }
+    }
+
+    #[cfg(test)]
+    fn push_mock_response(&mut self, use_key_address: bool, data: Option<Vec<u8>>) {
+        if let Transport::Mock { responses } = &mut self.transport {
+            responses.push_back((use_key_address, data));
         }
     }
 
@@ -133,42 +169,66 @@ impl KVSClient {
             .key_address_connect_address()
     }
 
-    async fn get_socket(&mut self, addr: &str) -> Result<&mut PushSocket> {
-        if !self.socket_cache.contains_key(addr) {
-            let mut sock = PushSocket::new();
-            sock.connect(addr)
-                .await
-                .map_err(|e| Error::Kvs(format!("Failed to connect to {}: {}", addr, e)))?;
-            self.socket_cache.insert(addr.to_string(), sock);
-        }
-        Ok(self
-            .socket_cache
-            .get_mut(addr)
-            .expect("socket just inserted"))
-    }
-
     async fn send_request(&mut self, msg: &[u8], addr: &str) -> Result<()> {
-        let sock = self.get_socket(addr).await?;
-        sock.send(msg.to_vec().into())
-            .await
-            .map_err(|e| Error::Kvs(format!("Failed to send: {}", e)))?;
-        Ok(())
+        match &mut self.transport {
+            Transport::Zmq { socket_cache, .. } => {
+                if !socket_cache.contains_key(addr) {
+                    let mut sock = PushSocket::new();
+                    sock.connect(addr)
+                        .await
+                        .map_err(|e| Error::Kvs(format!("Failed to connect to {}: {}", addr, e)))?;
+                    socket_cache.insert(addr.to_string(), sock);
+                }
+                let sock = socket_cache.get_mut(addr).expect("socket just inserted");
+                sock.send(msg.to_vec().into())
+                    .await
+                    .map_err(|e| Error::Kvs(format!("Failed to send: {}", e)))?;
+                Ok(())
+            }
+            #[cfg(test)]
+            Transport::Mock { .. } => Ok(()),
+        }
     }
 
     async fn recv_response(&mut self, use_key_address: bool) -> Option<Vec<u8>> {
-        let sock = if use_key_address {
-            &mut self.key_address_puller
-        } else {
-            &mut self.response_puller
-        };
-
-        match tokio::time::timeout(self.timeout, sock.recv()).await {
-            Ok(Ok(msg)) => msg.into_vec().pop().map(|b| b.to_vec()),
-            Ok(Err(e)) => {
-                error!("ZMQ recv error: {}", e);
-                None
+        match &mut self.transport {
+            Transport::Zmq {
+                key_address_puller,
+                response_puller,
+                ..
+            } => {
+                let sock = if use_key_address {
+                    key_address_puller
+                } else {
+                    response_puller
+                };
+                match tokio::time::timeout(self.timeout, sock.recv()).await {
+                    Ok(Ok(msg)) => msg.into_vec().pop().map(|b| b.to_vec()),
+                    Ok(Err(e)) => {
+                        error!("ZMQ recv error: {}", e);
+                        None
+                    }
+                    Err(_) => None,
+                }
             }
-            Err(_) => None,
+            #[cfg(test)]
+            Transport::Mock { responses } => responses
+                .iter()
+                .position(|(ka, _)| *ka == use_key_address)
+                .and_then(|idx| responses.remove(idx))
+                .and_then(|(_, data)| data),
+        }
+    }
+
+    fn evict_address(&mut self, key: &str, addr: &str) {
+        if let Some(addrs) = self.key_address_cache.get_mut(key) {
+            addrs.remove(addr);
+            if addrs.is_empty() {
+                self.key_address_cache.remove(key);
+            }
+        }
+        if let Transport::Zmq { socket_cache, .. } = &mut self.transport {
+            socket_cache.remove(addr);
         }
     }
 
@@ -237,16 +297,6 @@ impl KVSClient {
             let idx = self.rng.random_range(0..addrs.len());
             Some(addrs[idx].clone())
         }
-    }
-
-    fn evict_address(&mut self, key: &str, addr: &str) {
-        if let Some(addrs) = self.key_address_cache.get_mut(key) {
-            addrs.remove(addr);
-            if addrs.is_empty() {
-                self.key_address_cache.remove(key);
-            }
-        }
-        self.socket_cache.remove(addr);
     }
 
     async fn send_data_request(
@@ -1099,6 +1149,38 @@ impl KVSClient {
 mod tests {
     use super::*;
 
+    fn mock_client(tid: ThreadID) -> KVSClient {
+        KVSClient::new_mock("127.0.0.1", tid)
+    }
+
+    fn make_routing_response(key: &str, worker_addr: &str) -> Vec<u8> {
+        use crate::proto::kvs::key_address_response::KeyAddress;
+        let response = KeyAddressResponse {
+            addresses: vec![KeyAddress {
+                key: key.to_string(),
+                ips: vec![worker_addr.to_string()],
+            }],
+            ..Default::default()
+        };
+        response.encode_to_vec()
+    }
+
+    fn make_get_response(key: &str, value: &[u8]) -> Vec<u8> {
+        let lww = LwwValue {
+            timestamp: 1,
+            value: value.to_vec(),
+        };
+        let response = KeyResponse {
+            tuples: vec![KeyTuple {
+                key: key.to_string(),
+                payload: lww.encode_to_vec(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        response.encode_to_vec()
+    }
+
     #[test]
     fn generate_seed_is_deterministic_for_same_inputs_at_same_time() {
         let s1 = KVSClient::generate_seed(&"127.0.0.1".to_string(), 0);
@@ -1160,9 +1242,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn client_construction_and_request_id() {
-        let config = ClientConfig::default();
-        let mut client = KVSClient::new(&config, Some(99)).await;
+    async fn mock_client_request_id() {
+        let mut client = mock_client(99);
         let id1 = client.get_request_id();
         let id2 = client.get_request_id();
         assert!(id1.contains("127.0.0.1"));
@@ -1171,18 +1252,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn client_routing_thread_returns_address() {
-        let config = ClientConfig::default();
-        let mut client = KVSClient::new(&config, Some(98)).await;
+    async fn mock_client_routing_thread() {
+        let mut client = mock_client(98);
         let addr = client.get_routing_thread();
         assert!(addr.starts_with("tcp://"), "addr was: {}", addr);
         assert!(addr.contains("127.0.0.1"), "addr was: {}", addr);
     }
 
     #[tokio::test]
-    async fn client_clear_cache() {
-        let config = ClientConfig::default();
-        let mut client = KVSClient::new(&config, Some(97)).await;
+    async fn mock_client_clear_cache() {
+        let mut client = mock_client(97);
         client
             .key_address_cache
             .insert("test_key".into(), ["addr1".to_string()].into());
@@ -1192,9 +1271,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_worker_address_returns_cached() {
-        let config = ClientConfig::default();
-        let mut client = KVSClient::new(&config, Some(96)).await;
+    async fn mock_get_worker_address_returns_cached() {
+        let mut client = mock_client(96);
         client.key_address_cache.insert(
             "cached_key".into(),
             ["tcp://127.0.0.1:6200".to_string()].into(),
@@ -1204,9 +1282,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_worker_address_picks_from_multi_address_cache() {
-        let config = ClientConfig::default();
-        let mut client = KVSClient::new(&config, Some(95)).await;
+    async fn mock_get_worker_address_picks_from_multi() {
+        let mut client = mock_client(95);
         let mut addrs = HashSet::new();
         addrs.insert("tcp://10.0.0.1:6200".to_string());
         addrs.insert("tcp://10.0.0.2:6200".to_string());
@@ -1214,7 +1291,7 @@ mod tests {
         let addr = client
             .get_worker_address("multi_key")
             .await
-            .expect("expected cached address for multi_key");
+            .expect("expected cached address");
         assert!(
             addr == "tcp://10.0.0.1:6200" || addr == "tcp://10.0.0.2:6200",
             "unexpected addr: {}",
@@ -1223,27 +1300,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn invalidate_cache_removes_key() {
-        let config = ClientConfig::default();
-        let mut client = KVSClient::new(&config, Some(92)).await;
-        client.key_address_cache.insert(
-            "evict_me".into(),
-            ["tcp://10.0.0.1:6200".to_string()].into(),
-        );
-        assert!(client.key_address_cache.contains_key("evict_me"));
-        client.key_address_cache.remove("evict_me");
-        assert!(!client.key_address_cache.contains_key("evict_me"));
-    }
-
-    #[tokio::test]
-    async fn evict_address_removes_single_address() {
-        let config = ClientConfig::default();
-        let mut client = KVSClient::new(&config, Some(88)).await;
+    async fn mock_evict_address_removes_single() {
+        let mut client = mock_client(88);
         let mut addrs = HashSet::new();
         addrs.insert("tcp://10.0.0.1:6200".to_string());
         addrs.insert("tcp://10.0.0.2:6200".to_string());
         client.key_address_cache.insert("multi_addr".into(), addrs);
-
         client.evict_address("multi_addr", "tcp://10.0.0.1:6200");
         let remaining = &client.key_address_cache["multi_addr"];
         assert_eq!(remaining.len(), 1);
@@ -1251,58 +1313,102 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn evict_address_removes_key_when_last_address() {
-        let config = ClientConfig::default();
-        let mut client = KVSClient::new(&config, Some(87)).await;
+    async fn mock_evict_address_removes_key_when_last() {
+        let mut client = mock_client(87);
         client.key_address_cache.insert(
             "single_addr".into(),
             ["tcp://10.0.0.1:6200".to_string()].into(),
         );
-
         client.evict_address("single_addr", "tcp://10.0.0.1:6200");
         assert!(!client.key_address_cache.contains_key("single_addr"));
     }
 
     #[tokio::test]
-    async fn evict_address_also_removes_socket() {
-        let config = ClientConfig::default();
-        let mut client = KVSClient::new(&config, Some(86)).await;
-        client.key_address_cache.insert(
-            "sock_test".into(),
-            ["tcp://10.0.0.1:6200".to_string()].into(),
-        );
-        let sock = PushSocket::new();
-        client
-            .socket_cache
-            .insert("tcp://10.0.0.1:6200".to_string(), sock);
-
-        client.evict_address("sock_test", "tcp://10.0.0.1:6200");
-        assert!(!client.socket_cache.contains_key("tcp://10.0.0.1:6200"));
-    }
-
-    #[tokio::test]
-    async fn set_timeout_changes_duration() {
-        let config = ClientConfig::default();
-        let mut client = KVSClient::new(&config, Some(85)).await;
-        assert_eq!(client.timeout, Duration::from_secs(10));
+    async fn mock_set_timeout() {
+        let mut client = mock_client(85);
+        assert_eq!(client.timeout, Duration::from_secs(1));
         client.set_timeout(Duration::from_secs(3));
         assert_eq!(client.timeout, Duration::from_secs(3));
     }
 
     #[tokio::test]
-    async fn get_key_addresses_clears_cache_first() {
-        let config = ClientConfig::default();
-        let mut client = KVSClient::new(&config, Some(84)).await;
+    async fn mock_get_returns_value() {
+        let mut client = mock_client(80);
+        let worker = "tcp://127.0.0.1:6200";
+        client.push_mock_response(true, Some(make_routing_response("test_key", worker)));
+        client.push_mock_response(false, Some(make_get_response("test_key", b"hello")));
+        let val = client.get("test_key").await.expect("GET failed");
+        assert_eq!(val, "hello");
+    }
+
+    #[tokio::test]
+    async fn mock_get_bytes_returns_raw() {
+        let mut client = mock_client(79);
+        let worker = "tcp://127.0.0.1:6200";
+        client.push_mock_response(true, Some(make_routing_response("raw_key", worker)));
+        client.push_mock_response(false, Some(make_get_response("raw_key", b"\x01\x02\x03")));
+        let bytes = client.get_bytes("raw_key").await.expect("GET_BYTES failed");
+        assert_eq!(bytes, vec![1, 2, 3]);
+    }
+
+    #[tokio::test]
+    async fn mock_get_cluster_topology() {
+        use crate::proto::metadata::ClusterTopology;
+        let mut client = mock_client(78);
+        let topo = ClusterTopology {
+            routing_thread_count: 2,
+            memory_thread_count: 4,
+            ebs_thread_count: 1,
+        };
+        let worker = "tcp://127.0.0.1:6200";
+        let meta_key = "ANNA_METADATA|cluster_topology";
+        client.push_mock_response(true, Some(make_routing_response(meta_key, worker)));
+        client.push_mock_response(
+            false,
+            Some(make_get_response(meta_key, &topo.encode_to_vec())),
+        );
+        let result = client.get_cluster_topology().await;
+        assert!(result.is_some());
+        let t = result.unwrap();
+        assert_eq!(t.memory_thread_count, 4);
+        assert_eq!(t.routing_thread_count, 2);
+    }
+
+    #[tokio::test]
+    async fn mock_get_monitoring_ips() {
+        use crate::proto::shared::StringSet;
+        let mut client = mock_client(77);
+        let ips = StringSet {
+            keys: vec!["10.0.0.1".into(), "10.0.0.2".into()],
+        };
+        let worker = "tcp://127.0.0.1:6200";
+        let meta_key = "ANNA_METADATA|monitoring_ips";
+        client.push_mock_response(true, Some(make_routing_response(meta_key, worker)));
+        client.push_mock_response(
+            false,
+            Some(make_get_response(meta_key, &ips.encode_to_vec())),
+        );
+        let result = client.get_monitoring_ips().await;
+        assert_eq!(result.len(), 2);
+        assert!(result.contains(&"10.0.0.1".to_string()));
+    }
+
+    #[tokio::test]
+    async fn mock_get_monitoring_ips_not_found() {
+        let mut client = mock_client(76);
+        let result = client.get_monitoring_ips().await;
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn mock_get_key_addresses_empty() {
+        let mut client = mock_client(75);
         client.key_address_cache.insert(
             "stale_key".into(),
             ["tcp://10.0.0.1:6200".to_string()].into(),
         );
         let addrs = client.get_key_addresses("stale_key").await;
-        assert!(
-            addrs.is_empty(),
-            "Expected empty (no routing server), got {:?}",
-            addrs
-        );
+        assert!(addrs.is_empty());
         assert!(!client.key_address_cache.contains_key("stale_key"));
     }
 
@@ -1362,9 +1468,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn request_id_format() {
-        let config = ClientConfig::default();
-        let mut client = KVSClient::new(&config, Some(91)).await;
+    async fn mock_request_id_format() {
+        let mut client = mock_client(91);
         let id = client.get_request_id();
         let parts: Vec<&str> = id.split(':').collect();
         assert_eq!(parts.len(), 2);
