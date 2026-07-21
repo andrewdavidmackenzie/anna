@@ -193,40 +193,93 @@ void cli_loop_file(KvsClientInterface* client, const string& config_file,
 }
 
 string usage(const string& name) {
-  return name + " --config config-file command <CLI command file>\n" +
+  return name +
+         " --routing <ip>[,<ip>...] --client-ip <ip> [--threads <n>] "
+         "<command> [CLI command file]\n"
          "Valid commands are help, start, stop, status, cli\n";
 }
 
 }  // namespace
 
 int main(int argc, char* argv[]) {
-  // There can be two or three options
-  // #0 - binary name
-  // #1 - "--config" directive
-  // #2 - config filename
-  // #3 - command
-  // #4 - input file with commands if #3 is "CLI"
-  if (argc < 4 || argc > 5) {
+  // Parse named arguments:
+  //   --routing ip1,ip2,...   routing tier IP addresses (required)
+  //   --client-ip ip         this client's IP address (required)
+  //   --threads n            routing threads per IP (default: 1)
+  //   --config path          config file for server start/stop (optional)
+  //   <command>              CLI / START / STOP / STATUS / HELP
+  //   [file]                 command file when command is CLI
+  string routing_arg;
+  string client_ip;
+  string config_filename;
+  unsigned thread_count = 1;
+  string command;
+  string cli_file;
+
+  for (int i = 1; i < argc; i++) {
+    string arg = argv[i];
+    if (arg == "--routing" && i + 1 < argc) {
+      routing_arg = argv[++i];
+    } else if (arg == "--client-ip" && i + 1 < argc) {
+      client_ip = argv[++i];
+    } else if (arg == "--threads" && i + 1 < argc) {
+      thread_count = std::stoul(argv[++i]);
+    } else if (arg == "--config" && i + 1 < argc) {
+      config_filename = argv[++i];
+    } else if (command.empty()) {
+      command = arg;
+    } else if (cli_file.empty()) {
+      cli_file = arg;
+    }
+  }
+
+  std::transform(command.begin(), command.end(), command.begin(), ::toupper);
+
+  if (command.empty()) {
     std::cerr << "Usage: " << usage(argv[0]) << std::endl;
     return 1;
   }
-  string my_name = argv[0];
-  string config_filename = argv[2];
-  string command = argv[3];
-  std::transform(command.begin(), command.end(), command.begin(), ::toupper);
 
-  annalib::ClientConfig config = annalib::load_config(config_filename);
-  std::unique_ptr<KvsClient> client = annalib::make_client(config);
+  // Commands that need a connected client require --routing and --client-ip
+  if (command == "CLI" || command == "GET" || command == "PUT") {
+    if (routing_arg.empty() || client_ip.empty()) {
+      std::cerr << "Error: --routing and --client-ip are required for "
+                << command << std::endl;
+      return 1;
+    }
+  }
+
+  // Build ClientConfig from command-line arguments
+  annalib::ClientConfig config;
+  config.ip = client_ip;
+
+  if (!routing_arg.empty()) {
+    // Split comma-separated routing IPs
+    vector<string> routing_ips;
+    split(routing_arg, ',', routing_ips);
+
+    for (const string& ip : routing_ips) {
+      for (unsigned t = 0; t < thread_count; t++) {
+        config.routing_threads.push_back(UserRoutingThread(ip, t));
+      }
+    }
+  }
 
   if (command == "CLI") {
-    if (argc == 4) {
+    std::unique_ptr<KvsClient> client = annalib::make_client(config);
+
+    if (cli_file.empty()) {
       cli_loop_interactive(client.get(), config_filename);
     } else {
-      cli_loop_file(client.get(), config_filename, argv[4]);
+      cli_loop_file(client.get(), config_filename, cli_file);
     }
   } else if (command == "START") {
-    std::cout << annalib::start(config_filename) << " anna processes were started"
-              << std::endl;
+    if (config_filename.empty()) {
+      std::cerr << "Error: --config is required for START" << std::endl;
+      return 1;
+    }
+    std::cout << annalib::start(config_filename)
+              << " anna processes were started" << std::endl;
   } else if (command == "STOP") {
     std::cout << annalib::stop() << " anna processes were stopped"
               << std::endl;
@@ -235,6 +288,10 @@ int main(int argc, char* argv[]) {
       std::cout << name << " process is running" << std::endl;
     }
   } else if (command == "HELP") {
-    std::cout << usage(my_name) << std::endl;
+    std::cout << usage(argv[0]) << std::endl;
+  } else {
+    std::cerr << "Unrecognized command: " << command << std::endl;
+    std::cerr << usage(argv[0]) << std::endl;
+    return 1;
   }
 }

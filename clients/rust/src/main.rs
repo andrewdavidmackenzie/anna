@@ -4,11 +4,11 @@
 //! Execute `anna` or `anna --help` or `anna -h` at the comment line for a
 //! description of the command line options.
 
-use std::env;
 use std::process::exit;
 
 use annalib::{
-    completer::AnnaCompleter, config::Config, info, kvs_client::KVSClient, start, status, stop,
+    client_config::ClientConfig, completer::AnnaCompleter, info, kvs_client::KVSClient, start,
+    status, stop,
 };
 use clap::{Arg, ArgMatches, Command};
 use log::{debug, error};
@@ -19,7 +19,6 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
 const ANNA_HISTORY_FILENAME: &str = ".anna_history";
-const DEFAULT_CONFIG_FILENAME: &str = "default-config.yml";
 
 /// `anna` CLI Error codes
 /// 0 - Success
@@ -38,8 +37,6 @@ enum CliError {
     Anna(#[from] annalib::Error),
     #[error("{0}")]
     RustyLine(#[from] rustyline::error::ReadlineError),
-    #[error("Problem loading config from file: '{path}'\n{detail}")]
-    ConfigFile { path: String, detail: String },
     #[error("{0}")]
     Other(String),
 }
@@ -62,24 +59,28 @@ async fn main() {
     }
 }
 
-fn get_config_path(args: &ArgMatches) -> Result<PathBuf> {
-    match args.get_one::<String>("config").map(|s| s.as_str()) {
-        Some(config_file) => {
-            PathBuf::from(config_file)
-                .canonicalize()
-                .map_err(|e| CliError::ConfigFile {
-                    path: config_file.into(),
-                    detail: format!("Could not canonicalize: {}", e),
-                })
-        }
-        None => PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join(DEFAULT_CONFIG_FILENAME)
-            .canonicalize()
-            .map_err(|e| CliError::ConfigFile {
-                path: DEFAULT_CONFIG_FILENAME.into(),
-                detail: format!("Could not canonicalize default config: {}", e),
-            }),
+fn get_client_config(args: &ArgMatches) -> ClientConfig {
+    let routing: Vec<String> = args
+        .get_many::<String>("routing")
+        .map(|vals| vals.cloned().collect())
+        .unwrap_or_else(|| vec!["tcp://127.0.0.1:6450".to_string()]);
+    let client_ip = args
+        .get_one::<String>("client-ip")
+        .cloned()
+        .unwrap_or_else(|| "127.0.0.1".to_string());
+    ClientConfig {
+        routing_addresses: routing,
+        client_ip,
     }
+}
+
+fn get_server_config_path(args: &ArgMatches) -> Result<PathBuf> {
+    let path = args
+        .get_one::<String>("server-config")
+        .ok_or_else(|| CliError::Other("--server-config is required for start/stop".into()))?;
+    PathBuf::from(path)
+        .canonicalize()
+        .map_err(|e| CliError::Other(format!("Could not resolve server config '{}': {}", path, e)))
 }
 
 async fn run() -> Result<String> {
@@ -102,20 +103,23 @@ async fn run() -> Result<String> {
     {
         ("start", _) => Ok(format!(
             "{} anna processes were started",
-            start(&get_config_path(&matches)?)?
+            start(&get_server_config_path(&matches)?)?
         )),
         ("status", _) => Ok(format_status(status()?)),
         ("stop", _) => Ok(format!("{} anna processes were terminated", stop()?)),
         ("cli", arg_matches) => {
-            let config_path = get_config_path(&matches)?;
-            let config = Config::read(&config_path)?;
+            let config = get_client_config(&matches);
+            let server_config_path = matches
+                .get_one::<String>("server-config")
+                .map(PathBuf::from)
+                .unwrap_or_default();
             let client = KVSClient::new(&config, None).await;
             Ok(match arg_matches
                 .get_one::<String>("command_file")
                 .map(|s| s.as_str())
             {
-                None => cli_loop_interactive(client, config_path).await?,
-                Some(filename) => cli_loop_file(client, filename, config_path).await?,
+                None => cli_loop_interactive(client, server_config_path).await?,
+                Some(filename) => cli_loop_file(client, filename, server_config_path).await?,
             }
             .into())
         }
@@ -360,12 +364,26 @@ fn get_app() -> Command {
                 .help("Set verbosity level for output (trace, debug, info, warn, error (default))"),
         )
         .arg(
-            Arg::new("config")
-                .short('c')
-                .long("config")
+            Arg::new("routing")
+                .short('r')
+                .long("routing")
+                .num_args(1..)
+                .value_name("ROUTING_ADDRESS")
+                .help("Routing tier address(es), e.g. tcp://10.0.0.1:6450"),
+        )
+        .arg(
+            Arg::new("client-ip")
+                .long("client-ip")
+                .num_args(1)
+                .value_name("IP")
+                .help("IP address this client binds on (default: 127.0.0.1)"),
+        )
+        .arg(
+            Arg::new("server-config")
+                .long("server-config")
                 .num_args(1)
                 .value_name("CONFIG_FILE")
-                .help("Specify a config file to use"),
+                .help("Server config file for start/stop commands"),
         )
         .subcommand(
             Command::new("cli")

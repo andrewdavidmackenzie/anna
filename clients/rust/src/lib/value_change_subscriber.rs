@@ -1,4 +1,4 @@
-use crate::config::Config;
+use crate::client_config::ClientConfig;
 use crate::errors::{Error, Result};
 use crate::proto::kvs::{KeyResponse, LwwValue};
 use crate::proto::shared::StringSet;
@@ -28,10 +28,10 @@ const K_CACHE_UPDATE_PORT: usize = 7150;
 /// # #[tokio::main]
 /// # async fn main() -> annalib::Result<()> {
 /// use std::time::Duration;
-/// use annalib::config::Config;
+/// use annalib::client_config::ClientConfig;
 /// use annalib::value_change_subscriber::ValueChangeSubscriber;
 ///
-/// let config = Config::default();
+/// let config = ClientConfig::default();
 /// let mut cache = ValueChangeSubscriber::new(&config, None).await?;
 /// cache.watch(&["my-key".to_string()]).await?;
 ///
@@ -63,12 +63,12 @@ impl ValueChangeSubscriber {
     ///
     /// The `tid` parameter selects which port to listen on for updates.
     /// Pass `None` for the default (tid=0).
-    pub async fn new(config: &Config, tid: Option<usize>) -> Result<Self> {
+    pub async fn new(config: &ClientConfig, tid: Option<usize>) -> Result<Self> {
         let tid = tid.unwrap_or(0);
-        let base_offset = config.get_base_offset();
-        let cache_ip = config.get_user_ip().clone();
-        let server_ip = config.get_server_public_ip().clone();
-        let memory_threads = config.get_memory_thread_count();
+        let base_offset = config.base_offset();
+        let cache_ip = config.client_ip.clone();
+        let server_ip = config.routing_ip().unwrap_or("127.0.0.1").to_string();
+        let memory_threads = 1;
 
         let bind_addr = format!(
             "tcp://{}:{}",
@@ -281,7 +281,7 @@ mod tests {
 
     #[tokio::test]
     async fn new_value_change_subscriber() {
-        let config = crate::config::Config::default();
+        let config = crate::client_config::ClientConfig::default();
         let cache = ValueChangeSubscriber::new(&config, Some(90)).await;
         assert!(cache.is_ok());
         let cache = cache.unwrap();
@@ -291,7 +291,7 @@ mod tests {
 
     #[tokio::test]
     async fn recv_update_timeout() {
-        let config = crate::config::Config::default();
+        let config = crate::client_config::ClientConfig::default();
         let mut cache = ValueChangeSubscriber::new(&config, Some(91))
             .await
             .expect("Failed to create cache client");
@@ -306,15 +306,12 @@ mod tests {
     async fn recv_update_receives_pushed_value() {
         use crate::proto::kvs::{KeyResponse, KeyTuple};
 
-        let config = crate::config::Config::default();
+        let config = crate::client_config::ClientConfig::default();
         let mut sub = ValueChangeSubscriber::new(&config, Some(92))
             .await
             .expect("create failed");
 
-        let update_addr = format!(
-            "tcp://127.0.0.1:{}",
-            92 + K_CACHE_UPDATE_PORT
-        );
+        let update_addr = format!("tcp://127.0.0.1:{}", 92 + K_CACHE_UPDATE_PORT);
         let mut pusher = PushSocket::new();
         pusher.connect(&update_addr).await.expect("connect failed");
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -349,15 +346,12 @@ mod tests {
     async fn recv_update_skips_empty_payload() {
         use crate::proto::kvs::{KeyResponse, KeyTuple};
 
-        let config = crate::config::Config::default();
+        let config = crate::client_config::ClientConfig::default();
         let mut sub = ValueChangeSubscriber::new(&config, Some(93))
             .await
             .expect("create failed");
 
-        let update_addr = format!(
-            "tcp://127.0.0.1:{}",
-            93 + K_CACHE_UPDATE_PORT
-        );
+        let update_addr = format!("tcp://127.0.0.1:{}", 93 + K_CACHE_UPDATE_PORT);
         let mut pusher = PushSocket::new();
         pusher.connect(&update_addr).await.expect("connect failed");
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -385,7 +379,7 @@ mod tests {
 
     #[tokio::test]
     async fn watched_keys_accumulate() {
-        let config = crate::config::Config::default();
+        let config = crate::client_config::ClientConfig::default();
         let mut sub = ValueChangeSubscriber::new(&config, Some(94))
             .await
             .expect("create failed");

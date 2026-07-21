@@ -37,28 +37,17 @@ SET(KV_LIBRARY_DEPENDENCIES
     kvs-proto
     pthread
     anna-zmq
-    yaml-cpp
 )
 
 protobuf_generate(
   LANGUAGE cpp
-  PROTOS ../../server/protobuf/kvs.proto ../../server/protobuf/shared.proto ../../server/protobuf/metadata.proto
+  PROTOS ../../server/protobuf/kvs.proto ../../server/protobuf/shared.proto ../../server/protobuf/metadata.proto ../../server/protobuf/benchmark.proto
   IMPORT_DIRS ../../server/protobuf
   APPEND_PATH
   OUT_VAR PROTO_SRC
 )
 ADD_LIBRARY(kvs-proto ${PROTO_SRC})
 TARGET_LINK_LIBRARIES(kvs-proto protobuf::libprotobuf)
-
-protobuf_generate(
-  LANGUAGE cpp
-  PROTOS ../../server/protobuf/benchmark.proto
-  IMPORT_DIRS ../../server/protobuf
-  APPEND_PATH
-  OUT_VAR BPROTO_SRC
-)
-ADD_LIBRARY(anna-bench-proto ${BPROTO_SRC})
-TARGET_LINK_LIBRARIES(anna-bench-proto protobuf::libprotobuf)
 
 find_package(PkgConfig)
 pkg_check_modules(PC_ZeroMQ QUIET zmq)
@@ -88,7 +77,6 @@ FIND_PACKAGE(fmt CONFIG QUIET)
 FIND_PACKAGE(cppzmq REQUIRED)
 
 FIND_PACKAGE(spdlog CONFIG REQUIRED)
-FIND_PACKAGE(yaml-cpp REQUIRED)
 
 INCLUDE_DIRECTORIES(../../server/cpp/src)
 

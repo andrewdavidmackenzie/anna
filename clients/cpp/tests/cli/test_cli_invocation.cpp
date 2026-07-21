@@ -113,11 +113,9 @@ protected:
   }
 };
 
-TEST_F(CliInvocationTest, TooFewArgsPrintsUsage) {
-  auto r = run_command(cli_binary + " --config");
+TEST_F(CliInvocationTest, UnrecognizedCommandFails) {
+  auto r = run_command(cli_binary + " foobar");
   EXPECT_EQ(r.exit_code, 1);
-  EXPECT_TRUE(r.stderr_str.find("Usage:") != std::string::npos ||
-              r.stderr_str.find("usage:") != std::string::npos);
 }
 
 TEST_F(CliInvocationTest, NoArgsPrintsUsage) {
@@ -126,20 +124,20 @@ TEST_F(CliInvocationTest, NoArgsPrintsUsage) {
 }
 
 TEST_F(CliInvocationTest, HelpPrintsCommands) {
-  auto r = run_command(cli_binary + " --config " + test_config + " help");
+  auto r = run_command(cli_binary + " help");
   EXPECT_EQ(r.exit_code, 0);
-  EXPECT_TRUE(r.stdout_str.find("help") != std::string::npos ||
+  EXPECT_TRUE(r.stdout_str.find("routing") != std::string::npos ||
               r.stdout_str.find("cli") != std::string::npos);
 }
 
 TEST_F(CliInvocationTest, StopPrintsCount) {
-  auto r = run_command(cli_binary + " --config " + test_config + " stop");
+  auto r = run_command(cli_binary + " stop");
   EXPECT_EQ(r.exit_code, 0);
   EXPECT_TRUE(r.stdout_str.find("anna processes were stopped") != std::string::npos);
 }
 
 TEST_F(CliInvocationTest, StatusReturnsSuccess) {
-  auto r = run_command(cli_binary + " --config " + test_config + " status");
+  auto r = run_command(cli_binary + " status");
   EXPECT_EQ(r.exit_code, 0);
 }
 

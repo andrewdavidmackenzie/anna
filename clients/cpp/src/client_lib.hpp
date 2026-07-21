@@ -33,11 +33,6 @@ struct ClientConfig {
   Address ip;
 };
 
-// Parse a YAML anna config file (the same format used by the server) into a
-// ClientConfig. Throws a YAML::Exception if the file is missing or
-// malformed.
-ClientConfig load_config(const string& config_file_path);
-
 // Construct a KvsClient connected to the routing tier described by `config`.
 std::unique_ptr<KvsClient> make_client(const ClientConfig& config,
                                         unsigned tid = 0,

@@ -1,26 +1,13 @@
-use std::io;
-use std::path::Path;
 use std::process::Command;
 
-use assert_cmd::prelude::*; // Add methods on commands
-use predicates::prelude::*; // Used for writing assertions
-
-fn config_path() -> io::Result<String> {
-    let mut root_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    root_dir = root_dir.parent().unwrap(); // project_root/clients
-    root_dir = root_dir.parent().unwrap(); // project_root
-
-    Ok(root_dir
-        .join("conf/anna-config.yml")
-        .to_string_lossy()
-        .to_string())
-}
+use assert_cmd::prelude::*;
+use predicates::prelude::*;
 
 #[test]
 fn invalid_command() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("anna")?;
 
-    cmd.arg("--config").arg(config_path()?).arg("foo");
+    cmd.arg("foo");
     cmd.assert()
         .failure()
         .code(2)
@@ -30,22 +17,20 @@ fn invalid_command() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn file_doesnt_exist() -> Result<(), Box<dyn std::error::Error>> {
+fn start_without_server_config() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("anna")?;
 
-    cmd.arg("--config")
-        .arg("test/file/doesnt/exist")
-        .arg("start");
+    cmd.arg("start");
     cmd.assert()
         .failure()
         .code(1)
-        .stderr(predicate::str::contains("config"));
+        .stderr(predicate::str::contains("--server-config"));
 
     Ok(())
 }
 
 #[test]
-fn default_config_file() -> Result<(), Box<dyn std::error::Error>> {
+fn help_output() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("anna")?;
 
     cmd.arg("help");
@@ -65,12 +50,14 @@ fn debug_contains_lib_version() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn help_contains_command() -> Result<(), Box<dyn std::error::Error>> {
+fn help_contains_commands() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("anna")?;
 
     cmd.arg("help");
     cmd.assert().stdout(predicate::str::contains("--verbosity"));
-    cmd.assert().stdout(predicate::str::contains("--config"));
+    cmd.assert().stdout(predicate::str::contains("--routing"));
+    cmd.assert()
+        .stdout(predicate::str::contains("--server-config"));
     cmd.assert().stdout(predicate::str::contains("--help"));
     cmd.assert().stdout(predicate::str::contains("--version"));
     cmd.assert().stdout(predicate::str::contains("cli"));
@@ -86,9 +73,7 @@ fn help_contains_command() -> Result<(), Box<dyn std::error::Error>> {
 fn status_works() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("anna")?;
 
-    cmd.arg("--config")
-        .arg("test/file/doesnt/exist")
-        .arg("status");
+    cmd.arg("status");
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("anna-kvs"));
@@ -103,9 +88,7 @@ fn status_works() -> Result<(), Box<dyn std::error::Error>> {
 fn stop_kills_zero() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("anna")?;
 
-    cmd.arg("--config")
-        .arg("test/file/doesnt/exist")
-        .arg("stop");
+    cmd.arg("stop");
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("0 anna processes"));

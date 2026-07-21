@@ -30,31 +30,49 @@ func sortedStringKeys(m map[string]map[string]uint32) []string {
 }
 
 func main() {
-	configFile := "default-config.yml"
+	serverConfig := ""
+	routingAddr := ""
+	clientIP := "127.0.0.1"
 	args := os.Args[1:]
 
+	// Parse flags.
+	filtered := args[:0]
 	for i := 0; i < len(args); i++ {
-		if (args[i] == "--config" || args[i] == "-c") && i+1 < len(args) {
-			configFile = args[i+1]
-			args = append(args[:i], args[i+2:]...)
-			break
+		switch {
+		case (args[i] == "--server-config" || args[i] == "--config" || args[i] == "-c") && i+1 < len(args):
+			serverConfig = args[i+1]
+			i++
+		case args[i] == "--routing" && i+1 < len(args):
+			routingAddr = args[i+1]
+			i++
+		case args[i] == "--client-ip" && i+1 < len(args):
+			clientIP = args[i+1]
+			i++
+		default:
+			filtered = append(filtered, args[i])
 		}
 	}
+	args = filtered
 
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: anna-go [--config FILE] <command>")
+		fmt.Fprintln(os.Stderr, "Usage: anna-go [--server-config FILE] [--routing ADDR] [--client-ip IP] <command>")
 		fmt.Fprintln(os.Stderr, "Commands: start, stop, status, cli [command_file]")
 		os.Exit(1)
 	}
 
 	switch args[0] {
 	case "start":
-		configPath, err := filepath.Abs(configFile)
+		configPath := serverConfig
+		if configPath == "" {
+			fmt.Fprintln(os.Stderr, "error: --server-config is required for start")
+			os.Exit(1)
+		}
+		absPath, err := filepath.Abs(configPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-		count, err := annalib.Start(configPath)
+		count, err := annalib.Start(absPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -74,16 +92,7 @@ func main() {
 		fmt.Print(formatStatus(statuses))
 
 	case "cli":
-		configPath, err := filepath.Abs(configFile)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
-		}
-		config, err := annalib.ReadConfig(configPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
-		}
+		config := buildClientConfig(routingAddr, clientIP)
 		client, err := annalib.NewKVSClient(config, 0)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -91,18 +100,41 @@ func main() {
 		}
 		defer client.Close()
 
+		// Resolve server config path for start/stop commands within CLI.
+		configFilePath := serverConfig
+		if configFilePath != "" {
+			if abs, err := filepath.Abs(configFilePath); err == nil {
+				configFilePath = abs
+			}
+		}
+
 		if len(args) > 1 {
-			if err := cliFile(client, args[1], configPath); err != nil {
+			if err := cliFile(client, args[1], configFilePath); err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
 			}
 		} else {
-			cliInteractive(client, configPath)
+			cliInteractive(client, configFilePath)
 		}
 
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", args[0])
 		os.Exit(1)
+	}
+}
+
+// buildClientConfig creates a ClientConfig from CLI flags.
+func buildClientConfig(routing, ip string) *annalib.ClientConfig {
+	if routing != "" {
+		addrs := strings.Split(routing, ",")
+		return &annalib.ClientConfig{
+			RoutingAddresses: addrs,
+			ClientIP:         ip,
+		}
+	}
+	return &annalib.ClientConfig{
+		RoutingAddresses: []string{fmt.Sprintf("tcp://%s:6450", ip)},
+		ClientIP:         ip,
 	}
 }
 
@@ -265,7 +297,10 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 			return false, err
 		}
 
-		case "START":
+	case "START":
+		if configFilePath == "" {
+			return false, fmt.Errorf("no server config provided (use --server-config)")
+		}
 		count, err := annalib.Start(configFilePath)
 		if err != nil {
 			return false, err

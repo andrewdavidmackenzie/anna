@@ -203,8 +203,15 @@ impl MonitorTestCluster {
         std::thread::sleep(Duration::from_secs(3));
     }
 
-    fn config_path(&self) -> PathBuf {
-        self.config_dir.join("config.yml")
+    fn client_config(&self) -> annalib::client_config::ClientConfig {
+        annalib::client_config::ClientConfig {
+            routing_addresses: vec![format!(
+                "tcp://{}:{}",
+                NODE_IP,
+                6450 + self.base_offset as usize
+            )],
+            client_ip: NODE_IP.to_string(),
+        }
     }
 
     fn shutdown(&mut self) {
@@ -244,7 +251,6 @@ impl Drop for MonitorTestCluster {
 #[tokio::test]
 #[cfg(unix)]
 async fn monitor_stats_collection() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if !server_bin_dir().join("anna-kvs").exists() {
@@ -255,7 +261,7 @@ async fn monitor_stats_collection() {
     let mut cluster = MonitorTestCluster::new(100);
     cluster.start();
 
-    let config = Config::read(&cluster.config_path()).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(95)).await;
 
     // Generate activity: PUT keys with varying sizes
@@ -358,7 +364,6 @@ async fn monitor_stats_collection() {
 #[tokio::test]
 #[cfg(unix)]
 async fn policy_toggles_and_grace_period() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if !server_bin_dir().join("anna-kvs").exists() {
@@ -374,7 +379,7 @@ async fn policy_toggles_and_grace_period() {
         ..Default::default()
     });
 
-    let config = Config::read(&cluster.config_path()).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(96)).await;
 
     // PUT and GET keys to generate activity with policies enabled
@@ -420,7 +425,6 @@ async fn policy_toggles_and_grace_period() {
 #[tokio::test]
 #[cfg(unix)]
 async fn cross_tier_data_movement() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if !server_bin_dir().join("anna-kvs").exists() {
@@ -444,7 +448,7 @@ async fn cross_tier_data_movement() {
     // Start a disk-tier KVS node on the same cluster
     cluster.start_disk_kvs();
 
-    let config = Config::read(&cluster.config_path()).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(97)).await;
 
     // PUT keys to generate data on both tiers
@@ -498,7 +502,6 @@ async fn cross_tier_data_movement() {
 #[tokio::test]
 #[cfg(unix)]
 async fn latency_feedback_ingestion() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
     use annalib::proto::metadata::user_feedback::KeyLatency;
     use annalib::proto::metadata::UserFeedback;
@@ -517,7 +520,7 @@ async fn latency_feedback_ingestion() {
         ..Default::default()
     });
 
-    let config = Config::read(&cluster.config_path()).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(98)).await;
 
     // PUT keys to have data in the system
@@ -610,7 +613,6 @@ async fn latency_feedback_ingestion() {
 #[tokio::test]
 #[cfg(unix)]
 async fn hot_key_selective_replication() {
-    use annalib::config::Config;
     use annalib::kvs_client::KVSClient;
 
     if !server_bin_dir().join("anna-kvs").exists() {
@@ -625,7 +627,7 @@ async fn hot_key_selective_replication() {
         ..Default::default()
     });
 
-    let config = Config::read(&cluster.config_path()).expect("Failed to read config");
+    let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(99)).await;
 
     // Create a "hot" key with many accesses

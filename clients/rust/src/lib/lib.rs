@@ -8,10 +8,10 @@
 //! ```rust
 //! # #[tokio::main]
 //! # async fn main() {
-//! use annalib::config::Config;
+//! use annalib::client_config::ClientConfig;
 //! use annalib::kvs_client::KVSClient;
 //!
-//! let config = Config::default();
+//! let config = ClientConfig::default();
 //! let client = KVSClient::new(&config, Some(106)).await;
 //! // Use client.get("key") and client.put("key", "value") with a running server
 //! # }
@@ -38,24 +38,26 @@ use std::path::Path;
 use std::process::Command;
 use sysinfo::System;
 
-/// Subscribe to value changes for specific keys via the KVS gossip mechanism.
-pub mod value_change_subscriber;
+/// Minimal client-side configuration for connecting to an anna cluster.
+pub mod client_config;
 /// Tab-completion for the anna CLI.
 pub mod completer;
-/// `config` of anna - read from config file or created via API calls.
-pub mod config;
 /// put all error types and methods into an `errors` module
 mod errors;
 /// `info` module provides additional information about this anna client and server components running
 pub mod info;
 /// `kvs_client` connects to key-value-store server to perform operations
 pub mod kvs_client;
+/// Reports client-observed latency to the monitor for SLO enforcement.
+pub mod latency_reporter;
 /// `proto` module holds definition of protobufs for communication between client and server
 pub mod proto;
 /// `threads` provides helper methods related to anna threads
 pub mod threads;
 /// Types used by KVS
 pub mod types;
+/// Subscribe to value changes for specific keys via the KVS gossip mechanism.
+pub mod value_change_subscriber;
 
 // Pending them being defined elsewhere in a build script or similar
 const ANNA_MONITOR_PROCESS_NAME: &str = "anna-monitor";

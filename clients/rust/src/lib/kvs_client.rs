@@ -1,4 +1,4 @@
-use crate::config::Config;
+use crate::client_config::ClientConfig;
 use crate::errors::{Error, Result};
 use crate::proto::kvs::{
     AnnaError, KeyAddressRequest, KeyAddressResponse, KeyRequest, KeyResponse, KeyTuple,
@@ -28,10 +28,10 @@ use zeromq::{PullSocket, PushSocket, Socket, SocketRecv, SocketSend};
 /// ```rust
 /// # #[tokio::main]
 /// # async fn main() {
-/// use annalib::config::Config;
+/// use annalib::client_config::ClientConfig;
 /// use annalib::kvs_client::KVSClient;
 ///
-/// let config = Config::default();
+/// let config = ClientConfig::default();
 /// let client = KVSClient::new(&config, Some(105)).await;
 /// // Use client.get("key") and client.put("key", "value") with a running server
 /// # }
@@ -51,7 +51,7 @@ pub struct KVSClient {
 }
 
 impl KVSClient {
-    /// Create a new `KVSClient` from a `Config` and optional thread id.
+    /// Create a new `KVSClient` from a [`ClientConfig`] and optional thread id.
     ///
     /// The `tid` parameter allows multiple clients on the same machine to
     /// use different ZMQ ports. Pass `None` for the default (tid=0).
@@ -59,27 +59,29 @@ impl KVSClient {
     /// ```rust
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let config = annalib::config::Config::default();
+    /// let config = annalib::client_config::ClientConfig::default();
     /// let client = annalib::kvs_client::KVSClient::new(&config, Some(100)).await;
     /// # }
     /// ```
-    pub async fn new(config: &Config, tid: Option<ThreadID>) -> Self {
+    pub async fn new(config: &ClientConfig, tid: Option<ThreadID>) -> Self {
         let tid = tid.unwrap_or(0);
-        let base_offset = config.get_base_offset();
-        let thread_count = config.get_routing_thread_count();
-        let routing_ips = config.get_routing_ips();
-        let mut routing_threads = Vec::with_capacity(routing_ips.len() * thread_count);
-        for address in routing_ips {
-            for i in 0..thread_count {
-                routing_threads.push(UserRoutingThread::with_offset(address, i, base_offset));
+        let base_offset = config.base_offset();
+        let mut routing_threads = Vec::with_capacity(config.routing_addresses.len());
+        for addr in &config.routing_addresses {
+            if let Some(ip) = addr
+                .strip_prefix("tcp://")
+                .and_then(|rest| rest.rsplit_once(':'))
+                .map(|(host, _)| host.to_string())
+            {
+                routing_threads.push(UserRoutingThread::with_offset(&ip, 0, base_offset));
             }
         }
 
-        let seed = Self::generate_seed(config.get_user_ip(), tid);
+        let seed = Self::generate_seed(&config.client_ip, tid);
         info!("Random seed is {}.", seed);
         let rng = StdRng::seed_from_u64(seed);
 
-        let ut = UserThread::with_offset(config.get_user_ip(), tid, base_offset);
+        let ut = UserThread::with_offset(&config.client_ip, tid, base_offset);
 
         let mut key_address_puller = PullSocket::new();
         key_address_puller
@@ -368,7 +370,7 @@ impl KVSClient {
     /// ```rust
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let config = annalib::config::Config::default();
+    /// let config = annalib::client_config::ClientConfig::default();
     /// let client = annalib::kvs_client::KVSClient::new(&config, Some(101)).await;
     /// // let value = client.get("my_key").await?; // requires a running server
     /// # }
@@ -464,7 +466,7 @@ impl KVSClient {
     /// ```rust
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let config = annalib::config::Config::default();
+    /// let config = annalib::client_config::ClientConfig::default();
     /// let client = annalib::kvs_client::KVSClient::new(&config, Some(102)).await;
     /// // client.put("my_key", "my_value").await?; // requires a running server
     /// # }
@@ -496,7 +498,7 @@ impl KVSClient {
     /// ```rust
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let config = annalib::config::Config::default();
+    /// let config = annalib::client_config::ClientConfig::default();
     /// let client = annalib::kvs_client::KVSClient::new(&config, Some(103)).await;
     /// // let values = client.get_set("my_set").await?; // requires a running server
     /// # }
@@ -525,7 +527,7 @@ impl KVSClient {
     /// ```rust
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let config = annalib::config::Config::default();
+    /// let config = annalib::client_config::ClientConfig::default();
     /// let client = annalib::kvs_client::KVSClient::new(&config, Some(104)).await;
     /// // client.put_set("my_set", &["a", "b", "c"]).await?; // requires a running server
     /// # }
@@ -634,7 +636,7 @@ impl KVSClient {
     /// ```rust
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let config = annalib::config::Config::default();
+    /// let config = annalib::client_config::ClientConfig::default();
     /// let client = annalib::kvs_client::KVSClient::new(&config, Some(110)).await;
     /// // let values = client.get_ordered_set("my_oset").await?; // requires a running server
     /// # }
@@ -670,7 +672,7 @@ impl KVSClient {
     /// ```rust
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let config = annalib::config::Config::default();
+    /// let config = annalib::client_config::ClientConfig::default();
     /// let client = annalib::kvs_client::KVSClient::new(&config, Some(111)).await;
     /// // client.put_ordered_set("my_oset", &["x", "y", "z"]).await?; // requires a running server
     /// # }
@@ -708,7 +710,7 @@ impl KVSClient {
     /// ```rust
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let config = annalib::config::Config::default();
+    /// let config = annalib::client_config::ClientConfig::default();
     /// let client = annalib::kvs_client::KVSClient::new(&config, Some(112)).await;
     /// // let (vc, val) = client.get_single_causal("my_key").await?; // requires a running server
     /// # }
@@ -744,7 +746,7 @@ impl KVSClient {
     /// ```rust
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let config = annalib::config::Config::default();
+    /// let config = annalib::client_config::ClientConfig::default();
     /// let client = annalib::kvs_client::KVSClient::new(&config, Some(113)).await;
     /// // client.put_single_causal("my_key", "my_value").await?; // requires a running server
     /// # }
@@ -786,7 +788,7 @@ impl KVSClient {
     /// ```rust
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let config = annalib::config::Config::default();
+    /// let config = annalib::client_config::ClientConfig::default();
     /// let client = annalib::kvs_client::KVSClient::new(&config, Some(114)).await;
     /// // let (priority, val) = client.get_priority("my_key").await?; // requires a running server
     /// # }
@@ -814,7 +816,7 @@ impl KVSClient {
     /// ```rust
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let config = annalib::config::Config::default();
+    /// let config = annalib::client_config::ClientConfig::default();
     /// let client = annalib::kvs_client::KVSClient::new(&config, Some(115)).await;
     /// // client.put_priority("my_key", 1.0, "my_value").await?; // requires a running server
     /// # }
@@ -851,7 +853,7 @@ impl KVSClient {
     /// ```rust
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let config = annalib::config::Config::default();
+    /// let config = annalib::client_config::ClientConfig::default();
     /// let client = annalib::kvs_client::KVSClient::new(&config, Some(116)).await;
     /// // client.delete("my_key").await?; // requires a running server
     /// # }
@@ -1031,6 +1033,20 @@ impl KVSClient {
         self.query_routing(key).await
     }
 
+    /// Return the port base offset derived from the routing addresses.
+    pub fn base_offset(&self) -> usize {
+        if let Some(rt) = self.routing_threads.first() {
+            let addr = rt.key_address_connect_address();
+            addr.rsplit(':')
+                .next()
+                .and_then(|p| p.parse::<usize>().ok())
+                .map(|p| p.saturating_sub(6450))
+                .unwrap_or(0)
+        } else {
+            0
+        }
+    }
+
     /// Clear the key-address cache.
     pub fn clear_cache(&mut self) {
         self.key_address_cache.clear()
@@ -1108,10 +1124,7 @@ mod tests {
 
     #[tokio::test]
     async fn client_construction_and_request_id() {
-        let config = Config::read(
-            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
-        )
-        .expect("failed to read default config");
+        let config = ClientConfig::default();
         let mut client = KVSClient::new(&config, Some(99)).await;
         let id1 = client.get_request_id();
         let id2 = client.get_request_id();
@@ -1122,10 +1135,7 @@ mod tests {
 
     #[tokio::test]
     async fn client_routing_thread_returns_address() {
-        let config = Config::read(
-            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
-        )
-        .expect("failed to read default config");
+        let config = ClientConfig::default();
         let mut client = KVSClient::new(&config, Some(98)).await;
         let addr = client.get_routing_thread();
         assert!(addr.starts_with("tcp://"), "addr was: {}", addr);
@@ -1134,10 +1144,7 @@ mod tests {
 
     #[tokio::test]
     async fn client_clear_cache() {
-        let config = Config::read(
-            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
-        )
-        .expect("failed to read default config");
+        let config = ClientConfig::default();
         let mut client = KVSClient::new(&config, Some(97)).await;
         client
             .key_address_cache
@@ -1149,10 +1156,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_worker_address_returns_cached() {
-        let config = Config::read(
-            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
-        )
-        .expect("failed to read default config");
+        let config = ClientConfig::default();
         let mut client = KVSClient::new(&config, Some(96)).await;
         client.key_address_cache.insert(
             "cached_key".into(),
@@ -1164,10 +1168,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_worker_address_picks_from_multi_address_cache() {
-        let config = Config::read(
-            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
-        )
-        .expect("failed to read default config");
+        let config = ClientConfig::default();
         let mut client = KVSClient::new(&config, Some(95)).await;
         let mut addrs = HashSet::new();
         addrs.insert("tcp://10.0.0.1:6200".to_string());
@@ -1186,10 +1187,7 @@ mod tests {
 
     #[tokio::test]
     async fn invalidate_cache_removes_key() {
-        let config = Config::read(
-            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
-        )
-        .expect("failed to read default config");
+        let config = ClientConfig::default();
         let mut client = KVSClient::new(&config, Some(92)).await;
         client.key_address_cache.insert(
             "evict_me".into(),
@@ -1202,10 +1200,7 @@ mod tests {
 
     #[tokio::test]
     async fn evict_address_removes_single_address() {
-        let config = Config::read(
-            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
-        )
-        .expect("failed to read default config");
+        let config = ClientConfig::default();
         let mut client = KVSClient::new(&config, Some(88)).await;
         let mut addrs = HashSet::new();
         addrs.insert("tcp://10.0.0.1:6200".to_string());
@@ -1220,10 +1215,7 @@ mod tests {
 
     #[tokio::test]
     async fn evict_address_removes_key_when_last_address() {
-        let config = Config::read(
-            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
-        )
-        .expect("failed to read default config");
+        let config = ClientConfig::default();
         let mut client = KVSClient::new(&config, Some(87)).await;
         client.key_address_cache.insert(
             "single_addr".into(),
@@ -1236,10 +1228,7 @@ mod tests {
 
     #[tokio::test]
     async fn evict_address_also_removes_socket() {
-        let config = Config::read(
-            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
-        )
-        .expect("failed to read default config");
+        let config = ClientConfig::default();
         let mut client = KVSClient::new(&config, Some(86)).await;
         client.key_address_cache.insert(
             "sock_test".into(),
@@ -1256,10 +1245,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_timeout_changes_duration() {
-        let config = Config::read(
-            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
-        )
-        .expect("failed to read default config");
+        let config = ClientConfig::default();
         let mut client = KVSClient::new(&config, Some(85)).await;
         assert_eq!(client.timeout, Duration::from_secs(10));
         client.set_timeout(Duration::from_secs(3));
@@ -1268,10 +1254,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_key_addresses_clears_cache_first() {
-        let config = Config::read(
-            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
-        )
-        .expect("failed to read default config");
+        let config = ClientConfig::default();
         let mut client = KVSClient::new(&config, Some(84)).await;
         client.key_address_cache.insert(
             "stale_key".into(),
@@ -1343,10 +1326,7 @@ mod tests {
 
     #[tokio::test]
     async fn request_id_format() {
-        let config = Config::read(
-            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("default-config.yml"),
-        )
-        .expect("failed to read default config");
+        let config = ClientConfig::default();
         let mut client = KVSClient::new(&config, Some(91)).await;
         let id = client.get_request_id();
         let parts: Vec<&str> = id.split(':').collect();

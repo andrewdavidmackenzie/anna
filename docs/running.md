@@ -13,7 +13,7 @@ If you have not installed it, then you can build and run the development version
 > cargo run -- start
 ```
 
-By default, the `conf/anna-config.yml` config file is used, which only specifies one routing thread and one storage
+By default, the `server/conf/anna-config.yml` config file is used, which only specifies one routing thread and one storage
 thread.
 
 You are welcome to modify this file if you would like, but we generally do not recommend running more than one
