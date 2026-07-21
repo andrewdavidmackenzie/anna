@@ -1248,6 +1248,72 @@ async fn disk_tier_basic() {
             .unwrap_or_else(|e| panic!("GET {} failed: {}", key, e));
         assert_eq!(val, format!("disk_val_{}", i));
     }
+
+    // Test all lattice types on the disk tier to exercise disk serializers
+    #[cfg(feature = "set")]
+    {
+        client
+            .put_set("disk_set_key", &["a", "b", "c"])
+            .await
+            .expect("PUT_SET on disk failed");
+        let set_val = client
+            .get_set("disk_set_key")
+            .await
+            .expect("GET_SET on disk failed");
+        assert_eq!(set_val.len(), 3);
+
+        client
+            .put_ordered_set("disk_oset_key", &["x", "y", "z"])
+            .await
+            .expect("PUT_ORDERED_SET on disk failed");
+        let oset_val = client
+            .get_ordered_set("disk_oset_key")
+            .await
+            .expect("GET_ORDERED_SET on disk failed");
+        assert_eq!(oset_val.len(), 3);
+    }
+
+    #[cfg(feature = "causal")]
+    {
+        client
+            .put_single_causal("disk_sc_key", "causal_val")
+            .await
+            .expect("PUT_SINGLE_CAUSAL on disk failed");
+        let (vc, vals) = client
+            .get_single_causal("disk_sc_key")
+            .await
+            .expect("GET_SINGLE_CAUSAL on disk failed");
+        assert!(!vc.is_empty());
+        assert!(!vals.is_empty());
+
+        client
+            .put_causal("disk_mc_key", "multi_causal_val")
+            .await
+            .expect("PUT_CAUSAL on disk failed");
+        let (vc, _deps, val) = client
+            .get_causal("disk_mc_key")
+            .await
+            .expect("GET_CAUSAL on disk failed");
+        assert!(!vc.is_empty());
+        assert!(!val.is_empty());
+    }
+
+    client
+        .put_priority("disk_pri_key", 1.5, "important")
+        .await
+        .expect("PUT_PRIORITY on disk failed");
+    let (priority, val) = client
+        .get_priority("disk_pri_key")
+        .await
+        .expect("GET_PRIORITY on disk failed");
+    assert!((priority - 1.5).abs() < f64::EPSILON);
+    assert_eq!(val, "important");
+
+    // DELETE on disk tier
+    client
+        .delete("disk_key_0")
+        .await
+        .expect("DELETE on disk failed");
 }
 
 /// Memory-tier preference: with both memory and disk tier nodes,
