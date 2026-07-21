@@ -340,4 +340,21 @@ mod tests {
         let decoded = UserFeedback::decode(bytes.as_slice()).expect("decode failed");
         assert!(decoded.finish);
     }
+
+    #[tokio::test]
+    async fn connect_pre_establishes_sockets() {
+        use zeromq::PullSocket;
+
+        let port = 6750 + 82;
+        let mut puller = PullSocket::new();
+        puller
+            .bind(&format!("tcp://127.0.0.1:{}", port))
+            .await
+            .expect("bind failed");
+
+        let mut reporter =
+            LatencyReporter::with_monitoring_ips(vec!["127.0.0.1".into()], 82, Some(0));
+        reporter.connect().await.expect("connect failed");
+        assert_eq!(reporter.socket_cache.len(), 1);
+    }
 }
