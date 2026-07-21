@@ -1634,7 +1634,7 @@ async fn gossip_to_caches() {
 /// The test continuously sends feedback and accesses to keep all conditions
 /// met across multiple monitoring cycles (8s each in test config).
 ///
-/// Uses base_offset=25500 to stay below port 32768 limit.
+/// Uses base_offset=400.
 #[tokio::test]
 #[cfg(unix)]
 async fn slo_selective_replication() {
@@ -1688,10 +1688,9 @@ async fn slo_selective_replication() {
         .expect("feedback connect failed");
     tokio::time::sleep(Duration::from_millis(200)).await;
 
-    // The monitor clears user_latency at the START of each monitoring cycle,
-    // then collects internal stats, then reads the accumulated feedback.
-    // Feedback must arrive DURING the collection phase to be counted.
-    // Send feedback every second to ensure overlap with every cycle.
+    // Feedback is consumed at the END of each monitoring cycle (after
+    // collect_external_stats and slo_policy). Send frequently to ensure
+    // feedback is present for every cycle.
     //
     // Timeline: grace_period(10s) must elapse first, then we need at least
     // one cycle where both access stats AND latency feedback are present.
