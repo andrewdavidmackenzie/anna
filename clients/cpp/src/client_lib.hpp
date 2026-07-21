@@ -18,6 +18,7 @@
 #include <memory>
 
 #include "kvs_client.hpp"
+#include "metadata.pb.h"
 
 // This header (together with client_lib.cpp) is the "library" half of the
 // C++ client: it wraps KvsClientInterface with the KVS operations (get, put,
@@ -119,6 +120,50 @@ kvs::KeyResponse put_priority(KvsClientInterface* client, const string& key,
 
 // Issue a blocking GET for `key` under the priority lattice type.
 PriorityResult get_priority(KvsClientInterface* client, const string& key);
+
+// Issue a blocking GET for `key` under the default (LWW) lattice type and
+// return its raw value bytes.  Functionally identical to get() in C++ (since
+// std::string is byte-transparent), but provided for API symmetry with the
+// Rust client where get() performs a UTF-8 conversion.
+string get_bytes(KvsClientInterface* client, const string& key);
+
+// Retrieve server thread statistics for a specific node and thread.
+// Reads the metadata key
+//   ANNA_METADATA|stats|<public_ip>|<private_ip>|<tid>|<tier>
+// and decodes the ServerThreadStatistics protobuf.
+ServerThreadStatistics get_storage_stats(KvsClientInterface* client,
+                                         const string& public_ip,
+                                         const string& private_ip,
+                                         unsigned tid,
+                                         const string& tier);
+
+// Retrieve per-key access frequency data for a specific node and thread.
+// Reads the metadata key
+//   ANNA_METADATA|access|<public_ip>|<private_ip>|<tid>|<tier>
+// and decodes the KeyAccessData protobuf.
+KeyAccessData get_key_access_stats(KvsClientInterface* client,
+                                   const string& public_ip,
+                                   const string& private_ip,
+                                   unsigned tid,
+                                   const string& tier);
+
+// Retrieve per-key size data for a specific node and thread.
+// Reads the metadata key
+//   ANNA_METADATA|size|<public_ip>|<private_ip>|<tid>|<tier>
+// and decodes the KeySizeData protobuf.
+KeySizeData get_key_size_stats(KvsClientInterface* client,
+                               const string& public_ip,
+                               const string& private_ip,
+                               unsigned tid,
+                               const string& tier);
+
+// Set the per-key replication factor by writing to the metadata key
+//   ANNA_METADATA|replication|<key>
+// with a ReplicationFactor protobuf wrapped in an LWW value.
+void put_replication_factor(KvsClientInterface* client,
+                            const string& key,
+                            unsigned memory_rep,
+                            unsigned local_rep);
 
 // The anna server processes managed by start()/stop()/status().
 extern const vector<string> kProcessList;

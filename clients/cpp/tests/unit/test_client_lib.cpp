@@ -289,6 +289,205 @@ TEST(ClientLibTest, PutPrioritySendsRequest) {
   EXPECT_EQ(response.response_id(), "1");
 }
 
+// --- Metadata / stats helper tests ---
+
+TEST(ClientLibTest, GetBytesReturnsRawLwwValue) {
+  MockKvsClient client;
+  client.responses_.push_back(make_lww_response("0", "raw_bytes_here"));
+
+  string result = annalib::get_bytes(&client, "some_key");
+
+  EXPECT_EQ(result, "raw_bytes_here");
+  ASSERT_EQ(client.keys_get_.size(), 1u);
+  EXPECT_EQ(client.keys_get_[0], "some_key");
+}
+
+TEST(ClientLibTest, GetStorageStatsReadsCorrectKeyAndDecodesProtobuf) {
+  MockKvsClient client;
+
+  // Build a ServerThreadStatistics protobuf, serialize, and wrap in LWW.
+  ServerThreadStatistics stats;
+  stats.set_storage_consumption(2048);
+  stats.set_occupancy(0.5);
+  stats.set_epoch(7);
+  stats.set_access_count(42);
+  string serialized;
+  stats.SerializeToString(&serialized);
+
+  client.responses_.push_back(make_lww_response("0", serialized));
+
+  ServerThreadStatistics result = annalib::get_storage_stats(
+      &client, "1.2.3.4", "10.0.0.1", 3, "MEMORY");
+
+  EXPECT_EQ(result.storage_consumption(), 2048u);
+  EXPECT_DOUBLE_EQ(result.occupancy(), 0.5);
+  EXPECT_EQ(result.epoch(), 7u);
+  EXPECT_EQ(result.access_count(), 42u);
+
+  ASSERT_EQ(client.keys_get_.size(), 1u);
+  EXPECT_EQ(client.keys_get_[0],
+            "ANNA_METADATA|stats|1.2.3.4|10.0.0.1|3|MEMORY");
+}
+
+TEST(ClientLibTest, GetKeyAccessStatsReadsCorrectKeyAndDecodesProtobuf) {
+  MockKvsClient client;
+
+  KeyAccessData access;
+  auto* entry = access.add_keys();
+  entry->set_key("hot_key");
+  entry->set_access_count(999);
+  string serialized;
+  access.SerializeToString(&serialized);
+
+  client.responses_.push_back(make_lww_response("0", serialized));
+
+  KeyAccessData result = annalib::get_key_access_stats(
+      &client, "5.6.7.8", "192.168.1.1", 0, "DISK");
+
+  ASSERT_EQ(result.keys_size(), 1);
+  EXPECT_EQ(result.keys(0).key(), "hot_key");
+  EXPECT_EQ(result.keys(0).access_count(), 999u);
+
+  ASSERT_EQ(client.keys_get_.size(), 1u);
+  EXPECT_EQ(client.keys_get_[0],
+            "ANNA_METADATA|access|5.6.7.8|192.168.1.1|0|DISK");
+}
+
+TEST(ClientLibTest, GetKeySizeStatsReadsCorrectKeyAndDecodesProtobuf) {
+  MockKvsClient client;
+
+  KeySizeData sizes;
+  auto* ks = sizes.add_key_sizes();
+  ks->set_key("big_key");
+  ks->set_size(65536);
+  string serialized;
+  sizes.SerializeToString(&serialized);
+
+  client.responses_.push_back(make_lww_response("0", serialized));
+
+  KeySizeData result = annalib::get_key_size_stats(
+      &client, "9.8.7.6", "172.16.0.1", 2, "MEMORY");
+
+  ASSERT_EQ(result.key_sizes_size(), 1);
+  EXPECT_EQ(result.key_sizes(0).key(), "big_key");
+  EXPECT_EQ(result.key_sizes(0).size(), 65536u);
+
+  ASSERT_EQ(client.keys_get_.size(), 1u);
+  EXPECT_EQ(client.keys_get_[0],
+            "ANNA_METADATA|size|9.8.7.6|172.16.0.1|2|MEMORY");
+}
+
+TEST(ClientLibTest, PutReplicationFactorWritesCorrectKeyAndProtobuf) {
+  MockKvsClient client;
+  // put() inside put_replication_factor will call put_async then receive_async.
+  client.responses_.push_back(make_lww_response("1", "unused"));
+
+  annalib::put_replication_factor(&client, "my_data_key", 3, 1);
+
+  ASSERT_EQ(client.keys_put_.size(), 1u);
+  EXPECT_EQ(client.keys_put_[0], "ANNA_METADATA|replication|my_data_key");
+}
+
+TEST(ClientLibTest, ServerThreadStatisticsProtobufRoundtrip) {
+  ServerThreadStatistics original;
+  original.set_storage_consumption(4096);
+  original.set_occupancy(0.95);
+  original.set_epoch(12);
+  original.set_access_count(500);
+
+  string bytes;
+  original.SerializeToString(&bytes);
+
+  ServerThreadStatistics decoded;
+  ASSERT_TRUE(decoded.ParseFromString(bytes));
+
+  EXPECT_EQ(decoded.storage_consumption(), 4096u);
+  EXPECT_DOUBLE_EQ(decoded.occupancy(), 0.95);
+  EXPECT_EQ(decoded.epoch(), 12u);
+  EXPECT_EQ(decoded.access_count(), 500u);
+}
+
+TEST(ClientLibTest, KeyAccessDataProtobufRoundtrip) {
+  KeyAccessData original;
+  auto* k1 = original.add_keys();
+  k1->set_key("key_a");
+  k1->set_access_count(10);
+  auto* k2 = original.add_keys();
+  k2->set_key("key_b");
+  k2->set_access_count(20);
+
+  string bytes;
+  original.SerializeToString(&bytes);
+
+  KeyAccessData decoded;
+  ASSERT_TRUE(decoded.ParseFromString(bytes));
+
+  ASSERT_EQ(decoded.keys_size(), 2);
+  EXPECT_EQ(decoded.keys(0).key(), "key_a");
+  EXPECT_EQ(decoded.keys(0).access_count(), 10u);
+  EXPECT_EQ(decoded.keys(1).key(), "key_b");
+  EXPECT_EQ(decoded.keys(1).access_count(), 20u);
+}
+
+TEST(ClientLibTest, KeySizeDataProtobufRoundtrip) {
+  KeySizeData original;
+  auto* s1 = original.add_key_sizes();
+  s1->set_key("small");
+  s1->set_size(128);
+  auto* s2 = original.add_key_sizes();
+  s2->set_key("large");
+  s2->set_size(1048576);
+
+  string bytes;
+  original.SerializeToString(&bytes);
+
+  KeySizeData decoded;
+  ASSERT_TRUE(decoded.ParseFromString(bytes));
+
+  ASSERT_EQ(decoded.key_sizes_size(), 2);
+  EXPECT_EQ(decoded.key_sizes(0).key(), "small");
+  EXPECT_EQ(decoded.key_sizes(0).size(), 128u);
+  EXPECT_EQ(decoded.key_sizes(1).key(), "large");
+  EXPECT_EQ(decoded.key_sizes(1).size(), 1048576u);
+}
+
+TEST(ClientLibTest, ReplicationFactorProtobufRoundtrip) {
+  ReplicationFactor original;
+  original.set_key("replicated_key");
+
+  auto* gm = original.add_global();
+  gm->set_tier(MEMORY);
+  gm->set_value(3);
+  auto* gd = original.add_global();
+  gd->set_tier(DISK);
+  gd->set_value(0);
+
+  auto* lm = original.add_local();
+  lm->set_tier(MEMORY);
+  lm->set_value(1);
+  auto* ld = original.add_local();
+  ld->set_tier(DISK);
+  ld->set_value(0);
+
+  string bytes;
+  original.SerializeToString(&bytes);
+
+  ReplicationFactor decoded;
+  ASSERT_TRUE(decoded.ParseFromString(bytes));
+
+  EXPECT_EQ(decoded.key(), "replicated_key");
+  ASSERT_EQ(decoded.global_size(), 2);
+  EXPECT_EQ(decoded.global(0).tier(), MEMORY);
+  EXPECT_EQ(decoded.global(0).value(), 3u);
+  EXPECT_EQ(decoded.global(1).tier(), DISK);
+  EXPECT_EQ(decoded.global(1).value(), 0u);
+  ASSERT_EQ(decoded.local_size(), 2);
+  EXPECT_EQ(decoded.local(0).tier(), MEMORY);
+  EXPECT_EQ(decoded.local(0).value(), 1u);
+  EXPECT_EQ(decoded.local(1).tier(), DISK);
+  EXPECT_EQ(decoded.local(1).value(), 0u);
+}
+
 TEST(ClientLibTest, StopWithNothingRunningReturnsZero) {
   EXPECT_EQ(annalib::stop(), 0);
 }
