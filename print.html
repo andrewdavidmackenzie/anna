@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7bd44eee.js";
+            window.path_to_searchindex_js = "searchindex-61d0d744.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7bb26e2b.js"></script>
@@ -856,6 +856,92 @@ than <code>0.0.0.0</code>, so multiple nodes can coexist without port conflicts.
 <pre><code class="language-bash">sudo ifconfig lo0 alias 127.0.0.2
 </code></pre>
 <p>Linux supports the full 127.0.0.0/8 range by default.</p>
+<h2 id="operators-guide-to-autoscaling"><a class="header" href="#operators-guide-to-autoscaling">Operator’s Guide to Autoscaling</a></h2>
+<p>Anna’s autoscaling is a split-responsibility architecture:</p>
+<ul>
+<li><strong>Anna provides</strong>: metrics collection, cluster primitives (join, depart,
+replication changes), and a built-in policy engine</li>
+<li><strong>The operator provides</strong>: infrastructure lifecycle (provisioning and
+deprovisioning nodes) and optionally custom decision logic</li>
+</ul>
+<h3 id="reading-scaling-metrics-via-client-libraries"><a class="header" href="#reading-scaling-metrics-via-client-libraries">Reading Scaling Metrics via Client Libraries</a></h3>
+<p>All client libraries provide helper methods to read the metadata keys
+that the KVS server writes every <code>server_report_period</code> seconds:</p>
+<pre><code class="language-python"># Python example
+stats = client.get_storage_stats("10.0.0.1", "10.0.0.1", 0, "MEMORY")
+print(f"Storage: {stats.storage_consumption} KB")
+print(f"Occupancy: {stats.occupancy}")
+print(f"Access count: {stats.access_count}")
+
+access = client.get_key_access_stats("10.0.0.1", "10.0.0.1", 0, "MEMORY")
+for key_count in access.keys:
+    print(f"Key {key_count.key}: {key_count.access_count} accesses")
+
+sizes = client.get_key_size_stats("10.0.0.1", "10.0.0.1", 0, "MEMORY")
+for key_size in sizes.key_sizes:
+    print(f"Key {key_size.key}: {key_size.size} bytes")
+</code></pre>
+<p>Available in all four client libraries (Rust, Python, Go, C++):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Returns</th><th>Metadata Key</th></tr>
+</thead>
+<tbody>
+<tr><td><code>get_storage_stats(ip, ip, tid, tier)</code></td><td><code>ServerThreadStatistics</code></td><td><code>ANNA_METADATA|stats|...|...|tid|tier</code></td></tr>
+<tr><td><code>get_key_access_stats(ip, ip, tid, tier)</code></td><td><code>KeyAccessData</code></td><td><code>ANNA_METADATA|access|...|...|tid|tier</code></td></tr>
+<tr><td><code>get_key_size_stats(ip, ip, tid, tier)</code></td><td><code>KeySizeData</code></td><td><code>ANNA_METADATA|size|...|...|tid|tier</code></td></tr>
+<tr><td><code>put_replication_factor(key, mem_rep, local_rep)</code></td><td>—</td><td><code>ANNA_METADATA|replication|key</code></td></tr>
+<tr><td><code>get_cluster_topology()</code></td><td><code>ClusterTopology</code></td><td><code>ANNA_METADATA|cluster_topology</code></td></tr>
+<tr><td><code>get_monitoring_ips()</code></td><td>list of IPs</td><td><code>ANNA_METADATA|monitoring_ips</code></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="scaling-actions"><a class="header" href="#scaling-actions">Scaling Actions</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Action</th><th>How</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Scale out</strong></td><td>Start a new <code>anna-kvs</code> process with <code>seed_ip</code> pointing to an existing node. Data redistributes automatically via consistent hashing.</td></tr>
+<tr><td><strong>Scale in</strong></td><td>Send <code>SIGUSR1</code> to the node to trigger graceful self-departure. The node transfers its data to remaining nodes before exiting.</td></tr>
+<tr><td><strong>Hot-key replication</strong></td><td>Call <code>put_replication_factor(key, N, 1)</code> to increase the memory replication factor for a specific key.</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="example-simple-autoscaler"><a class="header" href="#example-simple-autoscaler">Example: Simple Autoscaler</a></h3>
+<pre><code class="language-python">import time
+
+CAPACITY_GB = 1  # per-node capacity from config
+SCALE_OUT_THRESHOLD = 0.6
+SCALE_IN_THRESHOLD = 0.05
+CHECK_INTERVAL = 30  # seconds
+
+while True:
+    stats = client.get_storage_stats(node_ip, node_ip, 0, "MEMORY")
+    consumption_pct = stats.storage_consumption / (CAPACITY_GB * 1_000_000)
+
+    if consumption_pct &gt; SCALE_OUT_THRESHOLD:
+        # Start a new anna-kvs pointing at the seed node
+        start_new_node(seed_ip)
+
+    if stats.occupancy &lt; SCALE_IN_THRESHOLD and node_count &gt; 1:
+        # Signal the least-busy node to depart
+        signal_depart(least_busy_node_pid)
+
+    time.sleep(CHECK_INTERVAL)
+</code></pre>
+<h3 id="management-node-protocol"><a class="header" href="#management-node-protocol">Management Node Protocol</a></h3>
+<p>The built-in policy engine communicates with an external management node
+via ZMQ PUSH on port 7001:</p>
+<ul>
+<li><strong>Add nodes</strong>: sends <code>"add:&lt;count&gt;:&lt;tier&gt;"</code> (e.g., <code>"add:2:memory"</code>)</li>
+<li><strong>Remove nodes</strong>: sends self-depart signal directly to the KVS node
+(no management node involvement)</li>
+</ul>
+<p>The management node is not part of Anna — it’s the operator’s responsibility
+to implement infrastructure provisioning in response to these messages.</p>
 <h2 id="performance-results"><a class="header" href="#performance-results">Performance Results</a></h2>
 <p>From the VLDB 2019 evaluation:</p>
 <ul>
