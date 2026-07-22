@@ -451,16 +451,24 @@ async fn cross_tier_data_movement() {
     let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(97)).await;
 
-    // PUT keys to generate data on both tiers
+    // PUT hot keys (will be accessed) and cold keys (won't be accessed).
+    // Hot keys exercise the promotion path, cold keys exercise demotion.
     for i in 0..3 {
         let key = format!("tier_move_key_{}", i);
         client
             .put(&key, &"x".repeat(1000))
             .await
-            .expect("PUT failed");
+            .expect("PUT hot key failed");
+    }
+    for i in 0..3 {
+        let key = format!("tier_cold_key_{}", i);
+        client
+            .put(&key, &"y".repeat(500))
+            .await
+            .expect("PUT cold key failed");
     }
 
-    // Access keys to generate stats (needed for tiering policy)
+    // Only access hot keys — cold keys remain unaccessed to trigger demotion
     for i in 0..3 {
         let key = format!("tier_move_key_{}", i);
         for _ in 0..5 {

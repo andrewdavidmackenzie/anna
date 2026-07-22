@@ -1847,24 +1847,24 @@ async fn management_node_integration() {
                             .into_iter().flat_map(|f| f.to_vec()).collect();
                         let response_addr = String::from_utf8_lossy(&data).to_string();
                         eprintln!("Mock mgmt: func nodes query, response addr: {}", response_addr);
-                        func_count += 1;
 
                         // Send back a StringSet of cache IPs to the KVS's
                         // management_node_response port. This exercises
                         // management_node_response_handler.cpp.
-                        if func_count == 1 && !response_addr.is_empty() {
+                        if func_count == 0 && !response_addr.is_empty() {
                             use annalib::proto::shared::StringSet;
                             use prost::Message;
                             let cache_ips = StringSet { keys: vec![] };
                             let mut push = zeromq::PushSocket::new();
-                            if push.connect(&response_addr).await.is_ok() {
-                                tokio::time::sleep(Duration::from_millis(100)).await;
-                                push.send(zeromq::ZmqMessage::from(cache_ips.encode_to_vec()))
-                                    .await
-                                    .ok();
-                                eprintln!("Mock mgmt: sent empty cache IP list to {}", response_addr);
-                            }
+                            push.connect(&response_addr).await
+                                .expect("Failed to connect to KVS response addr");
+                            tokio::time::sleep(Duration::from_millis(100)).await;
+                            push.send(zeromq::ZmqMessage::from(cache_ips.encode_to_vec()))
+                                .await
+                                .expect("Failed to send cache IPs to KVS");
+                            eprintln!("Mock mgmt: sent empty cache IP list to {}", response_addr);
                         }
+                        func_count += 1;
                     }
                 }
             }
