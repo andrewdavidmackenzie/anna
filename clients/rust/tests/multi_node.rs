@@ -2157,8 +2157,9 @@ async fn underutilization_scale_in() {
     let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(42)).await;
 
-    // PUT a small amount of data — poll until the cluster is ready
-    let deadline = Instant::now() + Duration::from_secs(TEST_SERVER_REPORT_PERIOD as u64 * 4);
+    // PUT a small amount of data — poll until the cluster is ready.
+    // With management node, cluster startup takes longer (restart count query).
+    let deadline = Instant::now() + Duration::from_secs(30);
     let mut put_ok = false;
     while Instant::now() < deadline {
         if client.put("scale_in_key", "small").await.is_ok() {
