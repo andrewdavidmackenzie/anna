@@ -18,6 +18,7 @@ import unittest
 import zmq
 
 from anna.kvs_pb2 import KeyResponse, KeyTuple
+from anna.shared_pb2 import StringSet
 from anna.value_change_subscriber import ValueChangeSubscriber, \
     CACHE_REGISTRATION_PORT, CACHE_UPDATE_PORT
 
@@ -108,6 +109,98 @@ class TestValueChangeSubscriber(unittest.TestCase):
 
         pusher.close()
         ctx.term()
+
+
+class TestWatch(unittest.TestCase):
+    """Test watch() method using mocked ZMQ sockets to avoid blocking sends."""
+
+    def setUp(self):
+        from unittest.mock import MagicMock, patch
+
+        # Create a real subscriber but with mocked context for watch tests
+        self.mock_context = MagicMock()
+        self.mock_push_socket = MagicMock()
+        self.mock_context.socket.return_value = self.mock_push_socket
+
+        # Create a subscriber with a real update_puller (bound to high offset)
+        self.client = ValueChangeSubscriber(
+            server_ip="127.0.0.1",
+            cache_ip="127.0.0.1",
+            memory_threads=2,
+            offset=51000,
+            tid=0,
+        )
+        # Replace the context used for push sockets with our mock
+        self.client.context = self.mock_context
+
+    def tearDown(self):
+        # The update_puller is a real socket, so close it manually
+        try:
+            self.client.update_puller.close()
+        except Exception:
+            pass
+        self.client.push_sockets.clear()
+
+    def test_watch_extends_watched_keys(self):
+        self.client.watch(["key1", "key2"])
+        self.assertEqual(self.client.watched_keys, ["key1", "key2"])
+
+    def test_watch_sends_to_all_threads(self):
+        self.client.watch(["keyA"])
+        # With 2 memory_threads, should have 2 push sockets
+        self.assertEqual(len(self.client.push_sockets), 2)
+
+    def test_watch_creates_push_sockets_with_correct_addresses(self):
+        self.client.watch(["keyB"])
+        expected_addrs = [
+            "tcp://127.0.0.1:{}".format(0 + CACHE_REGISTRATION_PORT + 51000),
+            "tcp://127.0.0.1:{}".format(1 + CACHE_REGISTRATION_PORT + 51000),
+        ]
+        for addr in expected_addrs:
+            self.assertIn(addr, self.client.push_sockets)
+
+    def test_watch_reuses_existing_sockets(self):
+        self.client.watch(["key1"])
+        socket_count_after_first = len(self.client.push_sockets)
+        self.client.watch(["key2"])
+        # Should reuse existing sockets, not create new ones
+        self.assertEqual(len(self.client.push_sockets), socket_count_after_first)
+
+    def test_watch_multiple_keys_at_once(self):
+        self.client.watch(["a", "b", "c"])
+        self.assertEqual(self.client.watched_keys, ["a", "b", "c"])
+
+    def test_watch_sends_serialized_message(self):
+        self.client.watch(["test_key"])
+        # Verify send was called on each push socket
+        self.assertEqual(self.mock_push_socket.send.call_count, 2)
+
+        # Verify the payload contains the cache_ip and key
+        payload = self.mock_push_socket.send.call_args[0][0]
+        msg = StringSet()
+        msg.ParseFromString(payload)
+        self.assertIn("127.0.0.1", list(msg.keys))
+        self.assertIn("test_key", list(msg.keys))
+
+
+class TestCloseWithPushSockets(unittest.TestCase):
+    def test_close_cleans_push_sockets(self):
+        from unittest.mock import MagicMock
+
+        client = ValueChangeSubscriber(
+            server_ip="127.0.0.1",
+            cache_ip="127.0.0.1",
+            memory_threads=1,
+            offset=52000,
+            tid=0,
+        )
+        # Add a mock push socket
+        mock_sock = MagicMock()
+        client.push_sockets["tcp://127.0.0.1:59200"] = mock_sock
+
+        client.close()
+        self.assertEqual(client.push_sockets, {})
+        mock_sock.close.assert_called_once()
 
 
 if __name__ == "__main__":
