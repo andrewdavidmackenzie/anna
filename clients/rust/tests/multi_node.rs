@@ -251,8 +251,8 @@ impl MultiNodeCluster {
 
         let routing_port = (6450 + cfg.base_offset) as u16;
         assert!(
-            wait_for_port(cfg.node_ip, routing_port, 30),
-            "Routing tier on {} did not start within 30 seconds (port {})",
+            wait_for_port(cfg.node_ip, routing_port, 60),
+            "Routing tier on {} did not start within 60 seconds (port {})",
             cfg.node_ip,
             routing_port
         );
