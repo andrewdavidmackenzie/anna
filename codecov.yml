@@ -6,6 +6,8 @@ ignore:
   - "**/test_*.cpp"
   - "**/*_test.go"
   - "**/*.pb.go"
+  - "**/*_pb2.py"
+  - "**/proto/**"
 
 comment:
   layout: "header, diff, components"
