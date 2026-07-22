@@ -1,9 +1,66 @@
 import pytest
 
 from anna.base_client import BaseAnnaClient
-from anna.kvs_pb2 import LWW, ORDERED_SET, PRIORITY, SET
+from anna.kvs_pb2 import LWW, ORDERED_SET, PRIORITY, SET, SINGLE_CAUSAL, MULTI_CAUSAL
 from anna.kvs_pb2 import KeyTuple, LWWValue, PriorityValue, SetValue
 from anna.lattices import LWWPairLattice, OrderedSetLattice, PriorityLattice, SetLattice
+
+
+class TestBaseClientNotImplemented:
+    def test_get_raises(self):
+        client = BaseAnnaClient()
+        with pytest.raises(NotImplementedError):
+            client.get("key")
+
+    def test_get_all_raises(self):
+        client = BaseAnnaClient()
+        with pytest.raises(NotImplementedError):
+            client.get_all(["key"])
+
+    def test_put_raises(self):
+        client = BaseAnnaClient()
+        with pytest.raises(NotImplementedError):
+            client.put("key", "value")
+
+    def test_put_all_raises(self):
+        client = BaseAnnaClient()
+        with pytest.raises(NotImplementedError):
+            client.put_all("key", "value")
+
+    def test_response_address_raises(self):
+        client = BaseAnnaClient()
+        with pytest.raises(NotImplementedError):
+            _ = client.response_address
+
+
+class TestDeserializeCausalTuple:
+    def test_deserialize_causal_tuple(self):
+        """Test deserialization of CausalTuple (the isinstance(tup, CausalTuple) branch)."""
+        from anna.causal_pb2 import CausalTuple
+        from anna.kvs_pb2 import MultiKeyCausalValue
+        from anna.lattices import MultiKeyCausalLattice
+
+        # Build the inner protobuf
+        val = MultiKeyCausalValue()
+        val.vector_clock["node1"] = 5
+
+        dep = val.dependencies.add()
+        dep.key = "dep_key"
+        dep.vector_clock["node2"] = 3
+
+        val.values.append(b"causal_value")
+
+        # Wrap in CausalTuple
+        tup = CausalTuple()
+        tup.payload = val.SerializeToString()
+
+        result = BaseAnnaClient._deserialize(tup)
+        assert isinstance(result, MultiKeyCausalLattice)
+        assert b"causal_value" in result.value.reveal()
+        assert result.vector_clock.reveal()["node1"].reveal() == 5
+        deps = result.dependencies.reveal()
+        assert "dep_key" in deps
+        assert deps["dep_key"].reveal()["node2"].reveal() == 3
 
 
 class TestSerialize:

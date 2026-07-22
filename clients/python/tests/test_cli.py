@@ -75,6 +75,91 @@ class TestProcessMgmt:
         finally:
             os.unlink(config_path)
 
+    def test_pids_from_name_returns_pids(self):
+        from unittest.mock import patch, MagicMock
+        from anna.process_mgmt import _pids_from_name
+
+        mock_result = MagicMock()
+        mock_result.stdout = "1234\n5678\n"
+
+        with patch("anna.process_mgmt.subprocess.run", return_value=mock_result):
+            pids = _pids_from_name("anna-kvs")
+        assert pids == [1234, 5678]
+
+    def test_pids_from_name_exception(self):
+        from unittest.mock import patch
+        from anna.process_mgmt import _pids_from_name
+
+        with patch("anna.process_mgmt.subprocess.run", side_effect=Exception("fail")):
+            pids = _pids_from_name("anna-kvs")
+        assert pids == []
+
+    def test_find_binary_with_valid_env(self):
+        from unittest.mock import patch
+        from anna.process_mgmt import _find_binary
+
+        with patch.dict(os.environ, {"ANNA_SERVER_PATH": "/tmp"}), \
+             patch("os.path.isfile", return_value=True), \
+             patch("os.access", return_value=True):
+            result = _find_binary("anna-kvs")
+        assert result == "/tmp/anna-kvs"
+
+    def test_start_skips_already_running(self):
+        from unittest.mock import patch
+        from anna.process_mgmt import start
+
+        with patch("anna.process_mgmt._pids_from_name", return_value=[1234]):
+            count = start("/fake/config.yml")
+        assert count == 0
+
+    def test_start_popen_success(self):
+        from unittest.mock import patch, MagicMock
+        from anna.process_mgmt import start
+
+        with patch("anna.process_mgmt._pids_from_name", return_value=[]), \
+             patch("anna.process_mgmt._find_binary", return_value="/usr/bin/fake"), \
+             patch("anna.process_mgmt.subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock()
+            count = start("/fake/config.yml")
+        assert count == 3  # 3 processes in PROCESS_LIST
+
+    def test_status_with_running_processes(self):
+        from unittest.mock import patch
+        from anna.process_mgmt import status
+
+        def mock_pids(name):
+            return [1234] if name == "anna-kvs" else []
+
+        with patch("anna.process_mgmt._pids_from_name", side_effect=mock_pids):
+            result = status()
+        assert result == ["anna-kvs"]
+
+    def test_stop_kills_processes(self):
+        from unittest.mock import patch, call
+        from anna.process_mgmt import stop
+
+        def mock_pids(name):
+            if name == "anna-kvs":
+                return [1111, 2222]
+            return []
+
+        with patch("anna.process_mgmt._pids_from_name", side_effect=mock_pids), \
+             patch("os.kill") as mock_kill:
+            count = stop()
+        assert count == 2
+        import signal
+        mock_kill.assert_any_call(1111, signal.SIGTERM)
+        mock_kill.assert_any_call(2222, signal.SIGTERM)
+
+    def test_stop_handles_process_lookup_error(self):
+        from unittest.mock import patch
+        from anna.process_mgmt import stop
+
+        with patch("anna.process_mgmt._pids_from_name", return_value=[9999]), \
+             patch("os.kill", side_effect=ProcessLookupError):
+            count = stop()
+        assert count == 0
+
 
 class TestCliUsage:
     def test_cli_usage_string(self):
@@ -422,3 +507,232 @@ class TestCausalFormatting:
 
         assert result is True
         client.put_causal.assert_called_once_with("k", "hello")
+
+    def test_get_causal_not_found(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.get_causal.return_value = None
+
+        execute_command(client, "/dev/null", "GET_CAUSAL mykey")
+        assert "Key not found" in capsys.readouterr().out
+
+    def test_put_causal_failure(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.put_causal.return_value = {"k": False}
+
+        execute_command(client, "/dev/null", "PUT_CAUSAL k val")
+        assert "Failure!" in capsys.readouterr().out
+
+
+class TestDeleteCommand:
+    def test_delete_success(self):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.delete.return_value = {"mykey": True}
+
+        result = execute_command(client, None, "DELETE mykey")
+        assert result is True
+        client.delete.assert_called_once_with("mykey")
+
+    def test_delete_failure(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.delete.return_value = {"mykey": False}
+
+        execute_command(client, None, "DELETE mykey")
+        assert "Failure!" in capsys.readouterr().out
+
+
+class TestGetSetNotFound:
+    def test_get_set_key_not_found(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.get.return_value = {"myset": None}
+
+        execute_command(client, None, "GET_SET myset")
+        assert "Key not found" in capsys.readouterr().out
+
+
+class TestPutSetFailure:
+    def test_put_set_failure(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.put.return_value = {"myset": False}
+
+        execute_command(client, None, "PUT_SET myset a b c")
+        assert "Failure!" in capsys.readouterr().out
+
+
+class TestStatusWithRunning:
+    def test_status_shows_running_processes(self, capsys):
+        from unittest.mock import MagicMock, patch
+        from anna.cli import execute_command
+
+        with patch("anna.cli.status", return_value=["anna-kvs"]):
+            execute_command(None, None, "STATUS")
+        out = capsys.readouterr().out
+        assert "anna-kvs process is running" in out
+
+
+class TestGetNonBytesReveal:
+    def test_get_non_bytes_reveal(self, capsys):
+        """Test GET when reveal() returns a non-bytes value (e.g., int)."""
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        lattice = MagicMock()
+        lattice.reveal.return_value = 42
+
+        client = MagicMock()
+        client.get.return_value = {"mykey": lattice}
+
+        execute_command(client, None, "GET mykey")
+        assert "42" in capsys.readouterr().out
+
+
+class TestCliInteractive:
+    def test_cli_interactive_exit(self):
+        from unittest.mock import MagicMock, patch
+        from anna.cli import cli_interactive
+
+        with patch("builtins.input", side_effect=["HELP", "EXIT"]):
+            cli_interactive(None, None)
+
+    def test_cli_interactive_eof(self):
+        from unittest.mock import MagicMock, patch
+        from anna.cli import cli_interactive
+
+        with patch("builtins.input", side_effect=EOFError):
+            cli_interactive(None, None)
+
+
+class TestCliFile:
+    def test_cli_file_reads_commands(self, tmp_path):
+        from unittest.mock import MagicMock
+        from anna.cli import cli_file
+
+        f = tmp_path / "commands.txt"
+        f.write_text("HELP\nEXIT\n")
+
+        cli_file(None, None, str(f))
+
+    def test_cli_file_stops_on_exit(self, tmp_path):
+        from unittest.mock import MagicMock
+        from anna.cli import cli_file
+
+        f = tmp_path / "commands.txt"
+        f.write_text("EXIT\nHELP\n")
+
+        cli_file(None, None, str(f))
+
+
+class TestMainFunction:
+    def test_main_help(self):
+        from unittest.mock import patch
+        from anna.cli import main
+
+        with patch("sys.argv", ["anna-py", "help"]):
+            main()
+
+    def test_main_start_requires_config(self):
+        from unittest.mock import patch
+        from anna.cli import main
+        import pytest
+
+        with patch("sys.argv", ["anna-py", "start"]):
+            with pytest.raises(SystemExit):
+                main()
+
+    def test_main_start_with_config(self, tmp_path):
+        from unittest.mock import patch
+        from anna.cli import main
+
+        config = tmp_path / "test.yml"
+        config.write_text("threads:\n  routing: 1\n")
+
+        with patch("sys.argv", ["anna-py", "--server-config", str(config), "start"]):
+            main()
+
+    def test_main_stop(self):
+        from unittest.mock import patch
+        from anna.cli import main
+
+        with patch("sys.argv", ["anna-py", "stop"]):
+            main()
+
+    def test_main_status_nothing_running(self, capsys):
+        from unittest.mock import patch
+        from anna.cli import main
+
+        with patch("sys.argv", ["anna-py", "status"]):
+            main()
+        out = capsys.readouterr().out
+        assert "not running" in out
+
+    def test_main_status_with_running(self, capsys):
+        from unittest.mock import patch
+        from anna.cli import main
+
+        with patch("sys.argv", ["anna-py", "status"]), \
+             patch("anna.cli.status", return_value=["anna-kvs"]):
+            main()
+        out = capsys.readouterr().out
+        assert "anna-kvs process is running" in out
+
+    def test_main_cli_requires_routing(self):
+        from unittest.mock import patch
+        from anna.cli import main
+        import pytest
+
+        with patch("sys.argv", ["anna-py", "cli"]):
+            with pytest.raises(SystemExit):
+                main()
+
+    def test_main_cli_requires_client_ip(self):
+        from unittest.mock import patch
+        from anna.cli import main
+        import pytest
+
+        with patch("sys.argv", ["anna-py", "--routing", "127.0.0.1", "cli"]):
+            with pytest.raises(SystemExit):
+                main()
+
+    def test_main_cli_interactive(self):
+        from unittest.mock import patch, MagicMock
+        from anna.cli import main
+
+        with patch("sys.argv", ["anna-py", "--routing", "127.0.0.1",
+                                "--client-ip", "127.0.0.1", "cli"]), \
+             patch("anna.client.AnnaTcpClient") as mock_cls, \
+             patch("anna.cli.cli_interactive") as mock_interactive:
+            mock_cls.return_value = MagicMock()
+            main()
+            mock_interactive.assert_called_once()
+
+    def test_main_cli_with_file(self, tmp_path):
+        from unittest.mock import patch, MagicMock
+        from anna.cli import main
+
+        f = tmp_path / "input.txt"
+        f.write_text("HELP\nEXIT\n")
+
+        with patch("sys.argv", ["anna-py", "--routing", "127.0.0.1",
+                                "--client-ip", "127.0.0.1", "cli", str(f)]), \
+             patch("anna.client.AnnaTcpClient") as mock_cls, \
+             patch("anna.cli.cli_file") as mock_file:
+            mock_cls.return_value = MagicMock()
+            main()
+            mock_file.assert_called_once()

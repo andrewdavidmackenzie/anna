@@ -2,6 +2,7 @@ package annalib
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	kvspb "github.com/andrewdavidmackenzie/anna/clients/go/annalib/proto/kvs"
+	sharedpb "github.com/andrewdavidmackenzie/anna/clients/go/annalib/proto/shared"
 )
 
 func TestValueChangeSubscriberConstants(t *testing.T) {
@@ -146,5 +148,208 @@ func TestRecvUpdateTimeout(t *testing.T) {
 	}
 	if ok {
 		t.Error("expected no update on timeout")
+	}
+}
+
+func TestWatchRegistersKeys(t *testing.T) {
+	// offset=20500 → registration port: 0+7200+20500 = 27700
+	// update port: 0+7150+20500 = 27650 (all below 32768)
+	offset := 20500
+
+	// Set up a PULL listener on the registration port so Watch() can connect.
+	regPort := 0 + kCacheRegistrationPort + offset // 27700
+	regAddr := fmt.Sprintf("tcp://127.0.0.1:%d", regPort)
+	puller := zmq4.NewPull(context.Background())
+	if err := puller.Listen(regAddr); err != nil {
+		t.Fatalf("failed to listen on registration port %d: %v", regPort, err)
+	}
+	defer puller.Close()
+
+	time.Sleep(100 * time.Millisecond)
+
+	cc, err := NewValueChangeSubscriber("127.0.0.1", "127.0.0.1", 1, offset, 0)
+	if err != nil {
+		t.Fatalf("NewValueChangeSubscriber failed: %v", err)
+	}
+	defer cc.Close()
+
+	keys := []string{"key_alpha", "key_beta"}
+	if err := cc.Watch(keys); err != nil {
+		t.Fatalf("Watch failed: %v", err)
+	}
+
+	// Verify watched keys were appended.
+	watched := cc.WatchedKeys()
+	if len(watched) != 2 {
+		t.Fatalf("expected 2 watched keys, got %d", len(watched))
+	}
+	if watched[0] != "key_alpha" || watched[1] != "key_beta" {
+		t.Errorf("unexpected watched keys: %v", watched)
+	}
+
+	// Receive the registration message on the PULL socket.
+	msg, err := puller.Recv()
+	if err != nil {
+		t.Fatalf("puller.Recv failed: %v", err)
+	}
+
+	var stringSet sharedpb.StringSet
+	if err := proto.Unmarshal(msg.Frames[0], &stringSet); err != nil {
+		t.Fatalf("failed to unmarshal registration message: %v", err)
+	}
+
+	// Registration message format: [cacheIP, key1, key2, ...]
+	if len(stringSet.Keys) != 3 {
+		t.Fatalf("expected 3 entries in registration (ip + 2 keys), got %d", len(stringSet.Keys))
+	}
+	if stringSet.Keys[0] != "127.0.0.1" {
+		t.Errorf("expected cache IP '127.0.0.1', got %q", stringSet.Keys[0])
+	}
+	if stringSet.Keys[1] != "key_alpha" || stringSet.Keys[2] != "key_beta" {
+		t.Errorf("unexpected keys in registration: %v", stringSet.Keys[1:])
+	}
+}
+
+func TestWatchMultipleCalls(t *testing.T) {
+	// offset=20600 → registration port: 27800, update port: 27750
+	offset := 20600
+
+	regPort := 0 + kCacheRegistrationPort + offset
+	regAddr := fmt.Sprintf("tcp://127.0.0.1:%d", regPort)
+	puller := zmq4.NewPull(context.Background())
+	if err := puller.Listen(regAddr); err != nil {
+		t.Fatalf("failed to listen on registration port %d: %v", regPort, err)
+	}
+	defer puller.Close()
+
+	time.Sleep(100 * time.Millisecond)
+
+	cc, err := NewValueChangeSubscriber("127.0.0.1", "127.0.0.1", 1, offset, 0)
+	if err != nil {
+		t.Fatalf("NewValueChangeSubscriber failed: %v", err)
+	}
+	defer cc.Close()
+
+	// First watch call.
+	if err := cc.Watch([]string{"k1"}); err != nil {
+		t.Fatalf("first Watch failed: %v", err)
+	}
+	// Read the first message.
+	if _, err := puller.Recv(); err != nil {
+		t.Fatalf("first recv failed: %v", err)
+	}
+
+	// Second watch call should append to watched keys and reuse the socket.
+	if err := cc.Watch([]string{"k2", "k3"}); err != nil {
+		t.Fatalf("second Watch failed: %v", err)
+	}
+	if _, err := puller.Recv(); err != nil {
+		t.Fatalf("second recv failed: %v", err)
+	}
+
+	watched := cc.WatchedKeys()
+	if len(watched) != 3 {
+		t.Fatalf("expected 3 watched keys after two Watch calls, got %d", len(watched))
+	}
+}
+
+func TestCloseWithPushSockets(t *testing.T) {
+	// offset=20700 → registration port: 27900, update port: 27850
+	offset := 20700
+
+	regPort := 0 + kCacheRegistrationPort + offset
+	regAddr := fmt.Sprintf("tcp://127.0.0.1:%d", regPort)
+	puller := zmq4.NewPull(context.Background())
+	if err := puller.Listen(regAddr); err != nil {
+		t.Fatalf("failed to listen on registration port %d: %v", regPort, err)
+	}
+	defer puller.Close()
+
+	time.Sleep(100 * time.Millisecond)
+
+	cc, err := NewValueChangeSubscriber("127.0.0.1", "127.0.0.1", 1, offset, 0)
+	if err != nil {
+		t.Fatalf("NewValueChangeSubscriber failed: %v", err)
+	}
+
+	// Watch to create push sockets.
+	if err := cc.Watch([]string{"close_test_key"}); err != nil {
+		t.Fatalf("Watch failed: %v", err)
+	}
+	// Drain the message.
+	if _, err := puller.Recv(); err != nil {
+		t.Fatalf("recv failed: %v", err)
+	}
+
+	// Verify push sockets exist before close.
+	if len(cc.pushSockets) == 0 {
+		t.Fatal("expected at least one push socket after Watch")
+	}
+
+	// Close should succeed and close both the update puller and push sockets.
+	if err := cc.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+}
+
+func TestRecvUpdateEmptyPayload(t *testing.T) {
+	// offset=20800 → update port: 0+7150+20800 = 27950
+	offset := 20800
+
+	cc, err := NewValueChangeSubscriber("127.0.0.1", "127.0.0.1", 1, offset, 0)
+	if err != nil {
+		t.Fatalf("NewValueChangeSubscriber failed: %v", err)
+	}
+	defer cc.Close()
+
+	updatePort := 0 + kCacheUpdatePort + offset // 27950
+	pusher := zmq4.NewPush(context.Background())
+	if err := pusher.Dial(fmt.Sprintf("tcp://127.0.0.1:%d", updatePort)); err != nil {
+		t.Fatalf("Dial failed: %v", err)
+	}
+	defer pusher.Close()
+	time.Sleep(100 * time.Millisecond)
+
+	// Send a response with an empty payload.
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{
+			{Key: "empty_key", Payload: nil},
+		},
+	}
+	payload, err := proto.Marshal(response)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+	if err := pusher.Send(zmq4.NewMsg(payload)); err != nil {
+		t.Fatalf("Send failed: %v", err)
+	}
+
+	// Should return ok=false because payload is empty.
+	_, _, ok, err := cc.RecvUpdate(5 * time.Second)
+	if err != nil {
+		t.Fatalf("RecvUpdate failed: %v", err)
+	}
+	if ok {
+		t.Error("expected no update for empty payload")
+	}
+}
+
+func TestNewValueChangeSubscriberBindError(t *testing.T) {
+	// Bind the update port first, then try to create a subscriber on the same port.
+	// offset=20900 → update port: 0+7150+20900 = 28050
+	offset := 20900
+	updatePort := 0 + kCacheUpdatePort + offset
+	updateAddr := fmt.Sprintf("tcp://127.0.0.1:%d", updatePort)
+
+	blocker := zmq4.NewPull(context.Background())
+	if err := blocker.Listen(updateAddr); err != nil {
+		t.Fatalf("failed to bind blocker on %s: %v", updateAddr, err)
+	}
+	defer blocker.Close()
+
+	// Second subscriber on same port should fail.
+	_, err := NewValueChangeSubscriber("127.0.0.1", "127.0.0.1", 1, offset, 0)
+	if err == nil {
+		t.Fatal("expected error when bind port is already in use")
 	}
 }

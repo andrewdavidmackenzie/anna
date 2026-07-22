@@ -69,4 +69,46 @@ class MockKvsClient : public KvsClientInterface {
   unsigned rid_;
 };
 
+// A mock that delays responses for N calls to receive_async() before
+// returning them, exercising the retry loops in client_lib.cpp.
+class DelayedMockKvsClient : public KvsClientInterface {
+ public:
+  DelayedMockKvsClient(unsigned delay) : delay_(delay), calls_(0), rid_(0) {}
+
+  ~DelayedMockKvsClient() {}
+
+  string put_async(const Key& key, const string& payload,
+                   kvs::LatticeType lattice_type) {
+    keys_put_.push_back(key);
+    return get_request_id();
+  }
+
+  void get_async(const Key& key) { keys_get_.push_back(key); }
+
+  vector<kvs::KeyResponse> receive_async() {
+    if (calls_++ < delay_) {
+      return {};  // return empty to trigger retry
+    }
+    vector<kvs::KeyResponse> result = responses_;
+    responses_.clear();
+    return result;
+  }
+
+  zmq::context_t* get_context() { return nullptr; }
+
+  vector<Key> keys_put_;
+  vector<Key> keys_get_;
+  vector<kvs::KeyResponse> responses_;
+
+ private:
+  string get_request_id() {
+    if (++rid_ % 10000 == 0) rid_ = 0;
+    return std::to_string(rid_++);
+  }
+
+  unsigned delay_;
+  unsigned calls_;
+  unsigned rid_;
+};
+
 #endif  // TESTS_UNIT_MOCK_KVS_CLIENT_HPP_

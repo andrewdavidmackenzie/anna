@@ -4,3 +4,9 @@ requires = [
     "wheel"
 ]
 build-backend = "setuptools.build_meta"
+
+[tool.coverage.run]
+omit = [
+    "anna/*_pb2.py",
+    "anna/__main__.py",
+]

@@ -1372,6 +1372,73 @@ func TestGetKeySizeStatsWithMock(t *testing.T) {
 	}
 }
 
+// --- parseRoutingAddress edge cases ---
+
+func TestParseRoutingAddressValid(t *testing.T) {
+	ip, tid, err := parseRoutingAddress("tcp://10.0.0.1:6450")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ip != "10.0.0.1" {
+		t.Errorf("IP = %q, want 10.0.0.1", ip)
+	}
+	if tid != 0 {
+		t.Errorf("tid = %d, want 0", tid)
+	}
+}
+
+func TestParseRoutingAddressWithOffset(t *testing.T) {
+	ip, tid, err := parseRoutingAddress("tcp://10.0.0.1:6460")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ip != "10.0.0.1" {
+		t.Errorf("IP = %q, want 10.0.0.1", ip)
+	}
+	if tid != 10 {
+		t.Errorf("tid = %d, want 10", tid)
+	}
+}
+
+func TestParseRoutingAddressMissingPort(t *testing.T) {
+	_, _, err := parseRoutingAddress("tcp://10.0.0.1")
+	if err == nil {
+		t.Error("expected error for address without port")
+	}
+}
+
+func TestParseRoutingAddressNonNumericPort(t *testing.T) {
+	_, _, err := parseRoutingAddress("tcp://10.0.0.1:abc")
+	if err == nil {
+		t.Error("expected error for non-numeric port")
+	}
+}
+
+func TestParseRoutingAddressLowPort(t *testing.T) {
+	// Port below kKeyAddressPort (6450) should clamp tid to 0.
+	ip, tid, err := parseRoutingAddress("tcp://10.0.0.1:100")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ip != "10.0.0.1" {
+		t.Errorf("IP = %q, want 10.0.0.1", ip)
+	}
+	if tid != 0 {
+		t.Errorf("tid = %d, want 0 for low port", tid)
+	}
+}
+
+func TestNewKVSClientInvalidRoutingAddress(t *testing.T) {
+	config := &ClientConfig{
+		RoutingAddresses: []string{"invalid-no-port"},
+		ClientIP:         "127.0.0.1",
+	}
+	_, err := NewKVSClient(config, 0)
+	if err == nil {
+		t.Error("expected error for invalid routing address format")
+	}
+}
+
 func TestPutReplicationFactorWithMock(t *testing.T) {
 	response := &kvspb.KeyResponse{
 		Tuples: []*kvspb.KeyTuple{{Key: "ANNA_METADATA|replication|my_key", Error: kvspb.AnnaError_NO_ERROR}},
