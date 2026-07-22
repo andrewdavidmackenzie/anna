@@ -45,3 +45,40 @@ func TestPidsFromNameNonexistent(t *testing.T) {
 		t.Errorf("expected no PIDs, got %v", pids)
 	}
 }
+
+func TestDetachedProcessAttr(t *testing.T) {
+	attr := detachedProcessAttr()
+	if attr == nil {
+		t.Fatal("expected non-nil SysProcAttr")
+	}
+	if !attr.Setsid {
+		t.Error("expected Setsid to be true")
+	}
+}
+
+func TestStartBinaryNotFound(t *testing.T) {
+	// anna-monitor is not on PATH during tests, so cmd.Start() will fail.
+	started, err := Start("/nonexistent/config.yml")
+	if err == nil {
+		t.Fatal("expected error when binary not found")
+	}
+	if started != 0 {
+		t.Errorf("expected 0 started, got %d", started)
+	}
+	// Verify it is a ProcessError.
+	if _, ok := err.(*ProcessError); !ok {
+		t.Errorf("expected *ProcessError, got %T: %v", err, err)
+	}
+}
+
+func TestProcessListContents(t *testing.T) {
+	expected := []string{"anna-monitor", "anna-route", "anna-kvs"}
+	if len(processList) != len(expected) {
+		t.Fatalf("expected %d processes, got %d", len(expected), len(processList))
+	}
+	for i, name := range expected {
+		if processList[i] != name {
+			t.Errorf("processList[%d] = %q, want %q", i, processList[i], name)
+		}
+	}
+}
