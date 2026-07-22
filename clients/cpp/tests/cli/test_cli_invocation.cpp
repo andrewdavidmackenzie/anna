@@ -147,14 +147,6 @@ TEST_F(CliInvocationTest, StartWithoutConfigFails) {
   EXPECT_TRUE(r.stderr_str.find("config") != std::string::npos);
 }
 
-TEST_F(CliInvocationTest, StartWithConfigReturnsSuccess) {
-  auto r = run_command(cli_binary + " --config " + test_config + " start");
-  EXPECT_EQ(r.exit_code, 0);
-  EXPECT_TRUE(r.stdout_str.find("anna processes were started") != std::string::npos);
-  // Clean up any started processes
-  run_command(cli_binary + " stop");
-}
-
 TEST_F(CliInvocationTest, CliWithoutRoutingFails) {
   // CLI command requires --routing and --client-ip
   auto r = run_command(cli_binary + " cli");

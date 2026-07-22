@@ -1,6 +1,7 @@
 package annalib
 
 import (
+	"os"
 	"testing"
 )
 
@@ -57,7 +58,11 @@ func TestDetachedProcessAttr(t *testing.T) {
 }
 
 func TestStartBinaryNotFound(t *testing.T) {
-	// anna-monitor is not on PATH during tests, so cmd.Start() will fail.
+	// Pin PATH to empty dir so server binaries are guaranteed not found.
+	oldPath := os.Getenv("PATH")
+	os.Setenv("PATH", "/nonexistent_dir_for_test")
+	defer os.Setenv("PATH", oldPath)
+
 	started, err := Start("/nonexistent/config.yml")
 	if err == nil {
 		t.Fatal("expected error when binary not found")

@@ -558,13 +558,15 @@ class TestGetAll:
         client.pusher_cache = MagicMock()
         client.pusher_cache.get.return_value = MagicMock()
 
-        with patch("anna.client.send_request"), \
+        with patch("anna.client.send_request") as mock_send, \
              patch("anna.client.recv_response") as mock_recv:
             mock_recv.side_effect = lambda ids, sock, cls: [response1, response2]
             result = client.get_all(["k1"])
 
         assert "k1" in result
         assert isinstance(result["k1"], LWWPairLattice)
+        mock_send.assert_called()
+        mock_recv.assert_called_once()
 
 
 class TestPutAll:
