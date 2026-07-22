@@ -1997,19 +1997,22 @@ async fn elasticity_storage_policy() {
 
     // Poll until PUT succeeds
     let deadline = Instant::now() + Duration::from_secs(TEST_SERVER_REPORT_PERIOD as u64 * 2);
+    let mut initial_put_ok = false;
     while Instant::now() < deadline {
         if client.put("elasticity_key_0", "value_0").await.is_ok() {
+            initial_put_ok = true;
             break;
         }
         tokio::time::sleep(Duration::from_millis(POLL_INTERVAL_MS)).await;
     }
+    assert!(initial_put_ok, "Initial PUT did not succeed before deadline");
 
     // PUT more data to ensure storage consumption is reported
     for i in 1..10 {
         client
             .put(&format!("elasticity_key_{}", i), &format!("value_{}", i))
             .await
-            .ok();
+            .unwrap_or_else(|e| panic!("PUT elasticity_key_{} failed: {}", i, e));
     }
 
     // The storage policy needs: grace_period to elapse + a monitoring cycle
