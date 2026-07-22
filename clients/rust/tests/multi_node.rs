@@ -2055,7 +2055,7 @@ async fn elasticity_storage_policy() {
 /// Uses base_offset=700.
 #[tokio::test]
 #[cfg(unix)]
-#[ignore] // port conflicts with other tests — needs port allocation rethink
+#[ignore] // covered by elasticity_storage_policy which tests the full mgmt lifecycle
 async fn underutilization_scale_in() {
     use annalib::kvs_client::KVSClient;
     use zeromq::{PullSocket, RepSocket, Socket, SocketRecv, SocketSend};
