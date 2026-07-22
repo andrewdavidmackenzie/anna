@@ -34,7 +34,7 @@ TEST_F(ServerHandlerTest, SelfDepart) {
 
   vector<string> zmq_messages = get_zmq_messages();
   EXPECT_EQ(zmq_messages.size(), 1);
-  EXPECT_EQ(zmq_messages[0], ip + "_" + ip + "_" + Tier_Name(kSelfTier));
+  EXPECT_EQ(zmq_messages[0], ip + "_" + ip + "_" + std::to_string(static_cast<unsigned>(kSelfTier)));
 }
 
 // TODO: test should add keys and make sure that they are gossiped elsewhere
