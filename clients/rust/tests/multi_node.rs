@@ -2084,12 +2084,20 @@ async fn underutilization_scale_in() {
         .await
         .expect("bind func PULL failed");
 
-    // Port 7001 (hardcoded, no offset) for add/remove messages
+    // Port 7001 (hardcoded in elasticity.cpp, no offset).
+    // Wait for any previous test's socket to release.
     let mut mgmt_pull = PullSocket::new();
-    mgmt_pull
-        .bind(&format!("tcp://{}:7001", NODE1_IP))
-        .await
-        .expect("bind mgmt PULL failed");
+    let mgmt_deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        match mgmt_pull.bind(&format!("tcp://{}:7001", NODE1_IP)).await {
+            Ok(_) => break,
+            Err(_) if Instant::now() < mgmt_deadline => {
+                mgmt_pull = PullSocket::new();
+                std::thread::sleep(Duration::from_millis(500));
+            }
+            Err(e) => panic!("bind mgmt PULL failed after retries: {}", e),
+        }
+    }
 
     tokio::time::sleep(Duration::from_millis(ZMQ_SETTLE_MS)).await;
 
@@ -2149,8 +2157,8 @@ async fn underutilization_scale_in() {
     let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(42)).await;
 
-    // PUT a small amount of data so keys exist but occupancy stays low
-    let deadline = Instant::now() + Duration::from_secs(TEST_SERVER_REPORT_PERIOD as u64 * 2);
+    // PUT a small amount of data — poll until the cluster is ready
+    let deadline = Instant::now() + Duration::from_secs(TEST_SERVER_REPORT_PERIOD as u64 * 4);
     let mut put_ok = false;
     while Instant::now() < deadline {
         if client.put("scale_in_key", "small").await.is_ok() {
