@@ -17,7 +17,11 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 const TEST_GOSSIP_EPOCH: u32 = 2;
+const TEST_SERVER_REPORT_PERIOD: u32 = 3;
+const TEST_MONITORING_TIMEOUT: u32 = 8;
+const TEST_GRACE_PERIOD: u32 = 10;
 const ZMQ_SETTLE_MS: u64 = 500;
+const POLL_INTERVAL_MS: u64 = 500;
 const NODE1_IP: &str = "127.0.0.1";
 const NODE2_IP: &str = "127.0.0.2";
 
@@ -105,12 +109,12 @@ ports:
   base_offset: {base_offset}
 timings:
   gossip_epoch: {gossip_epoch}
-  server_report_period: 3
+  server_report_period: {server_report_period}
   key_monitoring_period: 15
-  monitoring_timeout: 8
+  monitoring_timeout: {monitoring_timeout}
   monitoring_response_timeout_ms: 1000
   data_redistribute_batch: 50
-  grace_period: 10
+  grace_period: {grace_period}
 replication:
   memory: {replication_memory}
   ebs: {replication_ebs}
@@ -126,6 +130,9 @@ replication:
         routing_threads = cfg.routing_threads,
         ebs_path = cfg.ebs_path,
         selective_rep = cfg.selective_rep,
+        server_report_period = TEST_SERVER_REPORT_PERIOD,
+        monitoring_timeout = TEST_MONITORING_TIMEOUT,
+        grace_period = TEST_GRACE_PERIOD,
         elasticity = cfg.elasticity,
         mgmt_ip = cfg.mgmt_ip,
         memory_cap_kb_line = cfg
@@ -169,6 +176,20 @@ fn spawn_server_with_env(
         .spawn()
         .unwrap_or_else(|e| panic!("Failed to spawn {}: {}", name, e));
     Some(child)
+}
+
+/// Maximum time to wait for the SLO policy to trigger a replication change.
+/// Needs: grace_period + at least 2 monitoring cycles + buffer for CI.
+fn slo_policy_timeout() -> Duration {
+    Duration::from_secs((TEST_GRACE_PERIOD + TEST_MONITORING_TIMEOUT * 3) as u64)
+}
+
+/// Maximum time to wait for the management node to receive an add_node.
+/// Needs: grace_period + monitoring cycle + stats report + buffer.
+fn elasticity_policy_timeout() -> Duration {
+    Duration::from_secs(
+        (TEST_GRACE_PERIOD + TEST_MONITORING_TIMEOUT * 2 + TEST_SERVER_REPORT_PERIOD) as u64,
+    )
 }
 
 fn wait_for_port(ip: &str, port: u16, timeout_secs: u64) -> bool {
@@ -1685,82 +1706,72 @@ async fn slo_selective_replication() {
             .expect("PUT failed");
     }
 
-    // Connect directly to monitor feedback port using raw ZMQ (same pattern
-    // as the latency_feedback_ingestion test which is known to work).
+    // Connect to monitor feedback port using raw ZMQ
     let feedback_addr = format!("tcp://{}:{}", NODE1_IP, 6750 + 400);
     let mut feedback_pusher = PushSocket::new();
     feedback_pusher
         .connect(&feedback_addr)
         .await
         .expect("feedback connect failed");
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    tokio::time::sleep(Duration::from_millis(ZMQ_SETTLE_MS)).await;
 
-    // Feedback is consumed at the END of each monitoring cycle (after
-    // collect_external_stats and slo_policy). Send frequently to ensure
-    // feedback is present for every cycle.
-    //
-    // Timeline: grace_period(10s) must elapse first, then we need at least
-    // one cycle where both access stats AND latency feedback are present.
+    // Spawn background task to continuously send feedback and generate
+    // hot-key accesses. This runs independently of the polling loop.
+    let hot_key_owned = hot_key.to_string();
+    let feedback_handle = tokio::spawn(async move {
+        loop {
+            let feedback = UserFeedback {
+                uid: "slo_test_client".into(),
+                latency: 5000.0,
+                throughput: 100.0,
+                key_latency: vec![KeyLatency {
+                    key: hot_key_owned.clone(),
+                    latency: 5000.0,
+                }],
+                ..Default::default()
+            };
+            if feedback_pusher
+                .send(zeromq::ZmqMessage::from(feedback.encode_to_vec()))
+                .await
+                .is_err()
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    });
+
+    // Poll for the replication change with timeout derived from config constants.
+    // The policy needs: grace_period to elapse, then a monitoring cycle where
+    // both access stats and latency feedback are present.
     let rep_key = format!("ANNA_METADATA|replication|{}", hot_key);
     let mut memory_rep = 1u32;
+    let deadline = Instant::now() + slo_policy_timeout();
 
-    for attempt in 0..20 {
-        // Continuously access hot key to keep access stats fresh
-        for _ in 0..5 {
+    while Instant::now() < deadline {
+        // Keep generating hot-key accesses
+        for _ in 0..3 {
             client.get(hot_key).await.ok();
         }
 
-        // Send feedback every iteration using raw ZMQ
-        let feedback = UserFeedback {
-            uid: "slo_test_client".into(),
-            latency: 5000.0,
-            throughput: 100.0,
-            finish: false,
-            warmup: false,
-            key_latency: vec![KeyLatency {
-                key: hot_key.to_string(),
-                latency: 5000.0,
-            }],
-        };
-        feedback_pusher
-            .send(zeromq::ZmqMessage::from(feedback.encode_to_vec()))
-            .await
-            .expect("feedback send failed");
-
-        tokio::time::sleep(Duration::from_secs(4)).await;
-
-        // Check replication every other iteration
-        if attempt % 2 == 1 {
-            if let Ok(bytes) = client.get_bytes(&rep_key).await {
-                if let Ok(rep) = ReplicationFactor::decode(bytes.as_slice()) {
-                    memory_rep = rep
-                        .global
-                        .iter()
-                        .find(|r| r.tier == 1)
-                        .map(|r| r.value)
-                        .unwrap_or(1);
-                    if memory_rep > 1 {
-                        eprintln!(
-                            "SLO replication triggered after {}s: rep={}",
-                            (attempt + 1) * 2,
-                            memory_rep
-                        );
-                        break;
-                    }
+        if let Ok(bytes) = client.get_bytes(&rep_key).await {
+            if let Ok(rep) = ReplicationFactor::decode(bytes.as_slice()) {
+                memory_rep = rep
+                    .global
+                    .iter()
+                    .find(|r| r.tier == 1)
+                    .map(|r| r.value)
+                    .unwrap_or(1);
+                if memory_rep > 1 {
+                    break;
                 }
             }
         }
+
+        tokio::time::sleep(Duration::from_millis(POLL_INTERVAL_MS)).await;
     }
 
-    let finish_msg = UserFeedback {
-        uid: "slo_test_client".into(),
-        finish: true,
-        ..Default::default()
-    };
-    feedback_pusher
-        .send(zeromq::ZmqMessage::from(finish_msg.encode_to_vec()))
-        .await
-        .ok();
+    feedback_handle.abort();
 
     assert!(
         memory_rep > 1,
@@ -1860,27 +1871,25 @@ async fn management_node_integration() {
     let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(40)).await;
 
-    // Extra settle time for management node handshake
-    tokio::time::sleep(Duration::from_secs(2)).await;
-
-    // Basic PUT/GET to verify the cluster works with management node enabled
-    client
-        .put("mgmt_test_key", "mgmt_test_val")
-        .await
-        .expect("PUT failed with mgmt node");
+    // Poll until PUT succeeds (cluster may need time to stabilize)
+    let deadline = Instant::now() + Duration::from_secs(TEST_SERVER_REPORT_PERIOD as u64 * 2);
+    while Instant::now() < deadline {
+        if client.put("mgmt_test_key", "mgmt_test_val").await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(POLL_INTERVAL_MS)).await;
+    }
     let val = client
         .get("mgmt_test_key")
         .await
         .expect("GET failed with mgmt node");
     assert_eq!(val, "mgmt_test_val");
 
-    // Wait for the server's periodic func_nodes query (every server_report_period=3s)
-    tokio::time::sleep(Duration::from_secs(5)).await;
-
-    // The mock management node should have received at least:
-    // - 1 restart count query (from anna-kvs startup)
-    // - 1 func_nodes query (from anna-kvs periodic report)
-    let result = tokio::time::timeout(Duration::from_secs(5), mgmt_handle).await;
+    // The mock should receive: restart query (on startup) + func_nodes query
+    // (after server_report_period). Total wait bounded by config constants.
+    let mgmt_timeout =
+        Duration::from_secs((TEST_SERVER_REPORT_PERIOD * 2 + TEST_MONITORING_TIMEOUT) as u64);
+    let result = tokio::time::timeout(mgmt_timeout, mgmt_handle).await;
     match result {
         Ok(Ok((restart, func))) => {
             eprintln!(
@@ -1991,10 +2000,7 @@ async fn elasticity_storage_policy() {
     // PUT data to exceed the tiny 1 KB capacity
     for i in 0..10 {
         client
-            .put(
-                &format!("elasticity_key_{}", i),
-                &format!("value_{}", i),
-            )
+            .put(&format!("elasticity_key_{}", i), &format!("value_{}", i))
             .await
             .ok();
     }
@@ -2002,7 +2008,7 @@ async fn elasticity_storage_policy() {
     // Wait for monitor to collect stats and run storage_policy.
     // Grace period is 10s in test config, monitoring threshold is 8s.
     // Need: grace_period(10) + monitoring_cycle(8) + buffer(5) = ~23s
-    let result = tokio::time::timeout(Duration::from_secs(25), mgmt_handle).await;
+    let result = tokio::time::timeout(elasticity_policy_timeout(), mgmt_handle).await;
 
     match result {
         Ok(Ok(Some(msg))) => {
