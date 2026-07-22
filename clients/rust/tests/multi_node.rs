@@ -1704,7 +1704,7 @@ async fn slo_selective_replication() {
     let rep_key = format!("ANNA_METADATA|replication|{}", hot_key);
     let mut memory_rep = 1u32;
 
-    for attempt in 0..40 {
+    for attempt in 0..20 {
         // Continuously access hot key to keep access stats fresh
         for _ in 0..5 {
             client.get(hot_key).await.ok();
@@ -1727,10 +1727,10 @@ async fn slo_selective_replication() {
             .await
             .expect("feedback send failed");
 
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        tokio::time::sleep(Duration::from_secs(4)).await;
 
-        // Check replication every few iterations
-        if attempt % 3 == 2 {
+        // Check replication every other iteration
+        if attempt % 2 == 1 {
             if let Ok(bytes) = client.get_bytes(&rep_key).await {
                 if let Ok(rep) = ReplicationFactor::decode(bytes.as_slice()) {
                     memory_rep = rep
