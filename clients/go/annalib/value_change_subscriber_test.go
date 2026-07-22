@@ -55,7 +55,7 @@ func TestValueChangeSubscriberWatchedKeysInitiallyEmpty(t *testing.T) {
 }
 
 func TestNewValueChangeSubscriber(t *testing.T) {
-	cc, err := NewValueChangeSubscriber("127.0.0.1", "127.0.0.1", 1, 51000, 0)
+	cc, err := NewValueChangeSubscriber("127.0.0.1", "127.0.0.1", 1, 20000, 0)
 	if err != nil {
 		t.Fatalf("NewValueChangeSubscriber failed: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestNewValueChangeSubscriber(t *testing.T) {
 }
 
 func TestValueChangeSubscriberClose(t *testing.T) {
-	cc, err := NewValueChangeSubscriber("127.0.0.1", "127.0.0.1", 1, 51100, 0)
+	cc, err := NewValueChangeSubscriber("127.0.0.1", "127.0.0.1", 1, 20100, 0)
 	if err != nil {
 		t.Fatalf("NewValueChangeSubscriber failed: %v", err)
 	}
@@ -84,14 +84,14 @@ func TestValueChangeSubscriberClose(t *testing.T) {
 }
 
 func TestRecvUpdateReceivesPushedValue(t *testing.T) {
-	cc, err := NewValueChangeSubscriber("127.0.0.1", "127.0.0.1", 1, 51200, 0)
+	cc, err := NewValueChangeSubscriber("127.0.0.1", "127.0.0.1", 1, 20200, 0)
 	if err != nil {
 		t.Fatalf("NewValueChangeSubscriber failed: %v", err)
 	}
 	defer cc.Close()
 
 	pusher := zmq4.NewPush(context.Background())
-	err = pusher.Dial("tcp://127.0.0.1:58350")
+	err = pusher.Dial("tcp://127.0.0.1:27350")
 	if err != nil {
 		t.Fatalf("Dial failed: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestRecvUpdateReceivesPushedValue(t *testing.T) {
 }
 
 func TestRecvUpdateTimeout(t *testing.T) {
-	cc, err := NewValueChangeSubscriber("127.0.0.1", "127.0.0.1", 1, 51300, 0)
+	cc, err := NewValueChangeSubscriber("127.0.0.1", "127.0.0.1", 1, 20300, 0)
 	if err != nil {
 		t.Fatalf("NewValueChangeSubscriber failed: %v", err)
 	}
