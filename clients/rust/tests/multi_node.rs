@@ -1911,7 +1911,6 @@ async fn management_node_integration() {
 /// Uses base_offset=600.
 #[tokio::test]
 #[cfg(unix)]
-#[ignore] // storage policy timing not yet reliable — needs investigation
 async fn elasticity_storage_policy() {
     use annalib::kvs_client::KVSClient;
     use zeromq::{PullSocket, RepSocket, Socket, SocketRecv, SocketSend};
@@ -1936,10 +1935,10 @@ async fn elasticity_storage_policy() {
         .await
         .expect("bind func PULL failed");
 
-    // Port 7001+offset: PULL socket for "add:N:tier" messages from monitor
+    // Port 7001 (hardcoded in elasticity.cpp, no base_offset applied)
     let mut add_node_pull = PullSocket::new();
     add_node_pull
-        .bind(&format!("tcp://{}:{}", NODE1_IP, 7001 + base_offset))
+        .bind(&format!("tcp://{}:7001", NODE1_IP))
         .await
         .expect("bind add_node PULL failed");
 
@@ -1995,19 +1994,29 @@ async fn elasticity_storage_policy() {
 
     let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(41)).await;
-    tokio::time::sleep(Duration::from_secs(2)).await;
 
-    // PUT data to exceed the tiny 1 KB capacity
-    for i in 0..10 {
+    // Poll until PUT succeeds
+    let deadline = Instant::now() + Duration::from_secs(TEST_SERVER_REPORT_PERIOD as u64 * 2);
+    let mut initial_put_ok = false;
+    while Instant::now() < deadline {
+        if client.put("elasticity_key_0", "value_0").await.is_ok() {
+            initial_put_ok = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(POLL_INTERVAL_MS)).await;
+    }
+    assert!(initial_put_ok, "Initial PUT did not succeed before deadline");
+
+    // PUT more data to ensure storage consumption is reported
+    for i in 1..10 {
         client
             .put(&format!("elasticity_key_{}", i), &format!("value_{}", i))
             .await
-            .ok();
+            .unwrap_or_else(|e| panic!("PUT elasticity_key_{} failed: {}", i, e));
     }
 
-    // Wait for monitor to collect stats and run storage_policy.
-    // Grace period is 10s in test config, monitoring threshold is 8s.
-    // Need: grace_period(10) + monitoring_cycle(8) + buffer(5) = ~23s
+    // The storage policy needs: grace_period to elapse + a monitoring cycle
+    // where storage consumption > 60% of capacity (1 KB).
     let result = tokio::time::timeout(elasticity_policy_timeout(), mgmt_handle).await;
 
     match result {
