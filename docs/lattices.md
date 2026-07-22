@@ -151,6 +151,14 @@ but are **not enforced across replicas** during gossip convergence:
 - **Implementation**: `LWWPairLattice` in the server's storage kernel. The merge
   function compares timestamps and keeps the higher one.
 - **Where**: Server (`server/cpp/src/kvs/`), all client libraries.
+
+```rust
+// Rust example
+client.put("key", "value1").await?;
+client.put("key", "value2").await?; // later timestamp wins
+let val = client.get("key").await?;
+assert_eq!(val, "value2");
+```
 - **Use case**: Session data, user preferences, caches — any scenario where the
   most recent write is the correct one and brief inconsistency is acceptable.
 - **Comparison**: Similar to DynamoDB's default eventual consistency, Cassandra
@@ -167,6 +175,34 @@ but are **not enforced across replicas** during gossip convergence:
   dominates, it wins; if concurrent, both values are kept.
 - **Where**: Server (`server/cpp/src/kvs/`), client libraries (`GET_CAUSAL`/
   `PUT_CAUSAL` commands).
+
+```rust
+// Rust: Single-key causal
+client.put_single_causal("key", "value").await?;
+let (vector_clock, values) = client.get_single_causal("key").await?;
+// Concurrent writes (independent vector clocks) keep both values
+
+// Rust: Multi-key causal (tracks cross-key dependencies)
+client.put_causal("key", "value").await?;
+let (vector_clock, dependencies, value) = client.get_causal("key").await?;
+```
+
+```rust
+// Rust: Set (union merge)
+client.put_set("key", &["a", "b"]).await?;
+client.put_set("key", &["b", "c"]).await?;
+let values = client.get_set("key").await?; // ["a", "b", "c"]
+
+// Rust: Ordered set
+client.put_ordered_set("key", &["x", "y", "z"]).await?;
+let values = client.get_ordered_set("key").await?;
+
+// Rust: Priority (lowest wins)
+client.put_priority("key", 10.0, "low_priority").await?;
+client.put_priority("key", 1.0, "high_priority").await?;
+let (priority, value) = client.get_priority("key").await?;
+assert_eq!(priority, 1.0); // lowest priority wins
+```
 - **Use case**: Social media feeds (a reply should appear after the post it
   replies to), collaborative editing, distributed caches where causal ordering
   matters.
