@@ -141,6 +141,33 @@ TEST_F(CliInvocationTest, StatusReturnsSuccess) {
   EXPECT_EQ(r.exit_code, 0);
 }
 
+TEST_F(CliInvocationTest, StartWithoutConfigFails) {
+  auto r = run_command(cli_binary + " start");
+  EXPECT_EQ(r.exit_code, 1);
+  EXPECT_TRUE(r.stderr_str.find("config") != std::string::npos);
+}
+
+TEST_F(CliInvocationTest, StartWithConfigReturnsSuccess) {
+  auto r = run_command(cli_binary + " --config " + test_config + " start");
+  EXPECT_EQ(r.exit_code, 0);
+  EXPECT_TRUE(r.stdout_str.find("anna processes were started") != std::string::npos);
+  // Clean up any started processes
+  run_command(cli_binary + " stop");
+}
+
+TEST_F(CliInvocationTest, CliWithoutRoutingFails) {
+  // CLI command requires --routing and --client-ip
+  auto r = run_command(cli_binary + " cli");
+  EXPECT_EQ(r.exit_code, 1);
+  EXPECT_TRUE(r.stderr_str.find("routing") != std::string::npos);
+}
+
+TEST_F(CliInvocationTest, CliWithRoutingNoClientIpFails) {
+  auto r = run_command(cli_binary + " --routing 127.0.0.1 cli");
+  EXPECT_EQ(r.exit_code, 1);
+  EXPECT_TRUE(r.stderr_str.find("client-ip") != std::string::npos);
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
