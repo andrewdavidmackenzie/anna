@@ -168,6 +168,70 @@ TEST_F(CliInvocationTest, CliWithRoutingNoClientIpFails) {
   EXPECT_TRUE(r.stderr_str.find("client-ip") != std::string::npos);
 }
 
+TEST_F(CliInvocationTest, CliFileWithHelpAndStatus) {
+  // Write a command file with non-KVS commands
+  std::string cmd_file = "cli_test_commands.txt";
+  {
+    std::ofstream f(cmd_file);
+    f << "HELP\n";
+    f << "STATUS\n";
+    f << "STOP\n";
+  }
+  auto r = run_command(cli_binary + " --routing 127.0.0.1 --client-ip 127.0.0.1 cli " + cmd_file);
+  // These commands should complete (HELP prints usage, STATUS checks processes,
+  // STOP tries to stop processes)
+  EXPECT_EQ(r.exit_code, 0);
+  EXPECT_TRUE(r.stdout_str.find("GET") != std::string::npos ||
+              r.stdout_str.find("PUT") != std::string::npos);
+  std::remove(cmd_file.c_str());
+}
+
+TEST_F(CliInvocationTest, CliFileWithUnrecognizedCommand) {
+  std::string cmd_file = "cli_test_unrecognized.txt";
+  {
+    std::ofstream f(cmd_file);
+    f << "INVALID_COMMAND\n";
+  }
+  auto r = run_command(cli_binary + " --routing 127.0.0.1 --client-ip 127.0.0.1 cli " + cmd_file);
+  EXPECT_EQ(r.exit_code, 0);
+  EXPECT_TRUE(r.stdout_str.find("Unrecognized command") != std::string::npos);
+  std::remove(cmd_file.c_str());
+}
+
+TEST_F(CliInvocationTest, CliFileWithStartCommand) {
+  std::string cmd_file = "cli_test_start.txt";
+  {
+    std::ofstream f(cmd_file);
+    f << "START\n";
+    f << "STOP\n";  // Clean up
+  }
+  auto r = run_command(cli_binary + " --routing 127.0.0.1 --client-ip 127.0.0.1 --config " + test_config + " cli " + cmd_file);
+  EXPECT_EQ(r.exit_code, 0);
+  EXPECT_TRUE(r.stdout_str.find("anna processes") != std::string::npos);
+  std::remove(cmd_file.c_str());
+}
+
+TEST_F(CliInvocationTest, CliFileWithDeleteCommand) {
+  // DELETE with a mock client would hang since no server is running.
+  // But we can test that the command file processing works with
+  // non-blocking commands.
+  std::string cmd_file = "cli_test_delete.txt";
+  {
+    std::ofstream f(cmd_file);
+    f << "HELP\n";
+    f << "help\n";  // lowercase should also work (case conversion)
+  }
+  auto r = run_command(cli_binary + " --routing 127.0.0.1 --client-ip 127.0.0.1 cli " + cmd_file);
+  EXPECT_EQ(r.exit_code, 0);
+  std::remove(cmd_file.c_str());
+}
+
+TEST_F(CliInvocationTest, CliWithThreadsArg) {
+  // Test --threads flag parsing
+  auto r = run_command(cli_binary + " --routing 127.0.0.1 --client-ip 127.0.0.1 --threads 2 help");
+  EXPECT_EQ(r.exit_code, 0);
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

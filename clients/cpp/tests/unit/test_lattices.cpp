@@ -26,6 +26,7 @@
 #include "gtest/gtest.h"
 
 #include "common.hpp"
+#include "threads.hpp"
 
 // =====================================================================
 // lattice.hpp -- tested via concrete subclasses
@@ -991,4 +992,103 @@ TEST(LWWPairLatticeTest, Assign) {
   a.assign(TimestampValuePair<string>(99, "new"));
   EXPECT_EQ(a.reveal().value, "new");
   EXPECT_EQ(a.reveal().timestamp, 99ull);
+}
+
+// =====================================================================
+// Thread address classes (threads.hpp)
+// =====================================================================
+
+TEST(UserRoutingThreadTest, ConstructorAndAccessors) {
+  UserRoutingThread rt("10.0.0.1", 3);
+  EXPECT_EQ(rt.ip(), "10.0.0.1");
+  EXPECT_EQ(rt.tid(), 3u);
+}
+
+TEST(UserRoutingThreadTest, KeyAddressConnectAddress) {
+  UserRoutingThread rt("10.0.0.1", 0);
+  string addr = rt.key_address_connect_address();
+  EXPECT_TRUE(addr.find("10.0.0.1") != string::npos);
+  EXPECT_TRUE(addr.find("tcp://") != string::npos);
+}
+
+TEST(UserRoutingThreadTest, KeyAddressBindAddress) {
+  UserRoutingThread rt("10.0.0.1", 0);
+  string addr = rt.key_address_bind_address();
+  EXPECT_TRUE(addr.find("10.0.0.1") != string::npos);
+}
+
+TEST(UserRoutingThreadTest, DefaultConstructor) {
+  UserRoutingThread rt;
+  // Should not crash -- default-constructed state
+  (void)rt;
+}
+
+TEST(UserThreadTest, ConstructorAndAccessors) {
+  UserThread ut("192.168.1.1", 5);
+  EXPECT_EQ(ut.ip(), "192.168.1.1");
+  EXPECT_EQ(ut.tid(), 5u);
+}
+
+TEST(UserThreadTest, ResponseConnectAddress) {
+  UserThread ut("192.168.1.1", 0);
+  string addr = ut.response_connect_address();
+  EXPECT_TRUE(addr.find("192.168.1.1") != string::npos);
+  EXPECT_TRUE(addr.find("tcp://") != string::npos);
+}
+
+TEST(UserThreadTest, ResponseBindAddress) {
+  UserThread ut("192.168.1.1", 0);
+  string addr = ut.response_bind_address();
+  EXPECT_TRUE(addr.find("192.168.1.1") != string::npos);
+}
+
+TEST(UserThreadTest, KeyAddressConnectAddress) {
+  UserThread ut("192.168.1.1", 0);
+  string addr = ut.key_address_connect_address();
+  EXPECT_TRUE(addr.find("192.168.1.1") != string::npos);
+}
+
+TEST(UserThreadTest, KeyAddressBindAddress) {
+  UserThread ut("192.168.1.1", 0);
+  string addr = ut.key_address_bind_address();
+  EXPECT_TRUE(addr.find("192.168.1.1") != string::npos);
+}
+
+TEST(UserThreadTest, DefaultConstructor) {
+  UserThread ut;
+  (void)ut;
+}
+
+TEST(CacheThreadTest, ConstructorAndAccessors) {
+  CacheThread ct("10.0.0.2", 1);
+  EXPECT_EQ(ct.ip(), "10.0.0.2");
+  EXPECT_EQ(ct.tid(), 1u);
+}
+
+TEST(CacheThreadTest, CacheGetAddresses) {
+  CacheThread ct("10.0.0.2", 0);
+  EXPECT_EQ(ct.cache_get_bind_address(), "ipc:///requests/get");
+  EXPECT_EQ(ct.cache_get_connect_address(), "ipc:///requests/get");
+}
+
+TEST(CacheThreadTest, CachePutAddresses) {
+  CacheThread ct("10.0.0.2", 0);
+  EXPECT_EQ(ct.cache_put_bind_address(), "ipc:///requests/put");
+  EXPECT_EQ(ct.cache_put_connect_address(), "ipc:///requests/put");
+}
+
+TEST(CacheThreadTest, CacheUpdateAddresses) {
+  CacheThread ct("10.0.0.2", 0);
+  string addr = ct.cache_update_bind_address();
+  EXPECT_TRUE(addr.find("10.0.0.2") != string::npos);
+  string addr2 = ct.cache_update_connect_address();
+  EXPECT_TRUE(addr2.find("10.0.0.2") != string::npos);
+}
+
+// Verify thread port constants
+TEST(ThreadPortTest, Constants) {
+  EXPECT_EQ(kKeyAddressPort, 6450u);
+  EXPECT_EQ(kUserResponsePort, 6800u);
+  EXPECT_EQ(kUserKeyAddressPort, 6850u);
+  EXPECT_EQ(kCacheUpdatePort, 7150u);
 }

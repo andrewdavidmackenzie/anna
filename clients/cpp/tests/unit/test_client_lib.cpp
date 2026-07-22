@@ -686,3 +686,187 @@ TEST(ClientLibTest, PutPriorityWithNegativePriority) {
   ASSERT_EQ(client.keys_put_.size(), 1u);
   EXPECT_EQ(client.keys_put_[0], "neg_key");
 }
+
+// --- Retry loop tests using DelayedMockKvsClient ---
+
+TEST(ClientLibTest, GetRetriesUntilResponse) {
+  DelayedMockKvsClient client(2);  // return empty twice, then respond
+  client.responses_.push_back(make_lww_response("0", "delayed_value"));
+
+  string value = annalib::get(&client, "retry_key");
+
+  EXPECT_EQ(value, "delayed_value");
+  ASSERT_EQ(client.keys_get_.size(), 1u);
+}
+
+TEST(ClientLibTest, PutRetriesUntilResponse) {
+  DelayedMockKvsClient client(2);
+  client.responses_.push_back(make_lww_response("1", "unused"));
+
+  kvs::KeyResponse response = annalib::put(&client, "retry_key", "val");
+
+  ASSERT_EQ(client.keys_put_.size(), 1u);
+}
+
+TEST(ClientLibTest, GetSetRetriesUntilResponse) {
+  DelayedMockKvsClient client(1);
+  set<string> expected = {"a", "b"};
+  client.responses_.push_back(make_set_response(expected));
+
+  set<string> result = annalib::get_set(&client, "retry_set_key");
+
+  EXPECT_EQ(result, expected);
+}
+
+TEST(ClientLibTest, PutSetRetriesUntilResponse) {
+  DelayedMockKvsClient client(1);
+  client.responses_.push_back(make_lww_response("1", "unused"));
+
+  kvs::KeyResponse response =
+      annalib::put_set(&client, "retry_set", {"x"});
+
+  ASSERT_EQ(client.keys_put_.size(), 1u);
+}
+
+TEST(ClientLibTest, GetOrderedSetRetriesUntilResponse) {
+  DelayedMockKvsClient client(1);
+  client.responses_.push_back(make_ordered_set_response(set<string>({"a"})));
+
+  vector<string> result = annalib::get_ordered_set(&client, "retry_os");
+
+  EXPECT_EQ(result.size(), 1u);
+}
+
+TEST(ClientLibTest, PutOrderedSetRetriesUntilResponse) {
+  DelayedMockKvsClient client(1);
+  client.responses_.push_back(make_lww_response("1", "unused"));
+
+  kvs::KeyResponse response =
+      annalib::put_ordered_set(&client, "retry_os", {"x"});
+
+  ASSERT_EQ(client.keys_put_.size(), 1u);
+}
+
+TEST(ClientLibTest, GetCausalRetriesUntilResponse) {
+  DelayedMockKvsClient client(1);
+  client.responses_.push_back(make_causal_response("delayed_causal"));
+
+  annalib::CausalValue result = annalib::get_causal(&client, "retry_causal");
+
+  EXPECT_EQ(result.value, "delayed_causal");
+}
+
+TEST(ClientLibTest, PutCausalRetriesUntilResponse) {
+  DelayedMockKvsClient client(1);
+  client.responses_.push_back(make_lww_response("1", "unused"));
+
+  kvs::KeyResponse response =
+      annalib::put_causal(&client, "retry_causal", "val");
+
+  ASSERT_EQ(client.keys_put_.size(), 1u);
+}
+
+TEST(ClientLibTest, GetSingleCausalRetriesUntilResponse) {
+  DelayedMockKvsClient client(1);
+  client.responses_.push_back(make_single_causal_response("delayed_sc"));
+
+  annalib::SingleCausalValue result =
+      annalib::get_single_causal(&client, "retry_sc");
+
+  ASSERT_EQ(result.values.size(), 1u);
+  EXPECT_EQ(result.values[0], "delayed_sc");
+}
+
+TEST(ClientLibTest, PutSingleCausalRetriesUntilResponse) {
+  DelayedMockKvsClient client(1);
+  client.responses_.push_back(make_lww_response("1", "unused"));
+
+  kvs::KeyResponse response =
+      annalib::put_single_causal(&client, "retry_sc", "val");
+
+  ASSERT_EQ(client.keys_put_.size(), 1u);
+}
+
+TEST(ClientLibTest, GetPriorityRetriesUntilResponse) {
+  DelayedMockKvsClient client(1);
+  client.responses_.push_back(make_priority_response(1.0, "delayed_p"));
+
+  annalib::PriorityResult result =
+      annalib::get_priority(&client, "retry_priority");
+
+  EXPECT_DOUBLE_EQ(result.priority, 1.0);
+  EXPECT_EQ(result.value, "delayed_p");
+}
+
+TEST(ClientLibTest, PutPriorityRetriesUntilResponse) {
+  DelayedMockKvsClient client(1);
+  client.responses_.push_back(make_lww_response("1", "unused"));
+
+  kvs::KeyResponse response =
+      annalib::put_priority(&client, "retry_priority", 1.0, "val");
+
+  ASSERT_EQ(client.keys_put_.size(), 1u);
+}
+
+// --- Multiple-response error branch tests ---
+
+TEST(ClientLibTest, GetWithMultipleResponsesStillWorks) {
+  MockKvsClient client;
+  // Push two responses to trigger the "more than one response" warning
+  client.responses_.push_back(make_lww_response("0", "val1"));
+  client.responses_.push_back(make_lww_response("0", "val2"));
+
+  // Should still return the first response's value, with a warning to stderr
+  string value = annalib::get(&client, "multi_resp_key");
+  EXPECT_EQ(value, "val1");
+}
+
+TEST(ClientLibTest, GetSetWithMultipleResponsesStillWorks) {
+  MockKvsClient client;
+  set<string> expected = {"a"};
+  client.responses_.push_back(make_set_response(expected));
+  client.responses_.push_back(make_set_response(set<string>({"b"})));
+
+  set<string> result = annalib::get_set(&client, "multi_resp_set");
+  EXPECT_EQ(result, expected);
+}
+
+TEST(ClientLibTest, GetOrderedSetWithMultipleResponsesStillWorks) {
+  MockKvsClient client;
+  client.responses_.push_back(make_ordered_set_response(set<string>({"a"})));
+  client.responses_.push_back(make_ordered_set_response(set<string>({"b"})));
+
+  vector<string> result = annalib::get_ordered_set(&client, "multi_os");
+  EXPECT_EQ(result.size(), 1u);
+}
+
+TEST(ClientLibTest, GetCausalWithMultipleResponsesStillWorks) {
+  MockKvsClient client;
+  client.responses_.push_back(make_causal_response("v1"));
+  client.responses_.push_back(make_causal_response("v2"));
+
+  annalib::CausalValue result = annalib::get_causal(&client, "multi_causal");
+  EXPECT_EQ(result.value, "v1");
+}
+
+TEST(ClientLibTest, GetSingleCausalWithMultipleResponsesStillWorks) {
+  MockKvsClient client;
+  client.responses_.push_back(make_single_causal_response("v1"));
+  client.responses_.push_back(make_single_causal_response("v2"));
+
+  annalib::SingleCausalValue result =
+      annalib::get_single_causal(&client, "multi_sc");
+  ASSERT_EQ(result.values.size(), 1u);
+  EXPECT_EQ(result.values[0], "v1");
+}
+
+TEST(ClientLibTest, GetPriorityWithMultipleResponsesStillWorks) {
+  MockKvsClient client;
+  client.responses_.push_back(make_priority_response(1.0, "v1"));
+  client.responses_.push_back(make_priority_response(2.0, "v2"));
+
+  annalib::PriorityResult result =
+      annalib::get_priority(&client, "multi_priority");
+  EXPECT_DOUBLE_EQ(result.priority, 1.0);
+  EXPECT_EQ(result.value, "v1");
+}
