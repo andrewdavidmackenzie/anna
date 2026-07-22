@@ -84,6 +84,6 @@ void self_depart_handler(unsigned thread_id, unsigned &seed, Address public_ip,
 
   send_gossip(addr_keyset_map, pushers, serializers, stored_key_map);
   kZmqUtil->send_string(public_ip + "_" + private_ip + "_" +
-                            Tier_Name(kSelfTier),
+                            std::to_string(static_cast<unsigned>(kSelfTier)),
                         &pushers[serialized]);
 }
