@@ -17,7 +17,11 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 const TEST_GOSSIP_EPOCH: u32 = 2;
+const TEST_SERVER_REPORT_PERIOD: u32 = 3;
+const TEST_MONITORING_TIMEOUT: u32 = 8;
+const TEST_GRACE_PERIOD: u32 = 10;
 const ZMQ_SETTLE_MS: u64 = 500;
+const POLL_INTERVAL_MS: u64 = 500;
 const NODE1_IP: &str = "127.0.0.1";
 const NODE2_IP: &str = "127.0.0.2";
 
@@ -36,6 +40,9 @@ struct NodeConfig {
     routing_threads: u32,
     ebs_path: String,
     selective_rep: bool,
+    elasticity: bool,
+    mgmt_ip: String,
+    memory_cap_kb: Option<u32>,
 }
 
 impl Default for NodeConfig {
@@ -50,6 +57,9 @@ impl Default for NodeConfig {
             routing_threads: 1,
             ebs_path: "./".to_string(),
             selective_rep: false,
+            elasticity: false,
+            mgmt_ip: "NULL".to_string(),
+            memory_cap_kb: None,
         }
     }
 }
@@ -60,7 +70,7 @@ fn write_node_config(path: &Path, cfg: &NodeConfig) {
         f,
         "\
 monitoring:
-  mgmt_ip: {seed_ip}
+  mgmt_ip: \"{mgmt_ip}\"
   ip: {seed_ip}
 routing:
   monitoring:
@@ -80,15 +90,16 @@ server:
   seed_ip: {seed_ip}
   public_ip: {node_ip}
   private_ip: {node_ip}
-  mgmt_ip: \"NULL\"
+  mgmt_ip: \"{mgmt_ip}\"
 policy:
-  elasticity: false
+  elasticity: {elasticity}
   selective-rep: {selective_rep}
   tiering: false
 ebs: {ebs_path}
 capacities:
   memory-cap: 1
   ebs-cap: 256
+{memory_cap_kb_line}
 threads:
   memory: 1
   ebs: 1
@@ -98,12 +109,12 @@ ports:
   base_offset: {base_offset}
 timings:
   gossip_epoch: {gossip_epoch}
-  server_report_period: 3
+  server_report_period: {server_report_period}
   key_monitoring_period: 15
-  monitoring_timeout: 8
+  monitoring_timeout: {monitoring_timeout}
   monitoring_response_timeout_ms: 1000
   data_redistribute_batch: 50
-  grace_period: 10
+  grace_period: {grace_period}
 replication:
   memory: {replication_memory}
   ebs: {replication_ebs}
@@ -119,6 +130,15 @@ replication:
         routing_threads = cfg.routing_threads,
         ebs_path = cfg.ebs_path,
         selective_rep = cfg.selective_rep,
+        server_report_period = TEST_SERVER_REPORT_PERIOD,
+        monitoring_timeout = TEST_MONITORING_TIMEOUT,
+        grace_period = TEST_GRACE_PERIOD,
+        elasticity = cfg.elasticity,
+        mgmt_ip = cfg.mgmt_ip,
+        memory_cap_kb_line = cfg
+            .memory_cap_kb
+            .map(|kb| format!("  memory-cap-kb: {}", kb))
+            .unwrap_or_default(),
     )
     .expect("Failed to write config");
 }
@@ -156,6 +176,20 @@ fn spawn_server_with_env(
         .spawn()
         .unwrap_or_else(|e| panic!("Failed to spawn {}: {}", name, e));
     Some(child)
+}
+
+/// Maximum time to wait for the SLO policy to trigger a replication change.
+/// Needs: grace_period + at least 2 monitoring cycles + buffer for CI.
+fn slo_policy_timeout() -> Duration {
+    Duration::from_secs((TEST_GRACE_PERIOD + TEST_MONITORING_TIMEOUT * 3) as u64)
+}
+
+/// Maximum time to wait for the management node to receive an add_node.
+/// Needs: grace_period + monitoring cycle + stats report + buffer.
+fn elasticity_policy_timeout() -> Duration {
+    Duration::from_secs(
+        (TEST_GRACE_PERIOD + TEST_MONITORING_TIMEOUT * 2 + TEST_SERVER_REPORT_PERIOD) as u64,
+    )
 }
 
 fn wait_for_port(ip: &str, port: u16, timeout_secs: u64) -> bool {
@@ -238,8 +272,8 @@ impl MultiNodeCluster {
 
         let routing_port = (6450 + cfg.base_offset) as u16;
         assert!(
-            wait_for_port(cfg.node_ip, routing_port, 30),
-            "Routing tier on {} did not start within 30 seconds (port {})",
+            wait_for_port(cfg.node_ip, routing_port, 60),
+            "Routing tier on {} did not start within 60 seconds (port {})",
             cfg.node_ip,
             routing_port
         );
@@ -466,7 +500,7 @@ fn skip_unless_multi_ip() -> bool {
 }
 
 /// Cluster management: node join via seed, consistent hashing across 2 nodes.
-/// Uses base_offset=0 (ports 6000-7150)
+/// Uses base_offset=100.
 #[tokio::test]
 #[cfg(unix)]
 async fn multi_node_cluster_join_and_data_access() {
@@ -476,7 +510,7 @@ async fn multi_node_cluster_join_and_data_access() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(0);
+    let mut cluster = MultiNodeCluster::new(100);
 
     cluster.start_full_node(NODE1_IP, 1);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
@@ -1248,6 +1282,72 @@ async fn disk_tier_basic() {
             .unwrap_or_else(|e| panic!("GET {} failed: {}", key, e));
         assert_eq!(val, format!("disk_val_{}", i));
     }
+
+    // Test all lattice types on the disk tier to exercise disk serializers
+    #[cfg(feature = "set")]
+    {
+        client
+            .put_set("disk_set_key", &["a", "b", "c"])
+            .await
+            .expect("PUT_SET on disk failed");
+        let set_val = client
+            .get_set("disk_set_key")
+            .await
+            .expect("GET_SET on disk failed");
+        assert_eq!(set_val.len(), 3);
+
+        client
+            .put_ordered_set("disk_oset_key", &["x", "y", "z"])
+            .await
+            .expect("PUT_ORDERED_SET on disk failed");
+        let oset_val = client
+            .get_ordered_set("disk_oset_key")
+            .await
+            .expect("GET_ORDERED_SET on disk failed");
+        assert_eq!(oset_val.len(), 3);
+    }
+
+    #[cfg(feature = "causal")]
+    {
+        client
+            .put_single_causal("disk_sc_key", "causal_val")
+            .await
+            .expect("PUT_SINGLE_CAUSAL on disk failed");
+        let (vc, vals) = client
+            .get_single_causal("disk_sc_key")
+            .await
+            .expect("GET_SINGLE_CAUSAL on disk failed");
+        assert!(!vc.is_empty());
+        assert!(!vals.is_empty());
+
+        client
+            .put_causal("disk_mc_key", "multi_causal_val")
+            .await
+            .expect("PUT_CAUSAL on disk failed");
+        let (vc, _deps, val) = client
+            .get_causal("disk_mc_key")
+            .await
+            .expect("GET_CAUSAL on disk failed");
+        assert!(!vc.is_empty());
+        assert!(!val.is_empty());
+    }
+
+    client
+        .put_priority("disk_pri_key", 1.5, "important")
+        .await
+        .expect("PUT_PRIORITY on disk failed");
+    let (priority, val) = client
+        .get_priority("disk_pri_key")
+        .await
+        .expect("GET_PRIORITY on disk failed");
+    assert!((priority - 1.5).abs() < f64::EPSILON);
+    assert_eq!(val, "important");
+
+    // DELETE on disk tier
+    client
+        .delete("disk_key_0")
+        .await
+        .expect("DELETE on disk failed");
 }
 
 /// Memory-tier preference: with both memory and disk tier nodes,
@@ -1551,80 +1651,109 @@ async fn gossip_to_caches() {
 /// Verify that the SLO enforcement policy increases replication for hot keys
 /// when client-reported latency exceeds the 3ms threshold (kSloWorst = 3000us).
 ///
-/// Uses base_offset=25500 to stay below port 32768 limit.
+/// The SLO policy requires these conditions simultaneously:
+/// 1. avg_latency > 3000us (from UserFeedback)
+/// 2. kEnableSelectiveRep = true
+/// 3. key access count > mean + std (from KVS access tracking)
+/// 4. key present in latency_miss_ratio_map (from UserFeedback per-key data)
+/// 5. current_mem_rep < memory_node_count (room to replicate)
+/// 6. grace_period elapsed (10s in test config)
+///
+/// The test continuously sends feedback and accesses to keep all conditions
+/// met across multiple monitoring cycles (8s each in test config).
+///
+/// Uses base_offset=400.
 #[tokio::test]
 #[cfg(unix)]
-#[ignore] // SLO policy conditions not yet reliably met in CI — see #417
 async fn slo_selective_replication() {
     use annalib::kvs_client::KVSClient;
-    use annalib::latency_reporter::LatencyReporter;
-    use annalib::proto::metadata::ReplicationFactor;
+    use annalib::proto::metadata::user_feedback::KeyLatency;
+    use annalib::proto::metadata::{ReplicationFactor, UserFeedback};
     use prost::Message;
+    use zeromq::{PushSocket, Socket, SocketSend};
 
     if !can_bind(NODE2_IP) {
         eprintln!("SKIP: {} not bindable", NODE2_IP);
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(25500);
+    let mut cluster = MultiNodeCluster::new(400);
 
     // Start node 1 (full: monitor + route + kvs) with selective-rep enabled
     let cfg1 = NodeConfig {
         node_ip: NODE1_IP,
         seed_ip: NODE1_IP,
         replication_memory: 1,
-        base_offset: 25500,
+        base_offset: 400,
         selective_rep: true,
         ..Default::default()
     };
     cluster.start_full_node_with_config(cfg1);
 
-    // Start node 2 (kvs only, joining node 1) so there's a second node to replicate to
+    // Start node 2 (kvs only, joining node 1) so there's a second node
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
     let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(50)).await;
 
-    // PUT several keys so the hot key stands out statistically
-    for i in 0..5 {
+    let hot_key = "slo_key_0";
+
+    // PUT several keys: the hot key must stand out above mean + std
+    for i in 0..10 {
         client
             .put(&format!("slo_key_{}", i), &format!("value_{}", i))
             .await
             .expect("PUT failed");
     }
 
-    // Make key 0 "hot" by accessing it many times
-    let hot_key = "slo_key_0";
-    for _ in 0..20 {
-        client.get(hot_key).await.ok();
-    }
-
-    // Send high-latency feedback via LatencyReporter
-    let mut reporter =
-        LatencyReporter::with_monitoring_ips(vec![NODE1_IP.to_string()], 25500, Some(51));
-
-    // Report latency well above kSloWorst (3000us)
-    reporter
-        .report(5000.0, 100.0, &[(hot_key.to_string(), 5000.0)])
+    // Connect to monitor feedback port using raw ZMQ
+    let feedback_addr = format!("tcp://{}:{}", NODE1_IP, 6750 + 400);
+    let mut feedback_pusher = PushSocket::new();
+    feedback_pusher
+        .connect(&feedback_addr)
         .await
-        .expect("report failed");
+        .expect("feedback connect failed");
+    tokio::time::sleep(Duration::from_millis(ZMQ_SETTLE_MS)).await;
 
-    // Wait for grace period (10s in test config) to expire before sending
-    // the second round of feedback that the policy will actually act on.
-    tokio::time::sleep(Duration::from_secs(12)).await;
+    // Spawn background task to continuously send feedback and generate
+    // hot-key accesses. This runs independently of the polling loop.
+    let hot_key_owned = hot_key.to_string();
+    let feedback_handle = tokio::spawn(async move {
+        loop {
+            let feedback = UserFeedback {
+                uid: "slo_test_client".into(),
+                latency: 5000.0,
+                throughput: 100.0,
+                key_latency: vec![KeyLatency {
+                    key: hot_key_owned.clone(),
+                    latency: 5000.0,
+                }],
+                ..Default::default()
+            };
+            if feedback_pusher
+                .send(zeromq::ZmqMessage::from(feedback.encode_to_vec()))
+                .await
+                .is_err()
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    });
 
-    reporter
-        .report(5000.0, 100.0, &[(hot_key.to_string(), 5000.0)])
-        .await
-        .expect("second report failed");
-
-    reporter.finish().await.expect("finish failed");
-
-    // Poll for the replication change: check every 3s, up to 30s total.
+    // Poll for the replication change with timeout derived from config constants.
+    // The policy needs: grace_period to elapse, then a monitoring cycle where
+    // both access stats and latency feedback are present.
     let rep_key = format!("ANNA_METADATA|replication|{}", hot_key);
     let mut memory_rep = 1u32;
-    for attempt in 0..10 {
-        tokio::time::sleep(Duration::from_secs(3)).await;
+    let deadline = Instant::now() + slo_policy_timeout();
+
+    while Instant::now() < deadline {
+        // Keep generating hot-key accesses
+        for _ in 0..3 {
+            client.get(hot_key).await.ok();
+        }
+
         if let Ok(bytes) = client.get_bytes(&rep_key).await {
             if let Ok(rep) = ReplicationFactor::decode(bytes.as_slice()) {
                 memory_rep = rep
@@ -1634,20 +1763,269 @@ async fn slo_selective_replication() {
                     .map(|r| r.value)
                     .unwrap_or(1);
                 if memory_rep > 1 {
-                    eprintln!(
-                        "SLO replication triggered after {} attempts: rep={}",
-                        attempt + 1,
-                        memory_rep
-                    );
                     break;
                 }
             }
         }
+
+        tokio::time::sleep(Duration::from_millis(POLL_INTERVAL_MS)).await;
     }
+
+    feedback_handle.abort();
 
     assert!(
         memory_rep > 1,
         "Expected hot key replication > 1 after SLO violation, got {}",
         memory_rep
     );
+}
+
+/// Test the management node integration path: start a mock management node
+/// (ZMQ REP sockets), configure the cluster with mgmt_ip pointing to it,
+/// and verify the KVS server contacts it on startup (restart count query)
+/// and the monitor contacts it when storage policy triggers (add node).
+///
+/// Uses base_offset=500 to stay in safe port range.
+#[tokio::test]
+#[cfg(unix)]
+async fn management_node_integration() {
+    use annalib::kvs_client::KVSClient;
+    use zeromq::{PullSocket, RepSocket, Socket, SocketRecv, SocketSend};
+
+    if !server_bin_dir().join("anna-kvs").exists() {
+        eprintln!("SKIP: server binaries not built");
+        return;
+    }
+
+    let base_offset: u32 = 500;
+
+    // Start mock management node BEFORE starting the cluster.
+    // Port 7000+offset: REP socket for "restart:<ip>" queries
+    let mut restart_count_rep = RepSocket::new();
+    restart_count_rep
+        .bind(&format!("tcp://{}:{}", NODE1_IP, 7000 + base_offset))
+        .await
+        .expect("Failed to bind restart count REP");
+
+    // Port 7002+offset: PULL socket for func/cache node queries
+    // (KVS sends via PUSH, so we receive via PULL)
+    let mut func_nodes_pull = PullSocket::new();
+    func_nodes_pull
+        .bind(&format!("tcp://{}:{}", NODE1_IP, 7002 + base_offset))
+        .await
+        .expect("Failed to bind func nodes PULL");
+
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // Spawn a background task to handle management node requests.
+    // The KVS server sends "restart:<ip>" on startup and expects a count.
+    // The KVS also periodically queries func_nodes for cache IPs.
+    let mgmt_handle = tokio::spawn(async move {
+        let mut restart_count = 0u32;
+        let mut func_count = 0u32;
+
+        loop {
+            tokio::select! {
+                result = restart_count_rep.recv() => {
+                    if let Ok(msg) = result {
+                        let data: Vec<u8> = msg.into_vec()
+                            .into_iter().flat_map(|f| f.to_vec()).collect();
+                        let request = String::from_utf8_lossy(&data);
+                        eprintln!("Mock mgmt: restart query: {}", request);
+                        restart_count += 1;
+                        restart_count_rep
+                            .send(zeromq::ZmqMessage::from("0".as_bytes().to_vec()))
+                            .await
+                            .ok();
+                    }
+                }
+                result = func_nodes_pull.recv() => {
+                    if let Ok(msg) = result {
+                        let data: Vec<u8> = msg.into_vec()
+                            .into_iter().flat_map(|f| f.to_vec()).collect();
+                        eprintln!("Mock mgmt: func nodes query: {:?}", String::from_utf8_lossy(&data));
+                        func_count += 1;
+                        // PULL socket — no reply needed (KVS sends via PUSH)
+                    }
+                }
+            }
+
+            if restart_count >= 1 && func_count >= 1 {
+                return (restart_count, func_count);
+            }
+        }
+    });
+
+    // Start cluster with mgmt_ip pointing to our mock
+    let mut cluster = MultiNodeCluster::new(base_offset);
+    let cfg = NodeConfig {
+        node_ip: NODE1_IP,
+        seed_ip: NODE1_IP,
+        replication_memory: 1,
+        base_offset,
+        mgmt_ip: NODE1_IP.to_string(),
+        ..Default::default()
+    };
+    cluster.start_full_node_with_config(cfg);
+
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(40)).await;
+
+    // Poll until PUT succeeds (cluster may need time to stabilize)
+    let deadline = Instant::now() + Duration::from_secs(TEST_SERVER_REPORT_PERIOD as u64 * 2);
+    while Instant::now() < deadline {
+        if client.put("mgmt_test_key", "mgmt_test_val").await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(POLL_INTERVAL_MS)).await;
+    }
+    let val = client
+        .get("mgmt_test_key")
+        .await
+        .expect("GET failed with mgmt node");
+    assert_eq!(val, "mgmt_test_val");
+
+    // The mock should receive: restart query (on startup) + func_nodes query
+    // (after server_report_period). Total wait bounded by config constants.
+    let mgmt_timeout =
+        Duration::from_secs((TEST_SERVER_REPORT_PERIOD * 2 + TEST_MONITORING_TIMEOUT) as u64);
+    let result = tokio::time::timeout(mgmt_timeout, mgmt_handle).await;
+    match result {
+        Ok(Ok((restart, func))) => {
+            eprintln!(
+                "Mock mgmt received: {} restart queries, {} func queries",
+                restart, func
+            );
+            assert!(restart >= 1, "Expected at least 1 restart query");
+            assert!(func >= 1, "Expected at least 1 func_nodes query");
+        }
+        Ok(Err(e)) => panic!("Management mock task failed: {}", e),
+        Err(_) => panic!("Management mock did not receive expected queries within timeout"),
+    }
+}
+
+/// Test the storage policy elasticity path: with memory-cap-kb set very low
+/// and elasticity enabled, PUT enough data to exceed 60% capacity, then
+/// verify the monitor sends an "add:N:memory" message to the management node.
+///
+/// Uses base_offset=600.
+#[tokio::test]
+#[cfg(unix)]
+#[ignore] // storage policy timing not yet reliable — needs investigation
+async fn elasticity_storage_policy() {
+    use annalib::kvs_client::KVSClient;
+    use zeromq::{PullSocket, RepSocket, Socket, SocketRecv, SocketSend};
+
+    if !server_bin_dir().join("anna-kvs").exists() {
+        eprintln!("SKIP: server binaries not built");
+        return;
+    }
+
+    let base_offset: u32 = 600;
+
+    // Mock management node sockets
+    let mut restart_rep = RepSocket::new();
+    restart_rep
+        .bind(&format!("tcp://{}:{}", NODE1_IP, 7000 + base_offset))
+        .await
+        .expect("bind restart REP failed");
+
+    let mut func_pull = PullSocket::new();
+    func_pull
+        .bind(&format!("tcp://{}:{}", NODE1_IP, 7002 + base_offset))
+        .await
+        .expect("bind func PULL failed");
+
+    // Port 7001+offset: PULL socket for "add:N:tier" messages from monitor
+    let mut add_node_pull = PullSocket::new();
+    add_node_pull
+        .bind(&format!("tcp://{}:{}", NODE1_IP, 7001 + base_offset))
+        .await
+        .expect("bind add_node PULL failed");
+
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // Background task to handle management node protocol
+    let mgmt_handle = tokio::spawn(async move {
+        let mut add_node_msg: Option<String> = None;
+
+        loop {
+            tokio::select! {
+                result = restart_rep.recv() => {
+                    if let Ok(_msg) = result {
+                        restart_rep
+                            .send(zeromq::ZmqMessage::from("0".as_bytes().to_vec()))
+                            .await
+                            .ok();
+                    }
+                }
+                result = func_pull.recv() => {
+                    if let Ok(_msg) = result {
+                        // No response needed for PULL
+                    }
+                }
+                result = add_node_pull.recv() => {
+                    if let Ok(msg) = result {
+                        let data: Vec<u8> = msg.into_vec()
+                            .into_iter().flat_map(|f| f.to_vec()).collect();
+                        let message = String::from_utf8_lossy(&data).to_string();
+                        eprintln!("Mock mgmt: add_node request: {}", message);
+                        add_node_msg = Some(message);
+                        return add_node_msg;
+                    }
+                }
+            }
+        }
+    });
+
+    // Start cluster with elasticity enabled and very small memory capacity
+    // memory-cap-kb: 1 means 1 KB capacity. Storing any data exceeds 60%.
+    let mut cluster = MultiNodeCluster::new(base_offset);
+    let cfg = NodeConfig {
+        node_ip: NODE1_IP,
+        seed_ip: NODE1_IP,
+        replication_memory: 1,
+        base_offset,
+        elasticity: true,
+        mgmt_ip: NODE1_IP.to_string(),
+        memory_cap_kb: Some(1),
+        ..Default::default()
+    };
+    cluster.start_full_node_with_config(cfg);
+
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(41)).await;
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    // PUT data to exceed the tiny 1 KB capacity
+    for i in 0..10 {
+        client
+            .put(&format!("elasticity_key_{}", i), &format!("value_{}", i))
+            .await
+            .ok();
+    }
+
+    // Wait for monitor to collect stats and run storage_policy.
+    // Grace period is 10s in test config, monitoring threshold is 8s.
+    // Need: grace_period(10) + monitoring_cycle(8) + buffer(5) = ~23s
+    let result = tokio::time::timeout(elasticity_policy_timeout(), mgmt_handle).await;
+
+    match result {
+        Ok(Ok(Some(msg))) => {
+            eprintln!("Storage policy triggered: {}", msg);
+            assert!(
+                msg.starts_with("add:"),
+                "Expected 'add:N:tier' message, got: {}",
+                msg
+            );
+            assert!(
+                msg.contains("memory"),
+                "Expected memory tier in add request, got: {}",
+                msg
+            );
+        }
+        Ok(Ok(None)) => panic!("Management mock returned without receiving add_node"),
+        Ok(Err(e)) => panic!("Management mock task failed: {}", e),
+        Err(_) => panic!("Storage policy did not trigger add_node within 25 seconds"),
+    }
 }

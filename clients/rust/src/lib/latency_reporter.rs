@@ -93,6 +93,20 @@ impl LatencyReporter {
         }
     }
 
+    /// Pre-connect to all monitoring threads.
+    ///
+    /// ZMQ connections are asynchronous — calling `connect()` initiates the
+    /// TCP/ZMTP handshake but messages sent before it completes may be queued
+    /// or dropped. Call this method and wait briefly before the first `report()`
+    /// to ensure connections are established.
+    pub async fn connect(&mut self) -> Result<()> {
+        for ip in self.monitoring_ips.clone() {
+            let addr = format!("tcp://{}:{}", ip, K_FEEDBACK_REPORT_PORT + self.base_offset);
+            self.get_or_connect(&addr).await?;
+        }
+        Ok(())
+    }
+
     /// Set the warmup flag for subsequent reports.
     ///
     /// When warmup is true, the monitor ignores policy decisions (e.g.
@@ -325,5 +339,22 @@ mod tests {
             .collect();
         let decoded = UserFeedback::decode(bytes.as_slice()).expect("decode failed");
         assert!(decoded.finish);
+    }
+
+    #[tokio::test]
+    async fn connect_pre_establishes_sockets() {
+        use zeromq::PullSocket;
+
+        let port = 6750 + 82;
+        let mut puller = PullSocket::new();
+        puller
+            .bind(&format!("tcp://127.0.0.1:{}", port))
+            .await
+            .expect("bind failed");
+
+        let mut reporter =
+            LatencyReporter::with_monitoring_ips(vec!["127.0.0.1".into()], 82, Some(0));
+        reporter.connect().await.expect("connect failed");
+        assert_eq!(reporter.socket_cache.len(), 1);
     }
 }
