@@ -479,7 +479,7 @@ fn skip_unless_multi_ip() -> bool {
 }
 
 /// Cluster management: node join via seed, consistent hashing across 2 nodes.
-/// Uses base_offset=0 (ports 6000-7150)
+/// Uses base_offset=100.
 #[tokio::test]
 #[cfg(unix)]
 async fn multi_node_cluster_join_and_data_access() {
@@ -489,7 +489,7 @@ async fn multi_node_cluster_join_and_data_access() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(0);
+    let mut cluster = MultiNodeCluster::new(100);
 
     cluster.start_full_node(NODE1_IP, 1);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
