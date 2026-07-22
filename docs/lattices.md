@@ -99,25 +99,48 @@ This compositional approach means:
 
 ## Consistency Levels
 
-Anna supports a wide range of coordination-free consistency levels, all
-implemented through lattice composition:
+### Implemented
 
-| Consistency Level       | Description                                                            |
+Anna provides six lattice types with full implementations (lattice code,
+protobuf types, server handlers, serializers, and client APIs in all
+four languages):
+
+| Consistency Level       | Lattice Type     | Description                                       |
+|-------------------------|------------------|---------------------------------------------------|
+| **Eventual (LWW)**      | `LWW`            | Last write wins by timestamp                      |
+| **Set merge**           | `SET`             | Grow-only set with union merge                   |
+| **Ordered set merge**   | `ORDERED_SET`     | Set with insertion order preserved               |
+| **Single-key causal**   | `SINGLE_CAUSAL`   | Vector clocks track causal ordering per key      |
+| **Multi-key causal**    | `MULTI_CAUSAL`    | Causal ordering with cross-key dependency tracking |
+| **Priority**            | `PRIORITY`        | Lowest priority value wins                       |
+
+### Theoretical (not yet implemented)
+
+The VLDB 2019 paper (Section 4.2.1) notes that Anna's lattices "can be
+composed to offer the full range of coordination-free consistency
+guarantees." The following levels are theoretically achievable through
+lattice composition but have **no implementation** in the current codebase
+— no transactions, no session state, no write buffering, and no
+version-tracking protocol exist:
+
+| Consistency Level       | What would be needed                                                   |
 |-------------------------|------------------------------------------------------------------------|
-| **Eventual**            | Default. LWW lattice. Last write wins.                                 |
-| **Causal**              | Vector clocks track causal ordering between updates                    |
-| **Read Committed**      | Transaction timestamps ensure no dirty reads/writes                    |
-| **Read Uncommitted**    | Like Read Committed but allows dirty reads                             |
-| **Item Cut Isolation**  | Buffered reads ensure same value on re-read within transaction         |
-| **Monotonic Reads**     | Once a value is read, subsequent reads return same or newer            |
-| **Monotonic Writes**    | Writes from same client are applied in order                           |
-| **Writes Follow Reads** | A write after a read is ordered after the read's version               |
-| **Read Your Writes**    | A client always sees its own writes                                    |
-| **PRAM**                | Pipelined RAM — combines monotonic reads, writes, and read-your-writes |
+| **Read Committed**      | Client-side transaction buffering + commit protocol                    |
+| **Read Uncommitted**    | Same as Read Committed without write buffering                         |
+| **Item Cut Isolation**  | Client-side read cache per transaction                                 |
+| **Writes Follow Reads** | Client includes read version in write requests                         |
+| **PRAM**                | Composition of monotonic reads + monotonic writes + read-your-writes   |
 
-The key insight is that switching between these levels requires changing only
-which lattice type wraps the value — the server code, communication protocol,
-and actor model remain unchanged.
+### Emergent (no explicit enforcement)
+
+These properties are partially emergent from the existing lattice design
+but are **not enforced across replicas** during gossip convergence:
+
+| Consistency Level       | Status                                                                 |
+|-------------------------|------------------------------------------------------------------------|
+| **Monotonic Reads**     | Holds on a single replica; stale reads possible across replicas        |
+| **Monotonic Writes**    | Emergent from LWW timestamps; not a separate implementation            |
+| **Read Your Writes**    | Holds when reading from the same replica that accepted the write       |
 
 ### Consistency Level Details
 
@@ -151,81 +174,30 @@ and actor model remain unchanged.
   settings. MongoDB offers causal consistency sessions. Anna's implementation
   is unique in being coordination-free — no consensus protocol or total ordering.
 
-#### Read Committed
+#### Theoretical Consistency Levels (Not Yet Implemented)
 
-- **Definition**: Transactions only see committed data. No dirty reads (reading
-  uncommitted writes) and no dirty writes (overwriting uncommitted data).
-- **Implementation**: Appends a transaction timestamp to each write using a
-  `MaxIntLattice`. The merge function keeps the value with the higher
-  transaction timestamp, ensuring writes within a transaction are atomic.
-  Dirty reads are prevented by buffering writes at the client proxy until
-  commit time.
-- **Where**: Client proxy logic (transaction buffering).
-- **Use case**: Banking transactions, inventory management — anywhere partial
-  transaction results must not be visible.
-- **Comparison**: PostgreSQL's default isolation level. Most SQL databases
-  support this. Anna achieves it without coordination through lattice composition.
+The following consistency levels are described in the academic literature
+as achievable through lattice composition (see Bailis et al., "Coordination
+Avoidance in Database Systems", VLDB 2015). Anna's architecture could
+support them, but no implementation exists in this codebase.
 
-#### Read Uncommitted
+- **Read Committed / Read Uncommitted**: Would require client-side
+  transaction buffering and a commit protocol.
+- **Item Cut Isolation**: Would require a client-side read cache per
+  transaction.
+- **Writes Follow Reads**: Would require the client to include the read
+  version in write requests.
+- **PRAM**: Would compose monotonic reads, monotonic writes, and
+  read-your-writes — each of which would need explicit enforcement.
 
-- **Definition**: Like Read Committed but allows dirty reads (seeing uncommitted
-  data from other transactions).
-- **Implementation**: Same lattice as Read Committed but without client-side
-  write buffering.
-- **Where**: Client proxy logic.
-- **Use case**: Analytics queries where approximate results are acceptable and
-  performance is prioritized over strict correctness.
-
-#### Item Cut Isolation
-
-- **Definition**: Within a transaction, reading the same key twice returns the
-  same value (repeatable read for individual keys).
-- **Implementation**: The client proxy caches read values for the duration of
-  the transaction. Subsequent reads of the same key return the cached value.
-  No modification to the lattice composition is needed.
-- **Where**: Client proxy (read cache).
-- **Use case**: Report generation where consistency within a single query
-  matters, even if the data changes between queries.
-
-#### Monotonic Reads
-
-- **Definition**: Once a client reads a value, subsequent reads return the same
-  or a newer value — never an older one.
-- **Implementation**: The base eventual consistency lattice already guarantees
-  this because lattice merge is monotonically increasing.
-- **Where**: Inherent in the lattice design.
-- **Use case**: Newsfeeds, notification systems — users should never see items
-  disappear.
-
-#### Monotonic Writes
-
-- **Definition**: Writes from the same client are applied in the order they
-  were issued.
-- **Implementation**: Inherent in the LWW lattice with monotonically increasing
-  timestamps.
-- **Where**: Inherent in the lattice design.
-- **Use case**: Logging, audit trails — events must appear in order.
-
-#### Writes Follow Reads
-
-- **Definition**: A write that follows a read is ordered after the version that
-  was read.
-- **Implementation**: The client includes the version it read in its write
-  request. The lattice merge ensures the write is ordered after the read.
-- **Where**: Client proxy + lattice composition.
-- **Use case**: Comment systems (a reply is always ordered after the post
-  it responds to).
-
-#### PRAM (Pipelined RAM)
-
-- **Definition**: Combines monotonic reads, monotonic writes, and read-your-writes.
-  All operations from a single client are seen by all replicas in the order
-  the client issued them.
-- **Implementation**: Composition of the lattices for the three constituent
-  properties.
-- **Where**: Client proxy + lattice composition.
-- **Use case**: Interactive applications where a user expects to see their own
-  actions reflected immediately and in order.
+**Emergent properties** (not enforced, but partially hold):
+- **Monotonic Reads**: Holds on a single replica because lattice merge is
+  monotonically increasing. Not guaranteed across replicas during gossip
+  convergence (stale reads are possible).
+- **Monotonic Writes**: Emergent from LWW's monotonically increasing
+  timestamps. Not a separate implementation.
+- **Read Your Writes**: Holds when reading from the same replica that
+  accepted the write. Not guaranteed across replicas.
 
 ### Stronger Consistency Levels (Not Supported by Anna)
 
