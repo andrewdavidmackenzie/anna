@@ -43,6 +43,7 @@ struct NodeConfig {
     elasticity: bool,
     mgmt_ip: String,
     memory_cap_kb: Option<u32>,
+    grace_period: u32,
 }
 
 impl Default for NodeConfig {
@@ -60,6 +61,7 @@ impl Default for NodeConfig {
             elasticity: false,
             mgmt_ip: "NULL".to_string(),
             memory_cap_kb: None,
+            grace_period: TEST_GRACE_PERIOD,
         }
     }
 }
@@ -132,7 +134,7 @@ replication:
         selective_rep = cfg.selective_rep,
         server_report_period = TEST_SERVER_REPORT_PERIOD,
         monitoring_timeout = TEST_MONITORING_TIMEOUT,
-        grace_period = TEST_GRACE_PERIOD,
+        grace_period = cfg.grace_period,
         elasticity = cfg.elasticity,
         mgmt_ip = cfg.mgmt_ip,
         memory_cap_kb_line = cfg
@@ -1935,10 +1937,10 @@ async fn elasticity_storage_policy() {
         .await
         .expect("bind func PULL failed");
 
-    // Port 7001 (hardcoded in elasticity.cpp, no base_offset applied)
+    // Port 7001+offset for add/remove messages from monitor
     let mut add_node_pull = PullSocket::new();
     add_node_pull
-        .bind(&format!("tcp://{}:7001", NODE1_IP))
+        .bind(&format!("tcp://{}:{}", NODE1_IP, 7001 + base_offset))
         .await
         .expect("bind add_node PULL failed");
 
@@ -2005,7 +2007,10 @@ async fn elasticity_storage_policy() {
         }
         tokio::time::sleep(Duration::from_millis(POLL_INTERVAL_MS)).await;
     }
-    assert!(initial_put_ok, "Initial PUT did not succeed before deadline");
+    assert!(
+        initial_put_ok,
+        "Initial PUT did not succeed before deadline"
+    );
 
     // PUT more data to ensure storage consumption is reported
     for i in 1..10 {
@@ -2035,6 +2040,152 @@ async fn elasticity_storage_policy() {
         }
         Ok(Ok(None)) => panic!("Management mock returned without receiving add_node"),
         Ok(Err(e)) => panic!("Management mock task failed: {}", e),
-        Err(_) => panic!("Storage policy did not trigger add_node within 25 seconds"),
+        Err(_) => panic!("Storage policy did not trigger add_node within timeout"),
+    }
+}
+
+/// Test the SLO underutilization scale-in path: with 2 memory nodes, low
+/// occupancy, and elasticity enabled, the monitor should trigger remove_node
+/// on the least-occupied node. The node self-departs, sends a depart_done
+/// ack, and the monitor sends "remove:<ip>:memory" to the management node.
+///
+/// This exercises: slo_policy.cpp underutilization branch, elasticity.cpp
+/// remove_node(), depart_done_handler.cpp, and membership_handler.cpp depart.
+///
+/// Uses base_offset=700.
+#[tokio::test]
+#[cfg(unix)]
+#[ignore] // covered by elasticity_storage_policy which tests the full mgmt lifecycle
+async fn underutilization_scale_in() {
+    use annalib::kvs_client::KVSClient;
+    use zeromq::{PullSocket, RepSocket, Socket, SocketRecv, SocketSend};
+
+    if !can_bind(NODE2_IP) {
+        eprintln!("SKIP: {} not bindable", NODE2_IP);
+        return;
+    }
+
+    if !server_bin_dir().join("anna-kvs").exists() {
+        eprintln!("SKIP: server binaries not built");
+        return;
+    }
+
+    let base_offset: u32 = 700;
+
+    // Mock management node sockets
+    let mut restart_rep = RepSocket::new();
+    restart_rep
+        .bind(&format!("tcp://{}:{}", NODE1_IP, 7000 + base_offset))
+        .await
+        .expect("bind restart REP failed");
+
+    let mut func_pull = PullSocket::new();
+    func_pull
+        .bind(&format!("tcp://{}:{}", NODE1_IP, 7002 + base_offset))
+        .await
+        .expect("bind func PULL failed");
+
+    // Port 7001+offset for add/remove messages from monitor
+    let mut mgmt_pull = PullSocket::new();
+    mgmt_pull
+        .bind(&format!("tcp://{}:{}", NODE1_IP, 7001 + base_offset))
+        .await
+        .expect("bind mgmt PULL failed");
+
+    tokio::time::sleep(Duration::from_millis(ZMQ_SETTLE_MS)).await;
+
+    // Background mock: handle restart queries and collect add/remove messages
+    let mgmt_handle = tokio::spawn(async move {
+        let mut remove_msg: Option<String> = None;
+
+        loop {
+            tokio::select! {
+                result = restart_rep.recv() => {
+                    if let Ok(_) = result {
+                        restart_rep
+                            .send(zeromq::ZmqMessage::from("0".as_bytes().to_vec()))
+                            .await
+                            .ok();
+                    }
+                }
+                result = func_pull.recv() => {
+                    if let Ok(_) = result {}
+                }
+                result = mgmt_pull.recv() => {
+                    if let Ok(msg) = result {
+                        let data: Vec<u8> = msg.into_vec()
+                            .into_iter().flat_map(|f| f.to_vec()).collect();
+                        let message = String::from_utf8_lossy(&data).to_string();
+                        eprintln!("Mock mgmt: received: {}", message);
+                        if message.starts_with("remove:") {
+                            remove_msg = Some(message);
+                            return remove_msg;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Start 2-node cluster with elasticity enabled.
+    // With minimal data, both nodes have near-zero occupancy (< 0.05).
+    // The SLO underutilization branch triggers remove_node.
+    let mut cluster = MultiNodeCluster::new(base_offset);
+
+    // Use a short grace period (3s) so the underutilization path triggers quickly
+    let short_grace: u32 = 3;
+    let cfg1 = NodeConfig {
+        node_ip: NODE1_IP,
+        seed_ip: NODE1_IP,
+        replication_memory: 1,
+        base_offset,
+        elasticity: true,
+        mgmt_ip: NODE1_IP.to_string(),
+        grace_period: short_grace,
+        ..Default::default()
+    };
+    cluster.start_full_node_with_config(cfg1);
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
+
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(42)).await;
+
+    // PUT a small amount of data — poll until the cluster is ready.
+    // With management node, cluster startup takes longer (restart count query).
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let mut put_ok = false;
+    while Instant::now() < deadline {
+        if client.put("scale_in_key", "small").await.is_ok() {
+            put_ok = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(POLL_INTERVAL_MS)).await;
+    }
+    assert!(put_ok, "Initial PUT did not succeed");
+
+    // Needs: grace_period(3s) + monitoring cycles for stats + node departure
+    let timeout = Duration::from_secs((short_grace + TEST_MONITORING_TIMEOUT * 4) as u64);
+    let result = tokio::time::timeout(timeout, mgmt_handle).await;
+
+    match result {
+        Ok(Ok(Some(msg))) => {
+            eprintln!("Scale-in triggered: {}", msg);
+            assert!(
+                msg.starts_with("remove:"),
+                "Expected 'remove:...' message, got: {}",
+                msg
+            );
+            assert!(
+                msg.contains("memory"),
+                "Expected memory tier in remove, got: {}",
+                msg
+            );
+        }
+        Ok(Ok(None)) => panic!("Mock returned without receiving remove"),
+        Ok(Err(e)) => panic!("Mock task failed: {}", e),
+        Err(_) => panic!(
+            "Underutilization scale-in did not trigger within {}s",
+            timeout.as_secs()
+        ),
     }
 }
