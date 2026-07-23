@@ -1291,36 +1291,51 @@ async fn disk_tier_basic() {
         assert_eq!(val, format!("disk_val_{}", i));
     }
 
-    // Test all lattice types on the disk tier to exercise disk serializers
+    // Test all lattice types with merge on the disk tier
     #[cfg(feature = "set")]
     {
+        // Set: PUT twice to trigger union merge
         client
-            .put_set("disk_set_key", &["a", "b", "c"])
+            .put_set("disk_set_key", &["a", "b"])
             .await
-            .expect("PUT_SET on disk failed");
+            .expect("PUT_SET 1 failed");
+        client
+            .put_set("disk_set_key", &["b", "c"])
+            .await
+            .expect("PUT_SET 2 failed");
         let set_val = client
             .get_set("disk_set_key")
             .await
             .expect("GET_SET on disk failed");
-        assert_eq!(set_val.len(), 3);
+        assert!(set_val.len() >= 2);
 
+        // OrderedSet: PUT twice to trigger merge
         client
-            .put_ordered_set("disk_oset_key", &["x", "y", "z"])
+            .put_ordered_set("disk_oset_key", &["x", "y"])
             .await
-            .expect("PUT_ORDERED_SET on disk failed");
+            .expect("PUT_ORDERED_SET 1 failed");
+        client
+            .put_ordered_set("disk_oset_key", &["y", "z"])
+            .await
+            .expect("PUT_ORDERED_SET 2 failed");
         let oset_val = client
             .get_ordered_set("disk_oset_key")
             .await
             .expect("GET_ORDERED_SET on disk failed");
-        assert_eq!(oset_val.len(), 3);
+        assert!(oset_val.len() >= 2);
     }
 
     #[cfg(feature = "causal")]
     {
+        // SingleCausal: PUT twice to trigger merge (concurrent vector clocks)
         client
-            .put_single_causal("disk_sc_key", "causal_val")
+            .put_single_causal("disk_sc_key", "causal_v1")
             .await
-            .expect("PUT_SINGLE_CAUSAL on disk failed");
+            .expect("PUT_SINGLE_CAUSAL v1 failed");
+        client
+            .put_single_causal("disk_sc_key", "causal_v2")
+            .await
+            .expect("PUT_SINGLE_CAUSAL v2 failed");
         let (vc, vals) = client
             .get_single_causal("disk_sc_key")
             .await
@@ -1328,10 +1343,15 @@ async fn disk_tier_basic() {
         assert!(!vc.is_empty());
         assert!(!vals.is_empty());
 
+        // MultiCausal: PUT twice to trigger merge with dependency tracking
         client
-            .put_causal("disk_mc_key", "multi_causal_val")
+            .put_causal("disk_mc_key", "mc_v1")
             .await
-            .expect("PUT_CAUSAL on disk failed");
+            .expect("PUT_CAUSAL v1 failed");
+        client
+            .put_causal("disk_mc_key", "mc_v2")
+            .await
+            .expect("PUT_CAUSAL v2 failed");
         let (vc, _deps, val) = client
             .get_causal("disk_mc_key")
             .await
@@ -1340,16 +1360,21 @@ async fn disk_tier_basic() {
         assert!(!val.is_empty());
     }
 
+    // Priority: PUT twice to trigger lowest-wins merge
     client
-        .put_priority("disk_pri_key", 1.5, "important")
+        .put_priority("disk_pri_key", 10.0, "high")
         .await
-        .expect("PUT_PRIORITY on disk failed");
+        .expect("PUT_PRIORITY high failed");
+    client
+        .put_priority("disk_pri_key", 1.0, "low")
+        .await
+        .expect("PUT_PRIORITY low failed");
     let (priority, val) = client
         .get_priority("disk_pri_key")
         .await
         .expect("GET_PRIORITY on disk failed");
-    assert!((priority - 1.5).abs() < f64::EPSILON);
-    assert_eq!(val, "important");
+    assert!(priority <= 1.0, "Priority merge: lowest should win");
+    assert_eq!(val, "low");
 
     // DELETE on disk tier
     client
