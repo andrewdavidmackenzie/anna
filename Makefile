@@ -33,6 +33,7 @@ ifneq ($(BREW),)
 	brew install autoconf automake libtool pkg-config cmake protobuf curl lcov zmq cppzmq spdlog yaml-cpp googletest llvm
 endif
 ifneq ($(APTGET),)
+	sudo apt-get update
 	sudo apt-get -y install build-essential autoconf automake libtool curl unzip pkg-config cmake libc++-dev libc++abi-dev protobuf-compiler libprotobuf-dev lcov llvm libzmq3-dev cppzmq-dev libspdlog-dev libfmt-dev libyaml-cpp-dev libgtest-dev
 endif
 ifneq ($(YUM),)
