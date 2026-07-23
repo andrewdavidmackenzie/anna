@@ -51,7 +51,7 @@ void management_node_response_handler(string &serialized,
   for (const auto &cacheip : extant_caches) {
     Key key = get_user_metadata_key(cacheip, UserMetadataType::cache_ip);
     prepare_metadata_get_request(
-        key, global_hash_rings[Tier::MEMORY], local_hash_rings[Tier::MEMORY],
+        key, global_hash_rings[first_tier_with_nodes(global_hash_rings)], local_hash_rings[first_tier_with_nodes(global_hash_rings)],
         addr_request_map, wt.cache_ip_response_connect_address(), rid);
   }
 

@@ -81,6 +81,17 @@ typedef HashRing<LocalHasher> LocalHashRing;
 typedef hmap<Tier, GlobalHashRing, TierEnumHash> GlobalRingMap;
 typedef hmap<Tier, LocalHashRing, TierEnumHash> LocalRingMap;
 
+// Find the first tier that has nodes in its hash ring.
+// Returns Tier::MEMORY as fallback if no tier has nodes.
+inline Tier first_tier_with_nodes(GlobalRingMap &global_hash_rings) {
+  for (const auto &pair : global_hash_rings) {
+    if (pair.second.size() > 0) {
+      return pair.first;
+    }
+  }
+  return Tier::MEMORY;
+}
+
 class HashRingUtilInterface {
 public:
   virtual ServerThreadList get_responsible_threads(

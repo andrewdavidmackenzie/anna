@@ -64,7 +64,7 @@ void gossip_handler(unsigned &seed, string &serialized,
         } else {
           kHashRingUtil->issue_replication_factor_request(
               wt.replication_response_connect_address(), key,
-              global_hash_rings[Tier::MEMORY], local_hash_rings[Tier::MEMORY],
+              global_hash_rings[first_tier_with_nodes(global_hash_rings)], local_hash_rings[first_tier_with_nodes(global_hash_rings)],
               pushers, seed);
 
           pending_gossip[key].push_back(

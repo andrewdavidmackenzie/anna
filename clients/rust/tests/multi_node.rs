@@ -1256,7 +1256,7 @@ async fn disk_tier_basic() {
     let mut cluster = MultiNodeCluster::new(18015);
 
     // Start full cluster with both memory and disk replication.
-    // Some keys will hash to the disk node, exercising disk serializers.
+    // Keys are distributed across both tiers via consistent hashing.
     cluster.start_full_node_with_config(NodeConfig {
         replication_ebs: 1,
         base_offset: 18015,

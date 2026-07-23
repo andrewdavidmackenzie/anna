@@ -64,9 +64,10 @@ void user_request_handler(
         } else {
           // if we don't know what threads are responsible, we issue a rep
           // factor request and make the request pending
+          Tier tier = first_tier_with_nodes(global_hash_rings);
           kHashRingUtil->issue_replication_factor_request(
               wt.replication_response_connect_address(), key,
-              global_hash_rings[Tier::MEMORY], local_hash_rings[Tier::MEMORY],
+              global_hash_rings[tier], local_hash_rings[tier],
               pushers, seed);
 
           pending_requests[key].push_back(
