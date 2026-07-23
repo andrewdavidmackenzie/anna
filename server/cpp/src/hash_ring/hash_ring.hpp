@@ -89,6 +89,11 @@ inline Tier first_tier_with_nodes(GlobalRingMap &global_hash_rings) {
       return pair.first;
     }
   }
+  // All tiers empty — return whichever tier exists in the map so the
+  // caller gets a valid (though empty) ring rather than undefined behavior.
+  if (!global_hash_rings.empty()) {
+    return global_hash_rings.begin()->first;
+  }
   return Tier::MEMORY;
 }
 
