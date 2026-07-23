@@ -37,7 +37,7 @@ class TestValueChangeSubscriber(unittest.TestCase):
             server_ip="127.0.0.1",
             cache_ip="127.0.0.1",
             memory_threads=1,
-            offset=50000,
+            offset=20000,
             tid=0,
         )
 
@@ -72,7 +72,7 @@ class TestValueChangeSubscriber(unittest.TestCase):
     def test_recv_update_receives_pushed_value(self):
         ctx = zmq.Context()
         pusher = ctx.socket(zmq.PUSH)
-        pusher.connect("tcp://127.0.0.1:57150")
+        pusher.connect("tcp://127.0.0.1:27150")
         time.sleep(0.1)
 
         response = KeyResponse()
@@ -94,7 +94,7 @@ class TestValueChangeSubscriber(unittest.TestCase):
     def test_recv_update_skips_empty_payload(self):
         ctx = zmq.Context()
         pusher = ctx.socket(zmq.PUSH)
-        pusher.connect("tcp://127.0.0.1:57150")
+        pusher.connect("tcp://127.0.0.1:27150")
         time.sleep(0.1)
 
         response = KeyResponse()
@@ -127,7 +127,7 @@ class TestWatch(unittest.TestCase):
             server_ip="127.0.0.1",
             cache_ip="127.0.0.1",
             memory_threads=2,
-            offset=51000,
+            offset=20100,
             tid=0,
         )
         # Replace the context used for push sockets with our mock
@@ -153,8 +153,8 @@ class TestWatch(unittest.TestCase):
     def test_watch_creates_push_sockets_with_correct_addresses(self):
         self.client.watch(["keyB"])
         expected_addrs = [
-            "tcp://127.0.0.1:{}".format(0 + CACHE_REGISTRATION_PORT + 51000),
-            "tcp://127.0.0.1:{}".format(1 + CACHE_REGISTRATION_PORT + 51000),
+            "tcp://127.0.0.1:{}".format(0 + CACHE_REGISTRATION_PORT + 20100),
+            "tcp://127.0.0.1:{}".format(1 + CACHE_REGISTRATION_PORT + 20100),
         ]
         for addr in expected_addrs:
             self.assertIn(addr, self.client.push_sockets)
@@ -191,12 +191,12 @@ class TestCloseWithPushSockets(unittest.TestCase):
             server_ip="127.0.0.1",
             cache_ip="127.0.0.1",
             memory_threads=1,
-            offset=52000,
+            offset=20200,
             tid=0,
         )
         # Add a mock push socket
         mock_sock = MagicMock()
-        client.push_sockets["tcp://127.0.0.1:59200"] = mock_sock
+        client.push_sockets["tcp://127.0.0.1:27200"] = mock_sock
 
         client.close()
         self.assertEqual(client.push_sockets, {})

@@ -197,6 +197,45 @@ public:
   void remove(const Key &key) { kvs_->remove(key); }
 };
 
+// Common disk I/O helpers shared by all disk serializers.
+// Each serializer stores protobuf values as files at:
+//   <ebs_root>/ebs_<tid>/<key>
+
+inline string disk_fname(const string &ebs_root, unsigned tid, const Key &key) {
+  return ebs_root + "ebs_" + std::to_string(tid) + "/" + key;
+}
+
+template <typename T>
+inline bool disk_read(const string &path, T &value, kvs::AnnaError &error) {
+  std::fstream input(path, std::ios::in | std::ios::binary);
+  if (!input) {
+    error = kvs::AnnaError::KEY_DNE;
+    return false;
+  }
+  if (!value.ParseFromIstream(&input)) {
+    std::cerr << "Failed to parse payload." << std::endl;
+    error = kvs::AnnaError::KEY_DNE;
+    return false;
+  }
+  return true;
+}
+
+template <typename T>
+inline unsigned disk_write(const string &path, const T &value) {
+  std::fstream output(path, std::ios::out | std::ios::trunc | std::ios::binary);
+  if (!value.SerializeToOstream(&output)) {
+    std::cerr << "Failed to write payload." << std::endl;
+    return 0;
+  }
+  return output.tellp();
+}
+
+inline void disk_remove(const string &path) {
+  if (std::remove(path.c_str()) != 0) {
+    std::cerr << "Error deleting file" << std::endl;
+  }
+}
+
 class DiskLWWSerializer : public Serializer {
   unsigned tid_;
   string ebs_root_;
@@ -204,7 +243,6 @@ class DiskLWWSerializer : public Serializer {
 public:
   DiskLWWSerializer(unsigned &tid, string ebs_root) : tid_(tid) {
     ebs_root_ = ebs_root;
-
     if (ebs_root_.back() != '/') {
       ebs_root_ += "/";
     }
@@ -213,17 +251,7 @@ public:
   string get(const Key &key, kvs::AnnaError &error) {
     string res;
     kvs::LWWValue value;
-
-    // open a new filestream for reading in a binary
-    string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
-    std::fstream input(fname, std::ios::in | std::ios::binary);
-
-    if (!input) {
-      error = kvs::AnnaError::KEY_DNE;
-    } else if (!value.ParseFromIstream(&input)) {
-      std::cerr << "Failed to parse payload." << std::endl;
-      error = kvs::AnnaError::KEY_DNE;
-    } else {
+    if (disk_read(disk_fname(ebs_root_, tid_, key), value, error)) {
       if (value.value() == "") {
         error = kvs::AnnaError::KEY_DNE;
       } else {
@@ -237,46 +265,22 @@ public:
     kvs::LWWValue input_value;
     input_value.ParseFromString(serialized);
 
+    string path = disk_fname(ebs_root_, tid_, key);
     kvs::LWWValue original_value;
+    kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
 
-    string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
-    std::fstream input(fname, std::ios::in | std::ios::binary);
-
-    if (!input) { // in this case, this key has never been seen before, so we
-                  // attempt to create a new file for it
-
-      // ios::trunc means that we overwrite the existing file
-      std::fstream output(fname,
-                          std::ios::out | std::ios::trunc | std::ios::binary);
-      if (!input_value.SerializeToOstream(&output)) {
-        std::cerr << "Failed to write payload." << std::endl;
-      }
-      return output.tellp();
-    } else if (!original_value.ParseFromIstream(
-                   &input)) { // if we have seen the key before, attempt to
-                              // parse what was there before
-      std::cerr << "Failed to parse payload." << std::endl;
-      return 0;
+    if (!disk_read(path, original_value, error)) {
+      return disk_write(path, input_value);
+    } else if (input_value.timestamp() >= original_value.timestamp()) {
+      return disk_write(path, input_value);
     } else {
-      if (input_value.timestamp() >= original_value.timestamp()) {
-        std::fstream output(fname,
-                            std::ios::out | std::ios::trunc | std::ios::binary);
-        if (!input_value.SerializeToOstream(&output)) {
-          std::cerr << "Failed to write payload" << std::endl;
-        }
-        return output.tellp();
-      } else {
-        return input.tellp();
-      }
+      std::fstream input(path, std::ios::in | std::ios::binary);
+      return input.tellg();
     }
   }
 
   void remove(const Key &key) {
-    string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
-
-    if (std::remove(fname.c_str()) != 0) {
-      std::cerr << "Error deleting file" << std::endl;
-    }
+    disk_remove(disk_fname(ebs_root_, tid_, key));
   }
 };
 
@@ -722,24 +726,20 @@ class DiskPrioritySerializer : public Serializer {
 public:
   DiskPrioritySerializer(unsigned tid, string ebs_root) : tid_(tid) {
     ebs_root_ = ebs_root;
-    ebs_root_ = ebs_root;
+    if (ebs_root_.back() != '/') {
+      ebs_root_ += "/";
+    }
   }
 
   string get(const Key &key, kvs::AnnaError &error) override {
     string res;
     kvs::PriorityValue value;
-
-    std::fstream input(fname(key), std::ios::in | std::ios::binary);
-
-    if (!input) {
-      error = kvs::AnnaError::KEY_DNE;
-    } else if (!value.ParseFromIstream(&input)) {
-      std::cerr << "Failed to parse payload." << std::endl;
-      error = kvs::AnnaError::KEY_DNE;
-    } else if (value.value() == "") {
-      error = kvs::AnnaError::KEY_DNE;
-    } else {
-      value.SerializeToString(&res);
+    if (disk_read(fname(key), value, error)) {
+      if (value.value() == "") {
+        error = kvs::AnnaError::KEY_DNE;
+      } else {
+        value.SerializeToString(&res);
+      }
     }
     return res;
   }
@@ -748,35 +748,21 @@ public:
     kvs::PriorityValue input_value;
     input_value.ParseFromString(serialized);
 
-    int fd = open(fname(key).c_str(), O_RDWR | O_CREAT);
-    if (fd == -1) {
-      std::cerr << "Failed to open file" << std::endl;
-      return 0;
-    }
-
     kvs::PriorityValue original_value;
-    if (!original_value.ParseFromFileDescriptor(fd) ||
-        input_value.priority() < original_value.priority()) {
-      // resize the file to 0
-      ftruncate(fd, 0);
-      // ftruncate does not change the fd's file offset, so we set it to 0
-      lseek(fd, 0, SEEK_SET);
-      if (!input_value.SerializeToFileDescriptor(fd))
-        std::cerr << "Failed to write payload" << std::endl;
+    kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
+
+    if (!disk_read(fname(key), original_value, error)) {
+      return disk_write(fname(key), input_value);
+    } else if (input_value.priority() < original_value.priority()) {
+      return disk_write(fname(key), input_value);
+    } else {
+      std::fstream input(fname(key), std::ios::in | std::ios::binary);
+      return input.tellg();
     }
-
-    unsigned pos = lseek(fd, 0, SEEK_CUR);
-
-    if (close(fd) == -1)
-      std::cerr << "Problem closing file" << std::endl;
-
-    return pos;
   }
 
   void remove(const Key &key) override {
-    if (std::remove(fname(key).c_str()) != 0) {
-      std::cerr << "Error deleting file" << std::endl;
-    }
+    disk_remove(fname(key));
   }
 };
 
