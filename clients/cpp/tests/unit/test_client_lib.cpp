@@ -811,7 +811,7 @@ TEST(ClientLibTest, PutPriorityRetriesUntilResponse) {
 // --- Multiple-response error branch tests ---
 
 TEST(ClientLibTest, GetWithMultipleResponsesStillWorks) {
-  MockKvsClient client;
+  BatchMockKvsClient client;
   // Push two responses to trigger the "more than one response" warning
   client.responses_.push_back(make_lww_response("0", "val1"));
   client.responses_.push_back(make_lww_response("0", "val2"));
@@ -822,7 +822,7 @@ TEST(ClientLibTest, GetWithMultipleResponsesStillWorks) {
 }
 
 TEST(ClientLibTest, GetSetWithMultipleResponsesStillWorks) {
-  MockKvsClient client;
+  BatchMockKvsClient client;
   set<string> expected = {"a"};
   client.responses_.push_back(make_set_response(expected));
   client.responses_.push_back(make_set_response(set<string>({"b"})));
@@ -832,7 +832,7 @@ TEST(ClientLibTest, GetSetWithMultipleResponsesStillWorks) {
 }
 
 TEST(ClientLibTest, GetOrderedSetWithMultipleResponsesStillWorks) {
-  MockKvsClient client;
+  BatchMockKvsClient client;
   client.responses_.push_back(make_ordered_set_response(set<string>({"a"})));
   client.responses_.push_back(make_ordered_set_response(set<string>({"b"})));
 
@@ -841,7 +841,7 @@ TEST(ClientLibTest, GetOrderedSetWithMultipleResponsesStillWorks) {
 }
 
 TEST(ClientLibTest, GetCausalWithMultipleResponsesStillWorks) {
-  MockKvsClient client;
+  BatchMockKvsClient client;
   client.responses_.push_back(make_causal_response("v1"));
   client.responses_.push_back(make_causal_response("v2"));
 
@@ -850,7 +850,7 @@ TEST(ClientLibTest, GetCausalWithMultipleResponsesStillWorks) {
 }
 
 TEST(ClientLibTest, GetSingleCausalWithMultipleResponsesStillWorks) {
-  MockKvsClient client;
+  BatchMockKvsClient client;
   client.responses_.push_back(make_single_causal_response("v1"));
   client.responses_.push_back(make_single_causal_response("v2"));
 
@@ -861,7 +861,7 @@ TEST(ClientLibTest, GetSingleCausalWithMultipleResponsesStillWorks) {
 }
 
 TEST(ClientLibTest, GetPriorityWithMultipleResponsesStillWorks) {
-  MockKvsClient client;
+  BatchMockKvsClient client;
   client.responses_.push_back(make_priority_response(1.0, "v1"));
   client.responses_.push_back(make_priority_response(2.0, "v2"));
 
@@ -869,4 +869,77 @@ TEST(ClientLibTest, GetPriorityWithMultipleResponsesStillWorks) {
       annalib::get_priority(&client, "multi_priority");
   EXPECT_DOUBLE_EQ(result.priority, 1.0);
   EXPECT_EQ(result.value, "v1");
+}
+
+TEST(ClientLibTest, GetClusterTopologyDecodesProtobuf) {
+  MockKvsClient client;
+
+  ClusterTopology topology;
+  topology.set_routing_thread_count(2);
+  topology.set_memory_thread_count(4);
+  topology.set_ebs_thread_count(1);
+  string serialized;
+  topology.SerializeToString(&serialized);
+
+  client.responses_.push_back(make_lww_response("0", serialized));
+
+  ClusterTopology result = annalib::get_cluster_topology(&client);
+
+  EXPECT_EQ(result.routing_thread_count(), 2u);
+  EXPECT_EQ(result.memory_thread_count(), 4u);
+  EXPECT_EQ(result.ebs_thread_count(), 1u);
+
+  ASSERT_EQ(client.keys_get_.size(), 1u);
+  EXPECT_EQ(client.keys_get_[0], "ANNA_METADATA|cluster_topology");
+}
+
+TEST(ClientLibTest, GetMonitoringIpsDecodesProtobuf) {
+  MockKvsClient client;
+
+  shared::StringSet string_set;
+  string_set.add_keys("10.0.0.1");
+  string_set.add_keys("10.0.0.2");
+  string serialized;
+  string_set.SerializeToString(&serialized);
+
+  client.responses_.push_back(make_lww_response("0", serialized));
+
+  vector<string> result = annalib::get_monitoring_ips(&client);
+
+  ASSERT_EQ(result.size(), 2u);
+  EXPECT_EQ(result[0], "10.0.0.1");
+  EXPECT_EQ(result[1], "10.0.0.2");
+
+  ASSERT_EQ(client.keys_get_.size(), 1u);
+  EXPECT_EQ(client.keys_get_[0], "ANNA_METADATA|monitoring_ips");
+}
+
+TEST(ClientLibTest, GetMultiReturnsMultipleValues) {
+  MockKvsClient client;
+  client.responses_.push_back(make_lww_response("0", "val_a"));
+  client.responses_.push_back(make_lww_response("1", "val_b"));
+
+  vector<string> keys = {"key_a", "key_b"};
+  map<string, string> results = annalib::get_multi(&client, keys);
+
+  ASSERT_EQ(results.size(), 2u);
+  EXPECT_EQ(results["key_a"], "val_a");
+  EXPECT_EQ(results["key_b"], "val_b");
+}
+
+TEST(ClientLibTest, GetMultiEmptyKeysReturnsEmpty) {
+  MockKvsClient client;
+  vector<string> keys;
+  map<string, string> results = annalib::get_multi(&client, keys);
+  EXPECT_TRUE(results.empty());
+}
+
+TEST(ClientLibTest, SetTimeoutChangesTimeout) {
+  vector<UserRoutingThread> threads;
+  threads.push_back(UserRoutingThread("127.0.0.1", 0));
+  KvsClient kvs_client(threads, "127.0.0.1", 99, 10000);
+
+  EXPECT_EQ(kvs_client.get_timeout(), 10000u);
+  kvs_client.set_timeout(5000);
+  EXPECT_EQ(kvs_client.get_timeout(), 5000u);
 }

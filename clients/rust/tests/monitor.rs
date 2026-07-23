@@ -1,9 +1,18 @@
+// Holding `MONITOR_LOCK` across `.await` is intentional — it serializes
+// entire test bodies so only one server cluster runs at a time.
+#![allow(clippy::await_holding_lock)]
+
 //! Monitoring system tests: verify that anna-kvs reports statistics to
 //! anna-monitor via internal metadata keys.
 //!
 //! These tests use a separate port offset range (100+) from multi_node.rs
 //! (0-25221) to avoid conflicts. Since cargo runs test binaries sequentially,
 //! there is no parallel conflict between files.
+//!
+//! Each test starts a full server cluster (monitor + route + kvs = 3
+//! processes). Running all 7 tests in parallel starts 21 server processes
+//! simultaneously, causing resource contention that leads to flaky timeouts.
+//! The `MONITOR_LOCK` mutex serializes tests within this file.
 
 mod common;
 
@@ -13,7 +22,13 @@ use std::io::Write;
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
+
+/// Serialize all monitor tests so only one cluster runs at a time.
+/// Without this, 7 clusters (21 server processes) run simultaneously,
+/// causing resource contention and flaky timeouts.
+static MONITOR_LOCK: Mutex<()> = Mutex::new(());
 
 const NODE_IP: &str = "127.0.0.1";
 const REPORT_PERIOD: u32 = 3;
@@ -159,6 +174,13 @@ impl MonitorTestCluster {
         let config = self.config_dir.join("config.yml");
         write_monitor_config(&config, &cfg);
 
+        let port_range_start = 6200 + self.base_offset;
+        let port_range_end = 7200 + self.base_offset;
+        eprintln!(
+            "[monitor-test] base_offset={} starting cluster (ports {}-{})",
+            self.base_offset, port_range_start, port_range_end
+        );
+
         for name in ["anna-monitor", "anna-route", "anna-kvs"] {
             let bin = server_bin_dir().join(name);
             if !bin.exists() {
@@ -167,7 +189,7 @@ impl MonitorTestCluster {
             }
             let child = Command::new(&bin)
                 .args(["--config", &config.to_string_lossy()])
-                .env("PATH", &server_path())
+                .env("PATH", server_path())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .spawn()
@@ -183,6 +205,10 @@ impl MonitorTestCluster {
             routing_port
         );
         std::thread::sleep(Duration::from_secs(1));
+        eprintln!(
+            "[monitor-test] base_offset={} cluster ready",
+            self.base_offset
+        );
     }
 
     fn start_disk_kvs(&mut self) {
@@ -193,7 +219,7 @@ impl MonitorTestCluster {
         }
         let child = Command::new(&bin)
             .args(["--config", &config.to_string_lossy()])
-            .env("PATH", &server_path())
+            .env("PATH", server_path())
             .env("SERVER_TYPE", "ebs")
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -215,6 +241,10 @@ impl MonitorTestCluster {
     }
 
     fn shutdown(&mut self) {
+        eprintln!(
+            "[monitor-test] base_offset={} shutting down cluster",
+            self.base_offset
+        );
         #[cfg(unix)]
         {
             use nix::sys::signal::{kill, Signal};
@@ -229,6 +259,10 @@ impl MonitorTestCluster {
             child.wait().ok();
         }
         self.processes.clear();
+        eprintln!(
+            "[monitor-test] base_offset={} cluster stopped",
+            self.base_offset
+        );
     }
 }
 
@@ -251,6 +285,7 @@ impl Drop for MonitorTestCluster {
 #[tokio::test]
 #[cfg(unix)]
 async fn monitor_stats_collection() {
+    let _guard = MONITOR_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     use annalib::kvs_client::KVSClient;
 
     if !server_bin_dir().join("anna-kvs").exists() {
@@ -364,6 +399,7 @@ async fn monitor_stats_collection() {
 #[tokio::test]
 #[cfg(unix)]
 async fn policy_toggles_and_grace_period() {
+    let _guard = MONITOR_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     use annalib::kvs_client::KVSClient;
 
     if !server_bin_dir().join("anna-kvs").exists() {
@@ -425,6 +461,7 @@ async fn policy_toggles_and_grace_period() {
 #[tokio::test]
 #[cfg(unix)]
 async fn cross_tier_data_movement() {
+    let _guard = MONITOR_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     use annalib::kvs_client::KVSClient;
 
     if !server_bin_dir().join("anna-kvs").exists() {
@@ -510,6 +547,7 @@ async fn cross_tier_data_movement() {
 #[tokio::test]
 #[cfg(unix)]
 async fn latency_feedback_ingestion() {
+    let _guard = MONITOR_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     use annalib::kvs_client::KVSClient;
     use annalib::proto::metadata::user_feedback::KeyLatency;
     use annalib::proto::metadata::UserFeedback;
@@ -621,6 +659,7 @@ async fn latency_feedback_ingestion() {
 #[tokio::test]
 #[cfg(unix)]
 async fn hot_key_selective_replication() {
+    let _guard = MONITOR_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     use annalib::kvs_client::KVSClient;
 
     if !server_bin_dir().join("anna-kvs").exists() {
@@ -692,6 +731,7 @@ async fn hot_key_selective_replication() {
 #[tokio::test]
 #[cfg(unix)]
 async fn monitoring_ips_metadata() {
+    let _guard = MONITOR_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     use annalib::kvs_client::KVSClient;
     use annalib::proto::shared::StringSet;
     use prost::Message;
@@ -709,10 +749,12 @@ async fn monitoring_ips_metadata() {
 
     // The KVS writes monitoring IPs every server_report_period (3s in test config).
     // Poll until the metadata key appears.
+    // Allow up to 20 attempts (40s) to account for startup latency and
+    // resource contention when running all monitor tests together.
     let meta_key = "ANNA_METADATA|monitoring_ips";
     let mut found = false;
-    for _ in 0..10 {
-        std::thread::sleep(Duration::from_secs(2));
+    for _ in 0..20 {
+        tokio::time::sleep(Duration::from_secs(2)).await;
         if let Ok(bytes) = client.get_bytes(meta_key).await {
             let string_set =
                 StringSet::decode(bytes.as_slice()).expect("Failed to decode StringSet");
@@ -742,6 +784,7 @@ async fn monitoring_ips_metadata() {
 #[tokio::test]
 #[cfg(unix)]
 async fn cluster_topology_metadata() {
+    let _guard = MONITOR_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     use annalib::kvs_client::KVSClient;
 
     if !server_bin_dir().join("anna-kvs").exists() {
@@ -756,9 +799,12 @@ async fn cluster_topology_metadata() {
     let mut client = KVSClient::new(&config, Some(97)).await;
 
     // Poll until the topology metadata key appears.
+    // The KVS publishes this key every server_report_period (3s in test config).
+    // Allow up to 20 attempts (40s) to account for startup latency and
+    // resource contention when running all monitor tests together.
     let mut topology = None;
-    for _ in 0..10 {
-        std::thread::sleep(Duration::from_secs(2));
+    for _ in 0..20 {
+        tokio::time::sleep(Duration::from_secs(2)).await;
         topology = client.get_cluster_topology().await;
         if topology.is_some() {
             break;

@@ -73,7 +73,7 @@ It is a client-side construct — see `docs/client-feature-list.md`.
 | Disk tier                     | File-based storage on configurable path               | Yes           |
 | Tier selection                | `SERVER_TYPE` env var selects storage medium           | Yes           |
 | Identical kernel across tiers | Same storage kernel, different serialization layer     | Yes           |
-| Node capacities               | `capacities.memory-cap`, `capacities.ebs-cap`         | Yes           |
+| Node capacities               | `capacities.memory-cap`, `capacities.ebs-cap` (tested via `elasticity_storage_policy` with `memory-cap-kb: 1`) | Yes           |
 | Cross-tier data movement      | Promote hot data to memory, demote cold to disk       | Yes           |
 
 Note: `SERVER_TYPE` and `ebs` config should be renamed to storage-medium-agnostic
@@ -102,7 +102,7 @@ feature, not an autoscaling decision.
 |-----------------------------|--------------------------------------------------|---------------|
 | Periodic gossip (10s epoch) | Changesets multicast to all responsible replicas  | Yes           |
 | Merge-at-sender             | Batched updates merged before sending             | Yes           |
-| Gossip to caches            | Changed keys pushed to registered cache clients   | Yes           |
+| Value change subscription   | Changed keys pushed to subscribed clients         | Yes           |
 | Join gossip                 | Redistribute data to newly joined nodes           | Yes           |
 | Cross-tier gossip           | Updates propagated between memory and disk tiers  | Yes           |
 
@@ -171,17 +171,18 @@ Anna provides the **primitives** for autoscaling but delegates the scaling
 **decisions** and **infrastructure lifecycle** to the operator. This is a
 deliberate split:
 
-- **Server features** — the cluster primitives that enable scaling (node
+- **Server primitives** — the cluster mechanisms that enable scaling (node
   join/depart, replication changes, stats reporting). These are implemented
   in `anna-kvs`, `anna-route`, and `anna-monitor`.
-- **Client library helpers** — convenience methods for reading stats and
-  triggering scaling actions. These make it easy to build an autoscaler
-  in any language.
+- **Client library helpers** — convenience methods in all four client
+  libraries for reading stats, managing replication, and reporting latency.
+  These make it easy to build an autoscaler in any language. See
+  [client-feature-list.md](client-feature-list.md) for per-client details.
 - **Operator responsibility** — the decision logic (when to add/remove
   nodes) and the infrastructure lifecycle (provisioning/deprovisioning
   machines). Not part of the Anna project.
 
-### Server features (autoscaling primitives)
+### Server primitives
 
 | Feature                     | Description                                                   | System Tested |
 |-----------------------------|---------------------------------------------------------------|---------------|
@@ -190,14 +191,21 @@ deliberate split:
 | Policy toggles              | `policy.elasticity`, `policy.selective-rep`, `policy.tiering` | Yes           |
 | Latency feedback ingestion  | Monitor accepts `UserFeedback` protobuf for SLO decisions    | Yes           |
 
-### Client library helpers (#410)
+### Client library helpers
 
-| Feature                          | Description                                            | Implemented |
-|----------------------------------|--------------------------------------------------------|-------------|
-| Read storage/occupancy stats     | Helper to GET and decode `ServerThreadStatistics`      | Yes (Rust)  |
-| Read per-key access stats        | Helper to GET and decode `KeyAccessData`               | Yes (Rust)  |
-| Read per-key size stats          | Helper to GET and decode `KeySizeData`                 | Yes (Rust)  |
-| Report latency feedback          | Send `UserFeedback` to monitor for SLO enforcement    | No          |
+All four client libraries (Rust, C++, Go, Python) implement the following
+helpers. See [client-feature-list.md](client-feature-list.md) for the
+complete per-client feature matrix.
+
+| Feature                          | Description                                            | System Tested |
+|----------------------------------|--------------------------------------------------------|---------------|
+| Read storage/occupancy stats     | Helper to GET and decode `ServerThreadStatistics`      | Yes           |
+| Read per-key access stats        | Helper to GET and decode `KeyAccessData`               | Yes           |
+| Read per-key size stats          | Helper to GET and decode `KeySizeData`                 | Yes           |
+| Report latency feedback          | Send `UserFeedback` to monitor via `LatencyReporter`   | Yes           |
+| Set per-key replication factor   | Write `ReplicationFactor` protobuf to metadata key     | Yes           |
+| Cluster topology discovery       | Read `ClusterTopology` from metadata key               | Yes           |
+| Monitoring IP discovery          | Read monitoring IPs from metadata key                  | Yes           |
 
 ### Operator responsibility (not project features)
 
@@ -228,4 +236,5 @@ to implement their own scaling logic.
 | Routing Tier                           | `anna-route`   | 6     | 6      | 100%     | —      |
 | Monitoring                             | `anna-monitor` | 6     | 6      | 100%     | —      |
 | Autoscaling (server primitives)        | `anna-monitor` | 4     | 4      | 100%     | —      |
-| **Total**                              |                | **81**| **81** | **100%** |        |
+| Client library helpers                 | all clients    | 7     | 7      | 100%     | —      |
+| **Total**                              |                | **88**| **88** | **100%** |        |

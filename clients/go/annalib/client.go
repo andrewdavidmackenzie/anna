@@ -334,45 +334,60 @@ func parseSetPayload(payload []byte) ([]string, error) {
 	return values, nil
 }
 
+const maxRetries = 5
+
 func (c *KVSClient) sendDataRequest(key string, reqType kvspb.RequestType, latticeType kvspb.LatticeType, payload []byte) (*kvspb.KeyResponse, error) {
-	worker, ok := c.getWorkerAddress(key)
-	if !ok {
-		return nil, &KVSError{Message: fmt.Sprintf("no worker address for key %s", key)}
-	}
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		worker, ok := c.getWorkerAddress(key)
+		if !ok {
+			return nil, &KVSError{Message: fmt.Sprintf("no worker address for key %s", key)}
+		}
 
-	var cacheSize uint32
-	if cached, ok := c.keyAddressCache[key]; ok {
-		cacheSize = uint32(len(cached))
-	}
+		var cacheSize uint32
+		if cached, ok := c.keyAddressCache[key]; ok {
+			cacheSize = uint32(len(cached))
+		}
 
-	encoded, err := buildDataRequest(c.getRequestID(), c.ut.ResponseConnectAddress(), key, reqType, latticeType, payload, cacheSize)
-	if err != nil {
-		return nil, &KVSError{Message: fmt.Sprintf("failed to encode request: %v", err)}
-	}
+		encoded, err := buildDataRequest(c.getRequestID(), c.ut.ResponseConnectAddress(), key, reqType, latticeType, payload, cacheSize)
+		if err != nil {
+			return nil, &KVSError{Message: fmt.Sprintf("failed to encode request: %v", err)}
+		}
 
-	if err := c.tp.sendRequest(encoded, worker); err != nil {
-		return nil, err
-	}
+		if err := c.tp.sendRequest(encoded, worker); err != nil {
+			return nil, err
+		}
 
-	data, err := c.tp.recvResponse(false)
-	if err != nil {
-		return nil, &KVSError{Message: fmt.Sprintf("failed to receive response: %v", err)}
-	}
-	if data == nil {
-		delete(c.keyAddressCache, key)
-		return nil, &KVSError{Message: fmt.Sprintf("%s: request timed out", key)}
-	}
+		data, err := c.tp.recvResponse(false)
+		if err != nil {
+			return nil, &KVSError{Message: fmt.Sprintf("failed to receive response: %v", err)}
+		}
+		if data == nil {
+			c.evictAddress(key, worker)
+			if attempt < maxRetries {
+				continue
+			}
+			return nil, &KVSError{Message: fmt.Sprintf("%s: request timed out", key)}
+		}
 
-	response, err := parseDataResponse(data)
-	if err != nil {
-		return nil, &KVSError{Message: err.Error()}
-	}
+		response, err := parseDataResponse(data)
+		if err != nil {
+			return nil, &KVSError{Message: err.Error()}
+		}
 
-	if len(response.Tuples) > 0 && response.Tuples[0].Invalidate {
-		delete(c.keyAddressCache, key)
-	}
+		if len(response.Tuples) > 0 {
+			t := response.Tuples[0]
+			if t.Error == kvspb.AnnaError_WRONG_THREAD && attempt < maxRetries {
+				c.evictAddress(key, worker)
+				continue
+			}
+			if t.Invalidate {
+				delete(c.keyAddressCache, key)
+			}
+		}
 
-	return response, nil
+		return response, nil
+	}
+	return nil, &KVSError{Message: fmt.Sprintf("%s: max retries exceeded", key)}
 }
 
 func generateTimestamp() uint64 {
@@ -831,10 +846,176 @@ func (c *KVSClient) PutReplicationFactor(key string, memoryRep, localRep uint32)
 	return err
 }
 
+// GetMulti retrieves multiple keys in batched requests, grouping keys by
+// worker address for efficiency. Returns a map of key to value for all keys
+// that were successfully retrieved (keys with errors are omitted).
+func (c *KVSClient) GetMulti(keys []string) (map[string]string, error) {
+	if len(keys) == 0 {
+		return map[string]string{}, nil
+	}
+
+	const maxRetries = 3
+	results := make(map[string]string)
+	pending := make([]string, len(keys))
+	copy(pending, keys)
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if len(pending) == 0 {
+			break
+		}
+
+		// Group keys by worker address.
+		workerKeys := make(map[string][]string)
+		for _, key := range pending {
+			worker, ok := c.getWorkerAddress(key)
+			if !ok {
+				return nil, &KVSError{Message: fmt.Sprintf("GET_MULTI: no worker address for key %s", key)}
+			}
+			workerKeys[worker] = append(workerKeys[worker], key)
+		}
+
+		var retryKeys []string
+
+		for worker, batchKeys := range workerKeys {
+			rid := c.getRequestID()
+			request := &kvspb.KeyRequest{
+				RequestId:       rid,
+				ResponseAddress: c.ut.ResponseConnectAddress(),
+				Type:            kvspb.RequestType_GET,
+			}
+			for _, key := range batchKeys {
+				tuple := &kvspb.KeyTuple{Key: key}
+				if cached, ok := c.keyAddressCache[key]; ok {
+					tuple.AddressCacheSize = uint32(len(cached))
+				}
+				request.Tuples = append(request.Tuples, tuple)
+			}
+
+			encoded, err := proto.Marshal(request)
+			if err != nil {
+				return nil, &KVSError{Message: fmt.Sprintf("GET_MULTI: encode error: %v", err)}
+			}
+			if err := c.tp.sendRequest(encoded, worker); err != nil {
+				return nil, err
+			}
+
+			data, err := c.tp.recvResponse(false)
+			if err != nil {
+				return nil, &KVSError{Message: fmt.Sprintf("GET_MULTI: recv error: %v", err)}
+			}
+			if data == nil {
+				for _, key := range batchKeys {
+					delete(c.keyAddressCache, key)
+				}
+				return nil, &KVSError{Message: "GET_MULTI: request timed out"}
+			}
+
+			response := &kvspb.KeyResponse{}
+			if err := proto.Unmarshal(data, response); err != nil {
+				return nil, &KVSError{Message: fmt.Sprintf("GET_MULTI: decode error: %v", err)}
+			}
+
+			for _, tuple := range response.Tuples {
+				if tuple.Invalidate {
+					delete(c.keyAddressCache, tuple.Key)
+				}
+				if tuple.Error == kvspb.AnnaError_WRONG_THREAD {
+					delete(c.keyAddressCache, tuple.Key)
+					if attempt < maxRetries {
+						retryKeys = append(retryKeys, tuple.Key)
+					}
+				} else if tuple.Error == kvspb.AnnaError_NO_ERROR {
+					bytes, err := parseLWWBytes(tuple.Payload)
+					if err != nil {
+						return nil, &KVSError{Message: fmt.Sprintf("GET_MULTI: LWW decode error for key %s: %v", tuple.Key, err)}
+					}
+					results[tuple.Key] = string(bytes)
+				}
+			}
+		}
+
+		pending = retryKeys
+	}
+
+	return results, nil
+}
+
+// GetClusterTopology retrieves cluster topology (thread counts) from the
+// metadata key ANNA_METADATA|cluster_topology and decodes the ClusterTopology
+// protobuf. Returns nil if the key does not exist.
+func (c *KVSClient) GetClusterTopology() (*metadatapb.ClusterTopology, error) {
+	bytes, err := c.GetBytes("ANNA_METADATA|cluster_topology")
+	if err != nil {
+		return nil, err
+	}
+	var topology metadatapb.ClusterTopology
+	if err := proto.Unmarshal(bytes, &topology); err != nil {
+		return nil, &KVSError{Message: fmt.Sprintf("failed to decode ClusterTopology: %v", err)}
+	}
+	return &topology, nil
+}
+
+// GetMonitoringIPs retrieves monitoring node IP addresses from the metadata
+// key ANNA_METADATA|monitoring_ips and decodes the StringSet protobuf.
+// Returns an empty slice if the key does not exist.
+func (c *KVSClient) GetMonitoringIPs() ([]string, error) {
+	bytes, err := c.GetBytes("ANNA_METADATA|monitoring_ips")
+	if err != nil {
+		return []string{}, nil
+	}
+	var stringSet sharedpb.StringSet
+	if err := proto.Unmarshal(bytes, &stringSet); err != nil {
+		return nil, &KVSError{Message: fmt.Sprintf("failed to decode monitoring IPs: %v", err)}
+	}
+	return stringSet.Keys, nil
+}
+
 // Delete removes a key by writing an empty LWW value with a dominating timestamp.
 func (c *KVSClient) Delete(key string) error {
 	return c.Put(key, "")
 }
+// SetTimeout sets the request timeout duration.
+func (c *KVSClient) SetTimeout(d time.Duration) {
+	if t, ok := c.tp.(*zmqTransport); ok {
+		t.timeout = d
+	}
+}
+
+// GetTimeout returns the current request timeout duration.
+func (c *KVSClient) GetTimeout() time.Duration {
+	if t, ok := c.tp.(*zmqTransport); ok {
+		return t.timeout
+	}
+	return 0
+}
+
+// evictAddress removes a specific worker address from the cache for a key.
+// If the key's address list becomes empty, the key is removed entirely.
+// Also removes the ZMQ socket for the evicted address.
+func (c *KVSClient) evictAddress(key, addr string) {
+	addrs, ok := c.keyAddressCache[key]
+	if !ok {
+		return
+	}
+	filtered := addrs[:0]
+	for _, a := range addrs {
+		if a != addr {
+			filtered = append(filtered, a)
+		}
+	}
+	if len(filtered) == 0 {
+		delete(c.keyAddressCache, key)
+	} else {
+		c.keyAddressCache[key] = filtered
+	}
+	if t, ok := c.tp.(*zmqTransport); ok {
+		if sock, ok := t.socketCache[addr]; ok {
+			_ = sock.Close()
+			delete(t.socketCache, addr)
+		}
+	}
+}
+
 // ClearCache clears the key-address cache.
 func (c *KVSClient) ClearCache() {
 	c.keyAddressCache = make(map[string][]string)

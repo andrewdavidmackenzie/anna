@@ -20,7 +20,7 @@ import zmq
 from .kvs_pb2 import (
     GET, PUT,  # Anna's request types
     LWW,  # Anna's lattice types
-    NO_ERROR,  # Anna's error modes
+    NO_ERROR, WRONG_THREAD,  # Anna's error modes
     KeyAddressRequest,
     KeyAddressResponse,
     KeyResponse,
@@ -29,11 +29,13 @@ from .kvs_pb2 import (
 )
 from .metadata_pb2 import (
     MEMORY, DISK,
+    ClusterTopology,
     KeyAccessData,
     KeySizeData,
     ReplicationFactor,
     ServerThreadStatistics,
 )
+from .shared_pb2 import StringSet
 from .base_client import BaseAnnaClient
 from .common import UserThread
 from .lattices import (
@@ -55,29 +57,31 @@ from .zmq_util import (
 
 
 class AnnaTcpClient(BaseAnnaClient):
-    def __init__(self, elb_addr, ip, local=False, offset=0):
+    def __init__(self, elb_addr, ip, local=False, offset=0, base_offset=0):
         """
-        The AnnaTcpClientTcpAnnaClient allows you to interact with a local
-        copy of Anna or with a remote cluster running on AWS.
+        The AnnaTcpClient allows you to interact with a local copy of Anna
+        or with a remote cluster running on AWS.
 
         elb_addr: Either 127.0.0.1 (local mode) or the address of an AWS ELB
         for the routing tier
         ip: The IP address of the machine being used -- if None is provided,
         one is inferred by using socket.gethostbyname(); WARNING: this does not
         always work
-        elb_ports: The ports on which the routing tier will listen; use 6450 if
-        running in local mode, otherwise do not change
-        offset: A port numbering offset, which is only needed if multiple
-        clients are running on the same machine
+        offset: A port numbering offset for this client's own sockets, needed
+        if multiple clients run on the same machine
+        base_offset: Cluster-wide port offset applied to routing tier ports,
+        matching the server's ports.base_offset config value
         """
 
         super().__init__()
         self.elb_addr = elb_addr
+        self.base_offset = base_offset
 
         if local:
-            self.elb_ports = [6450]
+            self.elb_ports = [6450 + base_offset]
         else:
-            self.elb_ports = list(range(6450, 6454))
+            self.elb_ports = [p + base_offset
+                              for p in range(6450, 6454)]
 
         if ip:
             self.ut = UserThread(ip, offset)
@@ -97,45 +101,137 @@ class AnnaTcpClient(BaseAnnaClient):
         self.key_address_puller.bind(self.ut.get_key_address_bind_addr())
 
         self.rid = 0
+        self._max_retries = 5
+        self._timeout_ms = 10000
+
+    def set_timeout(self, timeout_ms):
+        """Set the request timeout in milliseconds."""
+        self._timeout_ms = timeout_ms
+
+    def get_timeout(self):
+        """Get the current request timeout in milliseconds."""
+        return self._timeout_ms
 
     def get(self, keys):
         if type(keys) != list:
             keys = [keys]
 
-        worker_addresses = {}
-        for key in keys:
-            worker_addresses[key] = (self._get_worker_address(key))
-
-        # Initialize all KV pairs to 0. Only change a value if we get a valid
-        # response from the server.
+        # Initialize all KV pairs to None. Only change a value if we get a
+        # valid response from the server.
         kv_pairs = {}
         for key in keys:
             kv_pairs[key] = None
 
-        request_ids = []
-        for key in worker_addresses:
-            if worker_addresses[key]:
-                send_sock = self.pusher_cache.get(worker_addresses[key])
+        pending = list(keys)
+        for attempt in range(self._max_retries + 1):
+            if not pending:
+                break
 
-                req, _ = self._prepare_data_request([key])
+            worker_addresses = {}
+            for key in pending:
+                worker_addresses[key] = self._get_worker_address(key)
+
+            request_ids = []
+            for key in worker_addresses:
+                if worker_addresses[key]:
+                    send_sock = self.pusher_cache.get(worker_addresses[key])
+
+                    req, _ = self._prepare_data_request([key])
+                    req.type = GET
+
+                    send_request(req, send_sock)
+                    request_ids.append(req.request_id)
+
+            # Wait for all responses to return.
+            responses = recv_response(request_ids, self.response_puller,
+                                      KeyResponse, self._timeout_ms)
+
+            retry_keys = []
+            for response in responses:
+                for tup in response.tuples:
+                    if tup.invalidate:
+                        self._invalidate_cache(tup.key)
+
+                    if tup.error == WRONG_THREAD and attempt < self._max_retries:
+                        worker = worker_addresses.get(tup.key)
+                        if worker:
+                            self._evict_address(tup.key, worker)
+                        elif tup.key in self.address_cache:
+                            self._invalidate_cache(tup.key)
+                        retry_keys.append(tup.key)
+                    elif tup.error == NO_ERROR:
+                        kv_pairs[tup.key] = self._deserialize(tup)
+
+            pending = retry_keys
+
+        return kv_pairs
+
+    def get_multi(self, keys):
+        """Retrieve multiple keys, batching requests by worker address.
+
+        Returns a dict mapping key to deserialized value for all keys
+        successfully retrieved. Keys with errors (KEY_DNE, etc.) are
+        omitted from the result.
+        """
+        if not keys:
+            return {}
+
+        max_retries = 3
+        results = {}
+        pending = list(keys)
+
+        for attempt in range(max_retries + 1):
+            if not pending:
+                break
+
+            # Group keys by worker address.
+            worker_keys = {}
+            for key in pending:
+                worker = self._get_worker_address(key)
+                if not worker:
+                    continue
+                worker_keys.setdefault(worker, []).append(key)
+
+            retry_keys = []
+            request_ids = []
+            worker_for_rid = {}
+
+            for worker, batch_keys in worker_keys.items():
+                send_sock = self.pusher_cache.get(worker)
+                req = KeyRequest()
+                req.request_id = self._get_request_id()
+                req.response_address = self.response_address
                 req.type = GET
+
+                for key in batch_keys:
+                    tup = req.tuples.add()
+                    tup.key = key
+                    if key in self.address_cache:
+                        tup.address_cache_size = len(self.address_cache[key])
 
                 send_request(req, send_sock)
                 request_ids.append(req.request_id)
+                worker_for_rid[req.request_id] = (worker, batch_keys)
 
-        # Wait for all responses to return.
-        responses = recv_response(request_ids, self.response_puller,
-                                  KeyResponse)
+            responses = recv_response(request_ids, self.response_puller,
+                                      KeyResponse, self._timeout_ms)
 
-        for response in responses:
-            for tup in response.tuples:
-                if tup.invalidate:
-                    self._invalidate_cache(tup.key)
+            for response in responses:
+                for tup in response.tuples:
+                    if tup.invalidate:
+                        if tup.key in self.address_cache:
+                            self._invalidate_cache(tup.key)
+                    if tup.error == WRONG_THREAD:
+                        if tup.key in self.address_cache:
+                            self._invalidate_cache(tup.key)
+                        if attempt < max_retries:
+                            retry_keys.append(tup.key)
+                    elif tup.error == NO_ERROR:
+                        results[tup.key] = self._deserialize(tup)
 
-                if tup.error == NO_ERROR:
-                    kv_pairs[tup.key] = self._deserialize(tup)
+            pending = retry_keys
 
-        return kv_pairs
+        return results
 
     def get_all(self, keys):
         if type(keys) != list or not keys:
@@ -165,7 +261,8 @@ class AnnaTcpClient(BaseAnnaClient):
 
                 req_ids.append(req.request_id)
 
-        responses = recv_response(req_ids, self.response_puller, KeyResponse)
+        responses = recv_response(req_ids, self.response_puller, KeyResponse,
+                                  self._timeout_ms)
 
         for resp in responses:
             for tup in resp.tuples:
@@ -183,44 +280,61 @@ class AnnaTcpClient(BaseAnnaClient):
         return kv_pairs
 
     def put(self, keys, values):
-        request_ids = []
-
         if type(keys) != list:
             keys = [keys]
         if type(values) != list:
             values = [values]
 
-        for key, value in zip(keys, values):
-            worker_address = self._get_worker_address(key)
-
-            if not worker_address:
-                return False
-
-            send_sock = self.pusher_cache.get(worker_address)
-
-            # We pass in a list because the data request preparation can prepare
-            # multiple tuples
-            req, tup = self._prepare_data_request([key])
-            req.type = PUT
-            request_ids.append(req.request_id)
-
-            # PUT only supports one key operations, we only ever have to look at
-            # the first KeyTuple returned.
-            tup = tup[0]
-            tup.payload, tup.lattice_type = self._serialize(value)
-
-            send_request(req, send_sock)
-
-        responses = recv_response(request_ids, self.response_puller, KeyResponse)
-
+        kv_map = dict(zip(keys, values))
+        pending = list(kv_map.keys())
         results = {}
-        for response in responses:
-            tup = response.tuples[0]
 
-            if tup.invalidate:
-                self._invalidate_cache(tup.key)
+        for attempt in range(self._max_retries + 1):
+            if not pending:
+                break
 
-            results[tup.key] = (tup.error == NO_ERROR)
+            worker_addresses = {}
+            request_ids = []
+            for key in pending:
+                value = kv_map[key]
+                worker_address = self._get_worker_address(key)
+
+                if not worker_address:
+                    return False
+
+                worker_addresses[key] = worker_address
+                send_sock = self.pusher_cache.get(worker_address)
+
+                req, tup = self._prepare_data_request([key])
+                req.type = PUT
+                request_ids.append(req.request_id)
+
+                tup = tup[0]
+                tup.payload, tup.lattice_type = self._serialize(value)
+
+                send_request(req, send_sock)
+
+            responses = recv_response(request_ids, self.response_puller,
+                                      KeyResponse, self._timeout_ms)
+
+            retry_keys = []
+            for response in responses:
+                tup = response.tuples[0]
+
+                if tup.invalidate:
+                    self._invalidate_cache(tup.key)
+
+                if tup.error == WRONG_THREAD and attempt < self._max_retries:
+                    worker = worker_addresses.get(tup.key)
+                    if worker:
+                        self._evict_address(tup.key, worker)
+                    elif tup.key in self.address_cache:
+                        self._invalidate_cache(tup.key)
+                    retry_keys.append(tup.key)
+                else:
+                    results[tup.key] = (tup.error == NO_ERROR)
+
+            pending = retry_keys
 
         return results
 
@@ -244,7 +358,8 @@ class AnnaTcpClient(BaseAnnaClient):
 
             req_ids.append(req.request_id)
 
-        responses = recv_response(req_ids, self.response_puller, KeyResponse)
+        responses = recv_response(req_ids, self.response_puller, KeyResponse,
+                                  self._timeout_ms)
 
         for resp in responses:
             tup = resp.tuples[0]
@@ -279,6 +394,20 @@ class AnnaTcpClient(BaseAnnaClient):
     # the client that its cache is out of date.
     def _invalidate_cache(self, key):
         del self.address_cache[key]
+
+    def _evict_address(self, key, addr):
+        """Remove a specific worker address from the cache for a key.
+
+        If the key's address list becomes empty, the key is removed entirely
+        (forcing a routing re-query on next access).
+        """
+        if key not in self.address_cache:
+            return
+        addrs = self.address_cache[key]
+        if addr in addrs:
+            addrs.remove(addr)
+        if not addrs:
+            del self.address_cache[key]
 
     def get_causal(self, key):
         result = self.get([key])
@@ -337,26 +466,36 @@ class AnnaTcpClient(BaseAnnaClient):
 
         Returns None if the key does not exist or an error occurs.
         """
-        worker_address = self._get_worker_address(key)
-        if not worker_address:
-            return None
+        for attempt in range(self._max_retries + 1):
+            worker_address = self._get_worker_address(key)
+            if not worker_address:
+                return None
 
-        send_sock = self.pusher_cache.get(worker_address)
-        req, _ = self._prepare_data_request([key])
-        req.type = GET
+            send_sock = self.pusher_cache.get(worker_address)
+            req, _ = self._prepare_data_request([key])
+            req.type = GET
 
-        send_request(req, send_sock)
-        responses = recv_response([req.request_id], self.response_puller,
-                                  KeyResponse)
+            send_request(req, send_sock)
+            responses = recv_response([req.request_id], self.response_puller,
+                                      KeyResponse, self._timeout_ms)
 
-        for response in responses:
-            for tup in response.tuples:
-                if tup.invalidate:
-                    self._invalidate_cache(tup.key)
-                if tup.error == NO_ERROR:
-                    lww_val = LWWValue()
-                    lww_val.ParseFromString(tup.payload)
-                    return lww_val.value
+            for response in responses:
+                for tup in response.tuples:
+                    if tup.invalidate:
+                        self._invalidate_cache(tup.key)
+                    if tup.error == WRONG_THREAD and attempt < self._max_retries:
+                        if tup.key in self.address_cache:
+                            self._invalidate_cache(tup.key)
+                        break
+                    if tup.error == NO_ERROR:
+                        lww_val = LWWValue()
+                        lww_val.ParseFromString(tup.payload)
+                        return lww_val.value
+                else:
+                    # Inner loop completed without break (no WRONG_THREAD)
+                    return None
+                # WRONG_THREAD was encountered, continue outer retry loop
+                continue
 
         return None
 
@@ -455,6 +594,42 @@ class AnnaTcpClient(BaseAnnaClient):
         val = LWWPairLattice(ts, payload)
         return self.put(meta_key, val)
 
+    def get_cluster_topology(self):
+        """
+        Retrieves cluster topology (thread counts) from the metadata key
+        ANNA_METADATA|cluster_topology.
+
+        Returns a dict with routing_thread_count, memory_thread_count,
+        ebs_thread_count, or None if the key does not exist.
+        """
+        raw = self.get_bytes("ANNA_METADATA|cluster_topology")
+        if raw is None:
+            return None
+
+        topology = ClusterTopology()
+        topology.ParseFromString(raw)
+        return {
+            'routing_thread_count': topology.routing_thread_count,
+            'memory_thread_count': topology.memory_thread_count,
+            'ebs_thread_count': topology.ebs_thread_count,
+        }
+
+    def get_monitoring_ips(self):
+        """
+        Retrieves monitoring node IP addresses from the metadata key
+        ANNA_METADATA|monitoring_ips.
+
+        Returns a list of IP address strings, or an empty list if the key
+        does not exist.
+        """
+        raw = self.get_bytes("ANNA_METADATA|monitoring_ips")
+        if raw is None:
+            return []
+
+        string_set = StringSet()
+        string_set.ParseFromString(raw)
+        return list(string_set.keys)
+
     # Returns and increments a request ID. Loops back after 10,000 requests.
     def _get_request_id(self):
         response = self.ut.get_ip() + ':' + str(self.rid)
@@ -500,7 +675,8 @@ class AnnaTcpClient(BaseAnnaClient):
         send_request(key_request, send_sock)
         response = recv_response([key_request.request_id],
                                  self.key_address_puller,
-                                 KeyAddressResponse)[0]
+                                 KeyAddressResponse,
+                                 self._timeout_ms)[0]
 
         if response.error != 0:
             return []

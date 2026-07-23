@@ -46,6 +46,18 @@ kvs::KeyResponse del(KvsClientInterface* client, const string& key) {
   return put(client, key, "");
 }
 
+map<string, string> get_multi(KvsClientInterface* client,
+                              const vector<string>& keys) {
+  map<string, string> results;
+  for (const auto& key : keys) {
+    string val = get(client, key);
+    if (!val.empty()) {
+      results[key] = val;
+    }
+  }
+  return results;
+}
+
 string get(KvsClientInterface* client, const string& key) {
   client->get_async(key);
 
@@ -441,6 +453,36 @@ void put_replication_factor(KvsClientInterface* client,
   string meta_key = kMetadataIdentifier + kMetadataDelimiter +
                     string("replication") + kMetadataDelimiter + key;
   put(client, meta_key, payload);
+}
+
+void set_timeout(KvsClient* client, unsigned timeout_ms) {
+  client->set_timeout(timeout_ms);
+}
+
+unsigned get_timeout(KvsClient* client) {
+  return client->get_timeout();
+}
+
+ClusterTopology get_cluster_topology(KvsClientInterface* client) {
+  string key = kMetadataIdentifier + kMetadataDelimiter +
+               string("cluster_topology");
+  string bytes = get_bytes(client, key);
+
+  ClusterTopology topology;
+  topology.ParseFromString(bytes);
+  return topology;
+}
+
+vector<string> get_monitoring_ips(KvsClientInterface* client) {
+  string key = kMetadataIdentifier + kMetadataDelimiter +
+               string("monitoring_ips");
+  string bytes = get_bytes(client, key);
+
+  shared::StringSet string_set;
+  if (!string_set.ParseFromString(bytes)) {
+    return {};
+  }
+  return {string_set.keys().begin(), string_set.keys().end()};
 }
 
 namespace {

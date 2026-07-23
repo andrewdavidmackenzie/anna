@@ -19,6 +19,7 @@
 
 #include "kvs_client.hpp"
 #include "metadata.pb.h"
+#include "shared.pb.h"
 
 // This header (together with client_lib.cpp) is the "library" half of the
 // C++ client: it wraps KvsClientInterface with the KVS operations (get, put,
@@ -42,6 +43,11 @@ std::unique_ptr<KvsClient> make_client(const ClientConfig& config,
 // Issue a blocking GET for `key` under the default (LWW) lattice type and
 // return its value.
 string get(KvsClientInterface* client, const string& key);
+
+// Retrieve multiple keys in a single call. Returns a map of key to value
+// for all keys successfully retrieved (keys with errors are omitted).
+map<string, string> get_multi(KvsClientInterface* client,
+                              const vector<string>& keys);
 
 // The result of a causal GET: the value plus the vector clock and
 // dependencies attached to it, for the caller to display/inspect as needed.
@@ -164,6 +170,24 @@ void put_replication_factor(KvsClientInterface* client,
                             const string& key,
                             unsigned memory_rep,
                             unsigned local_rep);
+
+// Set the request timeout in milliseconds for a client created with make_client.
+void set_timeout(KvsClient* client, unsigned timeout_ms);
+
+// Get the current request timeout in milliseconds.
+unsigned get_timeout(KvsClient* client);
+
+// Retrieve cluster topology (thread counts) from the metadata key
+//   ANNA_METADATA|cluster_topology
+// and decode the ClusterTopology protobuf.
+// Returns a default-constructed ClusterTopology if the key does not exist.
+ClusterTopology get_cluster_topology(KvsClientInterface* client);
+
+// Retrieve monitoring node IP addresses from the metadata key
+//   ANNA_METADATA|monitoring_ips
+// and decode the StringSet protobuf.
+// Returns an empty vector if the key does not exist.
+vector<string> get_monitoring_ips(KvsClientInterface* client);
 
 // The anna server processes managed by start()/stop()/status().
 extern const vector<string> kProcessList;

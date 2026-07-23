@@ -2,8 +2,8 @@ from unittest.mock import MagicMock, patch, PropertyMock
 import pytest
 
 from anna.kvs_pb2 import (
-    LWW, SET, NO_ERROR, KeyResponse, KeyTuple, LWWValue, SetValue,
-    KeyAddressResponse,
+    LWW, SET, NO_ERROR, WRONG_THREAD, KeyResponse, KeyTuple, LWWValue,
+    SetValue, KeyAddressResponse,
 )
 from anna.lattices import LWWPairLattice, SetLattice
 
@@ -129,7 +129,7 @@ class TestGet:
         with patch("anna.client.send_request") as mock_send, \
              patch("anna.client.recv_response") as mock_recv:
             # Make recv_response return our prepared response, matching any request ID
-            def recv_side_effect(req_ids, sock, cls):
+            def recv_side_effect(req_ids, sock, cls, timeout=10000):
                 response.response_id = req_ids[0]
                 return [response]
             mock_recv.side_effect = recv_side_effect
@@ -158,7 +158,7 @@ class TestPut:
 
         with patch("anna.client.send_request"), \
              patch("anna.client.recv_response") as mock_recv:
-            def recv_side_effect(req_ids, sock, cls):
+            def recv_side_effect(req_ids, sock, cls, timeout=10000):
                 response.response_id = req_ids[0]
                 return [response]
             mock_recv.side_effect = recv_side_effect
@@ -200,7 +200,7 @@ class TestGetWithInvalidate:
 
         with patch("anna.client.send_request"), \
              patch("anna.client.recv_response") as mock_recv:
-            mock_recv.side_effect = lambda ids, sock, cls: [response]
+            mock_recv.side_effect = lambda ids, sock, cls, timeout=10000: [response]
             result = client.get("mykey")
 
         assert "mykey" not in client.address_cache
@@ -225,7 +225,7 @@ class TestPutWithInvalidate:
 
         with patch("anna.client.send_request"), \
              patch("anna.client.recv_response") as mock_recv:
-            mock_recv.side_effect = lambda ids, sock, cls: [response]
+            mock_recv.side_effect = lambda ids, sock, cls, timeout=10000: [response]
             val = LWWPairLattice(1, b"world")
             result = client.put("mykey", val)
 
@@ -275,7 +275,7 @@ class TestGetBytesNoneAtEnd:
 
         with patch("anna.client.send_request"), \
              patch("anna.client.recv_response") as mock_recv:
-            mock_recv.side_effect = lambda ids, sock, cls: [response]
+            mock_recv.side_effect = lambda ids, sock, cls, timeout=10000: [response]
             result = client.get_bytes("mykey")
 
         assert result is None
@@ -401,7 +401,7 @@ class TestGetBytesInvalidate:
 
         with patch("anna.client.send_request"), \
              patch("anna.client.recv_response") as mock_recv:
-            mock_recv.side_effect = lambda ids, sock, cls: [response]
+            mock_recv.side_effect = lambda ids, sock, cls, timeout=10000: [response]
             result = client.get_bytes(meta_key)
 
         assert result == b"data"
@@ -417,7 +417,7 @@ class TestGetBytesNoResponse:
 
         with patch("anna.client.send_request"), \
              patch("anna.client.recv_response") as mock_recv:
-            mock_recv.side_effect = lambda ids, sock, cls: []
+            mock_recv.side_effect = lambda ids, sock, cls, timeout=10000: []
             result = client.get_bytes("k")
 
         assert result is None
@@ -484,7 +484,7 @@ class TestGetAll:
 
         with patch("anna.client.send_request"), \
              patch("anna.client.recv_response") as mock_recv:
-            mock_recv.side_effect = lambda ids, sock, cls: [response]
+            mock_recv.side_effect = lambda ids, sock, cls, timeout=10000: [response]
             result = client.get_all(["k1"])
 
         assert "k1" in result
@@ -521,7 +521,7 @@ class TestGetAll:
 
         with patch("anna.client.send_request"), \
              patch("anna.client.recv_response") as mock_recv:
-            mock_recv.side_effect = lambda ids, sock, cls: [response]
+            mock_recv.side_effect = lambda ids, sock, cls, timeout=10000: [response]
             result = client.get_all(["k1"])
 
         assert "k1" not in client.address_cache
@@ -560,7 +560,7 @@ class TestGetAll:
 
         with patch("anna.client.send_request") as mock_send, \
              patch("anna.client.recv_response") as mock_recv:
-            mock_recv.side_effect = lambda ids, sock, cls: [response1, response2]
+            mock_recv.side_effect = lambda ids, sock, cls, timeout=10000: [response1, response2]
             result = client.get_all(["k1"])
 
         assert "k1" in result
@@ -576,6 +576,212 @@ class TestPutAll:
             val = LWWPairLattice(1, b"data")
             result = client.put_all("k", val)
         assert result is False
+
+
+class TestWrongThreadRetry:
+    def test_get_retries_on_wrong_thread(self):
+        client = make_client()
+        client.address_cache["mykey"] = ["tcp://127.0.0.1:6200"]
+
+        # First response: WRONG_THREAD
+        wrong_response = KeyResponse()
+        wrong_response.response_id = "placeholder"
+        wrong_tup = wrong_response.tuples.add()
+        wrong_tup.key = "mykey"
+        wrong_tup.error = WRONG_THREAD
+
+        # Second response: success
+        lww_val = LWWValue()
+        lww_val.timestamp = 1
+        lww_val.value = b"success"
+
+        ok_response = KeyResponse()
+        ok_response.response_id = "placeholder"
+        ok_tup = ok_response.tuples.add()
+        ok_tup.key = "mykey"
+        ok_tup.lattice_type = LWW
+        ok_tup.payload = lww_val.SerializeToString()
+        ok_tup.error = NO_ERROR
+
+        mock_send_sock = MagicMock()
+        client.pusher_cache = MagicMock()
+        client.pusher_cache.get.return_value = mock_send_sock
+
+        call_count = [0]
+        lookup_count = [0]
+
+        def get_worker_side_effect(key, pick=True):
+            lookup_count[0] += 1
+            if lookup_count[0] == 2:
+                # On the second lookup the cache must have been
+                # invalidated by the WRONG_THREAD handler.
+                assert key not in client.address_cache, \
+                    "expected address_cache to be invalidated before retry"
+            # Re-populate cache on retry (simulates routing query)
+            client.address_cache[key] = ["tcp://127.0.0.1:6200"]
+            return "tcp://127.0.0.1:6200" if pick else \
+                ["tcp://127.0.0.1:6200"]
+
+        with patch("anna.client.send_request"), \
+             patch("anna.client.recv_response") as mock_recv, \
+             patch.object(client, '_get_worker_address',
+                          side_effect=get_worker_side_effect):
+            def recv_side_effect(req_ids, sock, cls, timeout=10000):
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    wrong_response.response_id = req_ids[0]
+                    return [wrong_response]
+                ok_response.response_id = req_ids[0]
+                return [ok_response]
+            mock_recv.side_effect = recv_side_effect
+
+            result = client.get("mykey")
+
+        assert "mykey" in result
+        assert isinstance(result["mykey"], LWWPairLattice)
+        assert result["mykey"].reveal() == b"success"
+        assert call_count[0] == 2
+        assert lookup_count[0] == 2
+
+    def test_put_retries_on_wrong_thread(self):
+        client = make_client()
+        client.address_cache["mykey"] = ["tcp://127.0.0.1:6200"]
+
+        wrong_response = KeyResponse()
+        wrong_response.response_id = "placeholder"
+        wrong_tup = wrong_response.tuples.add()
+        wrong_tup.key = "mykey"
+        wrong_tup.error = WRONG_THREAD
+
+        ok_response = KeyResponse()
+        ok_response.response_id = "placeholder"
+        ok_tup = ok_response.tuples.add()
+        ok_tup.key = "mykey"
+        ok_tup.error = NO_ERROR
+
+        mock_send_sock = MagicMock()
+        client.pusher_cache = MagicMock()
+        client.pusher_cache.get.return_value = mock_send_sock
+
+        call_count = [0]
+        lookup_count = [0]
+
+        def get_worker_side_effect(key, pick=True):
+            lookup_count[0] += 1
+            if lookup_count[0] == 2:
+                # On the second lookup the cache must have been
+                # invalidated by the WRONG_THREAD handler.
+                assert key not in client.address_cache, \
+                    "expected address_cache to be invalidated before retry"
+            client.address_cache[key] = ["tcp://127.0.0.1:6200"]
+            return "tcp://127.0.0.1:6200" if pick else \
+                ["tcp://127.0.0.1:6200"]
+
+        with patch("anna.client.send_request"), \
+             patch("anna.client.recv_response") as mock_recv, \
+             patch.object(client, '_get_worker_address',
+                          side_effect=get_worker_side_effect):
+            def recv_side_effect(req_ids, sock, cls, timeout=10000):
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    wrong_response.response_id = req_ids[0]
+                    return [wrong_response]
+                ok_response.response_id = req_ids[0]
+                return [ok_response]
+            mock_recv.side_effect = recv_side_effect
+
+            val = LWWPairLattice(1, b"data")
+            result = client.put("mykey", val)
+
+        assert result["mykey"] is True
+        assert call_count[0] == 2
+        assert lookup_count[0] == 2
+
+
+class TestGetMulti:
+    def test_returns_multiple_values(self):
+        client = make_client()
+        client.address_cache["a"] = ["tcp://127.0.0.1:6200"]
+        client.address_cache["b"] = ["tcp://127.0.0.1:6200"]
+
+        lww_a = LWWValue()
+        lww_a.timestamp = 1
+        lww_a.value = b"val_a"
+        lww_b = LWWValue()
+        lww_b.timestamp = 1
+        lww_b.value = b"val_b"
+
+        response = KeyResponse()
+        response.response_id = "placeholder"
+        tup_a = response.tuples.add()
+        tup_a.key = "a"
+        tup_a.lattice_type = LWW
+        tup_a.payload = lww_a.SerializeToString()
+        tup_a.error = NO_ERROR
+        tup_b = response.tuples.add()
+        tup_b.key = "b"
+        tup_b.lattice_type = LWW
+        tup_b.payload = lww_b.SerializeToString()
+        tup_b.error = NO_ERROR
+
+        mock_send_sock = MagicMock()
+        client.pusher_cache = MagicMock()
+        client.pusher_cache.get.return_value = mock_send_sock
+
+        with patch("anna.client.send_request"), \
+             patch("anna.client.recv_response") as mock_recv:
+            def recv_side_effect(req_ids, sock, cls, timeout=10000):
+                response.response_id = req_ids[0]
+                return [response]
+            mock_recv.side_effect = recv_side_effect
+
+            result = client.get_multi(["a", "b"])
+
+        assert "a" in result
+        assert "b" in result
+        assert isinstance(result["a"], LWWPairLattice)
+        assert result["a"].reveal() == b"val_a"
+
+    def test_empty_keys_returns_empty(self):
+        client = make_client()
+        result = client.get_multi([])
+        assert result == {}
+
+
+class TestEvictAddress:
+    def test_removes_single_address(self):
+        client = make_client()
+        client.address_cache["k"] = ["addr1", "addr2"]
+        client._evict_address("k", "addr1")
+        assert client.address_cache["k"] == ["addr2"]
+
+    def test_removes_key_when_last(self):
+        client = make_client()
+        client.address_cache["k"] = ["addr1"]
+        client._evict_address("k", "addr1")
+        assert "k" not in client.address_cache
+
+    def test_nonexistent_key(self):
+        client = make_client()
+        # Should not raise
+        client._evict_address("nonexistent", "addr1")
+
+    def test_nonexistent_address(self):
+        client = make_client()
+        client.address_cache["k"] = ["addr1"]
+        client._evict_address("k", "addr2")
+        assert client.address_cache["k"] == ["addr1"]
+
+
+class TestConfigurableTimeout:
+    def test_default_timeout(self):
+        client = make_client()
+        assert client.get_timeout() == 10000
+
+    def test_set_timeout(self):
+        client = make_client()
+        client.set_timeout(5000)
+        assert client.get_timeout() == 5000
 
 
 class TestResponseAddress:

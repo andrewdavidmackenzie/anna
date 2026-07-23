@@ -227,6 +227,7 @@ impl KVSClient {
                 self.key_address_cache.remove(key);
             }
         }
+        #[allow(irrefutable_let_patterns)]
         if let Transport::Zmq { socket_cache, .. } = &mut self.transport {
             socket_cache.remove(addr);
         }
@@ -1368,8 +1369,7 @@ mod tests {
             Some(make_get_response(meta_key, &topo.encode_to_vec())),
         );
         let result = client.get_cluster_topology().await;
-        assert!(result.is_some());
-        let t = result.unwrap();
+        let t = result.expect("get_cluster_topology returned None");
         assert_eq!(t.memory_thread_count, 4);
         assert_eq!(t.routing_thread_count, 2);
     }

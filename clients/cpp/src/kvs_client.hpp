@@ -85,6 +85,16 @@ class KvsClient : public KvsClientInterface {
 
  public:
   /**
+   * Set the request timeout in milliseconds.
+   */
+  void set_timeout(unsigned timeout_ms) { timeout_ = timeout_ms; }
+
+  /**
+   * Get the current request timeout in milliseconds.
+   */
+  unsigned get_timeout() const { return timeout_; }
+
+  /**
    * Issue an async PUT request to the KVS for a certain lattice typed value.
    */
   string put_async(const Key& key, const string& payload,

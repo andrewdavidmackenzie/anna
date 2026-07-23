@@ -297,9 +297,9 @@ mod tests {
     #[tokio::test]
     async fn new_value_change_subscriber() {
         let config = crate::client_config::ClientConfig::default();
-        let cache = ValueChangeSubscriber::new(&config, Some(90)).await;
-        assert!(cache.is_ok());
-        let cache = cache.unwrap();
+        let cache = ValueChangeSubscriber::new(&config, Some(90))
+            .await
+            .expect("Failed to create subscriber");
         assert!(cache.watched_keys().is_empty());
         assert!(cache.get_cached("nonexistent").is_none());
     }
@@ -349,12 +349,13 @@ mod tests {
             .recv_update(Duration::from_secs(5))
             .await
             .expect("recv error");
-        assert!(result.is_some());
-        let (key, payload) = result.unwrap();
+        let (key, payload) = result.expect("recv_update returned None");
         assert_eq!(key, "pushed_key");
         assert_eq!(payload, b"pushed_value");
-        assert!(sub.get_cached("pushed_key").is_some());
-        assert_eq!(sub.get_cached("pushed_key").unwrap(), b"pushed_value");
+        assert_eq!(
+            sub.get_cached("pushed_key").expect("key not in cache"),
+            b"pushed_value"
+        );
     }
 
     #[tokio::test]
