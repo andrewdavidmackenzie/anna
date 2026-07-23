@@ -43,7 +43,7 @@ void user_request_handler(
     ServerThreadList threads = kHashRingUtil->get_responsible_threads(
         wt.replication_response_connect_address(), key, is_metadata(key),
         global_hash_rings, local_hash_rings, key_replication_map, pushers,
-        kSelfTierIdVector, succeed, seed);
+        kAllTiers, succeed, seed);
 
     // Accept metadata keys that belong to this node (contain our IP)
     // regardless of hash ring responsibility — enables direct stats queries

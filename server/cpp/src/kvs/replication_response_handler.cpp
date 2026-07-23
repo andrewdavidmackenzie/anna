@@ -71,7 +71,7 @@ void replication_response_handler(
     ServerThreadList threads = kHashRingUtil->get_responsible_threads(
         wt.replication_response_connect_address(), key, is_metadata(key),
         global_hash_rings, local_hash_rings, key_replication_map, pushers,
-        kSelfTierIdVector, succeed, seed);
+        kAllTiers, succeed, seed);
 
     if (succeed) {
       bool responsible =
@@ -182,7 +182,7 @@ void replication_response_handler(
     ServerThreadList threads = kHashRingUtil->get_responsible_threads(
         wt.replication_response_connect_address(), key, is_metadata(key),
         global_hash_rings, local_hash_rings, key_replication_map, pushers,
-        kSelfTierIdVector, succeed, seed);
+        kAllTiers, succeed, seed);
 
     if (succeed) {
       if (std::find(threads.begin(), threads.end(), wt) != threads.end()) {
