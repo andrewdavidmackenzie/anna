@@ -811,7 +811,7 @@ TEST(ClientLibTest, PutPriorityRetriesUntilResponse) {
 // --- Multiple-response error branch tests ---
 
 TEST(ClientLibTest, GetWithMultipleResponsesStillWorks) {
-  MockKvsClient client;
+  BatchMockKvsClient client;
   // Push two responses to trigger the "more than one response" warning
   client.responses_.push_back(make_lww_response("0", "val1"));
   client.responses_.push_back(make_lww_response("0", "val2"));
@@ -822,7 +822,7 @@ TEST(ClientLibTest, GetWithMultipleResponsesStillWorks) {
 }
 
 TEST(ClientLibTest, GetSetWithMultipleResponsesStillWorks) {
-  MockKvsClient client;
+  BatchMockKvsClient client;
   set<string> expected = {"a"};
   client.responses_.push_back(make_set_response(expected));
   client.responses_.push_back(make_set_response(set<string>({"b"})));
@@ -832,7 +832,7 @@ TEST(ClientLibTest, GetSetWithMultipleResponsesStillWorks) {
 }
 
 TEST(ClientLibTest, GetOrderedSetWithMultipleResponsesStillWorks) {
-  MockKvsClient client;
+  BatchMockKvsClient client;
   client.responses_.push_back(make_ordered_set_response(set<string>({"a"})));
   client.responses_.push_back(make_ordered_set_response(set<string>({"b"})));
 
@@ -841,7 +841,7 @@ TEST(ClientLibTest, GetOrderedSetWithMultipleResponsesStillWorks) {
 }
 
 TEST(ClientLibTest, GetCausalWithMultipleResponsesStillWorks) {
-  MockKvsClient client;
+  BatchMockKvsClient client;
   client.responses_.push_back(make_causal_response("v1"));
   client.responses_.push_back(make_causal_response("v2"));
 
@@ -850,7 +850,7 @@ TEST(ClientLibTest, GetCausalWithMultipleResponsesStillWorks) {
 }
 
 TEST(ClientLibTest, GetSingleCausalWithMultipleResponsesStillWorks) {
-  MockKvsClient client;
+  BatchMockKvsClient client;
   client.responses_.push_back(make_single_causal_response("v1"));
   client.responses_.push_back(make_single_causal_response("v2"));
 
@@ -861,7 +861,7 @@ TEST(ClientLibTest, GetSingleCausalWithMultipleResponsesStillWorks) {
 }
 
 TEST(ClientLibTest, GetPriorityWithMultipleResponsesStillWorks) {
-  MockKvsClient client;
+  BatchMockKvsClient client;
   client.responses_.push_back(make_priority_response(1.0, "v1"));
   client.responses_.push_back(make_priority_response(2.0, "v2"));
 

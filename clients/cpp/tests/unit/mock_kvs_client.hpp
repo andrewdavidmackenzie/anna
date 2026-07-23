@@ -35,13 +35,14 @@ class MockKvsClient : public KvsClientInterface {
 
   void get_async(const Key& key) { keys_get_.push_back(key); }
 
-  // Returns whatever has been queued in `responses_`, then clears the queue
-  // (so a test can enqueue a response, call the function under test once,
-  // and get an empty result on any subsequent poll -- mirroring how a real
-  // KvsClient only returns a response once).
+  // Returns one queued response per call (FIFO), mirroring how a real
+  // KvsClient returns one response per receive poll.
   vector<kvs::KeyResponse> receive_async() {
-    vector<kvs::KeyResponse> result = responses_;
-    responses_.clear();
+    if (responses_.empty()) {
+      return {};
+    }
+    vector<kvs::KeyResponse> result = {responses_.front()};
+    responses_.erase(responses_.begin());
     return result;
   }
 
@@ -67,6 +68,17 @@ class MockKvsClient : public KvsClientInterface {
   }
 
   unsigned rid_;
+};
+
+// A mock that returns all queued responses in a single receive_async() call,
+// used to test the "received more than one response" warning path in get().
+class BatchMockKvsClient : public MockKvsClient {
+ public:
+  vector<kvs::KeyResponse> receive_async() {
+    vector<kvs::KeyResponse> result = responses_;
+    responses_.clear();
+    return result;
+  }
 };
 
 // A mock that delays responses for N calls to receive_async() before
