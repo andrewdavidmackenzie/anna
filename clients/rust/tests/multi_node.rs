@@ -1930,10 +1930,8 @@ async fn management_node_integration() {
         Err(_) => panic!("Management mock did not receive expected queries within timeout"),
     }
 
-    // Allow the KVS time to process the management_node_response we sent back.
-    // Without this, the cluster drops (SIGTERM) before the KVS polls the
-    // management_node_response_puller socket, so the handler never runs.
-    tokio::time::sleep(Duration::from_secs(TEST_SERVER_REPORT_PERIOD as u64)).await;
+    // Allow the KVS one poll cycle to process the management_node_response.
+    tokio::time::sleep(Duration::from_secs(1)).await;
 }
 
 /// Test the storage policy elasticity path: with memory-cap-kb set very low
