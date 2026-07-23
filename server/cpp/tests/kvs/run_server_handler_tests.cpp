@@ -24,6 +24,7 @@
 #include "types.hpp"
 
 #include "server_handler_base.hpp"
+#include "test_first_tier_with_nodes.hpp"
 #include "test_node_depart_handler.hpp"
 #include "test_node_join_handler.hpp"
 #include "test_self_depart_handler.hpp"
