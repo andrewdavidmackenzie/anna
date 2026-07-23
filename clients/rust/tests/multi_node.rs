@@ -2248,7 +2248,7 @@ async fn underutilization_scale_in() {
 /// grace period + a monitoring cycle with zero accesses, the monitor's
 /// movement_policy should attempt demotion (access_count < kKeyDemotionThreshold=1).
 ///
-/// Uses base_offset=900.
+/// Uses base_offset=7823.
 #[tokio::test]
 #[cfg(unix)]
 async fn tiering_movement_policy() {
@@ -2258,7 +2258,7 @@ async fn tiering_movement_policy() {
         return;
     }
 
-    let base_offset: u32 = 900;
+    let base_offset: u32 = 7823;
     let short_grace: u32 = 5;
 
     let mut cluster = MultiNodeCluster::new(base_offset);
@@ -2342,7 +2342,7 @@ async fn tiering_movement_policy() {
 /// During the departure, hash ring changes cause WRONG_THREAD errors
 /// on in-flight replication factor lookups, exercising the retry path.
 ///
-/// Uses base_offset=1000. Requires 127.0.0.2 bindable.
+/// Uses base_offset=9224. Requires 127.0.0.2 bindable.
 #[tokio::test]
 #[cfg(unix)]
 async fn replication_response_wrong_thread() {
@@ -2352,7 +2352,7 @@ async fn replication_response_wrong_thread() {
         return;
     }
 
-    let base_offset: u32 = 1000;
+    let base_offset: u32 = 9224;
     let mut cluster = MultiNodeCluster::new(base_offset);
 
     // Start 2-node cluster so keys are distributed
