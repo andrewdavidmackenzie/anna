@@ -291,22 +291,13 @@ class DiskSetSerializer : public Serializer {
 public:
   DiskSetSerializer(unsigned &tid, string ebs_root) : tid_(tid) {
     ebs_root_ = ebs_root;
+    if (ebs_root_.back() != '/') ebs_root_ += "/";
   }
 
   string get(const Key &key, kvs::AnnaError &error) {
     string res;
     kvs::SetValue value;
-
-    // open a new filestream for reading in a binary
-    string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
-    std::fstream input(fname, std::ios::in | std::ios::binary);
-
-    if (!input) {
-      error = kvs::AnnaError::KEY_DNE;
-    } else if (!value.ParseFromIstream(&input)) {
-      std::cerr << "Failed to parse payload." << std::endl;
-      error = kvs::AnnaError::KEY_DNE;
-    } else {
+    if (disk_read(disk_fname(ebs_root_, tid_, key), value, error)) {
       if (value.values_size() == 0) {
         error = kvs::AnnaError::KEY_DNE;
       } else {
@@ -320,27 +311,13 @@ public:
     kvs::SetValue input_value;
     input_value.ParseFromString(serialized);
 
+    string path = disk_fname(ebs_root_, tid_, key);
     kvs::SetValue original_value;
+    kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
 
-    string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
-    std::fstream input(fname, std::ios::in | std::ios::binary);
-
-    if (!input) { // in this case, this key has never been seen before, so we
-                  // attempt to create a new file for it
-      // ios::trunc means that we overwrite the existing file
-      std::fstream output(fname,
-                          std::ios::out | std::ios::trunc | std::ios::binary);
-      if (!input_value.SerializeToOstream(&output)) {
-        std::cerr << "Failed to write payload." << std::endl;
-      }
-      return output.tellp();
-    } else if (!original_value.ParseFromIstream(
-                   &input)) { // if we have seen the key before, attempt to
-                              // parse what was there before
-      std::cerr << "Failed to parse payload." << std::endl;
-      return 0;
+    if (!disk_read(path, original_value, error)) {
+      return disk_write(path, input_value);
     } else {
-      // get the existing value that we have and merge
       set<string> set_union;
       for (auto &val : original_value.values()) {
         set_union.emplace(std::move(val));
@@ -348,29 +325,16 @@ public:
       for (auto &val : input_value.values()) {
         set_union.emplace(std::move(val));
       }
-
       kvs::SetValue new_value;
       for (auto &val : set_union) {
         new_value.add_values(std::move(val));
       }
-
-      // write out the new payload.
-      std::fstream output(fname,
-                          std::ios::out | std::ios::trunc | std::ios::binary);
-
-      if (!new_value.SerializeToOstream(&output)) {
-        std::cerr << "Failed to write payload" << std::endl;
-      }
-      return output.tellp();
+      return disk_write(path, new_value);
     }
   }
 
   void remove(const Key &key) {
-    string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
-
-    if (std::remove(fname.c_str()) != 0) {
-      std::cerr << "Error deleting file" << std::endl;
-    }
+    disk_remove(disk_fname(ebs_root_, tid_, key));
   }
 };
 
@@ -381,22 +345,13 @@ class DiskOrderedSetSerializer : public Serializer {
 public:
   DiskOrderedSetSerializer(unsigned &tid, string ebs_root) : tid_(tid) {
     ebs_root_ = ebs_root;
+    if (ebs_root_.back() != '/') ebs_root_ += "/";
   }
 
   string get(const Key &key, kvs::AnnaError &error) {
     string res;
     kvs::SetValue value;
-
-    // open a new filestream for reading in a binary
-    string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
-    std::fstream input(fname, std::ios::in | std::ios::binary);
-
-    if (!input) {
-      error = kvs::AnnaError::KEY_DNE;
-    } else if (!value.ParseFromIstream(&input)) {
-      std::cerr << "Failed to parse payload." << std::endl;
-      error = kvs::AnnaError::KEY_DNE;
-    } else {
+    if (disk_read(disk_fname(ebs_root_, tid_, key), value, error)) {
       value.SerializeToString(&res);
     }
     return res;
@@ -406,27 +361,13 @@ public:
     kvs::SetValue input_value;
     input_value.ParseFromString(serialized);
 
+    string path = disk_fname(ebs_root_, tid_, key);
     kvs::SetValue original_value;
+    kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
 
-    string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
-    std::fstream input(fname, std::ios::in | std::ios::binary);
-
-    if (!input) { // in this case, this key has never been seen before, so we
-                  // attempt to create a new file for it
-      // ios::trunc means that we overwrite the existing file
-      std::fstream output(fname,
-                          std::ios::out | std::ios::trunc | std::ios::binary);
-      if (!input_value.SerializeToOstream(&output)) {
-        std::cerr << "Failed to write payload." << std::endl;
-      }
-      return output.tellp();
-    } else if (!original_value.ParseFromIstream(
-                   &input)) { // if we have seen the key before, attempt to
-                              // parse what was there before
-      std::cerr << "Failed to parse payload." << std::endl;
-      return 0;
+    if (!disk_read(path, original_value, error)) {
+      return disk_write(path, input_value);
     } else {
-      // get the existing value that we have and merge
       ordered_set<string> set_union;
       for (auto &val : original_value.values()) {
         set_union.emplace(std::move(val));
@@ -434,29 +375,16 @@ public:
       for (auto &val : input_value.values()) {
         set_union.emplace(std::move(val));
       }
-
       kvs::SetValue new_value;
       for (auto &val : set_union) {
         new_value.add_values(std::move(val));
       }
-
-      // write out the new payload.
-      std::fstream output(fname,
-                          std::ios::out | std::ios::trunc | std::ios::binary);
-
-      if (!new_value.SerializeToOstream(&output)) {
-        std::cerr << "Failed to write payload" << std::endl;
-      }
-      return output.tellp();
+      return disk_write(path, new_value);
     }
   }
 
   void remove(const Key &key) {
-    string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
-
-    if (std::remove(fname.c_str()) != 0) {
-      std::cerr << "Error deleting file" << std::endl;
-    }
+    disk_remove(disk_fname(ebs_root_, tid_, key));
   }
 };
 
@@ -467,22 +395,13 @@ class DiskSingleKeyCausalSerializer : public Serializer {
 public:
   DiskSingleKeyCausalSerializer(unsigned &tid, string ebs_root) : tid_(tid) {
     ebs_root_ = ebs_root;
+    if (ebs_root_.back() != '/') ebs_root_ += "/";
   }
 
   string get(const Key &key, kvs::AnnaError &error) {
     string res;
     kvs::SingleKeyCausalValue value;
-
-    // open a new filestream for reading in a binary
-    string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
-    std::fstream input(fname, std::ios::in | std::ios::binary);
-
-    if (!input) {
-      error = kvs::AnnaError::KEY_DNE;
-    } else if (!value.ParseFromIstream(&input)) {
-      std::cerr << "Failed to parse payload." << std::endl;
-      error = kvs::AnnaError::KEY_DNE;
-    } else {
+    if (disk_read(disk_fname(ebs_root_, tid_, key), value, error)) {
       if (value.values_size() == 0) {
         error = kvs::AnnaError::KEY_DNE;
       } else {
@@ -496,25 +415,12 @@ public:
     kvs::SingleKeyCausalValue input_value;
     input_value.ParseFromString(serialized);
 
+    string path = disk_fname(ebs_root_, tid_, key);
     kvs::SingleKeyCausalValue original_value;
+    kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
 
-    string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
-    std::fstream input(fname, std::ios::in | std::ios::binary);
-
-    if (!input) { // in this case, this key has never been seen before, so we
-                  // attempt to create a new file for it
-      // ios::trunc means that we overwrite the existing file
-      std::fstream output(fname,
-                          std::ios::out | std::ios::trunc | std::ios::binary);
-      if (!input_value.SerializeToOstream(&output)) {
-        std::cerr << "Failed to write payload." << std::endl;
-      }
-      return output.tellp();
-    } else if (!original_value.ParseFromIstream(
-                   &input)) { // if we have seen the key before, attempt to
-                              // parse what was there before
-      std::cerr << "Failed to parse payload." << std::endl;
-      return 0;
+    if (!disk_read(path, original_value, error)) {
+      return disk_write(path, input_value);
     } else {
       // get the existing value that we have and merge
       VectorClockValuePair<SetLattice<string>> orig_pair;
@@ -551,23 +457,12 @@ public:
         new_value.add_values(val);
       }
 
-      // write out the new payload.
-      std::fstream output(fname,
-                          std::ios::out | std::ios::trunc | std::ios::binary);
-
-      if (!new_value.SerializeToOstream(&output)) {
-        std::cerr << "Failed to write payload" << std::endl;
-      }
-      return output.tellp();
+      return disk_write(path, new_value);
     }
   }
 
   void remove(const Key &key) {
-    string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
-
-    if (std::remove(fname.c_str()) != 0) {
-      std::cerr << "Error deleting file" << std::endl;
-    }
+    disk_remove(disk_fname(ebs_root_, tid_, key));
   }
 };
 
@@ -578,22 +473,13 @@ class DiskMultiKeyCausalSerializer : public Serializer {
 public:
   DiskMultiKeyCausalSerializer(unsigned &tid, string ebs_root) : tid_(tid) {
     ebs_root_ = ebs_root;
+    if (ebs_root_.back() != '/') ebs_root_ += "/";
   }
 
   string get(const Key &key, kvs::AnnaError &error) {
     string res;
     kvs::MultiKeyCausalValue value;
-
-    // open a new filestream for reading in a binary
-    string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
-    std::fstream input(fname, std::ios::in | std::ios::binary);
-
-    if (!input) {
-      error = kvs::AnnaError::KEY_DNE;
-    } else if (!value.ParseFromIstream(&input)) {
-      std::cerr << "Failed to parse payload." << std::endl;
-      error = kvs::AnnaError::KEY_DNE;
-    } else {
+    if (disk_read(disk_fname(ebs_root_, tid_, key), value, error)) {
       if (value.values_size() == 0) {
         error = kvs::AnnaError::KEY_DNE;
       } else {
@@ -607,26 +493,12 @@ public:
     kvs::MultiKeyCausalValue input_value;
     input_value.ParseFromString(serialized);
 
+    string path = disk_fname(ebs_root_, tid_, key);
     kvs::MultiKeyCausalValue original_value;
+    kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
 
-    string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
-    std::fstream input(fname, std::ios::in | std::ios::binary);
-
-    if (!input) { // in this case, this key has never been seen before, so we
-                  // attempt to create a new file for it
-      // ios::trunc means that we overwrite the existing file
-      std::fstream output(fname,
-                          std::ios::out | std::ios::trunc | std::ios::binary);
-
-      if (!input_value.SerializeToOstream(&output)) {
-        std::cerr << "Failed to write payload." << std::endl;
-      }
-      return output.tellp();
-    } else if (!original_value.ParseFromIstream(
-                   &input)) { // if we have seen the key before, attempt to
-                              // parse what was there before
-      std::cerr << "Failed to parse payload." << std::endl;
-      return 0;
+    if (!disk_read(path, original_value, error)) {
+      return disk_write(path, input_value);
     } else {
       // get the existing value that we have and merge
       MultiKeyCausalPayload<SetLattice<string>> orig_payload;
@@ -694,23 +566,12 @@ public:
         new_value.add_values(val);
       }
 
-      std::fstream output(fname,
-                          std::ios::out | std::ios::trunc | std::ios::binary);
-
-      if (!new_value.SerializeToOstream(&output)) {
-        std::cerr << "Failed to write payload" << std::endl;
-      }
-
-      return output.tellp();
+      return disk_write(path, new_value);
     }
   }
 
   void remove(const Key &key) {
-    string fname = ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
-
-    if (std::remove(fname.c_str()) != 0) {
-      std::cerr << "Error deleting file" << std::endl;
-    }
+    disk_remove(disk_fname(ebs_root_, tid_, key));
   }
 };
 
