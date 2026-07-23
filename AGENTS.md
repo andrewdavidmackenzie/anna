@@ -58,6 +58,12 @@ for a specific task, then propose it to the user.
 - Use rust canonical code where possible. Implement `From` traits for conversion, create structs
   with methods, use traits when multiple implementations may be needed, etc.
 
+## CI Notes
+
+- Ubuntu CI requires `apt-get update` before `apt-get install` in the Makefile `dependencies`
+  target. Without it, stale package mirror URLs cause 404 errors when Ubuntu rotates package
+  versions (e.g. krb5 transitive dependencies).
+
 ## C++ Components
 
 The project includes C++ server and client code alongside the Rust client:
