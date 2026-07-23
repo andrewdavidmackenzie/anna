@@ -183,7 +183,7 @@ class TestGetBytes:
 
         with patch("anna.client.send_request"), \
              patch("anna.client.recv_response") as mock_recv:
-            mock_recv.side_effect = lambda ids, sock, cls: [response]
+            mock_recv.side_effect = lambda ids, sock, cls, timeout=10000: [response]
             result = client.get_bytes(meta_key)
 
         assert result == inner

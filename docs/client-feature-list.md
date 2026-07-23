@@ -94,9 +94,10 @@ See [autoscaling.md](autoscaling.md) for the full operator's guide.
 | GET_SINGLE_CAUSAL / PUT_SINGLE_CAUSAL | Yes |
 | GET_PRIORITY / PUT_PRIORITY | Yes   |
 | GET_BYTES (raw LWW value)  | Yes    |
+| Multi-key GET (get_multi)  | Yes    |
 | Address cache invalidation | Yes    |
 | WRONG_THREAD auto-retry    | Yes    |
-| Timeout (generate_bad_response) | Yes |
+| Configurable timeout       | Yes    |
 | Process management (start/stop/status) | Yes |
 | Value change subscription (watch/recv/get_cached) | Yes |
 | Latency feedback (LatencyReporter) | Yes |
@@ -116,8 +117,11 @@ See [autoscaling.md](autoscaling.md) for the full operator's guide.
 | GET_SINGLE_CAUSAL / PUT_SINGLE_CAUSAL | Yes |
 | GET_PRIORITY / PUT_PRIORITY | Yes   |
 | GET_BYTES (raw LWW value)  | Yes    |
-| Error code mapping         | Yes    |
+| Multi-key GET (GetMulti)   | Yes    |
+| Address cache invalidation | Yes    |
 | WRONG_THREAD auto-retry    | Yes    |
+| Dead-address eviction      | Yes    |
+| Configurable timeout       | Yes    |
 | Timeout with retry         | Yes    |
 | Process management (start/stop/status) | Yes |
 | Value change subscription (watch/recv/get_cached) | Yes |
@@ -137,8 +141,12 @@ See [autoscaling.md](autoscaling.md) for the full operator's guide.
 | GET_SINGLE_CAUSAL / PUT_SINGLE_CAUSAL | Yes |
 | GET_PRIORITY / PUT_PRIORITY | Yes   |
 | GET_BYTES (raw LWW value)  | Yes    |
+| Multi-key GET (get_multi)  | Yes    |
+| Address cache invalidation | Yes    |
 | WRONG_THREAD auto-retry    | Yes    |
-| Timeout (poll-based)       | Yes    |
+| Dead-address eviction      | Yes    |
+| Configurable timeout       | Yes    |
+| Port base_offset support   | Yes    |
 | Process management (start/stop) | Yes |
 | Value change subscription (watch/recv/get_cached) | Yes |
 | Latency feedback (LatencyReporter) | Yes |

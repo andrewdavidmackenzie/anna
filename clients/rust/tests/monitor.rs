@@ -189,7 +189,7 @@ impl MonitorTestCluster {
             }
             let child = Command::new(&bin)
                 .args(["--config", &config.to_string_lossy()])
-                .env("PATH", &server_path())
+                .env("PATH", server_path())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .spawn()
@@ -219,7 +219,7 @@ impl MonitorTestCluster {
         }
         let child = Command::new(&bin)
             .args(["--config", &config.to_string_lossy()])
-            .env("PATH", &server_path())
+            .env("PATH", server_path())
             .env("SERVER_TYPE", "ebs")
             .stdout(Stdio::null())
             .stderr(Stdio::null())

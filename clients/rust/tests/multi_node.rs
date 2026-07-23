@@ -2004,12 +2004,10 @@ async fn elasticity_storage_policy() {
 
     // Background task to handle management node protocol
     let mgmt_handle = tokio::spawn(async move {
-        let mut add_node_msg: Option<String> = None;
-
         loop {
             tokio::select! {
                 result = restart_rep.recv() => {
-                    if let Ok(_msg) = result {
+                    if result.is_ok() {
                         restart_rep
                             .send(zeromq::ZmqMessage::from("0".as_bytes().to_vec()))
                             .await
@@ -2017,7 +2015,7 @@ async fn elasticity_storage_policy() {
                     }
                 }
                 result = func_pull.recv() => {
-                    if let Ok(_msg) = result {
+                    if result.is_ok() {
                         // No response needed for PULL
                     }
                 }
@@ -2027,8 +2025,7 @@ async fn elasticity_storage_policy() {
                             .into_iter().flat_map(|f| f.to_vec()).collect();
                         let message = String::from_utf8_lossy(&data).to_string();
                         eprintln!("Mock mgmt: add_node request: {}", message);
-                        add_node_msg = Some(message);
-                        return add_node_msg;
+                        return Some(message);
                     }
                 }
             }
@@ -2152,12 +2149,10 @@ async fn underutilization_scale_in() {
 
     // Background mock: handle restart queries and collect add/remove messages
     let mgmt_handle = tokio::spawn(async move {
-        let mut remove_msg: Option<String> = None;
-
         loop {
             tokio::select! {
                 result = restart_rep.recv() => {
-                    if let Ok(_) = result {
+                    if result.is_ok() {
                         restart_rep
                             .send(zeromq::ZmqMessage::from("0".as_bytes().to_vec()))
                             .await
@@ -2165,7 +2160,7 @@ async fn underutilization_scale_in() {
                     }
                 }
                 result = func_pull.recv() => {
-                    if let Ok(_) = result {}
+                    if result.is_ok() {}
                 }
                 result = mgmt_pull.recv() => {
                     if let Ok(msg) = result {
@@ -2174,8 +2169,7 @@ async fn underutilization_scale_in() {
                         let message = String::from_utf8_lossy(&data).to_string();
                         eprintln!("Mock mgmt: received: {}", message);
                         if message.starts_with("remove:") {
-                            remove_msg = Some(message);
-                            return remove_msg;
+                            return Some(message);
                         }
                     }
                 }

@@ -44,6 +44,11 @@ std::unique_ptr<KvsClient> make_client(const ClientConfig& config,
 // return its value.
 string get(KvsClientInterface* client, const string& key);
 
+// Retrieve multiple keys in a single call. Returns a map of key to value
+// for all keys successfully retrieved (keys with errors are omitted).
+map<string, string> get_multi(KvsClientInterface* client,
+                              const vector<string>& keys);
+
 // The result of a causal GET: the value plus the vector clock and
 // dependencies attached to it, for the caller to display/inspect as needed.
 struct CausalValue {
@@ -165,6 +170,12 @@ void put_replication_factor(KvsClientInterface* client,
                             const string& key,
                             unsigned memory_rep,
                             unsigned local_rep);
+
+// Set the request timeout in milliseconds for a client created with make_client.
+void set_timeout(KvsClient* client, unsigned timeout_ms);
+
+// Get the current request timeout in milliseconds.
+unsigned get_timeout(KvsClient* client);
 
 // Retrieve cluster topology (thread counts) from the metadata key
 //   ANNA_METADATA|cluster_topology

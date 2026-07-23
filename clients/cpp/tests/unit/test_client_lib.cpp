@@ -913,3 +913,33 @@ TEST(ClientLibTest, GetMonitoringIpsDecodesProtobuf) {
   ASSERT_EQ(client.keys_get_.size(), 1u);
   EXPECT_EQ(client.keys_get_[0], "ANNA_METADATA|monitoring_ips");
 }
+
+TEST(ClientLibTest, GetMultiReturnsMultipleValues) {
+  MockKvsClient client;
+  client.responses_.push_back(make_lww_response("0", "val_a"));
+  client.responses_.push_back(make_lww_response("1", "val_b"));
+
+  vector<string> keys = {"key_a", "key_b"};
+  map<string, string> results = annalib::get_multi(&client, keys);
+
+  ASSERT_EQ(results.size(), 2u);
+  EXPECT_EQ(results["key_a"], "val_a");
+  EXPECT_EQ(results["key_b"], "val_b");
+}
+
+TEST(ClientLibTest, GetMultiEmptyKeysReturnsEmpty) {
+  MockKvsClient client;
+  vector<string> keys;
+  map<string, string> results = annalib::get_multi(&client, keys);
+  EXPECT_TRUE(results.empty());
+}
+
+TEST(ClientLibTest, SetTimeoutChangesTimeout) {
+  vector<UserRoutingThread> threads;
+  threads.push_back(UserRoutingThread("127.0.0.1", 0));
+  KvsClient kvs_client(threads, "127.0.0.1", 99, 10000);
+
+  EXPECT_EQ(kvs_client.get_timeout(), 10000u);
+  kvs_client.set_timeout(5000);
+  EXPECT_EQ(kvs_client.get_timeout(), 5000u);
+}

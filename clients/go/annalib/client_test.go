@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
 	kvspb "github.com/andrewdavidmackenzie/anna/clients/go/annalib/proto/kvs"
 	metadatapb "github.com/andrewdavidmackenzie/anna/clients/go/annalib/proto/metadata"
+	sharedpb "github.com/andrewdavidmackenzie/anna/clients/go/annalib/proto/shared"
 )
 
 func TestGenerateSeed(t *testing.T) {
@@ -1633,3 +1635,108 @@ func (m *sequencingMockTransport) recvResponse(useKeyAddress bool) ([]byte, erro
 }
 
 func (m *sequencingMockTransport) close() error { return nil }
+
+func TestGetMultiWithMock(t *testing.T) {
+	// Build a response with two tuples
+	lwwA := &kvspb.LWWValue{Timestamp: 100, Value: []byte("val_a")}
+	lwwB := &kvspb.LWWValue{Timestamp: 100, Value: []byte("val_b")}
+	lwwABytes, _ := proto.Marshal(lwwA)
+	lwwBBytes, _ := proto.Marshal(lwwB)
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{
+			{Key: "a", Error: kvspb.AnnaError_NO_ERROR, Payload: lwwABytes},
+			{Key: "b", Error: kvspb.AnnaError_NO_ERROR, Payload: lwwBBytes},
+		},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error: kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{
+			{Key: "a", Ips: []string{"tcp://10.0.0.1:6800"}},
+			{Key: "b", Ips: []string{"tcp://10.0.0.1:6800"}},
+		},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	results, err := client.GetMulti([]string{"a", "b"})
+	if err != nil {
+		t.Fatalf("GetMulti failed: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+	if results["a"] != "val_a" || results["b"] != "val_b" {
+		t.Errorf("unexpected results: %v", results)
+	}
+}
+
+func TestGetMultiEmpty(t *testing.T) {
+	tp := &mockTransport{}
+	client := newTestClient(tp)
+
+	results, err := client.GetMulti([]string{})
+	if err != nil {
+		t.Fatalf("GetMulti empty failed: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected empty results, got %v", results)
+	}
+}
+
+func TestEvictAddressRemovesSingle(t *testing.T) {
+	tp := &mockTransport{}
+	client := newTestClient(tp)
+	client.keyAddressCache["k"] = []string{"tcp://10.0.0.1:6800", "tcp://10.0.0.2:6800"}
+
+	client.evictAddress("k", "tcp://10.0.0.1:6800")
+
+	addrs := client.keyAddressCache["k"]
+	if len(addrs) != 1 || addrs[0] != "tcp://10.0.0.2:6800" {
+		t.Errorf("expected [tcp://10.0.0.2:6800], got %v", addrs)
+	}
+}
+
+func TestEvictAddressRemovesKeyWhenLast(t *testing.T) {
+	tp := &mockTransport{}
+	client := newTestClient(tp)
+	client.keyAddressCache["k"] = []string{"tcp://10.0.0.1:6800"}
+
+	client.evictAddress("k", "tcp://10.0.0.1:6800")
+
+	if _, ok := client.keyAddressCache["k"]; ok {
+		t.Error("expected key to be removed from cache when last address evicted")
+	}
+}
+
+func TestEvictAddressNonexistentKey(t *testing.T) {
+	tp := &mockTransport{}
+	client := newTestClient(tp)
+
+	// Should not panic
+	client.evictAddress("nonexistent", "tcp://10.0.0.1:6800")
+}
+
+func TestSetTimeoutChangesTimeout(t *testing.T) {
+	config := &ClientConfig{
+		RoutingAddresses: []string{"tcp://127.0.0.1:6450"},
+		ClientIP:         "127.0.0.1",
+	}
+	client, err := NewKVSClient(config, 98)
+	if err != nil {
+		t.Fatalf("NewKVSClient failed: %v", err)
+	}
+	defer client.Close()
+
+	if client.GetTimeout() != 10*time.Second {
+		t.Errorf("expected default timeout 10s, got %v", client.GetTimeout())
+	}
+
+	client.SetTimeout(5 * time.Second)
+	if client.GetTimeout() != 5*time.Second {
+		t.Errorf("expected timeout 5s, got %v", client.GetTimeout())
+	}
+}
