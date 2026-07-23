@@ -42,6 +42,20 @@ component_management:
       paths:
         - clients/go/
 
+flags:
+  clients:
+    paths:
+      - clients/
+    carryforward: true
+  server-system-tests:
+    paths:
+      - server/cpp/src/
+    carryforward: true
+  server-unit-tests:
+    paths:
+      - server/cpp/src/
+    carryforward: true
+
 coverage:
   status:
     project:
