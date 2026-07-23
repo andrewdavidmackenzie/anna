@@ -753,7 +753,7 @@ public:
 
     if (!disk_read(fname(key), original_value, error)) {
       return disk_write(fname(key), input_value);
-    } else if (input_value.priority() <= original_value.priority()) {
+    } else if (input_value.priority() < original_value.priority()) {
       return disk_write(fname(key), input_value);
     } else {
       std::fstream input(fname(key), std::ios::in | std::ios::binary);

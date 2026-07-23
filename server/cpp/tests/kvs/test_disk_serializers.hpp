@@ -181,6 +181,30 @@ TEST_F(DiskSerializerTest, PriorityLowestWins) {
   EXPECT_EQ(decoded.value(), "low");
 }
 
+TEST_F(DiskSerializerTest, PriorityEqualKeepsExisting) {
+  DiskPrioritySerializer serializer(tid_, ebs_root_);
+
+  kvs::PriorityValue pv1;
+  pv1.set_priority(5.0);
+  pv1.set_value("first");
+  string p1;
+  pv1.SerializeToString(&p1);
+  serializer.put("pri_eq", p1);
+
+  kvs::PriorityValue pv2;
+  pv2.set_priority(5.0);
+  pv2.set_value("second");
+  string p2;
+  pv2.SerializeToString(&p2);
+  serializer.put("pri_eq", p2);
+
+  kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
+  string result = serializer.get("pri_eq", error);
+  kvs::PriorityValue decoded;
+  decoded.ParseFromString(result);
+  EXPECT_EQ(decoded.value(), "first");
+}
+
 TEST_F(DiskSerializerTest, OrderedSetPutGet) {
   DiskOrderedSetSerializer serializer(tid_, ebs_root_);
 
