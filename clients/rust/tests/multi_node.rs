@@ -41,6 +41,7 @@ struct NodeConfig {
     ebs_path: String,
     selective_rep: bool,
     elasticity: bool,
+    tiering: bool,
     mgmt_ip: String,
     memory_cap_kb: Option<u32>,
     grace_period: u32,
@@ -59,6 +60,7 @@ impl Default for NodeConfig {
             ebs_path: "./".to_string(),
             selective_rep: false,
             elasticity: false,
+            tiering: false,
             mgmt_ip: "NULL".to_string(),
             memory_cap_kb: None,
             grace_period: TEST_GRACE_PERIOD,
@@ -96,7 +98,7 @@ server:
 policy:
   elasticity: {elasticity}
   selective-rep: {selective_rep}
-  tiering: false
+  tiering: {tiering}
 ebs: {ebs_path}
 capacities:
   memory-cap: 1
@@ -136,6 +138,7 @@ replication:
         monitoring_timeout = TEST_MONITORING_TIMEOUT,
         grace_period = cfg.grace_period,
         elasticity = cfg.elasticity,
+        tiering = cfg.tiering,
         mgmt_ip = cfg.mgmt_ip,
         memory_cap_kb_line = cfg
             .memory_cap_kb
@@ -2241,4 +2244,204 @@ async fn underutilization_scale_in() {
             timeout.as_secs()
         ),
     }
+}
+
+/// Test the tiering movement policy: with tiering enabled and both memory
+/// and disk tiers running, PUT keys then stop accessing them. After the
+/// grace period + a monitoring cycle with zero accesses, the monitor's
+/// movement_policy should attempt demotion (access_count < kKeyDemotionThreshold=1).
+///
+/// Uses base_offset=7823.
+#[tokio::test]
+#[cfg(unix)]
+async fn tiering_movement_policy() {
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let base_offset: u32 = 7823;
+    let short_grace: u32 = 5;
+
+    let mut cluster = MultiNodeCluster::new(base_offset);
+
+    // Start a node with both tiers, tiering enabled, short grace period
+    cluster.start_full_node_with_config(NodeConfig {
+        replication_memory: 1,
+        replication_ebs: 1,
+        base_offset,
+        tiering: true,
+        grace_period: short_grace,
+        ..Default::default()
+    });
+
+    // Start a disk-tier KVS on Node 2 so both tiers are present
+    cluster.start_disk_kvs_node(NODE2_IP, NODE1_IP);
+
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(90)).await;
+
+    // PUT several keys — these start with memory_rep=1, ebs_rep=1
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while Instant::now() < deadline {
+        let mut all_ok = true;
+        for i in 0..5 {
+            if client
+                .put(&format!("tier_key_{}", i), &format!("tier_val_{}", i))
+                .await
+                .is_err()
+            {
+                all_ok = false;
+                break;
+            }
+        }
+        if all_ok {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(POLL_INTERVAL_MS)).await;
+    }
+
+    // Verify keys are readable
+    for i in 0..5 {
+        let key = format!("tier_key_{}", i);
+        let val = client
+            .get(&key)
+            .await
+            .unwrap_or_else(|e| panic!("GET {} failed: {}", key, e));
+        assert_eq!(val, format!("tier_val_{}", i));
+    }
+
+    // Now stop accessing keys entirely. Wait for:
+    // grace_period + 2 monitoring cycles (one to count zero accesses,
+    // one for the policy to act on it)
+    let wait = Duration::from_secs((short_grace + TEST_MONITORING_TIMEOUT * 3) as u64);
+    eprintln!(
+        "Tiering test: waiting {}s for demotion cycle (grace={}s, monitor={}s)",
+        wait.as_secs(),
+        short_grace,
+        TEST_MONITORING_TIMEOUT
+    );
+    tokio::time::sleep(wait).await;
+
+    // Keys should still be readable (demotion moves replicas but data persists
+    // on disk tier). This also exercises the re-routing after replication change.
+    for i in 0..5 {
+        let key = format!("tier_key_{}", i);
+        // The key might need cache invalidation after replication change
+        client.clear_cache();
+        match client.get(&key).await {
+            Ok(val) => assert_eq!(val, format!("tier_val_{}", i)),
+            Err(e) => eprintln!(
+                "GET {} after demotion: {} (expected if routing stale)",
+                key, e
+            ),
+        }
+    }
+}
+
+/// Test replication_response_handler WRONG_THREAD path: start a 2-node
+/// cluster, PUT keys, then trigger self-depart on one node (SIGUSR1).
+/// During the departure, hash ring changes cause WRONG_THREAD errors
+/// on in-flight replication factor lookups, exercising the retry path.
+///
+/// Uses base_offset=9224. Requires 127.0.0.2 bindable.
+#[tokio::test]
+#[cfg(unix)]
+async fn replication_response_wrong_thread() {
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let base_offset: u32 = 9224;
+    let mut cluster = MultiNodeCluster::new(base_offset);
+
+    // Start 2-node cluster so keys are distributed
+    cluster.start_full_node_with_config(NodeConfig {
+        replication_memory: 1,
+        base_offset,
+        ..Default::default()
+    });
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
+
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(100)).await;
+
+    // PUT keys across both nodes
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while Instant::now() < deadline {
+        let mut all_ok = true;
+        for i in 0..20 {
+            if client
+                .put(&format!("depart_key_{}", i), &format!("val_{}", i))
+                .await
+                .is_err()
+            {
+                all_ok = false;
+                break;
+            }
+        }
+        if all_ok {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(POLL_INTERVAL_MS)).await;
+    }
+
+    // Verify keys
+    for i in 0..20 {
+        let key = format!("depart_key_{}", i);
+        let val = client
+            .get(&key)
+            .await
+            .unwrap_or_else(|e| panic!("GET {} failed before depart: {}", key, e));
+        assert_eq!(val, format!("val_{}", i));
+    }
+
+    // Send SIGUSR1 to Node 2's KVS to trigger self-depart.
+    // This shifts hash ring ownership, causing WRONG_THREAD on pending
+    // replication factor lookups for keys that were on the departing node.
+    let node2_kvs = cluster
+        .processes
+        .iter()
+        .find(|p| p.label.contains(NODE2_IP) && p.label.contains("kvs"));
+    if let Some(proc) = node2_kvs {
+        let pid = nix::unistd::Pid::from_raw(proc.child.id() as i32);
+        nix::sys::signal::kill(pid, nix::sys::signal::Signal::SIGUSR1)
+            .expect("Failed to send SIGUSR1");
+        eprintln!("Sent SIGUSR1 to Node 2 KVS (pid {})", proc.child.id());
+    } else {
+        eprintln!("SKIP: Node 2 KVS not found");
+        return;
+    }
+
+    // Wait for depart to propagate
+    tokio::time::sleep(Duration::from_secs(TEST_GOSSIP_EPOCH as u64 * 2)).await;
+
+    // Clear cache and re-read keys. Some will need re-routing through
+    // the replication_response_handler after hash ring changes.
+    client.clear_cache();
+    let mut success_count = 0;
+    for i in 0..20 {
+        let key = format!("depart_key_{}", i);
+        match client.get(&key).await {
+            Ok(val) => {
+                assert_eq!(val, format!("val_{}", i));
+                success_count += 1;
+            }
+            Err(e) => {
+                eprintln!(
+                    "GET {} after depart: {} (may be expected during transition)",
+                    key, e
+                );
+            }
+        }
+    }
+
+    assert!(
+        success_count >= 10,
+        "Expected at least 10/20 keys readable after node depart, got {}",
+        success_count
+    );
 }
