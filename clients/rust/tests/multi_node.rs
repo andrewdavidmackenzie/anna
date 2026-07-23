@@ -1954,6 +1954,9 @@ async fn management_node_integration() {
         Ok(Err(e)) => panic!("Management mock task failed: {}", e),
         Err(_) => panic!("Management mock did not receive expected queries within timeout"),
     }
+
+    // Allow the KVS one poll cycle to process the management_node_response.
+    tokio::time::sleep(Duration::from_secs(1)).await;
 }
 
 /// Test the storage policy elasticity path: with memory-cap-kb set very low
