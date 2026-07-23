@@ -89,7 +89,7 @@ void node_join_handler(unsigned thread_id, unsigned &seed, Address public_ip,
         ServerThreadList threads = kHashRingUtil->get_responsible_threads(
             wt.replication_response_connect_address(), key, is_metadata(key),
             global_hash_rings, local_hash_rings, key_replication_map, pushers,
-            kSelfTierIdVector, succeed, seed);
+            kAllTiers, succeed, seed);
 
         if (succeed) {
           // there are two situations in which we gossip data to the joining

@@ -1255,8 +1255,8 @@ async fn disk_tier_basic() {
 
     let mut cluster = MultiNodeCluster::new(18015);
 
-    // Start full cluster with both memory and disk replication.
-    // Keys are distributed across both tiers via consistent hashing.
+    // Start cluster with both tiers. Disk-only (replication_memory: 0) is
+    // not yet fully working — see #444 for the ongoing fix.
     cluster.start_full_node_with_config(NodeConfig {
         replication_ebs: 1,
         base_offset: 18015,
@@ -1277,6 +1277,10 @@ async fn disk_tier_basic() {
             .await
             .unwrap_or_else(|e| panic!("PUT disk_key_{} failed: {}", i, e));
     }
+
+    // Clear cache to force re-routing — ensures GETs go through the
+    // correct tier resolution path
+    client.clear_cache();
 
     for i in 0..20 {
         let key = format!("disk_key_{}", i);
