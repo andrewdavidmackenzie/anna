@@ -1,11 +1,13 @@
 package annalib
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"testing"
 	"time"
 
+	"github.com/go-zeromq/zmq4"
 	"google.golang.org/protobuf/proto"
 
 	kvspb "github.com/andrewdavidmackenzie/anna/clients/go/annalib/proto/kvs"
@@ -1738,5 +1740,830 @@ func TestSetTimeoutChangesTimeout(t *testing.T) {
 	client.SetTimeout(5 * time.Second)
 	if client.GetTimeout() != 5*time.Second {
 		t.Errorf("expected timeout 5s, got %v", client.GetTimeout())
+	}
+}
+
+// --- Helper: build a mock client whose data response has a specific error code ---
+
+func newMockClientWithErrorResponse(key string, annaErr kvspb.AnnaError) *KVSClient {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: key, Error: annaErr}},
+	}
+	respBytes, _ := proto.Marshal(response)
+	tp := &mockTransport{recvData: map[bool][]byte{false: respBytes}}
+	client := newTestClient(tp)
+	client.keyAddressCache[key] = []string{"tcp://10.0.0.1:6800"}
+	return client
+}
+
+// --- Helper: build a mock client whose data response has a corrupt payload ---
+
+func newMockClientWithCorruptPayload(key string) *KVSClient {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: key, Error: kvspb.AnnaError_NO_ERROR, Payload: []byte{0xff, 0xff}}},
+	}
+	respBytes, _ := proto.Marshal(response)
+	tp := &mockTransport{recvData: map[bool][]byte{false: respBytes}}
+	client := newTestClient(tp)
+	client.keyAddressCache[key] = []string{"tcp://10.0.0.1:6800"}
+	return client
+}
+
+// --- Helper: build a mock client whose GetBytes returns corrupt inner bytes (valid LWW wrapping corrupt data) ---
+
+func newMockClientWithCorruptInnerBytes(key string) *KVSClient {
+	lww := &kvspb.LWWValue{Timestamp: 100, Value: []byte{0xff, 0xff}}
+	lwwBytes, _ := proto.Marshal(lww)
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: key, Error: kvspb.AnnaError_NO_ERROR, Payload: lwwBytes}},
+	}
+	respBytes, _ := proto.Marshal(response)
+	tp := &mockTransport{recvData: map[bool][]byte{false: respBytes}}
+	client := newTestClient(tp)
+	client.keyAddressCache[key] = []string{"tcp://10.0.0.1:6800"}
+	return client
+}
+
+// --- Put: validateResponse error path ---
+
+func TestPutValidateResponseError(t *testing.T) {
+	client := newMockClientWithErrorResponse("k", kvspb.AnnaError_KEY_DNE)
+	err := client.Put("k", "val")
+	if err == nil {
+		t.Fatal("expected error from Put when response has KEY_DNE")
+	}
+}
+
+// --- GetSet: validateResponse error path ---
+
+func TestGetSetValidateResponseError(t *testing.T) {
+	client := newMockClientWithErrorResponse("s", kvspb.AnnaError_KEY_DNE)
+	_, err := client.GetSet("s")
+	if err == nil {
+		t.Fatal("expected error from GetSet when response has KEY_DNE")
+	}
+}
+
+// --- GetSet: parseSetPayload error path (corrupt payload) ---
+
+func TestGetSetCorruptPayload(t *testing.T) {
+	client := newMockClientWithCorruptPayload("s")
+	_, err := client.GetSet("s")
+	if err == nil {
+		t.Fatal("expected error from GetSet with corrupt payload")
+	}
+}
+
+// --- PutSet: validateResponse error path ---
+
+func TestPutSetValidateResponseError(t *testing.T) {
+	client := newMockClientWithErrorResponse("s", kvspb.AnnaError_KEY_DNE)
+	err := client.PutSet("s", []string{"a", "b"})
+	if err == nil {
+		t.Fatal("expected error from PutSet when response has KEY_DNE")
+	}
+}
+
+// --- GetCausal: validateResponse error path ---
+
+func TestGetCausalValidateResponseError(t *testing.T) {
+	client := newMockClientWithErrorResponse("k", kvspb.AnnaError_KEY_DNE)
+	_, err := client.GetCausal("k")
+	if err == nil {
+		t.Fatal("expected error from GetCausal when response has KEY_DNE")
+	}
+}
+
+// --- GetCausal: parseCausalPayload error path (corrupt payload) ---
+
+func TestGetCausalCorruptPayload(t *testing.T) {
+	client := newMockClientWithCorruptPayload("k")
+	_, err := client.GetCausal("k")
+	if err == nil {
+		t.Fatal("expected error from GetCausal with corrupt payload")
+	}
+}
+
+// --- PutCausal: validateResponse error path ---
+
+func TestPutCausalValidateResponseError(t *testing.T) {
+	client := newMockClientWithErrorResponse("k", kvspb.AnnaError_KEY_DNE)
+	err := client.PutCausal("k", "val")
+	if err == nil {
+		t.Fatal("expected error from PutCausal when response has KEY_DNE")
+	}
+}
+
+// --- GetOrderedSet: validateResponse error path ---
+
+func TestGetOrderedSetValidateResponseError(t *testing.T) {
+	client := newMockClientWithErrorResponse("os", kvspb.AnnaError_KEY_DNE)
+	_, err := client.GetOrderedSet("os")
+	if err == nil {
+		t.Fatal("expected error from GetOrderedSet when response has KEY_DNE")
+	}
+}
+
+// --- GetOrderedSet: parseOrderedSetPayload error path (corrupt payload) ---
+
+func TestGetOrderedSetCorruptPayload(t *testing.T) {
+	client := newMockClientWithCorruptPayload("os")
+	_, err := client.GetOrderedSet("os")
+	if err == nil {
+		t.Fatal("expected error from GetOrderedSet with corrupt payload")
+	}
+}
+
+// --- PutOrderedSet: validateResponse error path ---
+
+func TestPutOrderedSetValidateResponseError(t *testing.T) {
+	client := newMockClientWithErrorResponse("os", kvspb.AnnaError_KEY_DNE)
+	err := client.PutOrderedSet("os", []string{"a", "b"})
+	if err == nil {
+		t.Fatal("expected error from PutOrderedSet when response has KEY_DNE")
+	}
+}
+
+// --- GetSingleCausal: validateResponse error path ---
+
+func TestGetSingleCausalValidateResponseError(t *testing.T) {
+	client := newMockClientWithErrorResponse("k", kvspb.AnnaError_KEY_DNE)
+	_, err := client.GetSingleCausal("k")
+	if err == nil {
+		t.Fatal("expected error from GetSingleCausal when response has KEY_DNE")
+	}
+}
+
+// --- GetSingleCausal: parseSingleCausalPayload error path (corrupt payload) ---
+
+func TestGetSingleCausalCorruptPayload(t *testing.T) {
+	client := newMockClientWithCorruptPayload("k")
+	_, err := client.GetSingleCausal("k")
+	if err == nil {
+		t.Fatal("expected error from GetSingleCausal with corrupt payload")
+	}
+}
+
+// --- PutSingleCausal: validateResponse error path ---
+
+func TestPutSingleCausalValidateResponseError(t *testing.T) {
+	client := newMockClientWithErrorResponse("k", kvspb.AnnaError_KEY_DNE)
+	err := client.PutSingleCausal("k", "val")
+	if err == nil {
+		t.Fatal("expected error from PutSingleCausal when response has KEY_DNE")
+	}
+}
+
+// --- GetPriority: validateResponse error path ---
+
+func TestGetPriorityValidateResponseError(t *testing.T) {
+	client := newMockClientWithErrorResponse("p", kvspb.AnnaError_KEY_DNE)
+	_, _, err := client.GetPriority("p")
+	if err == nil {
+		t.Fatal("expected error from GetPriority when response has KEY_DNE")
+	}
+}
+
+// --- GetPriority: parsePriorityPayload error path (corrupt payload) ---
+
+func TestGetPriorityCorruptPayload(t *testing.T) {
+	client := newMockClientWithCorruptPayload("p")
+	_, _, err := client.GetPriority("p")
+	if err == nil {
+		t.Fatal("expected error from GetPriority with corrupt payload")
+	}
+}
+
+// --- PutPriority: validateResponse error path ---
+
+func TestPutPriorityValidateResponseError(t *testing.T) {
+	client := newMockClientWithErrorResponse("p", kvspb.AnnaError_KEY_DNE)
+	err := client.PutPriority("p", 1.0, "val")
+	if err == nil {
+		t.Fatal("expected error from PutPriority when response has KEY_DNE")
+	}
+}
+
+// --- GetBytes: validateResponse error path ---
+
+func TestGetBytesValidateResponseError(t *testing.T) {
+	client := newMockClientWithErrorResponse("k", kvspb.AnnaError_KEY_DNE)
+	_, err := client.GetBytes("k")
+	if err == nil {
+		t.Fatal("expected error from GetBytes when response has KEY_DNE")
+	}
+}
+
+// --- GetBytes: parseLWWBytes error path (corrupt payload) ---
+
+func TestGetBytesCorruptPayload(t *testing.T) {
+	client := newMockClientWithCorruptPayload("k")
+	_, err := client.GetBytes("k")
+	if err == nil {
+		t.Fatal("expected error from GetBytes with corrupt payload")
+	}
+}
+
+// --- GetStorageStats: decode error path (corrupt inner bytes) ---
+
+func TestGetStorageStatsDecodeError(t *testing.T) {
+	metaKey := "ANNA_METADATA|stats|10.0.0.1|192.168.1.1|0|MEMORY"
+	client := newMockClientWithCorruptInnerBytes(metaKey)
+	_, err := client.GetStorageStats("10.0.0.1", "192.168.1.1", 0, "MEMORY")
+	if err == nil {
+		t.Fatal("expected error from GetStorageStats with corrupt inner bytes")
+	}
+}
+
+// --- GetKeyAccessStats: decode error path (corrupt inner bytes) ---
+
+func TestGetKeyAccessStatsDecodeError(t *testing.T) {
+	metaKey := "ANNA_METADATA|access|10.0.0.1|10.0.0.1|0|MEMORY"
+	client := newMockClientWithCorruptInnerBytes(metaKey)
+	_, err := client.GetKeyAccessStats("10.0.0.1", "10.0.0.1", 0, "MEMORY")
+	if err == nil {
+		t.Fatal("expected error from GetKeyAccessStats with corrupt inner bytes")
+	}
+}
+
+// --- GetKeySizeStats: decode error path (corrupt inner bytes) ---
+
+func TestGetKeySizeStatsDecodeError(t *testing.T) {
+	metaKey := "ANNA_METADATA|size|10.0.0.1|10.0.0.1|1|MEMORY"
+	client := newMockClientWithCorruptInnerBytes(metaKey)
+	_, err := client.GetKeySizeStats("10.0.0.1", "10.0.0.1", 1, "MEMORY")
+	if err == nil {
+		t.Fatal("expected error from GetKeySizeStats with corrupt inner bytes")
+	}
+}
+
+// --- PutReplicationFactor: validateResponse error path ---
+
+func TestPutReplicationFactorValidateResponseError(t *testing.T) {
+	metaKey := "ANNA_METADATA|replication|my_key"
+	client := newMockClientWithErrorResponse(metaKey, kvspb.AnnaError_KEY_DNE)
+	err := client.PutReplicationFactor("my_key", 3, 1)
+	if err == nil {
+		t.Fatal("expected error from PutReplicationFactor when response has KEY_DNE")
+	}
+}
+
+// --- GetClusterTopology: decode error path (corrupt inner bytes) ---
+
+func TestGetClusterTopologyDecodeError(t *testing.T) {
+	metaKey := "ANNA_METADATA|cluster_topology"
+	client := newMockClientWithCorruptInnerBytes(metaKey)
+	_, err := client.GetClusterTopology()
+	if err == nil {
+		t.Fatal("expected error from GetClusterTopology with corrupt inner bytes")
+	}
+}
+
+// --- GetMonitoringIPs: decode error path (corrupt inner bytes) ---
+
+func TestGetMonitoringIPsDecodeError(t *testing.T) {
+	metaKey := "ANNA_METADATA|monitoring_ips"
+	client := newMockClientWithCorruptInnerBytes(metaKey)
+	_, err := client.GetMonitoringIPs()
+	if err == nil {
+		t.Fatal("expected error from GetMonitoringIPs with corrupt inner bytes")
+	}
+}
+
+// --- GetTimeout: non-zmqTransport path (returns 0) ---
+
+func TestGetTimeoutWithMockTransport(t *testing.T) {
+	tp := &mockTransport{}
+	client := newTestClient(tp)
+	timeout := client.GetTimeout()
+	if timeout != 0 {
+		t.Errorf("expected timeout 0 for non-zmqTransport, got %v", timeout)
+	}
+}
+
+// --- SetTimeout: non-zmqTransport path (no-op) ---
+
+func TestSetTimeoutWithMockTransport(t *testing.T) {
+	tp := &mockTransport{}
+	client := newTestClient(tp)
+	// Should not panic; it's a no-op for non-zmqTransport
+	client.SetTimeout(5 * time.Second)
+	if client.GetTimeout() != 0 {
+		t.Errorf("expected timeout 0 for non-zmqTransport after SetTimeout, got %v", client.GetTimeout())
+	}
+}
+
+// --- queryRouting: recvResponse error path ---
+
+func TestQueryRoutingRecvError(t *testing.T) {
+	tp := &mockTransport{recvErr: fmt.Errorf("recv failed")}
+	client := newTestClient(tp)
+	addrs := client.queryRouting("key")
+	if addrs != nil {
+		t.Errorf("expected nil addresses on recv error, got %v", addrs)
+	}
+}
+
+// --- queryRouting: parseRoutingResponse error path (corrupt routing response) ---
+
+func TestQueryRoutingCorruptResponse(t *testing.T) {
+	tp := &mockTransport{recvData: map[bool][]byte{true: {0xff, 0xff}}}
+	client := newTestClient(tp)
+	addrs := client.queryRouting("key")
+	if addrs != nil {
+		t.Errorf("expected nil addresses on corrupt routing response, got %v", addrs)
+	}
+}
+
+// --- GetMulti: no worker address error ---
+
+func TestGetMultiNoWorkerAddress(t *testing.T) {
+	tp := &mockTransport{recvData: map[bool][]byte{true: nil}}
+	client := newTestClient(tp)
+	_, err := client.GetMulti([]string{"missing_key"})
+	if err == nil {
+		t.Fatal("expected error from GetMulti when no worker address found")
+	}
+}
+
+// --- GetMulti: send error ---
+
+func TestGetMultiSendError(t *testing.T) {
+	tp := &mockTransport{sendErr: fmt.Errorf("send failed")}
+	client := newTestClient(tp)
+	client.keyAddressCache["k"] = []string{"tcp://10.0.0.1:6800"}
+	_, err := client.GetMulti([]string{"k"})
+	if err == nil {
+		t.Fatal("expected error from GetMulti on send failure")
+	}
+}
+
+// --- GetMulti: recv error ---
+
+func TestGetMultiRecvError(t *testing.T) {
+	tp := &mockTransport{recvErr: fmt.Errorf("recv failed")}
+	client := newTestClient(tp)
+	client.keyAddressCache["k"] = []string{"tcp://10.0.0.1:6800"}
+	_, err := client.GetMulti([]string{"k"})
+	if err == nil {
+		t.Fatal("expected error from GetMulti on recv failure")
+	}
+}
+
+// --- GetMulti: timeout (nil data response) ---
+
+func TestGetMultiTimeout(t *testing.T) {
+	tp := &mockTransport{recvData: map[bool][]byte{false: nil}}
+	client := newTestClient(tp)
+	client.keyAddressCache["k"] = []string{"tcp://10.0.0.1:6800"}
+	_, err := client.GetMulti([]string{"k"})
+	if err == nil {
+		t.Fatal("expected error from GetMulti on timeout")
+	}
+}
+
+// --- GetMulti: decode error (corrupt response bytes) ---
+
+func TestGetMultiDecodeError(t *testing.T) {
+	tp := &mockTransport{recvData: map[bool][]byte{false: {0xff, 0xff}}}
+	client := newTestClient(tp)
+	client.keyAddressCache["k"] = []string{"tcp://10.0.0.1:6800"}
+	_, err := client.GetMulti([]string{"k"})
+	if err == nil {
+		t.Fatal("expected error from GetMulti with corrupt response bytes")
+	}
+}
+
+// --- GetMulti: LWW decode error (valid response but corrupt payload in tuple) ---
+
+func TestGetMultiLWWDecodeError(t *testing.T) {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{
+			{Key: "k", Error: kvspb.AnnaError_NO_ERROR, Payload: []byte{0xff, 0xff}},
+		},
+	}
+	respBytes, _ := proto.Marshal(response)
+	tp := &mockTransport{recvData: map[bool][]byte{false: respBytes}}
+	client := newTestClient(tp)
+	client.keyAddressCache["k"] = []string{"tcp://10.0.0.1:6800"}
+	_, err := client.GetMulti([]string{"k"})
+	if err == nil {
+		t.Fatal("expected error from GetMulti with corrupt LWW payload")
+	}
+}
+
+// --- GetMulti: WRONG_THREAD retry path ---
+
+func TestGetMultiWrongThreadRetry(t *testing.T) {
+	// First response has WRONG_THREAD, second has success
+	wrongResponse := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{
+			{Key: "k", Error: kvspb.AnnaError_WRONG_THREAD},
+		},
+	}
+	wrongBytes, _ := proto.Marshal(wrongResponse)
+
+	lww := &kvspb.LWWValue{Timestamp: 100, Value: []byte("ok_val")}
+	lwwBytes, _ := proto.Marshal(lww)
+	okResponse := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{
+			{Key: "k", Error: kvspb.AnnaError_NO_ERROR, Payload: lwwBytes},
+		},
+	}
+	okBytes, _ := proto.Marshal(okResponse)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "k", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &sequencingMockTransport{
+		routingData:   routingBytes,
+		dataResponses: [][]byte{wrongBytes, okBytes},
+	}
+	client := newTestClient(tp)
+	client.keyAddressCache["k"] = []string{"tcp://10.0.0.1:6800"}
+
+	results, err := client.GetMulti([]string{"k"})
+	if err != nil {
+		t.Fatalf("GetMulti with WRONG_THREAD retry failed: %v", err)
+	}
+	if results["k"] != "ok_val" {
+		t.Errorf("expected 'ok_val', got '%s'", results["k"])
+	}
+}
+
+// --- GetMulti: invalidate cache on tuple response ---
+
+func TestGetMultiInvalidateCache(t *testing.T) {
+	lww := &kvspb.LWWValue{Timestamp: 100, Value: []byte("val")}
+	lwwBytes, _ := proto.Marshal(lww)
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{
+			{Key: "k", Error: kvspb.AnnaError_NO_ERROR, Payload: lwwBytes, Invalidate: true},
+		},
+	}
+	respBytes, _ := proto.Marshal(response)
+	tp := &mockTransport{recvData: map[bool][]byte{false: respBytes}}
+	client := newTestClient(tp)
+	client.keyAddressCache["k"] = []string{"tcp://10.0.0.1:6800"}
+
+	results, err := client.GetMulti([]string{"k"})
+	if err != nil {
+		t.Fatalf("GetMulti failed: %v", err)
+	}
+	if results["k"] != "val" {
+		t.Errorf("expected 'val', got '%s'", results["k"])
+	}
+	if _, ok := client.keyAddressCache["k"]; ok {
+		t.Error("expected cache to be invalidated")
+	}
+}
+
+// --- Get: corrupt LWW payload in response ---
+
+func TestGetCorruptPayload(t *testing.T) {
+	client := newMockClientWithCorruptPayload("k")
+	_, err := client.Get("k")
+	if err == nil {
+		t.Fatal("expected error from Get with corrupt LWW payload")
+	}
+}
+
+// --- sendDataRequest: parseDataResponse error (corrupt response bytes) ---
+
+func TestSendDataRequestCorruptResponse(t *testing.T) {
+	tp := &mockTransport{recvData: map[bool][]byte{false: {0xff, 0xff}}}
+	client := newTestClient(tp)
+	client.keyAddressCache["k"] = []string{"tcp://10.0.0.1:6800"}
+	_, err := client.Get("k")
+	if err == nil {
+		t.Fatal("expected error from Get with corrupt data response")
+	}
+}
+
+// --- sendDataRequest: empty tuples in response (no tuples at all) ---
+
+func TestSendDataRequestEmptyTuples(t *testing.T) {
+	response := &kvspb.KeyResponse{}
+	respBytes, _ := proto.Marshal(response)
+	tp := &mockTransport{recvData: map[bool][]byte{false: respBytes}}
+	client := newTestClient(tp)
+	client.keyAddressCache["k"] = []string{"tcp://10.0.0.1:6800"}
+	// sendDataRequest succeeds but validateResponse inside Get will fail
+	_, err := client.Get("k")
+	if err == nil {
+		t.Fatal("expected error from Get with empty tuples response")
+	}
+}
+
+// --- Put/PutSet/PutCausal/PutOrderedSet/PutSingleCausal/PutPriority: sendDataRequest error paths ---
+
+func TestPutSendError(t *testing.T) {
+	tp := &mockTransport{sendErr: fmt.Errorf("send failed")}
+	client := newTestClient(tp)
+	client.keyAddressCache["k"] = []string{"tcp://10.0.0.1:6800"}
+	err := client.Put("k", "val")
+	if err == nil {
+		t.Fatal("expected error from Put on send failure")
+	}
+}
+
+func TestPutSetSendError(t *testing.T) {
+	tp := &mockTransport{sendErr: fmt.Errorf("send failed")}
+	client := newTestClient(tp)
+	client.keyAddressCache["s"] = []string{"tcp://10.0.0.1:6800"}
+	err := client.PutSet("s", []string{"a"})
+	if err == nil {
+		t.Fatal("expected error from PutSet on send failure")
+	}
+}
+
+func TestPutCausalSendError(t *testing.T) {
+	tp := &mockTransport{sendErr: fmt.Errorf("send failed")}
+	client := newTestClient(tp)
+	client.keyAddressCache["k"] = []string{"tcp://10.0.0.1:6800"}
+	err := client.PutCausal("k", "val")
+	if err == nil {
+		t.Fatal("expected error from PutCausal on send failure")
+	}
+}
+
+func TestPutOrderedSetSendError(t *testing.T) {
+	tp := &mockTransport{sendErr: fmt.Errorf("send failed")}
+	client := newTestClient(tp)
+	client.keyAddressCache["os"] = []string{"tcp://10.0.0.1:6800"}
+	err := client.PutOrderedSet("os", []string{"a"})
+	if err == nil {
+		t.Fatal("expected error from PutOrderedSet on send failure")
+	}
+}
+
+func TestPutSingleCausalSendError(t *testing.T) {
+	tp := &mockTransport{sendErr: fmt.Errorf("send failed")}
+	client := newTestClient(tp)
+	client.keyAddressCache["k"] = []string{"tcp://10.0.0.1:6800"}
+	err := client.PutSingleCausal("k", "val")
+	if err == nil {
+		t.Fatal("expected error from PutSingleCausal on send failure")
+	}
+}
+
+func TestPutPrioritySendError(t *testing.T) {
+	tp := &mockTransport{sendErr: fmt.Errorf("send failed")}
+	client := newTestClient(tp)
+	client.keyAddressCache["p"] = []string{"tcp://10.0.0.1:6800"}
+	err := client.PutPriority("p", 1.0, "val")
+	if err == nil {
+		t.Fatal("expected error from PutPriority on send failure")
+	}
+}
+
+func TestPutReplicationFactorSendError(t *testing.T) {
+	tp := &mockTransport{sendErr: fmt.Errorf("send failed")}
+	client := newTestClient(tp)
+	metaKey := "ANNA_METADATA|replication|my_key"
+	client.keyAddressCache[metaKey] = []string{"tcp://10.0.0.1:6800"}
+	err := client.PutReplicationFactor("my_key", 3, 1)
+	if err == nil {
+		t.Fatal("expected error from PutReplicationFactor on send failure")
+	}
+}
+
+// --- GetStorageStats/GetKeyAccessStats/GetKeySizeStats: GetBytes error path ---
+
+func TestGetStorageStatsGetBytesError(t *testing.T) {
+	metaKey := "ANNA_METADATA|stats|10.0.0.1|192.168.1.1|0|MEMORY"
+	client := newMockClientWithErrorResponse(metaKey, kvspb.AnnaError_KEY_DNE)
+	_, err := client.GetStorageStats("10.0.0.1", "192.168.1.1", 0, "MEMORY")
+	if err == nil {
+		t.Fatal("expected error from GetStorageStats when GetBytes fails")
+	}
+}
+
+func TestGetKeyAccessStatsGetBytesError(t *testing.T) {
+	metaKey := "ANNA_METADATA|access|10.0.0.1|10.0.0.1|0|MEMORY"
+	client := newMockClientWithErrorResponse(metaKey, kvspb.AnnaError_KEY_DNE)
+	_, err := client.GetKeyAccessStats("10.0.0.1", "10.0.0.1", 0, "MEMORY")
+	if err == nil {
+		t.Fatal("expected error from GetKeyAccessStats when GetBytes fails")
+	}
+}
+
+func TestGetKeySizeStatsGetBytesError(t *testing.T) {
+	metaKey := "ANNA_METADATA|size|10.0.0.1|10.0.0.1|1|MEMORY"
+	client := newMockClientWithErrorResponse(metaKey, kvspb.AnnaError_KEY_DNE)
+	_, err := client.GetKeySizeStats("10.0.0.1", "10.0.0.1", 1, "MEMORY")
+	if err == nil {
+		t.Fatal("expected error from GetKeySizeStats when GetBytes fails")
+	}
+}
+
+// --- GetClusterTopology: GetBytes error path ---
+
+func TestGetClusterTopologyGetBytesError(t *testing.T) {
+	metaKey := "ANNA_METADATA|cluster_topology"
+	client := newMockClientWithErrorResponse(metaKey, kvspb.AnnaError_KEY_DNE)
+	_, err := client.GetClusterTopology()
+	if err == nil {
+		t.Fatal("expected error from GetClusterTopology when GetBytes fails")
+	}
+}
+
+// --- GetMonitoringIPs: GetBytes error returns empty slice (not error) ---
+
+func TestGetMonitoringIPsGetBytesError(t *testing.T) {
+	metaKey := "ANNA_METADATA|monitoring_ips"
+	client := newMockClientWithErrorResponse(metaKey, kvspb.AnnaError_KEY_DNE)
+	ips, err := client.GetMonitoringIPs()
+	if err != nil {
+		t.Fatalf("GetMonitoringIPs should not error when GetBytes fails, got: %v", err)
+	}
+	if len(ips) != 0 {
+		t.Errorf("expected empty IPs, got %v", ips)
+	}
+}
+
+// --- Get/GetSet/GetCausal/GetOrderedSet/GetSingleCausal/GetPriority/GetBytes: sendDataRequest error paths ---
+
+func TestGetSetSendError(t *testing.T) {
+	tp := &mockTransport{sendErr: fmt.Errorf("send failed")}
+	client := newTestClient(tp)
+	client.keyAddressCache["s"] = []string{"tcp://10.0.0.1:6800"}
+	_, err := client.GetSet("s")
+	if err == nil {
+		t.Fatal("expected error from GetSet on send failure")
+	}
+}
+
+func TestGetCausalSendError(t *testing.T) {
+	tp := &mockTransport{sendErr: fmt.Errorf("send failed")}
+	client := newTestClient(tp)
+	client.keyAddressCache["k"] = []string{"tcp://10.0.0.1:6800"}
+	_, err := client.GetCausal("k")
+	if err == nil {
+		t.Fatal("expected error from GetCausal on send failure")
+	}
+}
+
+func TestGetOrderedSetSendError(t *testing.T) {
+	tp := &mockTransport{sendErr: fmt.Errorf("send failed")}
+	client := newTestClient(tp)
+	client.keyAddressCache["os"] = []string{"tcp://10.0.0.1:6800"}
+	_, err := client.GetOrderedSet("os")
+	if err == nil {
+		t.Fatal("expected error from GetOrderedSet on send failure")
+	}
+}
+
+func TestGetSingleCausalSendError(t *testing.T) {
+	tp := &mockTransport{sendErr: fmt.Errorf("send failed")}
+	client := newTestClient(tp)
+	client.keyAddressCache["k"] = []string{"tcp://10.0.0.1:6800"}
+	_, err := client.GetSingleCausal("k")
+	if err == nil {
+		t.Fatal("expected error from GetSingleCausal on send failure")
+	}
+}
+
+func TestGetPrioritySendError(t *testing.T) {
+	tp := &mockTransport{sendErr: fmt.Errorf("send failed")}
+	client := newTestClient(tp)
+	client.keyAddressCache["p"] = []string{"tcp://10.0.0.1:6800"}
+	_, _, err := client.GetPriority("p")
+	if err == nil {
+		t.Fatal("expected error from GetPriority on send failure")
+	}
+}
+
+func TestGetBytesSendError(t *testing.T) {
+	tp := &mockTransport{sendErr: fmt.Errorf("send failed")}
+	client := newTestClient(tp)
+	client.keyAddressCache["k"] = []string{"tcp://10.0.0.1:6800"}
+	_, err := client.GetBytes("k")
+	if err == nil {
+		t.Fatal("expected error from GetBytes on send failure")
+	}
+}
+
+// --- sendDataRequest: max retries exceeded via WRONG_THREAD on every attempt ---
+
+func TestSendDataRequestMaxRetriesExceeded(t *testing.T) {
+	wrongThreadResponse := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "k", Error: kvspb.AnnaError_WRONG_THREAD}},
+	}
+	wrongBytes, _ := proto.Marshal(wrongThreadResponse)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "k", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	// Return WRONG_THREAD for all attempts (maxRetries+1 = 6)
+	responses := make([][]byte, 10)
+	for i := range responses {
+		responses[i] = wrongBytes
+	}
+	tp := &sequencingMockTransport{
+		routingData:   routingBytes,
+		dataResponses: responses,
+	}
+	client := newTestClient(tp)
+
+	_, err := client.Get("k")
+	if err == nil {
+		t.Fatal("expected error after max retries exceeded")
+	}
+	kvsErr, ok := err.(*KVSError)
+	if !ok {
+		t.Fatalf("expected KVSError, got %T", err)
+	}
+	// On the last attempt, WRONG_THREAD with attempt == maxRetries falls through
+	// to validateResponse, which returns "GET: WRONG_THREAD"
+	if kvsErr.Message != "GET: WRONG_THREAD" {
+		t.Errorf("unexpected error message: %s", kvsErr.Message)
+	}
+}
+
+// --- sendDataRequest: timeout on all retries triggers "request timed out" ---
+
+func TestSendDataRequestTimeoutAllRetries(t *testing.T) {
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "k", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	// Return nil (timeout) for all data responses, but valid routing data
+	tp := &sequencingMockTransport{
+		routingData:   routingBytes,
+		dataResponses: [][]byte{nil, nil, nil, nil, nil, nil, nil},
+	}
+	client := newTestClient(tp)
+
+	_, err := client.Get("k")
+	if err == nil {
+		t.Fatal("expected error after timeout on all retries")
+	}
+	kvsErr, ok := err.(*KVSError)
+	if !ok {
+		t.Fatalf("expected KVSError, got %T", err)
+	}
+	if kvsErr.Message != "k: request timed out" {
+		t.Errorf("unexpected error message: %s", kvsErr.Message)
+	}
+}
+
+// --- NewKVSClient: keyAddressPuller bind error (port conflict) ---
+
+func TestNewKVSClientKeyAddressPullerBindError(t *testing.T) {
+	// Create a client that binds on tid=507
+	client1, err := NewKVSClient(DefaultClientConfig(), 507)
+	if err != nil {
+		t.Fatalf("first client failed: %v", err)
+	}
+	defer client1.Close()
+
+	// Second client on same tid should fail to bind the key address puller
+	_, err = NewKVSClient(DefaultClientConfig(), 507)
+	if err == nil {
+		t.Fatal("expected error when key address puller port is already bound")
+	}
+}
+
+// --- NewKVSClient: responsePuller bind error (port conflict) ---
+
+func TestNewKVSClientResponsePullerBindError(t *testing.T) {
+	// Block only the response puller port (tid+6800) but leave key address port free.
+	// tid=508 → response port 7308, key address port 7358
+	ctx := context.Background()
+	blocker := zmq4.NewPull(ctx)
+	responsePort := 508 + kUserResponsePort // 7308
+	if err := blocker.Listen(fmt.Sprintf("tcp://0.0.0.0:%d", responsePort)); err != nil {
+		t.Fatalf("failed to block response port: %v", err)
+	}
+	defer blocker.Close()
+
+	_, err := NewKVSClient(DefaultClientConfig(), 508)
+	if err == nil {
+		t.Fatal("expected error when response puller port is already bound")
+	}
+}
+
+// --- queryRouting: routing response with error code ---
+
+func TestQueryRoutingResponseError(t *testing.T) {
+	routingResp := &kvspb.KeyAddressResponse{
+		Error: kvspb.AnnaError_NO_SERVERS,
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes}}
+	client := newTestClient(tp)
+
+	addrs := client.queryRouting("key")
+	if addrs != nil {
+		t.Errorf("expected nil addresses on routing error, got %v", addrs)
 	}
 }
