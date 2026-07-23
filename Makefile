@@ -175,6 +175,7 @@ server-cpp-tests:
 	@echo "Running C++ server tests with coverage"
 	@cd server/cpp/build && make --no-print-directory -s server-test-coverage
 	@find server/cpp -name "*.profraw" | xargs rm -f
+	@cp server/cpp/build/server.info server/cpp/build/server-unit.info 2>/dev/null || true
 
 .PHONY: merge-server-coverage
 merge-server-coverage:
