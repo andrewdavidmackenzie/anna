@@ -27,15 +27,17 @@ ServerThreadList HashRingUtil::get_responsible_threads(
     const vector<Tier> &tiers, bool &succeed, unsigned &seed) {
   if (metadata) {
     succeed = true;
+    Tier tier = first_tier_with_nodes(global_hash_rings);
     return kHashRingUtil->get_responsible_threads_metadata(
-        key, global_hash_rings[Tier::MEMORY], local_hash_rings[Tier::MEMORY]);
+        key, global_hash_rings[tier], local_hash_rings[tier]);
   } else {
     ServerThreadList result;
 
     if (key_replication_map.find(key) == key_replication_map.end()) {
+      Tier tier = first_tier_with_nodes(global_hash_rings);
       kHashRingUtil->issue_replication_factor_request(
-          response_address, key, global_hash_rings[Tier::MEMORY],
-          local_hash_rings[Tier::MEMORY], pushers, seed);
+          response_address, key, global_hash_rings[tier],
+          local_hash_rings[tier], pushers, seed);
       succeed = false;
     } else {
       for (const Tier &tier : tiers) {
