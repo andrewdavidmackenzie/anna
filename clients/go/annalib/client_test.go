@@ -1499,3 +1499,137 @@ func TestPutReplicationFactorWithMock(t *testing.T) {
 		t.Errorf("unexpected local replication: %v", rep.Local)
 	}
 }
+
+func TestGetClusterTopologyWithMock(t *testing.T) {
+	topology := &metadatapb.ClusterTopology{
+		RoutingThreadCount: 2,
+		MemoryThreadCount:  4,
+		EbsThreadCount:     1,
+	}
+	topologyBytes, _ := proto.Marshal(topology)
+	lww := &kvspb.LWWValue{Timestamp: 100, Value: topologyBytes}
+	lwwBytes, _ := proto.Marshal(lww)
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "ANNA_METADATA|cluster_topology", Error: kvspb.AnnaError_NO_ERROR, Payload: lwwBytes}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "ANNA_METADATA|cluster_topology", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	result, err := client.GetClusterTopology()
+	if err != nil {
+		t.Fatalf("GetClusterTopology failed: %v", err)
+	}
+	if result.RoutingThreadCount != 2 {
+		t.Errorf("expected routing_thread_count=2, got %d", result.RoutingThreadCount)
+	}
+	if result.MemoryThreadCount != 4 {
+		t.Errorf("expected memory_thread_count=4, got %d", result.MemoryThreadCount)
+	}
+	if result.EbsThreadCount != 1 {
+		t.Errorf("expected ebs_thread_count=1, got %d", result.EbsThreadCount)
+	}
+}
+
+func TestGetMonitoringIPsWithMock(t *testing.T) {
+	stringSet := &sharedpb.StringSet{Keys: []string{"10.0.0.1", "10.0.0.2"}}
+	setBytes, _ := proto.Marshal(stringSet)
+	lww := &kvspb.LWWValue{Timestamp: 100, Value: setBytes}
+	lwwBytes, _ := proto.Marshal(lww)
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "ANNA_METADATA|monitoring_ips", Error: kvspb.AnnaError_NO_ERROR, Payload: lwwBytes}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "ANNA_METADATA|monitoring_ips", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	result, err := client.GetMonitoringIPs()
+	if err != nil {
+		t.Fatalf("GetMonitoringIPs failed: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("expected 2 IPs, got %d", len(result))
+	}
+	if result[0] != "10.0.0.1" || result[1] != "10.0.0.2" {
+		t.Errorf("unexpected IPs: %v", result)
+	}
+}
+
+func TestWrongThreadRetry(t *testing.T) {
+	// First call: routing resolves, then server returns WRONG_THREAD
+	wrongThreadResponse := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "k", Error: kvspb.AnnaError_WRONG_THREAD}},
+	}
+	wrongBytes, _ := proto.Marshal(wrongThreadResponse)
+
+	// Second call: success
+	lww := &kvspb.LWWValue{Timestamp: 100, Value: []byte("ok")}
+	lwwBytes, _ := proto.Marshal(lww)
+	okResponse := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "k", Error: kvspb.AnnaError_NO_ERROR, Payload: lwwBytes}},
+	}
+	okBytes, _ := proto.Marshal(okResponse)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "k", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	// Use a sequencing mock that returns WRONG_THREAD first, then OK
+	tp := &sequencingMockTransport{
+		routingData:   routingBytes,
+		dataResponses: [][]byte{wrongBytes, okBytes},
+	}
+	client := newTestClient(tp)
+	client.tp = tp
+
+	result, err := client.Get("k")
+	if err != nil {
+		t.Fatalf("Get with WRONG_THREAD retry failed: %v", err)
+	}
+	if result != "ok" {
+		t.Errorf("expected 'ok', got '%s'", result)
+	}
+}
+
+// sequencingMockTransport returns different data responses in sequence.
+type sequencingMockTransport struct {
+	sentMessages  []sentMsg
+	routingData   []byte
+	dataResponses [][]byte
+	dataIndex     int
+}
+
+func (m *sequencingMockTransport) sendRequest(msg []byte, addr string) error {
+	m.sentMessages = append(m.sentMessages, sentMsg{data: msg, addr: addr})
+	return nil
+}
+
+func (m *sequencingMockTransport) recvResponse(useKeyAddress bool) ([]byte, error) {
+	if useKeyAddress {
+		return m.routingData, nil
+	}
+	if m.dataIndex < len(m.dataResponses) {
+		data := m.dataResponses[m.dataIndex]
+		m.dataIndex++
+		return data, nil
+	}
+	return nil, nil
+}
+
+func (m *sequencingMockTransport) close() error { return nil }

@@ -19,6 +19,7 @@
 
 #include "kvs_client.hpp"
 #include "metadata.pb.h"
+#include "shared.pb.h"
 
 // This header (together with client_lib.cpp) is the "library" half of the
 // C++ client: it wraps KvsClientInterface with the KVS operations (get, put,
@@ -164,6 +165,18 @@ void put_replication_factor(KvsClientInterface* client,
                             const string& key,
                             unsigned memory_rep,
                             unsigned local_rep);
+
+// Retrieve cluster topology (thread counts) from the metadata key
+//   ANNA_METADATA|cluster_topology
+// and decode the ClusterTopology protobuf.
+// Returns a default-constructed ClusterTopology if the key does not exist.
+ClusterTopology get_cluster_topology(KvsClientInterface* client);
+
+// Retrieve monitoring node IP addresses from the metadata key
+//   ANNA_METADATA|monitoring_ips
+// and decode the StringSet protobuf.
+// Returns an empty vector if the key does not exist.
+vector<string> get_monitoring_ips(KvsClientInterface* client);
 
 // The anna server processes managed by start()/stop()/status().
 extern const vector<string> kProcessList;

@@ -8,11 +8,13 @@ from anna.kvs_pb2 import LWW, NO_ERROR, KeyResponse, LWWValue
 from anna.metadata_pb2 import (
     DISK,
     MEMORY,
+    ClusterTopology,
     KeyAccessData,
     KeySizeData,
     ReplicationFactor,
     ServerThreadStatistics,
 )
+from anna.shared_pb2 import StringSet
 
 
 def make_client():
@@ -338,3 +340,62 @@ class TestPutReplicationFactor:
             client.put_replication_factor("testkey", 1, 1)
         call_key = mock_put.call_args[0][0]
         assert call_key == "ANNA_METADATA|replication|testkey"
+
+
+class TestGetClusterTopology:
+    def test_decodes_topology(self):
+        client = make_client()
+
+        topology = ClusterTopology()
+        topology.routing_thread_count = 2
+        topology.memory_thread_count = 4
+        topology.ebs_thread_count = 1
+        inner = topology.SerializeToString()
+
+        with patch.object(client, 'get_bytes', return_value=inner):
+            result = client.get_cluster_topology()
+
+        assert result == {
+            'routing_thread_count': 2,
+            'memory_thread_count': 4,
+            'ebs_thread_count': 1,
+        }
+
+    def test_returns_none_when_key_missing(self):
+        client = make_client()
+        with patch.object(client, 'get_bytes', return_value=None):
+            result = client.get_cluster_topology()
+        assert result is None
+
+    def test_reads_correct_key(self):
+        client = make_client()
+        with patch.object(client, 'get_bytes', return_value=None) as mock_gb:
+            client.get_cluster_topology()
+        mock_gb.assert_called_once_with("ANNA_METADATA|cluster_topology")
+
+
+class TestGetMonitoringIps:
+    def test_decodes_ips(self):
+        client = make_client()
+
+        string_set = StringSet()
+        string_set.keys.append("10.0.0.1")
+        string_set.keys.append("10.0.0.2")
+        inner = string_set.SerializeToString()
+
+        with patch.object(client, 'get_bytes', return_value=inner):
+            result = client.get_monitoring_ips()
+
+        assert result == ["10.0.0.1", "10.0.0.2"]
+
+    def test_returns_empty_when_key_missing(self):
+        client = make_client()
+        with patch.object(client, 'get_bytes', return_value=None):
+            result = client.get_monitoring_ips()
+        assert result == []
+
+    def test_reads_correct_key(self):
+        client = make_client()
+        with patch.object(client, 'get_bytes', return_value=None) as mock_gb:
+            client.get_monitoring_ips()
+        mock_gb.assert_called_once_with("ANNA_METADATA|monitoring_ips")

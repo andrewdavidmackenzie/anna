@@ -2,8 +2,8 @@ from unittest.mock import MagicMock, patch, PropertyMock
 import pytest
 
 from anna.kvs_pb2 import (
-    LWW, SET, NO_ERROR, KeyResponse, KeyTuple, LWWValue, SetValue,
-    KeyAddressResponse,
+    LWW, SET, NO_ERROR, WRONG_THREAD, KeyResponse, KeyTuple, LWWValue,
+    SetValue, KeyAddressResponse,
 )
 from anna.lattices import LWWPairLattice, SetLattice
 
@@ -576,6 +576,110 @@ class TestPutAll:
             val = LWWPairLattice(1, b"data")
             result = client.put_all("k", val)
         assert result is False
+
+
+class TestWrongThreadRetry:
+    def test_get_retries_on_wrong_thread(self):
+        client = make_client()
+        client.address_cache["mykey"] = ["tcp://127.0.0.1:6200"]
+
+        # First response: WRONG_THREAD
+        wrong_response = KeyResponse()
+        wrong_response.response_id = "placeholder"
+        wrong_tup = wrong_response.tuples.add()
+        wrong_tup.key = "mykey"
+        wrong_tup.error = WRONG_THREAD
+
+        # Second response: success
+        lww_val = LWWValue()
+        lww_val.timestamp = 1
+        lww_val.value = b"success"
+
+        ok_response = KeyResponse()
+        ok_response.response_id = "placeholder"
+        ok_tup = ok_response.tuples.add()
+        ok_tup.key = "mykey"
+        ok_tup.lattice_type = LWW
+        ok_tup.payload = lww_val.SerializeToString()
+        ok_tup.error = NO_ERROR
+
+        mock_send_sock = MagicMock()
+        client.pusher_cache = MagicMock()
+        client.pusher_cache.get.return_value = mock_send_sock
+
+        call_count = [0]
+
+        def get_worker_side_effect(key, pick=True):
+            # Re-populate cache on retry (simulates routing query)
+            client.address_cache[key] = ["tcp://127.0.0.1:6200"]
+            return "tcp://127.0.0.1:6200" if pick else \
+                ["tcp://127.0.0.1:6200"]
+
+        with patch("anna.client.send_request"), \
+             patch("anna.client.recv_response") as mock_recv, \
+             patch.object(client, '_get_worker_address',
+                          side_effect=get_worker_side_effect):
+            def recv_side_effect(req_ids, sock, cls):
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    wrong_response.response_id = req_ids[0]
+                    return [wrong_response]
+                ok_response.response_id = req_ids[0]
+                return [ok_response]
+            mock_recv.side_effect = recv_side_effect
+
+            result = client.get("mykey")
+
+        assert "mykey" in result
+        assert isinstance(result["mykey"], LWWPairLattice)
+        assert result["mykey"].reveal() == b"success"
+        assert call_count[0] == 2
+
+    def test_put_retries_on_wrong_thread(self):
+        client = make_client()
+        client.address_cache["mykey"] = ["tcp://127.0.0.1:6200"]
+
+        wrong_response = KeyResponse()
+        wrong_response.response_id = "placeholder"
+        wrong_tup = wrong_response.tuples.add()
+        wrong_tup.key = "mykey"
+        wrong_tup.error = WRONG_THREAD
+
+        ok_response = KeyResponse()
+        ok_response.response_id = "placeholder"
+        ok_tup = ok_response.tuples.add()
+        ok_tup.key = "mykey"
+        ok_tup.error = NO_ERROR
+
+        mock_send_sock = MagicMock()
+        client.pusher_cache = MagicMock()
+        client.pusher_cache.get.return_value = mock_send_sock
+
+        call_count = [0]
+
+        def get_worker_side_effect(key, pick=True):
+            client.address_cache[key] = ["tcp://127.0.0.1:6200"]
+            return "tcp://127.0.0.1:6200" if pick else \
+                ["tcp://127.0.0.1:6200"]
+
+        with patch("anna.client.send_request"), \
+             patch("anna.client.recv_response") as mock_recv, \
+             patch.object(client, '_get_worker_address',
+                          side_effect=get_worker_side_effect):
+            def recv_side_effect(req_ids, sock, cls):
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    wrong_response.response_id = req_ids[0]
+                    return [wrong_response]
+                ok_response.response_id = req_ids[0]
+                return [ok_response]
+            mock_recv.side_effect = recv_side_effect
+
+            val = LWWPairLattice(1, b"data")
+            result = client.put("mykey", val)
+
+        assert result["mykey"] is True
+        assert call_count[0] == 2
 
 
 class TestResponseAddress:

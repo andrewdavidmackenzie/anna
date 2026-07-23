@@ -334,45 +334,60 @@ func parseSetPayload(payload []byte) ([]string, error) {
 	return values, nil
 }
 
+const maxRetries = 5
+
 func (c *KVSClient) sendDataRequest(key string, reqType kvspb.RequestType, latticeType kvspb.LatticeType, payload []byte) (*kvspb.KeyResponse, error) {
-	worker, ok := c.getWorkerAddress(key)
-	if !ok {
-		return nil, &KVSError{Message: fmt.Sprintf("no worker address for key %s", key)}
-	}
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		worker, ok := c.getWorkerAddress(key)
+		if !ok {
+			return nil, &KVSError{Message: fmt.Sprintf("no worker address for key %s", key)}
+		}
 
-	var cacheSize uint32
-	if cached, ok := c.keyAddressCache[key]; ok {
-		cacheSize = uint32(len(cached))
-	}
+		var cacheSize uint32
+		if cached, ok := c.keyAddressCache[key]; ok {
+			cacheSize = uint32(len(cached))
+		}
 
-	encoded, err := buildDataRequest(c.getRequestID(), c.ut.ResponseConnectAddress(), key, reqType, latticeType, payload, cacheSize)
-	if err != nil {
-		return nil, &KVSError{Message: fmt.Sprintf("failed to encode request: %v", err)}
-	}
+		encoded, err := buildDataRequest(c.getRequestID(), c.ut.ResponseConnectAddress(), key, reqType, latticeType, payload, cacheSize)
+		if err != nil {
+			return nil, &KVSError{Message: fmt.Sprintf("failed to encode request: %v", err)}
+		}
 
-	if err := c.tp.sendRequest(encoded, worker); err != nil {
-		return nil, err
-	}
+		if err := c.tp.sendRequest(encoded, worker); err != nil {
+			return nil, err
+		}
 
-	data, err := c.tp.recvResponse(false)
-	if err != nil {
-		return nil, &KVSError{Message: fmt.Sprintf("failed to receive response: %v", err)}
-	}
-	if data == nil {
-		delete(c.keyAddressCache, key)
-		return nil, &KVSError{Message: fmt.Sprintf("%s: request timed out", key)}
-	}
+		data, err := c.tp.recvResponse(false)
+		if err != nil {
+			return nil, &KVSError{Message: fmt.Sprintf("failed to receive response: %v", err)}
+		}
+		if data == nil {
+			delete(c.keyAddressCache, key)
+			if attempt < maxRetries {
+				continue
+			}
+			return nil, &KVSError{Message: fmt.Sprintf("%s: request timed out", key)}
+		}
 
-	response, err := parseDataResponse(data)
-	if err != nil {
-		return nil, &KVSError{Message: err.Error()}
-	}
+		response, err := parseDataResponse(data)
+		if err != nil {
+			return nil, &KVSError{Message: err.Error()}
+		}
 
-	if len(response.Tuples) > 0 && response.Tuples[0].Invalidate {
-		delete(c.keyAddressCache, key)
-	}
+		if len(response.Tuples) > 0 {
+			t := response.Tuples[0]
+			if t.Error == kvspb.AnnaError_WRONG_THREAD && attempt < maxRetries {
+				delete(c.keyAddressCache, key)
+				continue
+			}
+			if t.Invalidate {
+				delete(c.keyAddressCache, key)
+			}
+		}
 
-	return response, nil
+		return response, nil
+	}
+	return nil, &KVSError{Message: fmt.Sprintf("%s: max retries exceeded", key)}
 }
 
 func generateTimestamp() uint64 {
@@ -829,6 +844,36 @@ func (c *KVSClient) PutReplicationFactor(key string, memoryRep, localRep uint32)
 
 	_, err = validateResponse(response, "PUT_REPLICATION")
 	return err
+}
+
+// GetClusterTopology retrieves cluster topology (thread counts) from the
+// metadata key ANNA_METADATA|cluster_topology and decodes the ClusterTopology
+// protobuf. Returns nil if the key does not exist.
+func (c *KVSClient) GetClusterTopology() (*metadatapb.ClusterTopology, error) {
+	bytes, err := c.GetBytes("ANNA_METADATA|cluster_topology")
+	if err != nil {
+		return nil, err
+	}
+	var topology metadatapb.ClusterTopology
+	if err := proto.Unmarshal(bytes, &topology); err != nil {
+		return nil, &KVSError{Message: fmt.Sprintf("failed to decode ClusterTopology: %v", err)}
+	}
+	return &topology, nil
+}
+
+// GetMonitoringIPs retrieves monitoring node IP addresses from the metadata
+// key ANNA_METADATA|monitoring_ips and decodes the StringSet protobuf.
+// Returns an empty slice if the key does not exist.
+func (c *KVSClient) GetMonitoringIPs() ([]string, error) {
+	bytes, err := c.GetBytes("ANNA_METADATA|monitoring_ips")
+	if err != nil {
+		return []string{}, nil
+	}
+	var stringSet sharedpb.StringSet
+	if err := proto.Unmarshal(bytes, &stringSet); err != nil {
+		return nil, &KVSError{Message: fmt.Sprintf("failed to decode monitoring IPs: %v", err)}
+	}
+	return stringSet.Keys, nil
 }
 
 // Delete removes a key by writing an empty LWW value with a dominating timestamp.

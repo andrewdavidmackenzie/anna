@@ -443,6 +443,28 @@ void put_replication_factor(KvsClientInterface* client,
   put(client, meta_key, payload);
 }
 
+ClusterTopology get_cluster_topology(KvsClientInterface* client) {
+  string key = kMetadataIdentifier + kMetadataDelimiter +
+               string("cluster_topology");
+  string bytes = get_bytes(client, key);
+
+  ClusterTopology topology;
+  topology.ParseFromString(bytes);
+  return topology;
+}
+
+vector<string> get_monitoring_ips(KvsClientInterface* client) {
+  string key = kMetadataIdentifier + kMetadataDelimiter +
+               string("monitoring_ips");
+  string bytes = get_bytes(client, key);
+
+  shared::StringSet string_set;
+  if (!string_set.ParseFromString(bytes)) {
+    return {};
+  }
+  return {string_set.keys().begin(), string_set.keys().end()};
+}
+
 namespace {
 
 vector<int> pids_from_name(const string& name) {

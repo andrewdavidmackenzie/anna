@@ -67,6 +67,7 @@ See [autoscaling.md](autoscaling.md) for the full operator's guide.
 | GET_CAUSAL / PUT_CAUSAL    | Yes    |
 | GET_SINGLE_CAUSAL / PUT_SINGLE_CAUSAL | Yes |
 | GET_PRIORITY / PUT_PRIORITY | Yes   |
+| GET_BYTES (raw LWW value)  | Yes    |
 | Multi-key GET (get_multi)  | Yes    |
 | Address cache invalidation | Yes    |
 | WRONG_THREAD retry         | Yes    |
@@ -86,14 +87,23 @@ See [autoscaling.md](autoscaling.md) for the full operator's guide.
 
 | Feature                    | Tested |
 |----------------------------|--------|
-| GET / PUT (LWW)            | Yes    |
+| GET / PUT / DELETE (LWW)   | Yes    |
+| GET_SET / PUT_SET           | Yes    |
+| GET_ORDERED_SET / PUT_ORDERED_SET | Yes |
+| GET_CAUSAL / PUT_CAUSAL    | Yes    |
+| GET_SINGLE_CAUSAL / PUT_SINGLE_CAUSAL | Yes |
+| GET_PRIORITY / PUT_PRIORITY | Yes   |
+| GET_BYTES (raw LWW value)  | Yes    |
 | Address cache invalidation | Yes    |
 | WRONG_THREAD auto-retry    | Yes    |
 | Timeout (generate_bad_response) | Yes |
+| Process management (start/stop/status) | Yes |
 | Value change subscription (watch/recv/get_cached) | Yes |
 | Latency feedback (LatencyReporter) | Yes |
 | Monitoring stats helpers (get_storage_stats etc.) | Yes |
 | Replication factor management (put_replication_factor) | Yes |
+| Cluster topology discovery (get_cluster_topology) | Yes |
+| Monitoring IP discovery (get_monitoring_ips) | Yes |
 
 ## Go Client (`clients/go`)
 
@@ -102,14 +112,20 @@ See [autoscaling.md](autoscaling.md) for the full operator's guide.
 | GET / PUT / DELETE (LWW)   | Yes    |
 | GET_SET / PUT_SET           | Yes    |
 | GET_ORDERED_SET / PUT_ORDERED_SET | Yes |
+| GET_CAUSAL / PUT_CAUSAL    | Yes    |
 | GET_SINGLE_CAUSAL / PUT_SINGLE_CAUSAL | Yes |
 | GET_PRIORITY / PUT_PRIORITY | Yes   |
+| GET_BYTES (raw LWW value)  | Yes    |
 | Error code mapping         | Yes    |
-| Timeout error code         | Yes    |
+| WRONG_THREAD auto-retry    | Yes    |
+| Timeout with retry         | Yes    |
+| Process management (start/stop/status) | Yes |
 | Value change subscription (watch/recv/get_cached) | Yes |
 | Latency feedback (LatencyReporter) | Yes |
 | Monitoring stats helpers (get_storage_stats etc.) | Yes |
 | Replication factor management (put_replication_factor) | Yes |
+| Cluster topology discovery (GetClusterTopology) | Yes |
+| Monitoring IP discovery (GetMonitoringIPs) | Yes |
 
 ## Python Client (`clients/python`)
 
@@ -120,9 +136,13 @@ See [autoscaling.md](autoscaling.md) for the full operator's guide.
 | GET_ORDERED_SET / PUT_ORDERED_SET | Yes |
 | GET_SINGLE_CAUSAL / PUT_SINGLE_CAUSAL | Yes |
 | GET_PRIORITY / PUT_PRIORITY | Yes   |
+| GET_BYTES (raw LWW value)  | Yes    |
+| WRONG_THREAD auto-retry    | Yes    |
 | Timeout (poll-based)       | Yes    |
 | Process management (start/stop) | Yes |
 | Value change subscription (watch/recv/get_cached) | Yes |
 | Latency feedback (LatencyReporter) | Yes |
 | Monitoring stats helpers (get_storage_stats etc.) | Yes |
 | Replication factor management (put_replication_factor) | Yes |
+| Cluster topology discovery (get_cluster_topology) | Yes |
+| Monitoring IP discovery (get_monitoring_ips) | Yes |
