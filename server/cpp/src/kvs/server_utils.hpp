@@ -722,7 +722,9 @@ class DiskPrioritySerializer : public Serializer {
 public:
   DiskPrioritySerializer(unsigned tid, string ebs_root) : tid_(tid) {
     ebs_root_ = ebs_root;
-    ebs_root_ = ebs_root;
+    if (ebs_root_.back() != '/') {
+      ebs_root_ += "/";
+    }
   }
 
   string get(const Key &key, kvs::AnnaError &error) override {
@@ -748,29 +750,31 @@ public:
     kvs::PriorityValue input_value;
     input_value.ParseFromString(serialized);
 
-    int fd = open(fname(key).c_str(), O_RDWR | O_CREAT);
-    if (fd == -1) {
-      std::cerr << "Failed to open file" << std::endl;
-      return 0;
-    }
-
     kvs::PriorityValue original_value;
-    if (!original_value.ParseFromFileDescriptor(fd) ||
-        input_value.priority() < original_value.priority()) {
-      // resize the file to 0
-      ftruncate(fd, 0);
-      // ftruncate does not change the fd's file offset, so we set it to 0
-      lseek(fd, 0, SEEK_SET);
-      if (!input_value.SerializeToFileDescriptor(fd))
-        std::cerr << "Failed to write payload" << std::endl;
+    std::fstream input(fname(key), std::ios::in | std::ios::binary);
+
+    if (!input) {
+      std::fstream output(fname(key),
+                          std::ios::out | std::ios::trunc | std::ios::binary);
+      if (!input_value.SerializeToOstream(&output)) {
+        std::cerr << "Failed to write payload." << std::endl;
+      }
+      return output.tellp();
+    } else if (!original_value.ParseFromIstream(&input)) {
+      std::cerr << "Failed to parse payload." << std::endl;
+      return 0;
+    } else {
+      if (input_value.priority() <= original_value.priority()) {
+        std::fstream output(fname(key),
+                            std::ios::out | std::ios::trunc | std::ios::binary);
+        if (!input_value.SerializeToOstream(&output)) {
+          std::cerr << "Failed to write payload" << std::endl;
+        }
+        return output.tellp();
+      } else {
+        return input.tellg();
+      }
     }
-
-    unsigned pos = lseek(fd, 0, SEEK_CUR);
-
-    if (close(fd) == -1)
-      std::cerr << "Problem closing file" << std::endl;
-
-    return pos;
   }
 
   void remove(const Key &key) override {
