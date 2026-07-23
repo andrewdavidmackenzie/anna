@@ -1255,7 +1255,8 @@ async fn disk_tier_basic() {
 
     let mut cluster = MultiNodeCluster::new(18015);
 
-    // Start full cluster with replication_ebs=1 so routing assigns to disk tier
+    // Start full cluster with replication_ebs=1 so routing knows about disk tier.
+    // With both memory and disk replication, some keys hash to the disk node.
     cluster.start_full_node_with_config(NodeConfig {
         replication_ebs: 1,
         base_offset: 18015,
@@ -1268,15 +1269,16 @@ async fn disk_tier_basic() {
     let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(71)).await;
 
-    // PUT and GET data — routing may direct to either memory or disk node
-    for i in 0..5 {
+    // PUT many keys with varied prefixes — with consistent hashing, some
+    // will map to the disk node, exercising disk serializers.
+    for i in 0..20 {
         client
             .put(&format!("disk_key_{}", i), &format!("disk_val_{}", i))
             .await
             .unwrap_or_else(|e| panic!("PUT disk_key_{} failed: {}", i, e));
     }
 
-    for i in 0..5 {
+    for i in 0..20 {
         let key = format!("disk_key_{}", i);
         let val = client
             .get(&key)
@@ -1854,7 +1856,9 @@ async fn management_node_integration() {
                         if func_count == 0 && !response_addr.is_empty() {
                             use annalib::proto::shared::StringSet;
                             use prost::Message;
-                            let cache_ips = StringSet { keys: vec![] };
+                            let cache_ips = StringSet {
+                                keys: vec!["10.0.0.99".to_string()],
+                            };
                             let mut push = zeromq::PushSocket::new();
                             push.connect(&response_addr).await
                                 .expect("Failed to connect to KVS response addr");

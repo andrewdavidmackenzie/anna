@@ -24,12 +24,18 @@ async fn consistency_all_lattice_types() {
     let mut client = KVSClient::new(&config, Some(30)).await;
 
     // === LWW: last writer wins ===
-    client.put("lww_key", "first").await.expect("PUT first failed");
+    client
+        .put("lww_key", "first")
+        .await
+        .expect("PUT first failed");
     let val = client.get("lww_key").await.expect("GET first failed");
     assert_eq!(val, "first");
 
     std::thread::sleep(std::time::Duration::from_millis(10));
-    client.put("lww_key", "second").await.expect("PUT second failed");
+    client
+        .put("lww_key", "second")
+        .await
+        .expect("PUT second failed");
     let val = client.get("lww_key").await.expect("GET second failed");
     assert_eq!(val, "second", "LWW: later timestamp should win");
 
