@@ -227,8 +227,10 @@ impl KVSClient {
                 self.key_address_cache.remove(key);
             }
         }
-        let Transport::Zmq { socket_cache, .. } = &mut self.transport;
-        socket_cache.remove(addr);
+        #[allow(irrefutable_let_patterns)]
+        if let Transport::Zmq { socket_cache, .. } = &mut self.transport {
+            socket_cache.remove(addr);
+        }
     }
 
     async fn query_routing(&mut self, key: &str) -> Vec<Address> {

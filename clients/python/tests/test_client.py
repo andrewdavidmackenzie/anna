@@ -608,8 +608,15 @@ class TestWrongThreadRetry:
         client.pusher_cache.get.return_value = mock_send_sock
 
         call_count = [0]
+        lookup_count = [0]
 
         def get_worker_side_effect(key, pick=True):
+            lookup_count[0] += 1
+            if lookup_count[0] == 2:
+                # On the second lookup the cache must have been
+                # invalidated by the WRONG_THREAD handler.
+                assert key not in client.address_cache, \
+                    "expected address_cache to be invalidated before retry"
             # Re-populate cache on retry (simulates routing query)
             client.address_cache[key] = ["tcp://127.0.0.1:6200"]
             return "tcp://127.0.0.1:6200" if pick else \
@@ -634,6 +641,7 @@ class TestWrongThreadRetry:
         assert isinstance(result["mykey"], LWWPairLattice)
         assert result["mykey"].reveal() == b"success"
         assert call_count[0] == 2
+        assert lookup_count[0] == 2
 
     def test_put_retries_on_wrong_thread(self):
         client = make_client()
@@ -656,8 +664,15 @@ class TestWrongThreadRetry:
         client.pusher_cache.get.return_value = mock_send_sock
 
         call_count = [0]
+        lookup_count = [0]
 
         def get_worker_side_effect(key, pick=True):
+            lookup_count[0] += 1
+            if lookup_count[0] == 2:
+                # On the second lookup the cache must have been
+                # invalidated by the WRONG_THREAD handler.
+                assert key not in client.address_cache, \
+                    "expected address_cache to be invalidated before retry"
             client.address_cache[key] = ["tcp://127.0.0.1:6200"]
             return "tcp://127.0.0.1:6200" if pick else \
                 ["tcp://127.0.0.1:6200"]
@@ -680,6 +695,7 @@ class TestWrongThreadRetry:
 
         assert result["mykey"] is True
         assert call_count[0] == 2
+        assert lookup_count[0] == 2
 
 
 class TestGetMulti:
