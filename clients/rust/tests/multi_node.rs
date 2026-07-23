@@ -1866,7 +1866,7 @@ async fn management_node_integration() {
                             push.send(zeromq::ZmqMessage::from(cache_ips.encode_to_vec()))
                                 .await
                                 .expect("Failed to send cache IPs to KVS");
-                            eprintln!("Mock mgmt: sent empty cache IP list to {}", response_addr);
+                            eprintln!("Mock mgmt: sent cache IP list to {}", response_addr);
                         }
                         func_count += 1;
                     }
