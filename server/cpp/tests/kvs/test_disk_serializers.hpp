@@ -66,6 +66,16 @@ TEST_F(DiskSerializerTest, LWWRemove) {
   EXPECT_EQ(error, kvs::AnnaError::KEY_DNE);
 }
 
+TEST_F(DiskSerializerTest, LWWRemoveNonexistent) {
+  DiskLWWSerializer serializer(tid_, ebs_root_);
+  // remove() returns void — no way to check failure directly.
+  // Verify it doesn't crash and GET still returns KEY_DNE.
+  serializer.remove("does_not_exist");
+  kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
+  serializer.get("does_not_exist", error);
+  EXPECT_EQ(error, kvs::AnnaError::KEY_DNE);
+}
+
 TEST_F(DiskSerializerTest, LWWLastWriterWins) {
   DiskLWWSerializer serializer(tid_, ebs_root_);
 
