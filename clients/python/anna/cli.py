@@ -7,7 +7,7 @@ from .process_mgmt import start, stop, status, PROCESS_LIST
 def cli_usage():
     return ("Valid commands are GET, GET_SET, GET_ORDERED_SET, GET_CAUSAL, "
             "GET_SINGLE_CAUSAL, GET_PRIORITY, PUT, PUT_SET, PUT_ORDERED_SET, "
-            "PUT_CAUSAL, PUT_SINGLE_CAUSAL, PUT_PRIORITY, "
+            "PUT_CAUSAL, PUT_SINGLE_CAUSAL, PUT_PRIORITY, DELETE, "
             "START, STOP, STATUS, HELP and EXIT")
 
 

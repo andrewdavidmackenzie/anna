@@ -70,8 +70,8 @@ void print_priority_value(const annalib::PriorityResult& result) {
 string cli_usage() {
   return "Valid commands are GET, GET_SET, GET_ORDERED_SET, GET_CAUSAL, "
          "GET_SINGLE_CAUSAL, GET_PRIORITY, PUT, PUT_SET, PUT_ORDERED_SET, "
-         "PUT_CAUSAL, PUT_SINGLE_CAUSAL, PUT_PRIORITY, START, STOP, STATUS, "
-         "HELP and EXIT";
+         "PUT_CAUSAL, PUT_SINGLE_CAUSAL, PUT_PRIORITY, DELETE, START, STOP, "
+         "STATUS, HELP and EXIT";
 }
 
 void execute_cli_command(KvsClientInterface* client, const string& config_file,
