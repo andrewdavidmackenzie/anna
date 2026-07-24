@@ -85,6 +85,32 @@ fn status_works() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn status_single_component() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("anna")?;
+
+    cmd.args(["status", "kvs"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("anna-kvs"));
+    cmd.assert()
+        .stdout(predicate::str::contains("anna-monitor").not());
+    cmd.assert()
+        .stdout(predicate::str::contains("anna-route").not());
+
+    Ok(())
+}
+
+#[test]
+fn status_invalid_component() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("anna")?;
+
+    cmd.args(["status", "bogus"]);
+    cmd.assert().failure().code(2);
+
+    Ok(())
+}
+
+#[test]
 fn stop_kills_zero() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("anna")?;
 
@@ -92,6 +118,31 @@ fn stop_kills_zero() -> Result<(), Box<dyn std::error::Error>> {
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("0 anna processes"));
+
+    Ok(())
+}
+
+#[test]
+fn stop_single_component_kills_zero() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("anna")?;
+
+    cmd.args(["stop", "kvs"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("0 anna processes"));
+
+    Ok(())
+}
+
+#[test]
+fn start_with_component_requires_server_config() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("anna")?;
+
+    cmd.args(["start", "kvs"]);
+    cmd.assert()
+        .failure()
+        .code(1)
+        .stderr(predicate::str::contains("--server-config"));
 
     Ok(())
 }

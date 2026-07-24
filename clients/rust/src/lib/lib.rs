@@ -20,13 +20,17 @@
 //! # Process Management
 //!
 //! ```rust
-//! // Check status (no server needed)
-//! let status = annalib::status()?;
+//! // Check status of all components (no server needed)
+//! let status = annalib::status(&[])?;
 //! for (name, pids) in &status {
 //!     if pids.is_empty() {
 //!         println!("{} is not running", name);
 //!     }
 //! }
+//!
+//! // Check status of a single component
+//! use annalib::Component;
+//! let status = annalib::status(&[Component::Kvs])?;
 //! # Ok::<(), annalib::Error>(())
 //! ```
 
@@ -34,6 +38,7 @@
 use nix::sys::signal::kill;
 #[cfg(unix)]
 use nix::unistd::Pid;
+use std::fmt;
 use std::path::Path;
 use std::process::Command;
 use sysinfo::System;
@@ -63,13 +68,58 @@ pub mod value_change_subscriber;
 const ANNA_MONITOR_PROCESS_NAME: &str = "anna-monitor";
 const ANNA_ROUTE_PROCESS_NAME: &str = "anna-route";
 const ANNA_KVS_PROCESS_NAME: &str = "anna-kvs";
-const PROCESS_LIST: [&str; 3] = [
-    ANNA_MONITOR_PROCESS_NAME,
-    ANNA_ROUTE_PROCESS_NAME,
-    ANNA_KVS_PROCESS_NAME,
-];
 
 pub use errors::{Error, Result};
+
+/// An anna server component that can be started, stopped, or queried for status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Component {
+    /// The monitoring daemon (`anna-monitor`).
+    Monitor,
+    /// The routing tier (`anna-route`).
+    Route,
+    /// The key-value store server (`anna-kvs`).
+    Kvs,
+}
+
+/// All components in their canonical start order.
+pub const ALL_COMPONENTS: [Component; 3] = [Component::Monitor, Component::Route, Component::Kvs];
+
+/// The short names accepted on the command line (in the same order as [`ALL_COMPONENTS`]).
+pub const COMPONENT_NAMES: [&str; 3] = ["monitor", "route", "kvs"];
+
+impl Component {
+    /// Return the binary/process name for this component.
+    pub fn process_name(self) -> &'static str {
+        match self {
+            Component::Monitor => ANNA_MONITOR_PROCESS_NAME,
+            Component::Route => ANNA_ROUTE_PROCESS_NAME,
+            Component::Kvs => ANNA_KVS_PROCESS_NAME,
+        }
+    }
+
+    /// Parse a short name (`kvs`, `monitor`, `route`) into a [`Component`].
+    ///
+    /// Returns `None` if the name is not recognized.
+    pub fn from_name(name: &str) -> Option<Component> {
+        match name.to_ascii_lowercase().as_str() {
+            "monitor" => Some(Component::Monitor),
+            "route" => Some(Component::Route),
+            "kvs" => Some(Component::Kvs),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for Component {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Component::Monitor => write!(f, "monitor"),
+            Component::Route => write!(f, "route"),
+            Component::Kvs => write!(f, "kvs"),
+        }
+    }
+}
 
 /*
    Gather a list of pids that are running for a process using the process name
@@ -81,21 +131,30 @@ fn pids_from_name(name: &str) -> Vec<i32> {
         .collect()
 }
 
-/// Start the anna server processes (`anna-monitor`, `anna-route`, `anna-kvs`).
+/// Start the given anna server components (or all if the slice is empty).
 ///
-/// Returns the number of processes started. Fails if any process is already running.
+/// Returns the number of processes started. Fails if any of the requested
+/// processes is already running.
 ///
 /// ```rust
 /// use std::path::Path;
+/// use annalib::Component;
 /// // Requires anna-monitor, anna-route, anna-kvs binaries in PATH
-/// if let Ok(count) = annalib::start(Path::new("anna-config.yml")) {
+/// if let Ok(count) = annalib::start(Path::new("anna-config.yml"), &[]) {
 ///     println!("{} processes started", count);
-///     annalib::stop().ok();
+///     annalib::stop(&[]).ok();
 /// }
 /// ```
-pub fn start(config_file_path: &Path) -> Result<usize> {
+pub fn start(config_file_path: &Path, components: &[Component]) -> Result<usize> {
+    let targets = if components.is_empty() {
+        &ALL_COMPONENTS[..]
+    } else {
+        components
+    };
+
     let mut process_count = 0;
-    for process_name in PROCESS_LIST.iter() {
+    for component in targets {
+        let process_name = component.process_name();
         let pids = pids_from_name(process_name);
         if !pids.is_empty() {
             return Err(Error::Process(format!(
@@ -119,12 +178,13 @@ pub fn start(config_file_path: &Path) -> Result<usize> {
     Ok(process_count)
 }
 
-/// Get the running status of each anna server process.
+/// Get the running status of the given anna server components (or all if the
+/// slice is empty).
 ///
 /// Returns a list of `(process_name, pids)` tuples.
 ///
 /// ```rust
-/// let status = annalib::status()?;
+/// let status = annalib::status(&[])?;
 /// for (name, pids) in &status {
 ///     if pids.is_empty() {
 ///         println!("{} is not running", name);
@@ -134,10 +194,17 @@ pub fn start(config_file_path: &Path) -> Result<usize> {
 /// }
 /// # Ok::<(), annalib::Error>(())
 /// ```
-pub fn status() -> Result<Vec<(String, Vec<i32>)>> {
+pub fn status(components: &[Component]) -> Result<Vec<(String, Vec<i32>)>> {
+    let targets = if components.is_empty() {
+        &ALL_COMPONENTS[..]
+    } else {
+        components
+    };
+
     let mut status = vec![];
 
-    for process_name in PROCESS_LIST.iter() {
+    for component in targets {
+        let process_name = component.process_name();
         let pids = pids_from_name(process_name);
         status.push((process_name.to_string(), pids));
     }
@@ -145,19 +212,27 @@ pub fn status() -> Result<Vec<(String, Vec<i32>)>> {
     Ok(status)
 }
 
-/// Stop all running anna server processes via SIGTERM.
+/// Stop the given anna server components via SIGTERM (or all if the slice is
+/// empty).
 ///
 /// Returns the number of processes terminated.
 ///
 /// ```rust
-/// let count = annalib::stop()?;
+/// let count = annalib::stop(&[])?;
 /// assert_eq!(count, 0); // no anna processes running during test
 /// # Ok::<(), annalib::Error>(())
 /// ```
 #[cfg(unix)]
-pub fn stop() -> Result<usize> {
+pub fn stop(components: &[Component]) -> Result<usize> {
+    let targets = if components.is_empty() {
+        &ALL_COMPONENTS[..]
+    } else {
+        components
+    };
+
     let mut kill_count: usize = 0;
-    for process_name in PROCESS_LIST.iter() {
+    for component in targets {
+        let process_name = component.process_name();
         for pid in pids_from_name(process_name) {
             if kill(Pid::from_raw(pid), Some(nix::sys::signal::Signal::SIGTERM)).is_ok() {
                 kill_count += 1;
@@ -172,20 +247,27 @@ pub fn stop() -> Result<usize> {
 ///
 /// It always returns `Ok(0)`.
 #[cfg(windows)]
-pub fn stop() -> Result<usize> {
+pub fn stop(_components: &[Component]) -> Result<usize> {
     Ok(0)
 }
 
 #[cfg(test)]
 mod test {
+    use super::*;
+
     #[test]
     fn no_such_process_to_stop() {
-        assert_eq!(super::stop().expect("stop failed"), 0);
+        assert_eq!(stop(&[]).expect("stop failed"), 0);
+    }
+
+    #[test]
+    fn stop_single_component() {
+        assert_eq!(stop(&[Component::Kvs]).expect("stop failed"), 0);
     }
 
     #[test]
     fn status_with_nothing_running() {
-        let status = super::status().expect("status failed");
+        let status = status(&[]).expect("status failed");
         assert_eq!(status.len(), 3);
         for (name, pids) in &status {
             assert!(
@@ -198,8 +280,15 @@ mod test {
     }
 
     #[test]
+    fn status_single_component() {
+        let status = status(&[Component::Kvs]).expect("status failed");
+        assert_eq!(status.len(), 1);
+        assert_eq!(status[0].0, "anna-kvs");
+    }
+
+    #[test]
     fn status_returns_process_names() {
-        let status = super::status().expect("status failed");
+        let status = status(&[]).expect("status failed");
         let names: Vec<&str> = status.iter().map(|(n, _)| n.as_str()).collect();
         assert!(names.contains(&"anna-monitor"));
         assert!(names.contains(&"anna-route"));
@@ -208,7 +297,30 @@ mod test {
 
     #[test]
     fn pids_from_name_nonexistent() {
-        let pids = super::pids_from_name("nonexistent_process_xyz_12345");
+        let pids = pids_from_name("nonexistent_process_xyz_12345");
         assert!(pids.is_empty());
+    }
+
+    #[test]
+    fn component_from_name() {
+        assert_eq!(Component::from_name("kvs"), Some(Component::Kvs));
+        assert_eq!(Component::from_name("monitor"), Some(Component::Monitor));
+        assert_eq!(Component::from_name("route"), Some(Component::Route));
+        assert_eq!(Component::from_name("KVS"), Some(Component::Kvs));
+        assert_eq!(Component::from_name("unknown"), None);
+    }
+
+    #[test]
+    fn component_process_name() {
+        assert_eq!(Component::Kvs.process_name(), "anna-kvs");
+        assert_eq!(Component::Monitor.process_name(), "anna-monitor");
+        assert_eq!(Component::Route.process_name(), "anna-route");
+    }
+
+    #[test]
+    fn component_display() {
+        assert_eq!(format!("{}", Component::Kvs), "kvs");
+        assert_eq!(format!("{}", Component::Monitor), "monitor");
+        assert_eq!(format!("{}", Component::Route), "route");
     }
 }
