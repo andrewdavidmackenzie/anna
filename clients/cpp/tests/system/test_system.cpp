@@ -15,9 +15,8 @@ protected:
 
     const char* routing_ip = std::getenv("ANNA_ROUTING_IP");
     config.ip = "127.0.0.1";
-
-    std::string rip = routing_ip ? routing_ip : "127.0.0.1";
-    config.routing_threads.push_back(UserRoutingThread(rip, 0));
+    config.routing_ips.push_back(routing_ip ? routing_ip : "127.0.0.1");
+    config.routing_thread_count = 1;
 
     return config;
   }
@@ -33,8 +32,7 @@ TEST_F(SystemTest, BasicPutGet) {
   string val = "test_value";
 
   // 1. Put
-  kvs::KeyResponse resp = annalib::put(client.get(), key, val);
-  ASSERT_EQ(resp.error(), kvs::AnnaError::NO_ERROR);
+  ASSERT_TRUE(annalib::put(client.get(), key, val).succeeded());
 
   // 2. Get
   string result = annalib::get(client.get(), key);
@@ -51,8 +49,7 @@ TEST_F(SystemTest, PutSetGetSet) {
   set<string> values = {"a", "b", "c"};
 
   // 1. Put set
-  kvs::KeyResponse resp = annalib::put_set(client.get(), key, values);
-  ASSERT_EQ(resp.error(), kvs::AnnaError::NO_ERROR);
+  ASSERT_TRUE(annalib::put_set(client.get(), key, values).succeeded());
 
   // 2. Get set
   set<string> result = annalib::get_set(client.get(), key);
@@ -69,8 +66,7 @@ TEST_F(SystemTest, OrderedSetPutGet) {
   set<string> values = {"alpha", "beta", "gamma"};
 
   // 1. Put ordered set
-  kvs::KeyResponse resp = annalib::put_ordered_set(client.get(), key, values);
-  ASSERT_EQ(resp.error(), kvs::AnnaError::NO_ERROR);
+  ASSERT_TRUE(annalib::put_ordered_set(client.get(), key, values).succeeded());
 
   // 2. Get ordered set
   vector<string> result = annalib::get_ordered_set(client.get(), key);
@@ -87,9 +83,7 @@ TEST_F(SystemTest, SingleCausalPutGet) {
   string val = "sc_hello";
 
   // 1. Put single causal
-  kvs::KeyResponse resp =
-      annalib::put_single_causal(client.get(), key, val);
-  ASSERT_EQ(resp.error(), kvs::AnnaError::NO_ERROR);
+  ASSERT_TRUE(annalib::put_single_causal(client.get(), key, val).succeeded());
 
   // 2. Get single causal
   annalib::SingleCausalValue result =
@@ -116,8 +110,7 @@ TEST_F(SystemTest, MultiCausalPutGet) {
   string val = "mc_hello";
 
   // 1. Put causal
-  kvs::KeyResponse resp = annalib::put_causal(client.get(), key, val);
-  ASSERT_EQ(resp.error(), kvs::AnnaError::NO_ERROR);
+  ASSERT_TRUE(annalib::put_causal(client.get(), key, val).succeeded());
 
   // 2. Get causal
   annalib::CausalValue result = annalib::get_causal(client.get(), key);
@@ -135,9 +128,7 @@ TEST_F(SystemTest, PriorityPutGet) {
   string val = "important";
 
   // 1. Put priority
-  kvs::KeyResponse resp =
-      annalib::put_priority(client.get(), key, priority, val);
-  ASSERT_EQ(resp.error(), kvs::AnnaError::NO_ERROR);
+  ASSERT_TRUE(annalib::put_priority(client.get(), key, priority, val).succeeded());
 
   // 2. Get priority
   annalib::PriorityResult result = annalib::get_priority(client.get(), key);
@@ -155,16 +146,14 @@ TEST_F(SystemTest, DeleteKey) {
   string val = "to_delete";
 
   // 1. Put
-  kvs::KeyResponse resp = annalib::put(client.get(), key, val);
-  ASSERT_EQ(resp.error(), kvs::AnnaError::NO_ERROR);
+  ASSERT_TRUE(annalib::put(client.get(), key, val).succeeded());
 
   // 2. Get - verify value exists
   string result = annalib::get(client.get(), key);
   EXPECT_EQ(result, val);
 
   // 3. Delete
-  kvs::KeyResponse del_resp = annalib::del(client.get(), key);
-  ASSERT_EQ(del_resp.error(), kvs::AnnaError::NO_ERROR);
+  ASSERT_TRUE(annalib::del(client.get(), key).succeeded());
 }
 
 int main(int argc, char **argv) {

@@ -16,6 +16,8 @@
 #define INCLUDE_CLIENT_LIB_HPP_
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "kvs_client.hpp"
 #include "metadata.pb.h"
@@ -29,10 +31,20 @@
 namespace annalib {
 
 // The set of configuration needed to construct a KvsClient: this client's
-// own IP address, and the set of routing threads it should talk to.
+// own IP address, the routing tier IP addresses, and the number of routing
+// threads per IP.
 struct ClientConfig {
-  vector<UserRoutingThread> routing_threads;
-  Address ip;
+  std::vector<std::string> routing_ips;
+  unsigned routing_thread_count = 1;
+  std::string ip;
+};
+
+// The result of a PUT or DELETE operation. Callers should check succeeded()
+// rather than inspecting protobuf types directly.
+struct PutResult {
+  bool succeeded() const { return !error; }
+  bool error = false;
+  std::string response_id;
 };
 
 // Construct a KvsClient connected to the routing tier described by `config`.
@@ -74,55 +86,46 @@ struct PriorityResult {
 CausalValue get_causal(KvsClientInterface* client, const string& key);
 
 // Delete a key by writing an empty LWW value with a dominating timestamp.
-kvs::KeyResponse del(KvsClientInterface* client, const string& key);
+PutResult del(KvsClientInterface* client, const string& key);
 
 // Issue a blocking PUT of `value` for `key` under the default (LWW) lattice
 // type.
-kvs::KeyResponse put(KvsClientInterface* client, const string& key,
-                     const string& value);
-
-// Delete a key by writing an empty LWW value with a dominating timestamp.
-kvs::KeyResponse del(KvsClientInterface* client, const string& key);
+PutResult put(KvsClientInterface* client, const string& key,
+              const string& value);
 
 // Issue a blocking PUT of `value` for `key` under the multi-key-causal
 // lattice type.
-kvs::KeyResponse put_causal(KvsClientInterface* client, const string& key,
-                            const string& value);
+PutResult put_causal(KvsClientInterface* client, const string& key,
+                     const string& value);
 
 // Issue a blocking PUT of `values` for `key` under the set lattice type.
-kvs::KeyResponse put_set(KvsClientInterface* client, const string& key,
-                         const set<string>& values);
+PutResult put_set(KvsClientInterface* client, const string& key,
+                  const set<string>& values);
 
 // Issue a blocking GET for `key` under the set lattice type.
 set<string> get_set(KvsClientInterface* client, const string& key);
 
 // Issue a blocking PUT of `values` for `key` under the ordered-set lattice
 // type. Same serialization as SET, but the server preserves insertion order.
-kvs::KeyResponse put_ordered_set(KvsClientInterface* client, const string& key,
-                                 const set<string>& values);
+PutResult put_ordered_set(KvsClientInterface* client, const string& key,
+                          const set<string>& values);
 
 // Issue a blocking GET for `key` under the ordered-set lattice type.
 vector<string> get_ordered_set(KvsClientInterface* client, const string& key);
 
-// Delete a key by writing an empty LWW value with a dominating timestamp.
-kvs::KeyResponse del(KvsClientInterface* client, const string& key);
-
 // Issue a blocking PUT of `value` for `key` under the single-key-causal
 // lattice type.
-kvs::KeyResponse put_single_causal(KvsClientInterface* client,
-                                   const string& key, const string& value);
+PutResult put_single_causal(KvsClientInterface* client,
+                            const string& key, const string& value);
 
 // Issue a blocking GET for `key` under the single-key-causal lattice type.
 SingleCausalValue get_single_causal(KvsClientInterface* client,
                                     const string& key);
 
-// Delete a key by writing an empty LWW value with a dominating timestamp.
-kvs::KeyResponse del(KvsClientInterface* client, const string& key);
-
 // Issue a blocking PUT of `value` with `priority` for `key` under the
 // priority lattice type (lower priority value wins).
-kvs::KeyResponse put_priority(KvsClientInterface* client, const string& key,
-                              double priority, const string& value);
+PutResult put_priority(KvsClientInterface* client, const string& key,
+                       double priority, const string& value);
 
 // Issue a blocking GET for `key` under the priority lattice type.
 PriorityResult get_priority(KvsClientInterface* client, const string& key);

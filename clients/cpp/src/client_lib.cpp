@@ -37,12 +37,35 @@ const vector<string> kProcessList = {"anna-monitor", "anna-route",
 
 std::unique_ptr<KvsClient> make_client(const ClientConfig& config,
                                         unsigned tid, unsigned timeout) {
-  return std::make_unique<KvsClient>(config.routing_threads, config.ip, tid,
-                                      timeout);
+  vector<UserRoutingThread> routing_threads;
+  for (const auto& ip : config.routing_ips) {
+    for (unsigned t = 0; t < config.routing_thread_count; t++) {
+      routing_threads.push_back(UserRoutingThread(ip, t));
+    }
+  }
+  return std::make_unique<KvsClient>(routing_threads, config.ip, tid, timeout);
 }
 
+namespace {
 
-kvs::KeyResponse del(KvsClientInterface* client, const string& key) {
+// Convert a kvs::KeyResponse into a PutResult for the public API.
+PutResult to_put_result(const kvs::KeyResponse& response,
+                        const string& expected_rid) {
+  PutResult result;
+  result.error = (response.error() != kvs::AnnaError::NO_ERROR);
+  result.response_id = response.response_id();
+
+  if (result.response_id != expected_rid) {
+    std::cerr << "Invalid response: ID did not match request ID!" << std::endl;
+    result.error = true;
+  }
+
+  return result;
+}
+
+}  // namespace
+
+PutResult del(KvsClientInterface* client, const string& key) {
   return put(client, key, "");
 }
 
@@ -115,8 +138,8 @@ CausalValue get_causal(KvsClientInterface* client, const string& key) {
   return result;
 }
 
-kvs::KeyResponse put(KvsClientInterface* client, const string& key,
-                     const string& value) {
+PutResult put(KvsClientInterface* client, const string& key,
+              const string& value) {
   LWWPairLattice<string> val(
       TimestampValuePair<string>(generate_timestamp(0), value));
 
@@ -128,19 +151,11 @@ kvs::KeyResponse put(KvsClientInterface* client, const string& key,
     responses = client->receive_async();
   }
 
-  kvs::KeyResponse response = responses[0];
-
-  // TODO encode this error into the response
-  if (response.response_id() != rid) {
-    std::cerr << "Invalid response: ID did not match request ID!"
-              << std::endl;
-  }
-
-  return response;
+  return to_put_result(responses[0], rid);
 }
 
-kvs::KeyResponse put_causal(KvsClientInterface* client, const string& key,
-                            const string& value) {
+PutResult put_causal(KvsClientInterface* client, const string& key,
+                     const string& value) {
   MultiKeyCausalPayload<SetLattice<string>> mkcp;
   // construct a test client id - version pair
   mkcp.vector_clock.insert("test", 1);
@@ -162,19 +177,11 @@ kvs::KeyResponse put_causal(KvsClientInterface* client, const string& key,
     responses = client->receive_async();
   }
 
-  kvs::KeyResponse response = responses[0];
-
-  // TODO encode this error into the response
-  if (response.response_id() != rid) {
-    std::cerr << "Invalid response: ID did not match request ID!"
-              << std::endl;
-  }
-
-  return response;
+  return to_put_result(responses[0], rid);
 }
 
-kvs::KeyResponse put_set(KvsClientInterface* client, const string& key,
-                         const set<string>& values) {
+PutResult put_set(KvsClientInterface* client, const string& key,
+                  const set<string>& values) {
   string rid = client->put_async(key, serialize(SetLattice<string>(values)),
                                  kvs::LatticeType::SET);
 
@@ -183,15 +190,7 @@ kvs::KeyResponse put_set(KvsClientInterface* client, const string& key,
     responses = client->receive_async();
   }
 
-  kvs::KeyResponse response = responses[0];
-
-  // TODO encode this error into the response
-  if (response.response_id() != rid) {
-    std::cerr << "Invalid response: ID did not match request ID!"
-              << std::endl;
-  }
-
-  return response;
+  return to_put_result(responses[0], rid);
 }
 
 set<string> get_set(KvsClientInterface* client, const string& key) {
@@ -213,8 +212,8 @@ set<string> get_set(KvsClientInterface* client, const string& key) {
   return latt.reveal();
 }
 
-kvs::KeyResponse put_ordered_set(KvsClientInterface* client, const string& key,
-                                 const set<string>& values) {
+PutResult put_ordered_set(KvsClientInterface* client, const string& key,
+                          const set<string>& values) {
   // Same serialization as SET, but use ORDERED_SET lattice type so the
   // server stores as OrderedSetLattice.
   string rid = client->put_async(key, serialize(SetLattice<string>(values)),
@@ -225,14 +224,7 @@ kvs::KeyResponse put_ordered_set(KvsClientInterface* client, const string& key,
     responses = client->receive_async();
   }
 
-  kvs::KeyResponse response = responses[0];
-
-  if (response.response_id() != rid) {
-    std::cerr << "Invalid response: ID did not match request ID!"
-              << std::endl;
-  }
-
-  return response;
+  return to_put_result(responses[0], rid);
 }
 
 vector<string> get_ordered_set(KvsClientInterface* client, const string& key) {
@@ -259,8 +251,8 @@ vector<string> get_ordered_set(KvsClientInterface* client, const string& key) {
   return result;
 }
 
-kvs::KeyResponse put_single_causal(KvsClientInterface* client,
-                                   const string& key, const string& value) {
+PutResult put_single_causal(KvsClientInterface* client,
+                            const string& key, const string& value) {
   VectorClockValuePair<SetLattice<string>> p;
   // construct a test client id - version pair
   p.vector_clock.insert("test", 1);
@@ -277,14 +269,7 @@ kvs::KeyResponse put_single_causal(KvsClientInterface* client,
     responses = client->receive_async();
   }
 
-  kvs::KeyResponse response = responses[0];
-
-  if (response.response_id() != rid) {
-    std::cerr << "Invalid response: ID did not match request ID!"
-              << std::endl;
-  }
-
-  return response;
+  return to_put_result(responses[0], rid);
 }
 
 SingleCausalValue get_single_causal(KvsClientInterface* client,
@@ -319,8 +304,8 @@ SingleCausalValue get_single_causal(KvsClientInterface* client,
   return result;
 }
 
-kvs::KeyResponse put_priority(KvsClientInterface* client, const string& key,
-                              double priority, const string& value) {
+PutResult put_priority(KvsClientInterface* client, const string& key,
+                       double priority, const string& value) {
   PriorityLattice<double, string> pl(
       PriorityValuePair<double, string>(priority, value));
 
@@ -332,14 +317,7 @@ kvs::KeyResponse put_priority(KvsClientInterface* client, const string& key,
     responses = client->receive_async();
   }
 
-  kvs::KeyResponse response = responses[0];
-
-  if (response.response_id() != rid) {
-    std::cerr << "Invalid response: ID did not match request ID!"
-              << std::endl;
-  }
-
-  return response;
+  return to_put_result(responses[0], rid);
 }
 
 PriorityResult get_priority(KvsClientInterface* client, const string& key) {
