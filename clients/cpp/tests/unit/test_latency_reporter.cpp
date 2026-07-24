@@ -17,17 +17,24 @@
 #include "benchmark.pb.h"
 #include "latency_reporter.hpp"
 
-// A mock ZmqUtil that records sent strings instead of using real sockets.
+// A mock ZmqUtil that records sent messages and their destination sockets.
+// Each unique address in the SocketCache gets a unique zmq::socket_t*, so
+// we can verify that messages are routed to distinct destinations.
+struct SentMessage {
+  string payload;
+  zmq::socket_t* socket;
+};
+
 class MockZmqUtil : public ZmqUtilInterface {
 public:
   void send_string(const string& s, zmq::socket_t* socket) override {
-    sent_messages.push_back(s);
+    sent.push_back({s, socket});
   }
   string recv_string(zmq::socket_t* socket) override { return ""; }
   int poll(vector<zmq::pollitem_t>* items, std::chrono::milliseconds timeout) override {
     return 0;
   }
-  vector<string> sent_messages;
+  vector<SentMessage> sent;
 };
 
 // Test that the UserFeedback protobuf roundtrips correctly. This validates
@@ -149,11 +156,11 @@ TEST(LatencyReporterTest, ReportSendsToAllMonitoringIps) {
   reporter.report(42.5, 1000.0, key_latencies);
 
   // Should have sent one message per monitoring IP
-  ASSERT_EQ(mock.sent_messages.size(), 2u);
+  ASSERT_EQ(mock.sent.size(), 2u);
 
   // Deserialize the first message and verify contents
   UserFeedback feedback;
-  ASSERT_TRUE(feedback.ParseFromString(mock.sent_messages[0]));
+  ASSERT_TRUE(feedback.ParseFromString(mock.sent[0].payload));
   EXPECT_EQ(feedback.uid(), "cpp_client:3");
   EXPECT_DOUBLE_EQ(feedback.latency(), 42.5);
   EXPECT_DOUBLE_EQ(feedback.throughput(), 1000.0);
@@ -164,8 +171,11 @@ TEST(LatencyReporterTest, ReportSendsToAllMonitoringIps) {
   EXPECT_EQ(feedback.key_latency(1).key(), "key_b");
   EXPECT_DOUBLE_EQ(feedback.key_latency(1).latency(), 15.0);
 
-  // Both messages should be identical (sent to different addresses)
-  EXPECT_EQ(mock.sent_messages[0], mock.sent_messages[1]);
+  // Both messages have the same payload (sent to different addresses)
+  EXPECT_EQ(mock.sent[0].payload, mock.sent[1].payload);
+
+  // Messages were sent to different sockets (one per monitoring IP)
+  EXPECT_NE(mock.sent[0].socket, mock.sent[1].socket);
 }
 
 TEST(LatencyReporterTest, ReportRespectsWarmupFlag) {
@@ -178,9 +188,9 @@ TEST(LatencyReporterTest, ReportRespectsWarmupFlag) {
 
   reporter.report(10.0, 500.0, {});
 
-  ASSERT_EQ(mock.sent_messages.size(), 1u);
+  ASSERT_EQ(mock.sent.size(), 1u);
   UserFeedback feedback;
-  ASSERT_TRUE(feedback.ParseFromString(mock.sent_messages[0]));
+  ASSERT_TRUE(feedback.ParseFromString(mock.sent[0].payload));
   EXPECT_TRUE(feedback.warmup());
 }
 
@@ -192,7 +202,7 @@ TEST(LatencyReporterTest, ReportWithNoMonitoringIpsSendsNothing) {
   LatencyReporter reporter(ips, 0);
 
   reporter.report(10.0, 500.0, {});
-  EXPECT_TRUE(mock.sent_messages.empty());
+  EXPECT_TRUE(mock.sent.empty());
 }
 
 TEST(LatencyReporterTest, FinishSendsFinishMessage) {
@@ -204,9 +214,9 @@ TEST(LatencyReporterTest, FinishSendsFinishMessage) {
 
   reporter.finish();
 
-  ASSERT_EQ(mock.sent_messages.size(), 1u);
+  ASSERT_EQ(mock.sent.size(), 1u);
   UserFeedback feedback;
-  ASSERT_TRUE(feedback.ParseFromString(mock.sent_messages[0]));
+  ASSERT_TRUE(feedback.ParseFromString(mock.sent[0].payload));
   EXPECT_EQ(feedback.uid(), "cpp_client:7");
   EXPECT_TRUE(feedback.finish());
   // Other fields should be default
@@ -223,22 +233,36 @@ TEST(LatencyReporterTest, FinishSendsToAllMonitoringIps) {
 
   reporter.finish();
 
-  EXPECT_EQ(mock.sent_messages.size(), 3u);
+  ASSERT_EQ(mock.sent.size(), 3u);
+
+  // Each message should go to a distinct socket (one per IP)
+  set<zmq::socket_t*> sockets;
+  for (const auto& m : mock.sent) {
+    sockets.insert(m.socket);
+  }
+  EXPECT_EQ(sockets.size(), 3u);
 }
 
 TEST(LatencyReporterTest, BaseOffsetAffectsPort) {
-  // This test verifies the reporter uses base_offset in the address.
-  // We can't directly check the address string, but we can verify
-  // it doesn't crash with a non-zero base_offset.
+  // Two reporters with the same IP but different base_offsets should use
+  // different socket-cache entries (since the address string contains the
+  // port = kFeedbackReportPort + base_offset). We verify this by checking
+  // that the socket pointers differ.
   MockZmqUtil mock;
   ZmqUtilGuard guard(&mock);
 
   vector<Address> ips = {"10.0.0.1"};
-  LatencyReporter reporter(ips, 100, 0);
+  LatencyReporter reporter_a(ips, 0, 0);
+  LatencyReporter reporter_b(ips, 100, 0);
 
-  reporter.report(1.0, 1.0, {});
-  ASSERT_EQ(mock.sent_messages.size(), 1u);
+  reporter_a.report(1.0, 1.0, {});
+  ASSERT_EQ(mock.sent.size(), 1u);
+  zmq::socket_t* socket_a = mock.sent[0].socket;
 
-  reporter.finish();
-  ASSERT_EQ(mock.sent_messages.size(), 2u);
+  reporter_b.report(1.0, 1.0, {});
+  ASSERT_EQ(mock.sent.size(), 2u);
+  zmq::socket_t* socket_b = mock.sent[1].socket;
+
+  // Different base_offset -> different address -> different socket
+  EXPECT_NE(socket_a, socket_b);
 }

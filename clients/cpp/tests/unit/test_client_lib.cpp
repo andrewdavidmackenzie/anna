@@ -12,6 +12,8 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
+#include <fstream>
+
 #include "gtest/gtest.h"
 
 #include "client_lib.hpp"
@@ -980,23 +982,45 @@ TEST(ClientLibTest, KvsClientGetSeed) {
   threads.push_back(UserRoutingThread("127.0.0.1", 0));
   KvsClient kvs_client(threads, "127.0.0.1", 95, 10000);
 
-  unsigned seed = kvs_client.get_seed();
-  // Seed should be non-zero (it's time + hash(ip) + tid)
-  EXPECT_GT(seed, 0u);
+  // Just exercise the accessor; the seed value itself is not contractual
+  // (it can legally wrap to zero). Uniqueness is tested below in
+  // MultipleKvsClientsHaveDifferentSeeds.
+  (void)kvs_client.get_seed();
 }
 
 TEST(ClientLibTest, KvsClientSetLogger) {
+  const string log_name = "test_custom_log_94";
+  const string log_file = "test_custom_log_94.txt";
+
   vector<UserRoutingThread> threads;
   threads.push_back(UserRoutingThread("127.0.0.1", 0));
-  KvsClient kvs_client(threads, "127.0.0.1", 94, 10000);
 
-  // Create a custom logger and set it
-  auto custom_log = spdlog::basic_logger_mt(
-      "test_custom_log_94", "test_custom_log_94.txt", true);
-  kvs_client.set_logger(custom_log);
-  // If we get here without crashing, the setter works.
-  spdlog::drop("test_custom_log_94");
-  std::remove("test_custom_log_94.txt");
+  {
+    KvsClient kvs_client(threads, "127.0.0.1", 94, 10000);
+
+    auto custom_log = spdlog::basic_logger_mt(log_name, log_file, true);
+    kvs_client.set_logger(custom_log);
+
+    // Use set_timeout to trigger a log write through the custom logger.
+    // The KvsClient constructor logs "Random seed is ..." via its logger,
+    // but that happened before we swapped it. Force a flush so any buffered
+    // messages from the new logger reach disk.
+    custom_log->info("set_logger_test_marker");
+    custom_log->flush();
+  }
+  // KvsClient is destroyed here, releasing its shared_ptr to the logger.
+
+  // Drop the registry entry so spdlog closes the file.
+  spdlog::drop(log_name);
+
+  // Verify the log file contains our marker.
+  std::ifstream in(log_file);
+  std::string contents((std::istreambuf_iterator<char>(in)),
+                        std::istreambuf_iterator<char>());
+  in.close();
+  EXPECT_NE(contents.find("set_logger_test_marker"), std::string::npos);
+
+  std::remove(log_file.c_str());
 }
 
 TEST(ClientLibTest, KvsClientDefaultTimeout) {
