@@ -943,3 +943,77 @@ TEST(ClientLibTest, SetTimeoutChangesTimeout) {
   kvs_client.set_timeout(5000);
   EXPECT_EQ(kvs_client.get_timeout(), 5000u);
 }
+
+// --- Tests for annalib::set_timeout / get_timeout wrappers ---
+
+TEST(ClientLibTest, SetTimeoutWrapper) {
+  vector<UserRoutingThread> threads;
+  threads.push_back(UserRoutingThread("127.0.0.1", 0));
+  KvsClient kvs_client(threads, "127.0.0.1", 98, 10000);
+
+  annalib::set_timeout(&kvs_client, 3000);
+  EXPECT_EQ(annalib::get_timeout(&kvs_client), 3000u);
+}
+
+// --- Tests for KvsClient accessors ---
+
+TEST(ClientLibTest, KvsClientClearCache) {
+  vector<UserRoutingThread> threads;
+  threads.push_back(UserRoutingThread("127.0.0.1", 0));
+  KvsClient kvs_client(threads, "127.0.0.1", 97, 10000);
+
+  // clear_cache should not crash on an empty cache
+  kvs_client.clear_cache();
+}
+
+TEST(ClientLibTest, KvsClientGetContext) {
+  vector<UserRoutingThread> threads;
+  threads.push_back(UserRoutingThread("127.0.0.1", 0));
+  KvsClient kvs_client(threads, "127.0.0.1", 96, 10000);
+
+  zmq::context_t* ctx = kvs_client.get_context();
+  EXPECT_NE(ctx, nullptr);
+}
+
+TEST(ClientLibTest, KvsClientGetSeed) {
+  vector<UserRoutingThread> threads;
+  threads.push_back(UserRoutingThread("127.0.0.1", 0));
+  KvsClient kvs_client(threads, "127.0.0.1", 95, 10000);
+
+  unsigned seed = kvs_client.get_seed();
+  // Seed should be non-zero (it's time + hash(ip) + tid)
+  EXPECT_GT(seed, 0u);
+}
+
+TEST(ClientLibTest, KvsClientSetLogger) {
+  vector<UserRoutingThread> threads;
+  threads.push_back(UserRoutingThread("127.0.0.1", 0));
+  KvsClient kvs_client(threads, "127.0.0.1", 94, 10000);
+
+  // Create a custom logger and set it
+  auto custom_log = spdlog::basic_logger_mt(
+      "test_custom_log_94", "test_custom_log_94.txt", true);
+  kvs_client.set_logger(custom_log);
+  // If we get here without crashing, the setter works.
+  spdlog::drop("test_custom_log_94");
+  std::remove("test_custom_log_94.txt");
+}
+
+TEST(ClientLibTest, KvsClientDefaultTimeout) {
+  vector<UserRoutingThread> threads;
+  threads.push_back(UserRoutingThread("127.0.0.1", 0));
+  // Default timeout is 10000
+  KvsClient kvs_client(threads, "127.0.0.1", 93);
+
+  EXPECT_EQ(kvs_client.get_timeout(), 10000u);
+}
+
+TEST(ClientLibTest, MultipleKvsClientsHaveDifferentSeeds) {
+  vector<UserRoutingThread> threads;
+  threads.push_back(UserRoutingThread("127.0.0.1", 0));
+  KvsClient client1(threads, "127.0.0.1", 91, 10000);
+  KvsClient client2(threads, "127.0.0.1", 92, 10000);
+
+  // Different tid should yield different seeds
+  EXPECT_NE(client1.get_seed(), client2.get_seed());
+}
