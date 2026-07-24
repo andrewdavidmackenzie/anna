@@ -105,6 +105,11 @@ fn parse_components(sub_matches: &ArgMatches) -> Result<Vec<Component>> {
 /// `split[0]` is the command (START/STOP/STATUS); `split[1]` (if present) is the
 /// component name.
 fn parse_component_from_split(split: &[&str]) -> Result<Vec<Component>> {
+    if split.len() > 2 {
+        return Err(CliError::Other(
+            "Expected at most one component argument".into(),
+        ));
+    }
     if split.len() <= 1 {
         return Ok(vec![]);
     }
@@ -519,5 +524,36 @@ mod test {
         assert!(usage.contains("stop"));
         assert!(usage.contains("status"));
         assert!(usage.contains("exit"));
+    }
+
+    #[test]
+    fn parse_component_from_split_no_args() {
+        let split = vec!["START"];
+        let result = parse_component_from_split(&split).expect("should succeed");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn parse_component_from_split_valid() {
+        let split = vec!["START", "kvs"];
+        let result = parse_component_from_split(&split).expect("should succeed");
+        assert_eq!(result, vec![Component::Kvs]);
+    }
+
+    #[test]
+    fn parse_component_from_split_invalid() {
+        let split = vec!["START", "bogus"];
+        assert!(parse_component_from_split(&split).is_err());
+    }
+
+    #[test]
+    fn parse_component_from_split_surplus_args() {
+        let split = vec!["STOP", "kvs", "extra"];
+        let err = parse_component_from_split(&split).expect_err("should fail with surplus args");
+        assert!(
+            err.to_string().contains("at most one"),
+            "unexpected error: {}",
+            err
+        );
     }
 }

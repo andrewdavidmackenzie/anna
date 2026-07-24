@@ -121,6 +121,25 @@ impl fmt::Display for Component {
     }
 }
 
+/// Return a deduplicated, order-preserving list of components.
+///
+/// If `components` is empty, returns all components in canonical order.
+fn resolve_targets(components: &[Component]) -> Vec<Component> {
+    if components.is_empty() {
+        return ALL_COMPONENTS.to_vec();
+    }
+    let mut seen = [false; 3]; // indexed by Component discriminant
+    let mut targets = Vec::with_capacity(components.len());
+    for &c in components {
+        let idx = c as usize;
+        if !seen[idx] {
+            seen[idx] = true;
+            targets.push(c);
+        }
+    }
+    targets
+}
+
 /*
    Gather a list of pids that are running for a process using the process name
 */
@@ -136,7 +155,7 @@ fn pids_from_name(name: &str) -> Vec<i32> {
 /// Returns the number of processes started. Fails if any of the requested
 /// processes is already running.
 ///
-/// ```rust
+/// ```rust,no_run
 /// use std::path::Path;
 /// use annalib::Component;
 /// // Requires anna-monitor, anna-route, anna-kvs binaries in PATH
@@ -146,14 +165,10 @@ fn pids_from_name(name: &str) -> Vec<i32> {
 /// }
 /// ```
 pub fn start(config_file_path: &Path, components: &[Component]) -> Result<usize> {
-    let targets = if components.is_empty() {
-        &ALL_COMPONENTS[..]
-    } else {
-        components
-    };
+    let targets = resolve_targets(components);
 
     let mut process_count = 0;
-    for component in targets {
+    for component in &targets {
         let process_name = component.process_name();
         let pids = pids_from_name(process_name);
         if !pids.is_empty() {
@@ -195,15 +210,11 @@ pub fn start(config_file_path: &Path, components: &[Component]) -> Result<usize>
 /// # Ok::<(), annalib::Error>(())
 /// ```
 pub fn status(components: &[Component]) -> Result<Vec<(String, Vec<i32>)>> {
-    let targets = if components.is_empty() {
-        &ALL_COMPONENTS[..]
-    } else {
-        components
-    };
+    let targets = resolve_targets(components);
 
     let mut status = vec![];
 
-    for component in targets {
+    for component in &targets {
         let process_name = component.process_name();
         let pids = pids_from_name(process_name);
         status.push((process_name.to_string(), pids));
@@ -224,14 +235,10 @@ pub fn status(components: &[Component]) -> Result<Vec<(String, Vec<i32>)>> {
 /// ```
 #[cfg(unix)]
 pub fn stop(components: &[Component]) -> Result<usize> {
-    let targets = if components.is_empty() {
-        &ALL_COMPONENTS[..]
-    } else {
-        components
-    };
+    let targets = resolve_targets(components);
 
     let mut kill_count: usize = 0;
-    for component in targets {
+    for component in &targets {
         let process_name = component.process_name();
         for pid in pids_from_name(process_name) {
             if kill(Pid::from_raw(pid), Some(nix::sys::signal::Signal::SIGTERM)).is_ok() {
@@ -322,5 +329,37 @@ mod test {
         assert_eq!(format!("{}", Component::Kvs), "kvs");
         assert_eq!(format!("{}", Component::Monitor), "monitor");
         assert_eq!(format!("{}", Component::Route), "route");
+    }
+
+    #[test]
+    fn resolve_targets_empty_returns_all() {
+        let targets = resolve_targets(&[]);
+        assert_eq!(targets, ALL_COMPONENTS.to_vec());
+    }
+
+    #[test]
+    fn resolve_targets_deduplicates() {
+        let targets = resolve_targets(&[Component::Kvs, Component::Kvs]);
+        assert_eq!(targets, vec![Component::Kvs]);
+    }
+
+    #[test]
+    fn resolve_targets_preserves_order() {
+        let targets = resolve_targets(&[Component::Kvs, Component::Monitor, Component::Kvs]);
+        assert_eq!(targets, vec![Component::Kvs, Component::Monitor]);
+    }
+
+    #[test]
+    fn status_deduplicates_components() {
+        let status = status(&[Component::Kvs, Component::Kvs]).expect("status failed");
+        assert_eq!(status.len(), 1);
+    }
+
+    #[test]
+    fn stop_deduplicates_components() {
+        assert_eq!(
+            stop(&[Component::Kvs, Component::Kvs]).expect("stop failed"),
+            0
+        );
     }
 }

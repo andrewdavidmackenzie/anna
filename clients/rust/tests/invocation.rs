@@ -146,3 +146,43 @@ fn start_with_component_requires_server_config() -> Result<(), Box<dyn std::erro
 
     Ok(())
 }
+
+#[test]
+fn status_monitor_component() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("anna")?;
+
+    cmd.args(["status", "monitor"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("anna-monitor"));
+    cmd.assert()
+        .stdout(predicate::str::contains("anna-kvs").not());
+
+    Ok(())
+}
+
+#[test]
+fn status_route_component() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("anna")?;
+
+    cmd.args(["status", "route"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("anna-route"));
+    cmd.assert()
+        .stdout(predicate::str::contains("anna-kvs").not());
+
+    Ok(())
+}
+
+#[test]
+fn stop_monitor_component_kills_zero() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("anna")?;
+
+    cmd.args(["stop", "monitor"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("0 anna processes"));
+
+    Ok(())
+}
