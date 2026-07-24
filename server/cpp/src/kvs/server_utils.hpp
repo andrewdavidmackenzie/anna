@@ -50,8 +50,8 @@ typedef map<Address, set<Key>> AddressKeysetMap;
 class Serializer {
 public:
   virtual string get(const Key &key, kvs::AnnaError &error) = 0;
-  virtual unsigned put(const Key &key, const string &serialized) = 0;
-  virtual void remove(const Key &key) = 0;
+  virtual int put(const Key &key, const string &serialized) = 0;
+  virtual bool remove(const Key &key) = 0;
   virtual ~Serializer(){};
 };
 
@@ -71,13 +71,16 @@ public:
     return serialize(val);
   }
 
-  unsigned put(const Key &key, const string &serialized) {
+  int put(const Key &key, const string &serialized) {
     LWWPairLattice<string> val = deserialize_lww(serialized);
     kvs_->put(key, val);
-    return kvs_->size(key);
+    return static_cast<int>(kvs_->size(key));
   }
 
-  void remove(const Key &key) { kvs_->remove(key); }
+  bool remove(const Key &key) {
+    kvs_->remove(key);
+    return true;
+  }
 };
 
 class MemorySetSerializer : public Serializer {
@@ -94,13 +97,16 @@ public:
     return serialize(val);
   }
 
-  unsigned put(const Key &key, const string &serialized) {
+  int put(const Key &key, const string &serialized) {
     SetLattice<string> sl = deserialize_set(serialized);
     kvs_->put(key, sl);
-    return kvs_->size(key);
+    return static_cast<int>(kvs_->size(key));
   }
 
-  void remove(const Key &key) { kvs_->remove(key); }
+  bool remove(const Key &key) {
+    kvs_->remove(key);
+    return true;
+  }
 };
 
 class MemoryOrderedSetSerializer : public Serializer {
@@ -114,13 +120,16 @@ public:
     return serialize(val);
   }
 
-  unsigned put(const Key &key, const string &serialized) {
+  int put(const Key &key, const string &serialized) {
     OrderedSetLattice<string> sl = deserialize_ordered_set(serialized);
     kvs_->put(key, sl);
-    return kvs_->size(key);
+    return static_cast<int>(kvs_->size(key));
   }
 
-  void remove(const Key &key) { kvs_->remove(key); }
+  bool remove(const Key &key) {
+    kvs_->remove(key);
+    return true;
+  }
 };
 
 class MemorySingleKeyCausalSerializer : public Serializer {
@@ -137,15 +146,18 @@ public:
     return serialize(val);
   }
 
-  unsigned put(const Key &key, const string &serialized) {
+  int put(const Key &key, const string &serialized) {
     kvs::SingleKeyCausalValue causal_value = deserialize_causal(serialized);
     VectorClockValuePair<SetLattice<string>> p =
         to_vector_clock_value_pair(causal_value);
     kvs_->put(key, SingleKeyCausalLattice<SetLattice<string>>(p));
-    return kvs_->size(key);
+    return static_cast<int>(kvs_->size(key));
   }
 
-  void remove(const Key &key) { kvs_->remove(key); }
+  bool remove(const Key &key) {
+    kvs_->remove(key);
+    return true;
+  }
 };
 
 class MemoryMultiKeyCausalSerializer : public Serializer {
@@ -162,16 +174,19 @@ public:
     return serialize(val);
   }
 
-  unsigned put(const Key &key, const string &serialized) {
+  int put(const Key &key, const string &serialized) {
     kvs::MultiKeyCausalValue multi_key_causal_value =
         deserialize_multi_key_causal(serialized);
     MultiKeyCausalPayload<SetLattice<string>> p =
         to_multi_key_causal_payload(multi_key_causal_value);
     kvs_->put(key, MultiKeyCausalLattice<SetLattice<string>>(p));
-    return kvs_->size(key);
+    return static_cast<int>(kvs_->size(key));
   }
 
-  void remove(const Key &key) { kvs_->remove(key); }
+  bool remove(const Key &key) {
+    kvs_->remove(key);
+    return true;
+  }
 };
 
 class MemoryPrioritySerializer : public Serializer {
@@ -188,13 +203,16 @@ public:
     return serialize(val);
   }
 
-  unsigned put(const Key &key, const string &serialized) {
+  int put(const Key &key, const string &serialized) {
     PriorityLattice<double, string> val = deserialize_priority(serialized);
     kvs_->put(key, val);
-    return kvs_->size(key);
+    return static_cast<int>(kvs_->size(key));
   }
 
-  void remove(const Key &key) { kvs_->remove(key); }
+  bool remove(const Key &key) {
+    kvs_->remove(key);
+    return true;
+  }
 };
 
 // Common disk I/O helpers shared by all disk serializers.
@@ -213,7 +231,7 @@ inline bool disk_read(const string &path, T &value, kvs::AnnaError &error) {
     return false;
   }
   if (!value.ParseFromIstream(&input)) {
-    std::cerr << "Failed to parse payload." << std::endl;
+    spdlog::error("Failed to parse payload from {}", path);
     error = kvs::AnnaError::KEY_DNE;
     return false;
   }
@@ -221,19 +239,21 @@ inline bool disk_read(const string &path, T &value, kvs::AnnaError &error) {
 }
 
 template <typename T>
-inline unsigned disk_write(const string &path, const T &value) {
+inline int disk_write(const string &path, const T &value) {
   std::fstream output(path, std::ios::out | std::ios::trunc | std::ios::binary);
   if (!value.SerializeToOstream(&output)) {
-    std::cerr << "Failed to write payload." << std::endl;
-    return 0;
+    spdlog::error("Failed to write payload to {}", path);
+    return -1;
   }
-  return output.tellp();
+  return static_cast<int>(output.tellp());
 }
 
-inline void disk_remove(const string &path) {
+inline bool disk_remove(const string &path) {
   if (std::remove(path.c_str()) != 0) {
-    std::cerr << "Error deleting file" << std::endl;
+    spdlog::error("Error deleting file: {}", path);
+    return false;
   }
+  return true;
 }
 
 class DiskLWWSerializer : public Serializer {
@@ -261,7 +281,7 @@ public:
     return res;
   }
 
-  unsigned put(const Key &key, const string &serialized) {
+  int put(const Key &key, const string &serialized) {
     kvs::LWWValue input_value;
     input_value.ParseFromString(serialized);
 
@@ -275,12 +295,12 @@ public:
       return disk_write(path, input_value);
     } else {
       std::fstream input(path, std::ios::in | std::ios::binary);
-      return input.tellg();
+      return static_cast<int>(input.tellg());
     }
   }
 
-  void remove(const Key &key) {
-    disk_remove(disk_fname(ebs_root_, tid_, key));
+  bool remove(const Key &key) {
+    return disk_remove(disk_fname(ebs_root_, tid_, key));
   }
 };
 
@@ -307,7 +327,7 @@ public:
     return res;
   }
 
-  unsigned put(const Key &key, const string &serialized) {
+  int put(const Key &key, const string &serialized) {
     kvs::SetValue input_value;
     input_value.ParseFromString(serialized);
 
@@ -333,8 +353,8 @@ public:
     }
   }
 
-  void remove(const Key &key) {
-    disk_remove(disk_fname(ebs_root_, tid_, key));
+  bool remove(const Key &key) {
+    return disk_remove(disk_fname(ebs_root_, tid_, key));
   }
 };
 
@@ -357,7 +377,7 @@ public:
     return res;
   }
 
-  unsigned put(const Key &key, const string &serialized) {
+  int put(const Key &key, const string &serialized) {
     kvs::SetValue input_value;
     input_value.ParseFromString(serialized);
 
@@ -383,8 +403,8 @@ public:
     }
   }
 
-  void remove(const Key &key) {
-    disk_remove(disk_fname(ebs_root_, tid_, key));
+  bool remove(const Key &key) {
+    return disk_remove(disk_fname(ebs_root_, tid_, key));
   }
 };
 
@@ -411,7 +431,7 @@ public:
     return res;
   }
 
-  unsigned put(const Key &key, const string &serialized) {
+  int put(const Key &key, const string &serialized) {
     kvs::SingleKeyCausalValue input_value;
     input_value.ParseFromString(serialized);
 
@@ -461,8 +481,8 @@ public:
     }
   }
 
-  void remove(const Key &key) {
-    disk_remove(disk_fname(ebs_root_, tid_, key));
+  bool remove(const Key &key) {
+    return disk_remove(disk_fname(ebs_root_, tid_, key));
   }
 };
 
@@ -489,7 +509,7 @@ public:
     return res;
   }
 
-  unsigned put(const Key &key, const string &serialized) {
+  int put(const Key &key, const string &serialized) {
     kvs::MultiKeyCausalValue input_value;
     input_value.ParseFromString(serialized);
 
@@ -570,8 +590,8 @@ public:
     }
   }
 
-  void remove(const Key &key) {
-    disk_remove(disk_fname(ebs_root_, tid_, key));
+  bool remove(const Key &key) {
+    return disk_remove(disk_fname(ebs_root_, tid_, key));
   }
 };
 
@@ -605,7 +625,7 @@ public:
     return res;
   }
 
-  unsigned put(const Key &key, const string &serialized) override {
+  int put(const Key &key, const string &serialized) override {
     kvs::PriorityValue input_value;
     input_value.ParseFromString(serialized);
 
@@ -618,12 +638,12 @@ public:
       return disk_write(fname(key), input_value);
     } else {
       std::fstream input(fname(key), std::ios::in | std::ios::binary);
-      return input.tellg();
+      return static_cast<int>(input.tellg());
     }
   }
 
-  void remove(const Key &key) override {
-    disk_remove(fname(key));
+  bool remove(const Key &key) override {
+    return disk_remove(fname(key));
   }
 };
 

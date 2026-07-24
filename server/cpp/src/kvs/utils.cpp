@@ -57,11 +57,17 @@ std::pair<string, kvs::AnnaError> process_get(const Key &key,
   return std::pair<string, kvs::AnnaError>(std::move(res), error);
 }
 
-void process_put(const Key &key, kvs::LatticeType lattice_type,
+bool process_put(const Key &key, kvs::LatticeType lattice_type,
                  const string &payload, Serializer *serializer,
                  map<Key, KeyProperty> &stored_key_map) {
-  stored_key_map[key].size_ = serializer->put(key, payload);
+  int result = serializer->put(key, payload);
+  if (result < 0) {
+    spdlog::error("Failed to put key {}", key);
+    return false;
+  }
+  stored_key_map[key].size_ = static_cast<unsigned>(result);
   stored_key_map[key].type_ = std::move(lattice_type);
+  return true;
 }
 
 bool is_primary_replica(const Key &key,

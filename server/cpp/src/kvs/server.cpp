@@ -754,7 +754,9 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
       // remove keys
       if (join_gossip_map.size() == 0) {
         for (const string &key : join_remove_set) {
-          serializers[stored_key_map[key].type_]->remove(key);
+          if (!serializers[stored_key_map[key].type_]->remove(key)) {
+            log->error("Failed to remove key {} during join cleanup.", key);
+          }
           stored_key_map.erase(key);
         }
 

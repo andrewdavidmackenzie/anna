@@ -28,8 +28,8 @@ TEST_F(DiskSerializerTest, LWWPutGet) {
   string payload;
   lww.SerializeToString(&payload);
 
-  unsigned size = serializer.put("test_key", payload);
-  EXPECT_GT(size, 0u);
+  int size = serializer.put("test_key", payload);
+  EXPECT_GT(size, 0);
 
   kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
   string result = serializer.get("test_key", error);
@@ -59,7 +59,7 @@ TEST_F(DiskSerializerTest, LWWRemove) {
   lww.SerializeToString(&payload);
   serializer.put("del_key", payload);
 
-  serializer.remove("del_key");
+  EXPECT_TRUE(serializer.remove("del_key"));
 
   kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
   serializer.get("del_key", error);
@@ -68,9 +68,8 @@ TEST_F(DiskSerializerTest, LWWRemove) {
 
 TEST_F(DiskSerializerTest, LWWRemoveNonexistent) {
   DiskLWWSerializer serializer(tid_, ebs_root_);
-  // remove() returns void — no way to check failure directly.
-  // Verify it doesn't crash and GET still returns KEY_DNE.
-  serializer.remove("does_not_exist");
+  // remove() returns false when the file does not exist.
+  EXPECT_FALSE(serializer.remove("does_not_exist"));
   kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
   serializer.get("does_not_exist", error);
   EXPECT_EQ(error, kvs::AnnaError::KEY_DNE);
@@ -153,8 +152,8 @@ TEST_F(DiskSerializerTest, PrioritySinglePutGet) {
   pv.set_value("test");
   string payload;
   pv.SerializeToString(&payload);
-  unsigned size = serializer.put("pri_single", payload);
-  EXPECT_GT(size, 0u);
+  int size = serializer.put("pri_single", payload);
+  EXPECT_GT(size, 0);
 
   kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
   string result = serializer.get("pri_single", error);
