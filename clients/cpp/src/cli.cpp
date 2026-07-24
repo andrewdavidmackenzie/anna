@@ -91,18 +91,15 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
   } else if (command == "GET_CAUSAL") {
     print_causal_value(annalib::get_causal(client, v[1]));
   } else if (command == "DELETE") {
-    kvs::KeyResponse response = annalib::del(client, v[1]);
-    if (response.error() != kvs::AnnaError::NO_ERROR) {
+    if (!annalib::del(client, v[1]).succeeded()) {
       std::cout << "Failure!" << std::endl;
     }
   } else if (command == "PUT") {
-    kvs::KeyResponse response = annalib::put(client, v[1], v[2]);
-    if (response.error() != kvs::AnnaError::NO_ERROR) {
+    if (!annalib::put(client, v[1], v[2]).succeeded()) {
       std::cout << "Failure!" << std::endl;
     }
   } else if (command == "PUT_CAUSAL") {
-    kvs::KeyResponse response = annalib::put_causal(client, v[1], v[2]);
-    if (response.error() != kvs::AnnaError::NO_ERROR) {
+    if (!annalib::put_causal(client, v[1], v[2]).succeeded()) {
       std::cout << "Failure!" << std::endl;
     }
   } else if (command == "PUT_SET") {
@@ -110,8 +107,7 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
     for (size_t i = 2; i < v.size(); i++) {
       values.insert(v[i]);
     }
-    kvs::KeyResponse response = annalib::put_set(client, v[1], values);
-    if (response.error() != kvs::AnnaError::NO_ERROR) {
+    if (!annalib::put_set(client, v[1], values).succeeded()) {
       std::cout << "Failure!" << std::endl;
     }
   } else if (command == "GET_SET") {
@@ -121,9 +117,7 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
     for (size_t i = 2; i < v.size(); i++) {
       values.insert(v[i]);
     }
-    kvs::KeyResponse response =
-        annalib::put_ordered_set(client, v[1], values);
-    if (response.error() != kvs::AnnaError::NO_ERROR) {
+    if (!annalib::put_ordered_set(client, v[1], values).succeeded()) {
       std::cout << "Failure!" << std::endl;
     }
   } else if (command == "GET_ORDERED_SET") {
@@ -134,18 +128,14 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
     }
     std::cout << "]" << std::endl;
   } else if (command == "PUT_SINGLE_CAUSAL") {
-    kvs::KeyResponse response =
-        annalib::put_single_causal(client, v[1], v[2]);
-    if (response.error() != kvs::AnnaError::NO_ERROR) {
+    if (!annalib::put_single_causal(client, v[1], v[2]).succeeded()) {
       std::cout << "Failure!" << std::endl;
     }
   } else if (command == "GET_SINGLE_CAUSAL") {
     print_single_causal_value(annalib::get_single_causal(client, v[1]));
   } else if (command == "PUT_PRIORITY") {
     double priority = std::stod(v[2]);
-    kvs::KeyResponse response =
-        annalib::put_priority(client, v[1], priority, v[3]);
-    if (response.error() != kvs::AnnaError::NO_ERROR) {
+    if (!annalib::put_priority(client, v[1], priority, v[3]).succeeded()) {
       std::cout << "Failure!" << std::endl;
     }
   } else if (command == "GET_PRIORITY") {
@@ -252,17 +242,11 @@ int main(int argc, char* argv[]) {
   // Build ClientConfig from command-line arguments
   annalib::ClientConfig config;
   config.ip = client_ip;
+  config.routing_thread_count = thread_count;
 
   if (!routing_arg.empty()) {
     // Split comma-separated routing IPs
-    vector<string> routing_ips;
-    split(routing_arg, ',', routing_ips);
-
-    for (const string& ip : routing_ips) {
-      for (unsigned t = 0; t < thread_count; t++) {
-        config.routing_threads.push_back(UserRoutingThread(ip, t));
-      }
-    }
+    split(routing_arg, ',', config.routing_ips);
   }
 
   if (command == "CLI") {
