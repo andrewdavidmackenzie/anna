@@ -109,7 +109,7 @@ void send_gossip(AddressKeysetMap &addr_keyset_map, SocketCache &pushers,
 std::pair<string, kvs::AnnaError> process_get(const Key &key,
                                          Serializer *serializer);
 
-void process_put(const Key &key, kvs::LatticeType lattice_type,
+bool process_put(const Key &key, kvs::LatticeType lattice_type,
                  const string &payload, Serializer *serializer,
                  map<Key, KeyProperty> &stored_key_map);
 
