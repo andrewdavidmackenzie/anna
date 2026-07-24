@@ -239,6 +239,7 @@ TEST(ClientLibTest, PutOrderedSetSendsRequest) {
 
   ASSERT_EQ(client.keys_put_.size(), 1u);
   EXPECT_EQ(client.keys_put_[0], "my_ordered_key");
+  EXPECT_TRUE(result.succeeded());
   EXPECT_EQ(result.response_id, "1");
 }
 
@@ -266,6 +267,7 @@ TEST(ClientLibTest, PutSingleCausalSendsRequest) {
 
   ASSERT_EQ(client.keys_put_.size(), 1u);
   EXPECT_EQ(client.keys_put_[0], "my_sc_key");
+  EXPECT_TRUE(result.succeeded());
   EXPECT_EQ(result.response_id, "1");
 }
 
@@ -292,6 +294,7 @@ TEST(ClientLibTest, PutPrioritySendsRequest) {
 
   ASSERT_EQ(client.keys_put_.size(), 1u);
   EXPECT_EQ(client.keys_put_[0], "my_priority_key");
+  EXPECT_TRUE(result.succeeded());
   EXPECT_EQ(result.response_id, "1");
 }
 

@@ -18,6 +18,7 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
+#include <stdexcept>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/wait.h>
@@ -37,6 +38,11 @@ const vector<string> kProcessList = {"anna-monitor", "anna-route",
 
 std::unique_ptr<KvsClient> make_client(const ClientConfig& config,
                                         unsigned tid, unsigned timeout) {
+  if (config.routing_ips.empty() || config.routing_thread_count == 0) {
+    throw std::invalid_argument(
+        "ClientConfig requires at least one routing IP and a non-zero "
+        "routing_thread_count");
+  }
   vector<UserRoutingThread> routing_threads;
   for (const auto& ip : config.routing_ips) {
     for (unsigned t = 0; t < config.routing_thread_count; t++) {
