@@ -8,7 +8,7 @@ use std::process::exit;
 
 use annalib::{
     client_config::ClientConfig, completer::AnnaCompleter, info, kvs_client::KVSClient, start,
-    status, stop,
+    status, stop, Component, COMPONENT_NAMES,
 };
 use clap::{Arg, ArgMatches, Command};
 use log::{debug, error};
@@ -83,6 +83,46 @@ fn get_server_config_path(args: &ArgMatches) -> Result<PathBuf> {
         .map_err(|e| CliError::Other(format!("Could not resolve server config '{}': {}", path, e)))
 }
 
+/// Parse the optional component name from the subcommand arguments.
+///
+/// Returns an empty vec if no component was specified (meaning "all"),
+/// or a single-element vec with the parsed [`Component`].
+fn parse_components(sub_matches: &ArgMatches) -> Result<Vec<Component>> {
+    match sub_matches.get_one::<String>("component") {
+        None => Ok(vec![]),
+        Some(name) => Component::from_name(name).map(|c| vec![c]).ok_or_else(|| {
+            CliError::Other(format!(
+                "Unknown component '{}'. Valid components: {}",
+                name,
+                COMPONENT_NAMES.join(", ")
+            ))
+        }),
+    }
+}
+
+/// Parse an optional component name from the interactive CLI input tokens.
+///
+/// `split[0]` is the command (START/STOP/STATUS); `split[1]` (if present) is the
+/// component name.
+fn parse_component_from_split(split: &[&str]) -> Result<Vec<Component>> {
+    if split.len() > 2 {
+        return Err(CliError::Other(
+            "Expected at most one component argument".into(),
+        ));
+    }
+    if split.len() <= 1 {
+        return Ok(vec![]);
+    }
+    let name = split[1];
+    Component::from_name(name).map(|c| vec![c]).ok_or_else(|| {
+        CliError::Other(format!(
+            "Unknown component '{}'. Valid components: {}",
+            name,
+            COMPONENT_NAMES.join(", ")
+        ))
+    })
+}
+
 async fn run() -> Result<String> {
     let app = get_app();
     let matches = app.get_matches();
@@ -101,12 +141,24 @@ async fn run() -> Result<String> {
         .subcommand()
         .ok_or_else(|| CliError::Other("Could not find valid subcommand".into()))?
     {
-        ("start", _) => Ok(format!(
-            "{} anna processes were started",
-            start(&get_server_config_path(&matches)?)?
-        )),
-        ("status", _) => Ok(format_status(status()?)),
-        ("stop", _) => Ok(format!("{} anna processes were terminated", stop()?)),
+        ("start", sub_matches) => {
+            let components = parse_components(sub_matches)?;
+            Ok(format!(
+                "{} anna processes were started",
+                start(&get_server_config_path(&matches)?, &components)?
+            ))
+        }
+        ("status", sub_matches) => {
+            let components = parse_components(sub_matches)?;
+            Ok(format_status(status(&components)?))
+        }
+        ("stop", sub_matches) => {
+            let components = parse_components(sub_matches)?;
+            Ok(format!(
+                "{} anna processes were terminated",
+                stop(&components)?
+            ))
+        }
         ("cli", arg_matches) => {
             let config = get_client_config(&matches);
             let server_config_path = matches
@@ -223,9 +275,21 @@ async fn execute_command(
                 .map_err(|e| CliError::Other(format!("Invalid priority '{}': {}", split[2], e)))?;
             client.put_priority(split[1], priority, split[3]).await?
         }
-        "START" => println!("{} anna processes were started", start(config_file_path)?),
-        "STOP" => println!("{} anna processes were terminated", stop()?),
-        "STATUS" => println!("{}", format_status(status()?)),
+        "START" => {
+            let components = parse_component_from_split(&split)?;
+            println!(
+                "{} anna processes were started",
+                start(config_file_path, &components)?
+            );
+        }
+        "STOP" => {
+            let components = parse_component_from_split(&split)?;
+            println!("{} anna processes were terminated", stop(&components)?);
+        }
+        "STATUS" => {
+            let components = parse_component_from_split(&split)?;
+            println!("{}", format_status(status(&components)?));
+        }
         "HELP" => println!("{}", cli_usage()),
         "EXIT" => return Ok(true),
         _ => {
@@ -282,9 +346,10 @@ fn cli_usage() -> String {
     );
 
     usage = format!(
-        "{}\n\tdelete {{key}} \t\t\t- delete a key from the KVS\n\tstart \t\t\t\t- start anna processes\
-        \n\tstop \t\t\t\t- stop running anna processes\
-        \n\tstatus \t\t\t\t- print the status of anna processes\
+        "{}\n\tdelete {{key}} \t\t\t- delete a key from the KVS\
+        \n\tstart [component] \t\t- start anna processes (component: kvs, monitor, route; omit for all)\
+        \n\tstop [component] \t\t- stop running anna processes (component: kvs, monitor, route; omit for all)\
+        \n\tstatus [component] \t\t- print the status of anna processes (component: kvs, monitor, route; omit for all)\
         \n\thelp \t\t\t\t- print this usage message\
         \n\texit \t\t\t\t- exit the CLI (does not stop any anna processes)",
         usage
@@ -394,9 +459,36 @@ fn get_app() -> Command {
                         .help("An optional file of commands to run"),
                 ),
         )
-        .subcommand(Command::new("start").about("Start the KVS server processes"))
-        .subcommand(Command::new("stop").about("Stop the KVS server processes"))
-        .subcommand(Command::new("status").about("Report status of KVS server processes"))
+        .subcommand(
+            Command::new("start")
+                .about("Start the KVS server processes")
+                .arg(
+                    Arg::new("component")
+                        .index(1)
+                        .value_parser(COMPONENT_NAMES.to_vec())
+                        .help("Component to start (kvs, monitor, route). Omit to start all"),
+                ),
+        )
+        .subcommand(
+            Command::new("stop")
+                .about("Stop the KVS server processes")
+                .arg(
+                    Arg::new("component")
+                        .index(1)
+                        .value_parser(COMPONENT_NAMES.to_vec())
+                        .help("Component to stop (kvs, monitor, route). Omit to stop all"),
+                ),
+        )
+        .subcommand(
+            Command::new("status")
+                .about("Report status of KVS server processes")
+                .arg(
+                    Arg::new("component")
+                        .index(1)
+                        .value_parser(COMPONENT_NAMES.to_vec())
+                        .help("Component to check (kvs, monitor, route). Omit to check all"),
+                ),
+        )
 }
 
 #[cfg(test)]
@@ -432,5 +524,36 @@ mod test {
         assert!(usage.contains("stop"));
         assert!(usage.contains("status"));
         assert!(usage.contains("exit"));
+    }
+
+    #[test]
+    fn parse_component_from_split_no_args() {
+        let split = vec!["START"];
+        let result = parse_component_from_split(&split).expect("should succeed");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn parse_component_from_split_valid() {
+        let split = vec!["START", "kvs"];
+        let result = parse_component_from_split(&split).expect("should succeed");
+        assert_eq!(result, vec![Component::Kvs]);
+    }
+
+    #[test]
+    fn parse_component_from_split_invalid() {
+        let split = vec!["START", "bogus"];
+        assert!(parse_component_from_split(&split).is_err());
+    }
+
+    #[test]
+    fn parse_component_from_split_surplus_args() {
+        let split = vec!["STOP", "kvs", "extra"];
+        let err = parse_component_from_split(&split).expect_err("should fail with surplus args");
+        assert!(
+            err.to_string().contains("at most one"),
+            "unexpected error: {}",
+            err
+        );
     }
 }

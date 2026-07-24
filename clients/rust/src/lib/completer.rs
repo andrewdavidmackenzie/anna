@@ -1,5 +1,6 @@
 //! Tab-completion for anna CLI commands.
 
+use crate::COMPONENT_NAMES;
 use rustyline::completion::{Completer, Pair};
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
@@ -28,6 +29,9 @@ pub const ANNA_COMMANDS: &[&str] = &[
     "EXIT",
 ];
 
+/// Commands that accept an optional component name argument.
+const COMPONENT_COMMANDS: &[&str] = &["START", "STOP", "STATUS"];
+
 /// Provides tab-completion for anna CLI commands.
 pub struct AnnaCompleter;
 
@@ -40,13 +44,32 @@ impl Completer for AnnaCompleter {
         pos: usize,
         _ctx: &Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Pair>)> {
-        let prefix = &line[..pos].to_ascii_uppercase();
-        if prefix.contains(' ') {
+        let text = &line[..pos];
+        let upper = text.to_ascii_uppercase();
+
+        // If there is a space, we may be completing a component argument
+        if let Some(space_pos) = upper.find(' ') {
+            let cmd = upper[..space_pos].trim();
+            if COMPONENT_COMMANDS.contains(&cmd) {
+                let arg_start = space_pos + 1;
+                let arg_prefix = text[arg_start..].to_ascii_lowercase();
+                let matches: Vec<Pair> = COMPONENT_NAMES
+                    .iter()
+                    .filter(|name| name.starts_with(arg_prefix.as_str()))
+                    .map(|name| Pair {
+                        display: name.to_string(),
+                        replacement: name.to_string(),
+                    })
+                    .collect();
+                return Ok((arg_start, matches));
+            }
             return Ok((pos, vec![]));
         }
+
+        // Complete the command itself
         let matches: Vec<Pair> = ANNA_COMMANDS
             .iter()
-            .filter(|cmd| cmd.starts_with(prefix.as_str()))
+            .filter(|cmd| cmd.starts_with(upper.as_str()))
             .map(|cmd| Pair {
                 display: cmd.to_string(),
                 replacement: cmd.to_string(),
@@ -101,7 +124,7 @@ mod tests {
     }
 
     #[test]
-    fn no_completion_after_space() {
+    fn no_completion_after_space_for_non_component_command() {
         let results = complete("GET ");
         assert!(results.is_empty());
     }
@@ -117,5 +140,40 @@ mod tests {
         let results = complete("EXIT");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0], "EXIT");
+    }
+
+    #[test]
+    fn start_completes_components() {
+        let results = complete("START ");
+        assert_eq!(results.len(), 3);
+        assert!(results.contains(&"monitor".to_string()));
+        assert!(results.contains(&"route".to_string()));
+        assert!(results.contains(&"kvs".to_string()));
+    }
+
+    #[test]
+    fn stop_completes_components() {
+        let results = complete("STOP ");
+        assert_eq!(results.len(), 3);
+    }
+
+    #[test]
+    fn status_completes_components() {
+        let results = complete("STATUS ");
+        assert_eq!(results.len(), 3);
+    }
+
+    #[test]
+    fn start_filters_component_prefix() {
+        let results = complete("START k");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0], "kvs");
+    }
+
+    #[test]
+    fn component_completion_case_insensitive() {
+        let results = complete("START M");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0], "monitor");
     }
 }
