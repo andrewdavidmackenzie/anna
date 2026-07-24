@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-644dfae8.js";
+            window.path_to_searchindex_js = "searchindex-c9ffdf55.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-7bb26e2b.js"></script>
+        <script src="toc-e6cef21f.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1068,7 +1068,7 @@ It is a client-side construct — see <code>docs/client-feature-list.md</code>.<
 <tr><td>Disk tier</td><td>File-based storage on configurable path</td><td>Yes</td></tr>
 <tr><td>Tier selection</td><td><code>SERVER_TYPE</code> env var selects storage medium</td><td>Yes</td></tr>
 <tr><td>Identical kernel across tiers</td><td>Same storage kernel, different serialization layer</td><td>Yes</td></tr>
-<tr><td>Node capacities</td><td><code>capacities.memory-cap</code>, <code>capacities.ebs-cap</code></td><td>Yes</td></tr>
+<tr><td>Node capacities</td><td><code>capacities.memory-cap</code>, <code>capacities.ebs-cap</code> (tested via <code>elasticity_storage_policy</code> with <code>memory-cap-kb: 1</code>)</td><td>Yes</td></tr>
 <tr><td>Cross-tier data movement</td><td>Promote hot data to memory, demote cold to disk</td><td>Yes</td></tr>
 </tbody>
 </table>
@@ -1104,7 +1104,7 @@ feature, not an autoscaling decision.</p>
 <tbody>
 <tr><td>Periodic gossip (10s epoch)</td><td>Changesets multicast to all responsible replicas</td><td>Yes</td></tr>
 <tr><td>Merge-at-sender</td><td>Batched updates merged before sending</td><td>Yes</td></tr>
-<tr><td>Gossip to caches</td><td>Changed keys pushed to registered cache clients</td><td>Yes</td></tr>
+<tr><td>Value change subscription</td><td>Changed keys pushed to subscribed clients</td><td>Yes</td></tr>
 <tr><td>Join gossip</td><td>Redistribute data to newly joined nodes</td><td>Yes</td></tr>
 <tr><td>Cross-tier gossip</td><td>Updates propagated between memory and disk tiers</td><td>Yes</td></tr>
 </tbody>
@@ -1197,17 +1197,18 @@ by <code>anna-monitor</code> each monitoring cycle.</p>
 <strong>decisions</strong> and <strong>infrastructure lifecycle</strong> to the operator. This is a
 deliberate split:</p>
 <ul>
-<li><strong>Server features</strong> — the cluster primitives that enable scaling (node
+<li><strong>Server primitives</strong> — the cluster mechanisms that enable scaling (node
 join/depart, replication changes, stats reporting). These are implemented
 in <code>anna-kvs</code>, <code>anna-route</code>, and <code>anna-monitor</code>.</li>
-<li><strong>Client library helpers</strong> — convenience methods for reading stats and
-triggering scaling actions. These make it easy to build an autoscaler
-in any language.</li>
+<li><strong>Client library helpers</strong> — convenience methods in all four client
+libraries for reading stats, managing replication, and reporting latency.
+These make it easy to build an autoscaler in any language. See
+<a href="#client-feature-list">client-feature-list.md</a> for per-client details.</li>
 <li><strong>Operator responsibility</strong> — the decision logic (when to add/remove
 nodes) and the infrastructure lifecycle (provisioning/deprovisioning
 machines). Not part of the Anna project.</li>
 </ul>
-<h3 id="server-features-autoscaling-primitives"><a class="header" href="#server-features-autoscaling-primitives">Server features (autoscaling primitives)</a></h3>
+<h3 id="server-primitives"><a class="header" href="#server-primitives">Server primitives</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -1221,17 +1222,23 @@ machines). Not part of the Anna project.</li>
 </tbody>
 </table>
 </div>
-<h3 id="client-library-helpers-410"><a class="header" href="#client-library-helpers-410">Client library helpers (#410)</a></h3>
+<h3 id="client-library-helpers"><a class="header" href="#client-library-helpers">Client library helpers</a></h3>
+<p>All four client libraries (Rust, C++, Go, Python) implement the following
+helpers. See <a href="#client-feature-list">client-feature-list.md</a> for the
+complete per-client feature matrix.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Feature</th><th>Description</th><th>Implemented</th></tr>
+<tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
 </thead>
 <tbody>
-<tr><td>Read storage/occupancy stats</td><td>Helper to GET and decode <code>ServerThreadStatistics</code></td><td>Yes (Rust)</td></tr>
-<tr><td>Read per-key access stats</td><td>Helper to GET and decode <code>KeyAccessData</code></td><td>Yes (Rust)</td></tr>
-<tr><td>Read per-key size stats</td><td>Helper to GET and decode <code>KeySizeData</code></td><td>Yes (Rust)</td></tr>
-<tr><td>Report latency feedback</td><td>Send <code>UserFeedback</code> to monitor for SLO enforcement</td><td>No</td></tr>
+<tr><td>Read storage/occupancy stats</td><td>Helper to GET and decode <code>ServerThreadStatistics</code></td><td>Yes</td></tr>
+<tr><td>Read per-key access stats</td><td>Helper to GET and decode <code>KeyAccessData</code></td><td>Yes</td></tr>
+<tr><td>Read per-key size stats</td><td>Helper to GET and decode <code>KeySizeData</code></td><td>Yes</td></tr>
+<tr><td>Report latency feedback</td><td>Send <code>UserFeedback</code> to monitor via <code>LatencyReporter</code></td><td>Yes</td></tr>
+<tr><td>Set per-key replication factor</td><td>Write <code>ReplicationFactor</code> protobuf to metadata key</td><td>Yes</td></tr>
+<tr><td>Cluster topology discovery</td><td>Read <code>ClusterTopology</code> from metadata key</td><td>Yes</td></tr>
+<tr><td>Monitoring IP discovery</td><td>Read monitoring IPs from metadata key</td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
@@ -1265,7 +1272,192 @@ to implement their own scaling logic.</p>
 <tr><td>Routing Tier</td><td><code>anna-route</code></td><td>6</td><td>6</td><td>100%</td><td>—</td></tr>
 <tr><td>Monitoring</td><td><code>anna-monitor</code></td><td>6</td><td>6</td><td>100%</td><td>—</td></tr>
 <tr><td>Autoscaling (server primitives)</td><td><code>anna-monitor</code></td><td>4</td><td>4</td><td>100%</td><td>—</td></tr>
-<tr><td><strong>Total</strong></td><td></td><td><strong>81</strong></td><td><strong>81</strong></td><td><strong>100%</strong></td><td></td></tr>
+<tr><td>Client library helpers</td><td>all clients</td><td>7</td><td>7</td><td>100%</td><td>—</td></tr>
+<tr><td><strong>Total</strong></td><td></td><td><strong>88</strong></td><td><strong>88</strong></td><td><strong>100%</strong></td><td></td></tr>
+</tbody>
+</table>
+</div>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="client-feature-list"><a class="header" href="#client-feature-list">Client Feature List</a></h1>
+<p>Features implemented per client. Each client wraps the Anna KVS protocol
+(protobuf over ZeroMQ) with a language-native API.</p>
+<h2 id="value-change-subscription"><a class="header" href="#value-change-subscription">Value Change Subscription</a></h2>
+<p>All four clients provide a value change subscription API — a pub-sub
+mechanism for receiving notifications when specific keys are updated
+(including deletes). The subscriber registers interest in keys with the
+KVS server threads via a dedicated registration port (7200). During each
+gossip epoch, when a watched key changes, the KVS pushes the new value
+to the subscriber on port 7150.</p>
+<p>Applications can use this for caching, event-driven updates, replication
+to external systems, or any pattern that needs to react to key changes.</p>
+<h3 id="api-per-language"><a class="header" href="#api-per-language">API (per language)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Create subscriber</td><td>Connect to the KVS and bind the update listener</td></tr>
+<tr><td><code>watch(keys)</code></td><td>Register interest in one or more keys</td></tr>
+<tr><td><code>recv_update(timeout)</code></td><td>Block for next pushed update from gossip</td></tr>
+<tr><td><code>get_cached(key)</code></td><td>Read the latest received value locally</td></tr>
+</tbody>
+</table>
+</div>
+<p>This feature replaces the original Cloudburst management-node-based cache
+registration with direct client-to-server registration, enabling
+subscribers in standalone mode (<code>mgmt_ip: "NULL"</code>).</p>
+<h2 id="latency-feedback-latencyreporter"><a class="header" href="#latency-feedback-latencyreporter">Latency Feedback (LatencyReporter)</a></h2>
+<p>All four clients provide a <code>LatencyReporter</code> API for sending latency
+feedback to the monitoring system, enabling SLO enforcement (selective
+replication of hot keys when latency exceeds 3ms).</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Create reporter</td><td>Connect to monitoring threads (explicit IPs or metadata discovery)</td></tr>
+<tr><td><code>report(latency, throughput, key_latencies)</code></td><td>Send <code>UserFeedback</code> protobuf to all monitors</td></tr>
+<tr><td><code>set_warmup(bool)</code></td><td>Toggle warmup flag (monitor ignores policy during warmup)</td></tr>
+<tr><td><code>finish()</code></td><td>Signal that this client is done reporting</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="monitoring-and-autoscaling-helpers"><a class="header" href="#monitoring-and-autoscaling-helpers">Monitoring and Autoscaling Helpers</a></h2>
+<p>All four clients provide helper methods for reading cluster metrics and
+managing replication factors, enabling operator-driven autoscaling.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>get_storage_stats(ip, ip, tid, tier)</code></td><td>Read <code>ServerThreadStatistics</code> (consumption, occupancy, epoch)</td></tr>
+<tr><td><code>get_key_access_stats(ip, ip, tid, tier)</code></td><td>Read <code>KeyAccessData</code> (per-key access counts)</td></tr>
+<tr><td><code>get_key_size_stats(ip, ip, tid, tier)</code></td><td>Read <code>KeySizeData</code> (per-key sizes)</td></tr>
+<tr><td><code>put_replication_factor(key, mem_rep, local_rep)</code></td><td>Set per-key replication factor</td></tr>
+<tr><td><code>get_cluster_topology()</code></td><td>Read <code>ClusterTopology</code> (thread counts)</td></tr>
+<tr><td><code>get_monitoring_ips()</code></td><td>Read monitoring node IP addresses</td></tr>
+</tbody>
+</table>
+</div>
+<p>See <a href="#autoscaling-and-policy-engine">autoscaling.md</a> for the full operator’s guide.</p>
+<h2 id="rust-client-clientsrust"><a class="header" href="#rust-client-clientsrust">Rust Client (<code>clients/rust</code>)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Tested</th></tr>
+</thead>
+<tbody>
+<tr><td>GET / PUT / DELETE (LWW)</td><td>Yes</td></tr>
+<tr><td>GET_SET / PUT_SET</td><td>Yes</td></tr>
+<tr><td>GET_ORDERED_SET / PUT_ORDERED_SET</td><td>Yes</td></tr>
+<tr><td>GET_CAUSAL / PUT_CAUSAL</td><td>Yes</td></tr>
+<tr><td>GET_SINGLE_CAUSAL / PUT_SINGLE_CAUSAL</td><td>Yes</td></tr>
+<tr><td>GET_PRIORITY / PUT_PRIORITY</td><td>Yes</td></tr>
+<tr><td>GET_BYTES (raw LWW value)</td><td>Yes</td></tr>
+<tr><td>Multi-key GET (get_multi)</td><td>Yes</td></tr>
+<tr><td>Address cache invalidation</td><td>Yes</td></tr>
+<tr><td>WRONG_THREAD retry</td><td>Yes</td></tr>
+<tr><td>Timeout retry</td><td>Yes</td></tr>
+<tr><td>Dead-address eviction</td><td>Yes</td></tr>
+<tr><td>Configurable timeout</td><td>Yes</td></tr>
+<tr><td>Port base_offset support</td><td>Yes</td></tr>
+<tr><td>Process management (start/stop/status)</td><td>Yes</td></tr>
+<tr><td>Value change subscription (watch/recv/get_cached)</td><td>Yes</td></tr>
+<tr><td>Latency feedback (LatencyReporter)</td><td>Yes</td></tr>
+<tr><td>Monitoring stats helpers (get_storage_stats etc.)</td><td>Yes</td></tr>
+<tr><td>Replication factor management (put_replication_factor)</td><td>Yes</td></tr>
+<tr><td>Cluster topology discovery (get_cluster_topology)</td><td>Yes</td></tr>
+<tr><td>Monitoring IP discovery (get_monitoring_ips)</td><td>Yes</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="c-client-clientscpp"><a class="header" href="#c-client-clientscpp">C++ Client (<code>clients/cpp</code>)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Tested</th></tr>
+</thead>
+<tbody>
+<tr><td>GET / PUT / DELETE (LWW)</td><td>Yes</td></tr>
+<tr><td>GET_SET / PUT_SET</td><td>Yes</td></tr>
+<tr><td>GET_ORDERED_SET / PUT_ORDERED_SET</td><td>Yes</td></tr>
+<tr><td>GET_CAUSAL / PUT_CAUSAL</td><td>Yes</td></tr>
+<tr><td>GET_SINGLE_CAUSAL / PUT_SINGLE_CAUSAL</td><td>Yes</td></tr>
+<tr><td>GET_PRIORITY / PUT_PRIORITY</td><td>Yes</td></tr>
+<tr><td>GET_BYTES (raw LWW value)</td><td>Yes</td></tr>
+<tr><td>Multi-key GET (get_multi)</td><td>Yes</td></tr>
+<tr><td>Address cache invalidation</td><td>Yes</td></tr>
+<tr><td>WRONG_THREAD auto-retry</td><td>Yes</td></tr>
+<tr><td>Configurable timeout</td><td>Yes</td></tr>
+<tr><td>Process management (start/stop/status)</td><td>Yes</td></tr>
+<tr><td>Value change subscription (watch/recv/get_cached)</td><td>Yes</td></tr>
+<tr><td>Latency feedback (LatencyReporter)</td><td>Yes</td></tr>
+<tr><td>Monitoring stats helpers (get_storage_stats etc.)</td><td>Yes</td></tr>
+<tr><td>Replication factor management (put_replication_factor)</td><td>Yes</td></tr>
+<tr><td>Cluster topology discovery (get_cluster_topology)</td><td>Yes</td></tr>
+<tr><td>Monitoring IP discovery (get_monitoring_ips)</td><td>Yes</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="go-client-clientsgo"><a class="header" href="#go-client-clientsgo">Go Client (<code>clients/go</code>)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Tested</th></tr>
+</thead>
+<tbody>
+<tr><td>GET / PUT / DELETE (LWW)</td><td>Yes</td></tr>
+<tr><td>GET_SET / PUT_SET</td><td>Yes</td></tr>
+<tr><td>GET_ORDERED_SET / PUT_ORDERED_SET</td><td>Yes</td></tr>
+<tr><td>GET_CAUSAL / PUT_CAUSAL</td><td>Yes</td></tr>
+<tr><td>GET_SINGLE_CAUSAL / PUT_SINGLE_CAUSAL</td><td>Yes</td></tr>
+<tr><td>GET_PRIORITY / PUT_PRIORITY</td><td>Yes</td></tr>
+<tr><td>GET_BYTES (raw LWW value)</td><td>Yes</td></tr>
+<tr><td>Multi-key GET (GetMulti)</td><td>Yes</td></tr>
+<tr><td>Address cache invalidation</td><td>Yes</td></tr>
+<tr><td>WRONG_THREAD auto-retry</td><td>Yes</td></tr>
+<tr><td>Dead-address eviction</td><td>Yes</td></tr>
+<tr><td>Configurable timeout</td><td>Yes</td></tr>
+<tr><td>Timeout with retry</td><td>Yes</td></tr>
+<tr><td>Process management (start/stop/status)</td><td>Yes</td></tr>
+<tr><td>Value change subscription (watch/recv/get_cached)</td><td>Yes</td></tr>
+<tr><td>Latency feedback (LatencyReporter)</td><td>Yes</td></tr>
+<tr><td>Monitoring stats helpers (get_storage_stats etc.)</td><td>Yes</td></tr>
+<tr><td>Replication factor management (put_replication_factor)</td><td>Yes</td></tr>
+<tr><td>Cluster topology discovery (GetClusterTopology)</td><td>Yes</td></tr>
+<tr><td>Monitoring IP discovery (GetMonitoringIPs)</td><td>Yes</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="python-client-clientspython"><a class="header" href="#python-client-clientspython">Python Client (<code>clients/python</code>)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Tested</th></tr>
+</thead>
+<tbody>
+<tr><td>GET / PUT / DELETE (LWW)</td><td>Yes</td></tr>
+<tr><td>GET_SET / PUT_SET</td><td>Yes</td></tr>
+<tr><td>GET_ORDERED_SET / PUT_ORDERED_SET</td><td>Yes</td></tr>
+<tr><td>GET_SINGLE_CAUSAL / PUT_SINGLE_CAUSAL</td><td>Yes</td></tr>
+<tr><td>GET_PRIORITY / PUT_PRIORITY</td><td>Yes</td></tr>
+<tr><td>GET_BYTES (raw LWW value)</td><td>Yes</td></tr>
+<tr><td>Multi-key GET (get_multi)</td><td>Yes</td></tr>
+<tr><td>Address cache invalidation</td><td>Yes</td></tr>
+<tr><td>WRONG_THREAD auto-retry</td><td>Yes</td></tr>
+<tr><td>Dead-address eviction</td><td>Yes</td></tr>
+<tr><td>Configurable timeout</td><td>Yes</td></tr>
+<tr><td>Port base_offset support</td><td>Yes</td></tr>
+<tr><td>Process management (start/stop)</td><td>Yes</td></tr>
+<tr><td>Value change subscription (watch/recv/get_cached)</td><td>Yes</td></tr>
+<tr><td>Latency feedback (LatencyReporter)</td><td>Yes</td></tr>
+<tr><td>Monitoring stats helpers (get_storage_stats etc.)</td><td>Yes</td></tr>
+<tr><td>Replication factor management (put_replication_factor)</td><td>Yes</td></tr>
+<tr><td>Cluster topology discovery (get_cluster_topology)</td><td>Yes</td></tr>
+<tr><td>Monitoring IP discovery (get_monitoring_ips)</td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
