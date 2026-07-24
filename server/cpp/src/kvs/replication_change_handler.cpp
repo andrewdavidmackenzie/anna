@@ -147,8 +147,9 @@ void replication_change_handler(
   for (const string &key : remove_set) {
     if (!serializers[stored_key_map[key].type_]->remove(key)) {
       log->error("Failed to remove key {} during replication change.", key);
+    } else {
+      stored_key_map.erase(key);
+      local_changeset.erase(key);
     }
-    stored_key_map.erase(key);
-    local_changeset.erase(key);
   }
 }

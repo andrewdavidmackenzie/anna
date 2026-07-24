@@ -753,14 +753,18 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
 
       // remove keys
       if (join_gossip_map.size() == 0) {
+        set<Key> failed_removals;
         for (const string &key : join_remove_set) {
           if (!serializers[stored_key_map[key].type_]->remove(key)) {
             log->error("Failed to remove key {} during join cleanup.", key);
+            failed_removals.insert(key);
+          } else {
+            stored_key_map.erase(key);
           }
-          stored_key_map.erase(key);
         }
 
-        join_remove_set.clear();
+        // Retain failed entries for retry on next cleanup cycle.
+        join_remove_set = std::move(failed_removals);
       }
     }
   }

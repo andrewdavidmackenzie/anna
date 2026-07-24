@@ -241,11 +241,25 @@ inline bool disk_read(const string &path, T &value, kvs::AnnaError &error) {
 template <typename T>
 inline int disk_write(const string &path, const T &value) {
   std::fstream output(path, std::ios::out | std::ios::trunc | std::ios::binary);
-  if (!value.SerializeToOstream(&output)) {
-    spdlog::error("Failed to write payload to {}", path);
+  if (!output) {
+    spdlog::error("Failed to open file for writing: {}", path);
     return -1;
   }
-  return static_cast<int>(output.tellp());
+  if (!value.SerializeToOstream(&output)) {
+    spdlog::error("Failed to serialize payload to {}", path);
+    return -1;
+  }
+  output.flush();
+  if (output.fail()) {
+    spdlog::error("Failed to flush payload to {}", path);
+    return -1;
+  }
+  auto pos = output.tellp();
+  if (pos == std::streampos(-1)) {
+    spdlog::error("Failed to determine write position for {}", path);
+    return -1;
+  }
+  return static_cast<int>(pos);
 }
 
 inline bool disk_remove(const string &path) {
@@ -295,6 +309,7 @@ public:
       return disk_write(path, input_value);
     } else {
       std::fstream input(path, std::ios::in | std::ios::binary);
+      input.seekg(0, std::ios::end);
       return static_cast<int>(input.tellg());
     }
   }
@@ -638,6 +653,7 @@ public:
       return disk_write(fname(key), input_value);
     } else {
       std::fstream input(fname(key), std::ios::in | std::ios::binary);
+      input.seekg(0, std::ios::end);
       return static_cast<int>(input.tellg());
     }
   }
