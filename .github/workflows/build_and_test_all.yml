@@ -15,6 +15,21 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  check-docs:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq protobuf-compiler
+        cargo install cargo-binstall || true
+        cargo binstall -y mdbook lychee
+
+    - name: Build and check docs
+      run: make docs
+
   build:
     runs-on: ${{ matrix.os }}
     strategy:

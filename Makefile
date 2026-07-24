@@ -156,7 +156,7 @@ coverage: test
 	@genhtml -o coverage --quiet rust_workspace.info server/cpp/build/server.info clients/cpp/build/client.info || true
 
 .PHONY: test
-test: client-cpp-tests client-python-tests workspace-rust-tests client-go-tests server-system-coverage server-cpp-tests merge-server-coverage
+test: client-cpp-tests client-python-tests workspace-rust-tests client-go-tests server-system-coverage server-cpp-tests merge-server-coverage docs
 
 .PHONY: server-system-coverage
 server-system-coverage:
@@ -205,8 +205,16 @@ workspace-rust-tests:
 	@$(CARGO_ENV) cargo llvm-cov test --lcov --output-path rust_workspace.info
 	@lcov --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' '*/incremental/*' -o rust_workspace.info --ignore-errors inconsistent,format,unused
 
+MDBOOK := $(shell command -v mdbook 2> /dev/null)
+LYCHEE := $(shell command -v lychee 2> /dev/null)
+
 .PHONY: docs
 docs:
+ifeq ($(MDBOOK),)
+	@echo "Skipping docs: mdbook not found (install with 'cargo binstall mdbook')"
+else ifeq ($(LYCHEE),)
+	@echo "Skipping docs: lychee not found (install with 'cargo binstall lychee')"
+else
 	@echo "Generating docs with cargo doc"
 	@cargo doc --quiet --no-deps --target-dir=target/html/code 2>&1 > /dev/null
 	@echo "Generating book with mdbook"
@@ -221,6 +229,7 @@ docs:
 	@echo "Checking links"
 	@lychee --offline --root-dir target/html 'target/html/**/*.html' 2>&1
 	@echo "Cleaned up extra files in docs folder"
+endif
 
 .PHONY: cleanup
 cleanup: test-cleanup coverage-cleanup
