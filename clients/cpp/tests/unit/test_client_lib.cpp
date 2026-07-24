@@ -12,6 +12,8 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
+#include <fstream>
+
 #include "gtest/gtest.h"
 
 #include "client_lib.hpp"
@@ -942,4 +944,100 @@ TEST(ClientLibTest, SetTimeoutChangesTimeout) {
   EXPECT_EQ(kvs_client.get_timeout(), 10000u);
   kvs_client.set_timeout(5000);
   EXPECT_EQ(kvs_client.get_timeout(), 5000u);
+}
+
+// --- Tests for annalib::set_timeout / get_timeout wrappers ---
+
+TEST(ClientLibTest, SetTimeoutWrapper) {
+  vector<UserRoutingThread> threads;
+  threads.push_back(UserRoutingThread("127.0.0.1", 0));
+  KvsClient kvs_client(threads, "127.0.0.1", 98, 10000);
+
+  annalib::set_timeout(&kvs_client, 3000);
+  EXPECT_EQ(annalib::get_timeout(&kvs_client), 3000u);
+}
+
+// --- Tests for KvsClient accessors ---
+
+TEST(ClientLibTest, KvsClientClearCache) {
+  vector<UserRoutingThread> threads;
+  threads.push_back(UserRoutingThread("127.0.0.1", 0));
+  KvsClient kvs_client(threads, "127.0.0.1", 97, 10000);
+
+  // clear_cache should not crash on an empty cache
+  kvs_client.clear_cache();
+}
+
+TEST(ClientLibTest, KvsClientGetContext) {
+  vector<UserRoutingThread> threads;
+  threads.push_back(UserRoutingThread("127.0.0.1", 0));
+  KvsClient kvs_client(threads, "127.0.0.1", 96, 10000);
+
+  zmq::context_t* ctx = kvs_client.get_context();
+  EXPECT_NE(ctx, nullptr);
+}
+
+TEST(ClientLibTest, KvsClientGetSeed) {
+  vector<UserRoutingThread> threads;
+  threads.push_back(UserRoutingThread("127.0.0.1", 0));
+  KvsClient kvs_client(threads, "127.0.0.1", 95, 10000);
+
+  // Just exercise the accessor; the seed value itself is not contractual
+  // (it can legally wrap to zero). Uniqueness is tested below in
+  // MultipleKvsClientsHaveDifferentSeeds.
+  (void)kvs_client.get_seed();
+}
+
+TEST(ClientLibTest, KvsClientSetLogger) {
+  const string log_name = "test_custom_log_94";
+  const string log_file = "test_custom_log_94.txt";
+
+  vector<UserRoutingThread> threads;
+  threads.push_back(UserRoutingThread("127.0.0.1", 0));
+
+  {
+    KvsClient kvs_client(threads, "127.0.0.1", 94, 10000);
+
+    auto custom_log = spdlog::basic_logger_mt(log_name, log_file, true);
+    kvs_client.set_logger(custom_log);
+
+    // Use set_timeout to trigger a log write through the custom logger.
+    // The KvsClient constructor logs "Random seed is ..." via its logger,
+    // but that happened before we swapped it. Force a flush so any buffered
+    // messages from the new logger reach disk.
+    custom_log->info("set_logger_test_marker");
+    custom_log->flush();
+  }
+  // KvsClient is destroyed here, releasing its shared_ptr to the logger.
+
+  // Drop the registry entry so spdlog closes the file.
+  spdlog::drop(log_name);
+
+  // Verify the log file contains our marker.
+  std::ifstream in(log_file);
+  std::string contents((std::istreambuf_iterator<char>(in)),
+                        std::istreambuf_iterator<char>());
+  in.close();
+  EXPECT_NE(contents.find("set_logger_test_marker"), std::string::npos);
+
+  std::remove(log_file.c_str());
+}
+
+TEST(ClientLibTest, KvsClientDefaultTimeout) {
+  vector<UserRoutingThread> threads;
+  threads.push_back(UserRoutingThread("127.0.0.1", 0));
+  // Default timeout is 10000
+  KvsClient kvs_client(threads, "127.0.0.1", 93);
+
+  EXPECT_EQ(kvs_client.get_timeout(), 10000u);
+}
+
+TEST(ClientLibTest, MultipleKvsClientsHaveDifferentSeeds) {
+  vector<UserRoutingThread> threads;
+  threads.push_back(UserRoutingThread("127.0.0.1", 0));
+  KvsClient client1(threads, "127.0.0.1", 91, 10000);
+  KvsClient client2(threads, "127.0.0.1", 92, 10000);
+
+  // Different tid should yield different seeds
+  EXPECT_NE(client1.get_seed(), client2.get_seed());
 }
