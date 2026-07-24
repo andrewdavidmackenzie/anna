@@ -144,6 +144,8 @@ FUNCTION(SETUP_TARGET_FOR_COVERAGE _targetname _testrunner _outputname)
     # Capturing lcov counters and generating report
     COMMAND ${LCOV_PATH} --directory . --base-directory . --capture --output-file ${coverage_info} --gcov-tool="${CMAKE_SOURCE_DIR}/tests/llvm-gcov.sh" --ignore-errors inconsistent,format || true
     COMMAND ${LCOV_PATH} --remove ${coverage_info} '/Applications/*' '/usr*' '*/build/*' '*/test/*' '*tests/*' '*/ext/*' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '*/protobuf/*' -o ${coverage_info} --ignore-errors inconsistent,format,unused || true
+    # Keep only client source files — strip server headers, system headers, etc.
+    COMMAND ${LCOV_PATH} --extract ${coverage_info} '*/clients/cpp/src/*' -o ${coverage_info} --ignore-errors inconsistent,format,unused || true
 
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     COMMENT "Resetting code coverage counters to zero.\nProcessing code coverage counters and generating report."
