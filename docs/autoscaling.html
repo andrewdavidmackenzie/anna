@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c9ffdf55.js";
+            window.path_to_searchindex_js = "../searchindex-4d7fee97.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e6cef21f.js"></script>
@@ -175,9 +175,9 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="autoscaling-and-policy-engine"><a class="header" href="#autoscaling-and-policy-engine">Autoscaling and Policy Engine</a></h1>
-<p>The second Anna paper (VLDB 2019) extended the system with autoscaling
-capabilities to adapt to changing workloads. Anna automatically adjusts
-its deployment to balance cost, latency, and fault tolerance.</p>
+<p>Anna includes autoscaling capabilities to adapt to changing workloads,
+automatically adjusting its deployment to balance cost, latency, and
+fault tolerance.</p>
 <h2 id="workload-challenges"><a class="header" href="#workload-challenges">Workload Challenges</a></h2>
 <p>Real-world workloads vary along three dimensions:</p>
 <div class="table-wrapper">
@@ -206,8 +206,8 @@ the remaining node count, adjusting replication factors if needed.</li>
 over-correction while data redistributes and access patterns stabilize.</li>
 </ul>
 <h3 id="2-multi-master-selective-replication"><a class="header" href="#2-multi-master-selective-replication">2. Multi-Master Selective Replication</a></h3>
-<p>Unlike Anna v0 which replicated all keys uniformly, the extended Anna
-selectively replicates hot keys:</p>
+<p>When <code>policy.selective-rep</code> is enabled, Anna selectively replicates hot
+keys rather than replicating all keys uniformly:</p>
 <ul>
 <li>The policy engine classifies keys as “hot” if their access frequency
 exceeds H standard deviations above the mean</li>
@@ -380,7 +380,7 @@ via ZMQ PUSH on port 7001:</p>
 <p>The management node is not part of Anna — it’s the operator’s responsibility
 to implement infrastructure provisioning in response to these messages.</p>
 <h2 id="performance-results"><a class="header" href="#performance-results">Performance Results</a></h2>
-<p>From the VLDB 2019 evaluation:</p>
+<p>From the <a href="http://www.vikrams.io/papers/anna-vldb19.pdf">VLDB 2019 paper</a> evaluation:</p>
 <ul>
 <li>Anna outperforms AWS ElastiCache and Masstree by up to 10x in
 cost-effectiveness under various contention levels</li>
