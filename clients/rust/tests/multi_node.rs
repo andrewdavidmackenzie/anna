@@ -9,6 +9,7 @@
 mod common;
 
 use common::server_path;
+use serial_test::serial;
 use std::fs;
 use std::io::Write;
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -1824,6 +1825,7 @@ async fn slo_selective_replication() {
 /// Uses base_offset=500 to stay in safe port range.
 #[tokio::test]
 #[cfg(unix)]
+#[serial(mgmt)]
 async fn management_node_integration() {
     use annalib::kvs_client::KVSClient;
     use zeromq::{PullSocket, RepSocket, Socket, SocketRecv, SocketSend};
@@ -1969,6 +1971,7 @@ async fn management_node_integration() {
 /// Uses base_offset=600.
 #[tokio::test]
 #[cfg(unix)]
+#[serial(mgmt)]
 async fn elasticity_storage_policy() {
     use annalib::kvs_client::KVSClient;
     use zeromq::{PullSocket, RepSocket, Socket, SocketRecv, SocketSend};
@@ -2108,7 +2111,7 @@ async fn elasticity_storage_policy() {
 /// Uses base_offset=700.
 #[tokio::test]
 #[cfg(unix)]
-#[ignore] // covered by elasticity_storage_policy which tests the full mgmt lifecycle
+#[serial(mgmt)]
 async fn underutilization_scale_in() {
     use annalib::kvs_client::KVSClient;
     use zeromq::{PullSocket, RepSocket, Socket, SocketRecv, SocketSend};
