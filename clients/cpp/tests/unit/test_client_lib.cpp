@@ -12,9 +12,10 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#include <fstream>
+#include <sstream>
 
 #include "gtest/gtest.h"
+#include "spdlog/sinks/ostream_sink.h"
 
 #include "client_lib.hpp"
 #include "mock_kvs_client.hpp"
@@ -997,37 +998,29 @@ TEST(ClientLibTest, KvsClientGetSeed) {
 
 TEST(ClientLibTest, KvsClientSetLogger) {
   const string log_name = "test_custom_log_94";
-  const string log_file = "test_custom_log_94.txt";
 
   vector<UserRoutingThread> threads;
   threads.push_back(UserRoutingThread("127.0.0.1", 0));
 
+  // Use an ostream sink to capture log output in memory (no file I/O).
+  auto oss = std::make_shared<std::ostringstream>();
+  auto ostream_sink =
+      std::make_shared<spdlog::sinks::ostream_sink_mt>(*oss);
+  auto custom_log =
+      std::make_shared<spdlog::logger>(log_name, ostream_sink);
+
   {
     KvsClient kvs_client(threads, "127.0.0.1", 94, 10000);
-
-    auto custom_log = spdlog::basic_logger_mt(log_name, log_file, true);
     kvs_client.set_logger(custom_log);
 
-    // Use set_timeout to trigger a log write through the custom logger.
-    // The KvsClient constructor logs "Random seed is ..." via its logger,
-    // but that happened before we swapped it. Force a flush so any buffered
-    // messages from the new logger reach disk.
     custom_log->info("set_logger_test_marker");
     custom_log->flush();
   }
-  // KvsClient is destroyed here, releasing its shared_ptr to the logger.
 
-  // Drop the registry entry so spdlog closes the file.
   spdlog::drop(log_name);
 
-  // Verify the log file contains our marker.
-  std::ifstream in(log_file);
-  std::string contents((std::istreambuf_iterator<char>(in)),
-                        std::istreambuf_iterator<char>());
-  in.close();
-  EXPECT_NE(contents.find("set_logger_test_marker"), std::string::npos);
-
-  std::remove(log_file.c_str());
+  // Verify the in-memory log contains our marker.
+  EXPECT_NE(oss->str().find("set_logger_test_marker"), std::string::npos);
 }
 
 TEST(ClientLibTest, KvsClientDefaultTimeout) {

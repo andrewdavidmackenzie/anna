@@ -88,9 +88,8 @@ void run(const unsigned &thread_id,
          const vector<MonitoringThread> &monitoring_threads,
          const Address &ip) {
   KvsClient client(routing_threads, ip, thread_id, 10000);
-  string log_file = "log_" + std::to_string(thread_id) + ".txt";
   string logger_name = "benchmark_log_" + std::to_string(thread_id);
-  auto log = spdlog::basic_logger_mt(logger_name, log_file, true);
+  auto log = spdlog::stdout_color_mt(logger_name);
   log->flush_on(spdlog::level::info);
 
   client.set_logger(log);
