@@ -208,7 +208,7 @@ def run_smoke_test(cli_cmd):
 
     finally:
         stop_servers(procs)
-        for f in ["test_config.yml", "client_log.txt", "log.txt", "log_0.txt"]:
+        for f in ["test_config.yml"]:
             if os.path.exists(f):
                 os.remove(f)
         if os.path.exists("test_data"):
