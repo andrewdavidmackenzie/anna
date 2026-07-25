@@ -43,7 +43,7 @@ HashRingUtil hash_ring_util;
 HashRingUtilInterface *kHashRingUtil = &hash_ring_util;
 
 int main(int argc, char *argv[]) {
-  auto log = spdlog::basic_logger_mt("monitoring_log", "log.txt", true);
+  auto log = spdlog::stdout_color_mt("monitoring_log");
   log->flush_on(spdlog::level::info);
 
   install_shutdown_handler();

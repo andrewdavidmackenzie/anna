@@ -45,9 +45,8 @@ HashRingUtilInterface *kHashRingUtil = &hash_ring_util;
 void run(unsigned thread_id, string ebs_root, Address public_ip, Address private_ip,
          Address seed_ip, vector<Address> routing_ips,
          vector<Address> monitoring_ips, Address management_ip) {
-  string log_file = "log_" + std::to_string(thread_id) + ".txt";
   string log_name = "server_log_" + std::to_string(thread_id);
-  auto log = spdlog::basic_logger_mt(log_name, log_file, true);
+  auto log = spdlog::stdout_color_mt(log_name);
   log->flush_on(spdlog::level::info);
 
   // each thread has a handle to itself
