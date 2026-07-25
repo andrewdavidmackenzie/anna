@@ -82,12 +82,39 @@ jobs:
       if: matrix.os == 'windows-latest'
       run: cargo test
 
-    - name: Upload client coverage
+    - name: Upload Rust client coverage
       if: matrix.os == 'macos-latest'
       uses: codecov/codecov-action@v6
       with:
-        files: rust_workspace.info,clients/cpp/build/client.info,clients/python/coverage.xml,clients/go/annalib/coverage.out
-        flags: clients
+        files: rust_workspace.info
+        flags: rust-client
+        token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: true
+
+    - name: Upload C++ client coverage
+      if: matrix.os == 'macos-latest'
+      uses: codecov/codecov-action@v6
+      with:
+        files: clients/cpp/build/client.info
+        flags: cpp-client
+        token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: true
+
+    - name: Upload Python client coverage
+      if: matrix.os == 'macos-latest'
+      uses: codecov/codecov-action@v6
+      with:
+        files: clients/python/coverage.xml
+        flags: python-client
+        token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: true
+
+    - name: Upload Go client coverage
+      if: matrix.os == 'macos-latest'
+      uses: codecov/codecov-action@v6
+      with:
+        files: clients/go/annalib/coverage.out
+        flags: go-client
         token: ${{ secrets.CODECOV_TOKEN }}
         fail_ci_if_error: true
 
