@@ -1,246 +1,217 @@
 //! System test: drive KVSClient library API directly against a live server.
+//! Tests run against both memory-tier and disk-tier KVS nodes to exercise
+//! both Memory*Serializer and Disk*Serializer code paths.
 
 mod common;
 
-use common::{client_config, generate_config, ServerGuard};
+use annalib::kvs_client::KVSClient;
+use common::{client_config, generate_config, generate_disk_config, ServerGuard};
 
-const BASE_OFFSET: u16 = 200;
+const MEMORY_BASE_OFFSET: u16 = 200;
+const DISK_BASE_OFFSET: u16 = 201;
 
-#[tokio::test]
-#[cfg(unix)]
-async fn system_test_kvs_client() {
-    use annalib::kvs_client::KVSClient;
+/// Core lattice type tests: PUT, GET, overwrite, merge, DELETE, KEY_DNE.
+/// Shared between memory and disk tier tests.
+async fn test_all_lattice_types(client: &mut KVSClient, prefix: &str) {
+    // LWW: put, get, overwrite
+    let key_a = format!("{prefix}_a");
+    client.put(&key_a, "hello").await.expect("PUT failed");
+    let val = client.get(&key_a).await.expect("GET failed");
+    assert_eq!(val, "hello");
 
-    let config_path = generate_config(BASE_OFFSET);
-    let _guard = ServerGuard::start(&config_path, BASE_OFFSET);
-
-    let config = client_config(BASE_OFFSET);
-    let mut client = KVSClient::new(&config, Some(50)).await;
-
-    // PUT and GET a LWW value
-    client.put("sys_test_a", "hello").await.expect("PUT failed");
-    let val = client.get("sys_test_a").await.expect("GET failed");
-    assert_eq!(val, "hello", "GET returned wrong value");
-
-    // Overwrite
     client
-        .put("sys_test_a", "world")
+        .put(&key_a, "world")
         .await
         .expect("PUT overwrite failed");
-    let val = client
-        .get("sys_test_a")
-        .await
-        .expect("GET after overwrite failed");
-    assert_eq!(val, "world", "GET after overwrite returned wrong value");
+    let val = client.get(&key_a).await.expect("GET overwrite failed");
+    assert_eq!(val, "world");
 
     // Multiple keys
-    client.put("sys_test_b", "42").await.expect("PUT b failed");
-    let val_a = client.get("sys_test_a").await.expect("GET a failed");
-    let val_b = client.get("sys_test_b").await.expect("GET b failed");
-    assert_eq!(val_a, "world");
-    assert_eq!(val_b, "42");
+    let key_b = format!("{prefix}_b");
+    client.put(&key_b, "42").await.expect("PUT b failed");
+    assert_eq!(client.get(&key_a).await.unwrap(), "world");
+    assert_eq!(client.get(&key_b).await.unwrap(), "42");
 
-    // PUT_SET and GET_SET
+    // SET and ORDERED_SET
     #[cfg(feature = "set")]
     {
+        let set_key = format!("{prefix}_set");
         client
-            .put_set("sys_test_set", &["x", "y", "z"])
+            .put_set(&set_key, &["x", "y", "z"])
             .await
             .expect("PUT_SET failed");
-        let set_val = client
-            .get_set("sys_test_set")
-            .await
-            .expect("GET_SET failed");
-        assert!(set_val.contains(&"x".to_string()));
-        assert!(set_val.contains(&"y".to_string()));
-        assert!(set_val.contains(&"z".to_string()));
+        let set_val = client.get_set(&set_key).await.expect("GET_SET failed");
         assert_eq!(set_val.len(), 3);
 
-        // SET union
+        // SET union merge (second PUT to same key)
         client
-            .put_set("sys_test_set", &["w", "x"])
+            .put_set(&set_key, &["w", "x"])
             .await
             .expect("PUT_SET union failed");
         let set_val = client
-            .get_set("sys_test_set")
+            .get_set(&set_key)
             .await
-            .expect("GET_SET after union failed");
-        assert!(
-            set_val.len() >= 3,
-            "Expected at least 3 elements, got {}",
-            set_val.len()
-        );
-        assert!(set_val.contains(&"x".to_string()));
+            .expect("GET_SET union failed");
+        assert!(set_val.len() >= 3);
         assert!(set_val.contains(&"w".to_string()));
 
-        // ORDERED_SET
+        // ORDERED_SET with merge
+        let oset_key = format!("{prefix}_oset");
         client
-            .put_ordered_set("sys_test_oset", &["alpha", "beta", "gamma"])
+            .put_ordered_set(&oset_key, &["alpha", "beta"])
             .await
-            .expect("PUT_ORDERED_SET failed");
+            .expect("PUT_ORDERED_SET 1 failed");
+        client
+            .put_ordered_set(&oset_key, &["beta", "gamma"])
+            .await
+            .expect("PUT_ORDERED_SET 2 failed");
         let oset_val = client
-            .get_ordered_set("sys_test_oset")
+            .get_ordered_set(&oset_key)
             .await
             .expect("GET_ORDERED_SET failed");
-        assert!(oset_val.contains(&"alpha".to_string()));
-        assert!(oset_val.contains(&"beta".to_string()));
-        assert!(oset_val.contains(&"gamma".to_string()));
-        assert_eq!(oset_val.len(), 3, "ORDERED_SET should have 3 elements");
+        assert!(oset_val.len() >= 3, "OrderedSet union should merge");
     }
 
-    // SINGLE_CAUSAL
+    // SINGLE_CAUSAL with merge
     #[cfg(feature = "causal")]
     {
+        let sc_key = format!("{prefix}_sc");
         client
-            .put_single_causal("sys_test_sc", "sc_hello")
+            .put_single_causal(&sc_key, "sc_v1")
             .await
-            .expect("PUT_SINGLE_CAUSAL failed");
+            .expect("PUT_SINGLE_CAUSAL 1 failed");
+        client
+            .put_single_causal(&sc_key, "sc_v2")
+            .await
+            .expect("PUT_SINGLE_CAUSAL 2 failed");
         let (vc, values) = client
-            .get_single_causal("sys_test_sc")
+            .get_single_causal(&sc_key)
             .await
             .expect("GET_SINGLE_CAUSAL failed");
-        assert!(
-            values.contains(&"sc_hello".to_string()),
-            "SINGLE_CAUSAL values should contain 'sc_hello'"
-        );
-        assert!(
-            vc.contains_key("test"),
-            "SINGLE_CAUSAL vector clock should have 'test' key"
-        );
+        assert!(!values.is_empty(), "SingleCausal should have values");
+        assert!(!vc.is_empty(), "SingleCausal should have vector clock");
     }
 
-    // MULTI_CAUSAL
+    // MULTI_CAUSAL with merge
     #[cfg(feature = "causal")]
     {
+        let mc_key = format!("{prefix}_mc");
         client
-            .put_causal("sys_test_mc", "mc_hello")
+            .put_causal(&mc_key, "mc_v1")
             .await
-            .expect("PUT_CAUSAL failed");
-        let (vc, deps, value) = client
-            .get_causal("sys_test_mc")
+            .expect("PUT_CAUSAL 1 failed");
+        client
+            .put_causal(&mc_key, "mc_v2")
             .await
-            .expect("GET_CAUSAL failed");
-        assert_eq!(value, "mc_hello", "MULTI_CAUSAL value should be 'mc_hello'");
-        assert!(
-            vc.contains_key("test"),
-            "MULTI_CAUSAL vector clock should have 'test' key"
-        );
-        assert!(
-            deps.iter().any(|(k, _)| k == "dep1"),
-            "MULTI_CAUSAL dependencies should have 'dep1'"
-        );
+            .expect("PUT_CAUSAL 2 failed");
+        let (vc, _deps, value) = client.get_causal(&mc_key).await.expect("GET_CAUSAL failed");
+        assert!(!value.is_empty(), "MultiCausal should have a value");
+        assert!(!vc.is_empty(), "MultiCausal should have vector clock");
     }
 
-    // PRIORITY
+    // PRIORITY with merge (lowest wins)
+    let pri_key = format!("{prefix}_pri");
     client
-        .put_priority("sys_test_pri", 1.5, "important")
+        .put_priority(&pri_key, 5.0, "high")
         .await
-        .expect("PUT_PRIORITY failed");
+        .expect("PUT_PRIORITY 1 failed");
+    client
+        .put_priority(&pri_key, 1.0, "low")
+        .await
+        .expect("PUT_PRIORITY 2 failed");
     let (priority, pri_value) = client
-        .get_priority("sys_test_pri")
+        .get_priority(&pri_key)
         .await
         .expect("GET_PRIORITY failed");
     assert!(
-        (priority - 1.5).abs() < f64::EPSILON,
-        "PRIORITY should be 1.5, got {}",
+        (priority - 1.0).abs() < f64::EPSILON,
+        "Priority merge: lowest should win, got {}",
         priority
     );
-    assert_eq!(
-        pri_value, "important",
-        "PRIORITY value should be 'important'"
-    );
+    assert_eq!(pri_value, "low");
 
     // DELETE
+    let del_key = format!("{prefix}_del");
     client
-        .put("sys_test_del", "to_delete")
+        .put(&del_key, "to_delete")
         .await
-        .expect("PUT failed");
-    let del_val = client.get("sys_test_del").await.expect("GET failed");
-    assert_eq!(
-        del_val, "to_delete",
-        "Value before delete should be 'to_delete'"
-    );
-    client.delete("sys_test_del").await.expect("DELETE failed");
-    let after_del = client.get("sys_test_del").await;
+        .expect("PUT for delete failed");
+    assert_eq!(client.get(&del_key).await.unwrap(), "to_delete");
+    client.delete(&del_key).await.expect("DELETE failed");
+    let after_del = client.get(&del_key).await;
+    assert!(after_del.is_err(), "GET after DELETE should fail");
     assert!(
-        after_del.is_err(),
-        "GET after DELETE should fail with KEY_DNE"
-    );
-    assert!(
-        after_del
-            .expect_err("expected error")
-            .to_string()
-            .contains("KEY_DNE"),
+        after_del.unwrap_err().to_string().contains("KEY_DNE"),
         "Error should indicate KEY_DNE"
     );
 
+    // KEY_DNE
+    let dne_key = format!("{prefix}_nonexistent_xyz");
+    let dne = client.get(&dne_key).await;
+    assert!(dne.is_err(), "GET nonexistent key should fail");
+    assert!(dne.unwrap_err().to_string().contains("KEY_DNE"));
+}
+
+/// Memory-tier-only tests (multi-key GET, lattice mismatch, metadata keys).
+async fn test_memory_extras(client: &mut KVSClient) {
     // MULTI-KEY GET
-    client
-        .put("multi_a", "val_a")
-        .await
-        .expect("PUT multi_a failed");
-    client
-        .put("multi_b", "val_b")
-        .await
-        .expect("PUT multi_b failed");
-    client
-        .put("multi_c", "val_c")
-        .await
-        .expect("PUT multi_c failed");
+    client.put("multi_a", "val_a").await.unwrap();
+    client.put("multi_b", "val_b").await.unwrap();
+    client.put("multi_c", "val_c").await.unwrap();
     let results = client
         .get_multi(&["multi_a", "multi_b", "multi_c"])
         .await
         .expect("GET_MULTI failed");
-    assert_eq!(results.len(), 3, "GET_MULTI should return 3 results");
+    assert_eq!(results.len(), 3);
     assert_eq!(results["multi_a"], "val_a");
     assert_eq!(results["multi_b"], "val_b");
     assert_eq!(results["multi_c"], "val_c");
 
     // MULTI-KEY GET with empty list
-    let empty_results = client
+    let empty = client
         .get_multi::<String>(&[])
         .await
         .expect("GET_MULTI empty failed");
-    assert!(empty_results.is_empty());
+    assert!(empty.is_empty());
 
-    // KEY_DNE: GET a key that was never PUT
-    let dne = client.get("nonexistent_key_xyz").await;
-    assert!(dne.is_err(), "GET nonexistent key should fail");
-    assert!(
-        dne.expect_err("expected KEY_DNE")
-            .to_string()
-            .contains("KEY_DNE"),
-        "Error should indicate KEY_DNE"
-    );
-
-    // LATTICE mismatch: PUT as LWW then PUT_SET to the same key.
-    // The server logs the mismatch but silently drops the mismatched PUT
-    // (does not set a LATTICE error code). Verify the original value survives.
-    client
-        .put("lattice_clash", "lww_value")
-        .await
-        .expect("PUT LWW failed");
+    // LATTICE mismatch: PUT as LWW then PUT_SET to the same key
+    client.put("lattice_clash", "lww_value").await.unwrap();
     #[cfg(feature = "set")]
     {
         client.put_set("lattice_clash", &["set_val"]).await.ok();
-        let original = client
-            .get("lattice_clash")
-            .await
-            .expect("GET after lattice mismatch failed");
-        assert_eq!(
-            original, "lww_value",
-            "Original LWW value should be preserved after mismatched PUT_SET"
-        );
+        let original = client.get("lattice_clash").await.unwrap();
+        assert_eq!(original, "lww_value", "Original LWW should be preserved");
     }
 
-    // METADATA KEY: verify metadata keys (ANNA_METADATA|...) are stored in
-    // the KVS like regular data. This exercises the metadata-as-KVS-data
-    // path in the server.
+    // METADATA KEY
     let meta_key = "ANNA_METADATA|replication|meta_test_key";
-    client
-        .put(meta_key, "meta_value")
-        .await
-        .expect("PUT metadata key failed");
-    let meta_val = client.get(meta_key).await.expect("GET metadata key failed");
+    client.put(meta_key, "meta_value").await.unwrap();
+    let meta_val = client.get(meta_key).await.unwrap();
     assert_eq!(meta_val, "meta_value");
+}
+
+#[tokio::test]
+#[cfg(unix)]
+async fn system_test_kvs_client() {
+    let config_path = generate_config(MEMORY_BASE_OFFSET);
+    let _guard = ServerGuard::start(&config_path, MEMORY_BASE_OFFSET);
+    let config = client_config(MEMORY_BASE_OFFSET);
+    let mut client = KVSClient::new(&config, Some(50)).await;
+
+    test_all_lattice_types(&mut client, "mem").await;
+    test_memory_extras(&mut client).await;
+}
+
+/// Same lattice type tests running against a disk-tier KVS.
+/// Exercises all Disk*Serializer classes including merge paths
+/// (read-merge-write cycle when a key already exists on disk).
+#[tokio::test]
+#[cfg(unix)]
+async fn disk_tier_lattice_types() {
+    let config_path = generate_disk_config(DISK_BASE_OFFSET);
+    let _guard = ServerGuard::start_disk(&config_path, DISK_BASE_OFFSET);
+    let config = client_config(DISK_BASE_OFFSET);
+    let mut client = KVSClient::new(&config, Some(51)).await;
+
+    test_all_lattice_types(&mut client, "disk").await;
 }

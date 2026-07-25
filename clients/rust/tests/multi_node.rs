@@ -2151,8 +2151,9 @@ async fn elasticity_storage_policy() {
 #[tokio::test]
 #[cfg(unix)]
 #[serial(multi_node)]
-#[ignore] // Requires tight timing coordination between 2 KVS nodes + monitor;
-          // passes locally but flaky on CI. Coverage tracked in #467.
+#[ignore] // SLO underutilization policy requires tight timing between 2 nodes'
+          // stats reporting and monitor policy cycles. Passes locally but the
+          // policy doesn't trigger on CI within the timeout. See #467.
 async fn underutilization_scale_in() {
     use annalib::kvs_client::KVSClient;
     use zeromq::{PullSocket, RepSocket, Socket, SocketRecv, SocketSend};
@@ -2265,9 +2266,38 @@ async fn underutilization_scale_in() {
     }
     assert!(put_ok, "Initial PUT did not succeed");
 
-    // Needs: grace_period + several monitoring cycles for stats collection,
-    // policy decision, node self-departure, and depart-done ack.
-    let timeout = Duration::from_secs((short_grace + short_monitoring * 8) as u64);
+    // Wait until the monitor sees fresh stats from BOTH nodes. The SLO
+    // policy only triggers scale-in when memory_node_count > 1, which
+    // requires both nodes to have joined and reported at least one epoch.
+    let stats_deadline = Instant::now() + Duration::from_secs(30);
+    let mut both_reporting = false;
+    while Instant::now() < stats_deadline {
+        let node1_fresh = client
+            .get_storage_stats(NODE1_IP, NODE1_IP, 0, "MEMORY")
+            .await
+            .map(|s| s.epoch > 0)
+            .unwrap_or(false);
+        let node2_fresh = client
+            .get_storage_stats(NODE2_IP, NODE2_IP, 0, "MEMORY")
+            .await
+            .map(|s| s.epoch > 0)
+            .unwrap_or(false);
+        if node1_fresh && node2_fresh {
+            both_reporting = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(POLL_INTERVAL_MS)).await;
+    }
+    assert!(
+        both_reporting,
+        "Monitor did not receive fresh stats (epoch > 0) from both nodes within 30s"
+    );
+
+    // Both nodes confirmed reporting with epoch > 0. The SLO policy can
+    // now see min_memory_occupancy < 0.05 and memory_node_count > 1.
+    // Wait for grace_period + monitoring cycles for policy decision,
+    // replication adjustment, node self-departure, and depart-done ack.
+    let timeout = Duration::from_secs((short_grace + short_monitoring * 10) as u64);
     let result = tokio::time::timeout(timeout, mgmt_handle).await;
 
     match result {
