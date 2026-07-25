@@ -57,7 +57,7 @@ class KvsClient : public KvsClientInterface {
       response_puller_(zmq::socket_t(context_, ZMQ_PULL)),
       log_(spdlog::get("client_log")
                ? spdlog::get("client_log")
-               : spdlog::basic_logger_mt("client_log", "client_log.txt", true)),
+               : spdlog::stderr_color_mt("client_log")),
       timeout_(timeout) {
     // initialize logger
     log_->flush_on(spdlog::level::info);

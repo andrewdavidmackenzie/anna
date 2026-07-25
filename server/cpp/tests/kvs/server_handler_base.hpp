@@ -12,7 +12,7 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#include "spdlog/sinks/basic_file_sink.h"
+#include "spdlog/sinks/stdout_color_sinks.h"
 #include "spdlog/spdlog.h"
 #include "mock/mock_hash_utils.hpp"
 #include "mock/mock_zmq_utils.hpp"
@@ -23,7 +23,7 @@ ZmqUtilInterface *kZmqUtil = &mock_zmq_util;
 MockHashRingUtil mock_hash_ring_util;
 HashRingUtilInterface *kHashRingUtil = &mock_hash_ring_util;
 
-logger log_ = spdlog::basic_logger_mt("mock_log", "mock_log.txt", true);
+logger log_ = spdlog::stdout_color_mt("mock_log");
 
 string kRequestId = "0";
 
