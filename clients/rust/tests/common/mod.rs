@@ -22,6 +22,15 @@ pub fn server_path() -> String {
 }
 
 pub fn generate_config(base_offset: u16) -> String {
+    generate_config_inner(base_offset, false)
+}
+
+/// Generate a config for a disk-tier KVS node (replication.memory=0, ebs=1).
+pub fn generate_disk_config(base_offset: u16) -> String {
+    generate_config_inner(base_offset, true)
+}
+
+fn generate_config_inner(base_offset: u16, disk_tier: bool) -> String {
     let config_dir = std::env::temp_dir().join(format!(
         "anna_system_test_{}_{}",
         std::process::id(),
@@ -30,6 +39,15 @@ pub fn generate_config(base_offset: u16) -> String {
     fs::create_dir_all(&config_dir).expect("Failed to create config dir");
     let config_path = config_dir.join("config.yml");
     let ip = "127.0.0.1";
+
+    let ebs_dir = config_dir.join("ebs");
+    fs::create_dir_all(&ebs_dir).expect("Failed to create ebs dir");
+    // The disk serializer writes files under <ebs_root>/ebs_<tid>/
+    // and expects the subdirectory to exist.
+    fs::create_dir_all(ebs_dir.join("ebs_0")).expect("Failed to create ebs_0 dir");
+
+    let (memory_rep, ebs_rep, ebs_cap) = if disk_tier { (0, 1, 256) } else { (1, 0, 0) };
+
     let content = format!(
         r#"monitoring:
   mgmt_ip: {ip}
@@ -57,18 +75,18 @@ policy:
   elasticity: false
   selective-rep: false
   tiering: false
-ebs: /tmp/anna_ebs_{base_offset}
+ebs: {ebs_path}
 capacities:
   memory-cap: 1
-  ebs-cap: 0
+  ebs-cap: {ebs_cap}
 threads:
   memory: 1
   ebs: 1
   routing: 1
   benchmark: 1
 replication:
-  memory: 1
-  ebs: 0
+  memory: {memory_rep}
+  ebs: {ebs_rep}
   minimum: 1
   local: 1
 ports:
@@ -83,7 +101,11 @@ timings:
   monitoring_response_timeout_ms: 10000
 "#,
         ip = ip,
-        base_offset = base_offset
+        base_offset = base_offset,
+        ebs_path = ebs_dir.to_string_lossy(),
+        memory_rep = memory_rep,
+        ebs_rep = ebs_rep,
+        ebs_cap = ebs_cap,
     );
     fs::write(&config_path, content).expect("Failed to write config");
     config_path.to_string_lossy().to_string()
@@ -125,6 +147,15 @@ pub struct ServerGuard {
 
 impl ServerGuard {
     pub fn start(config_path: &str, base_offset: u16) -> Self {
+        Self::start_inner(config_path, base_offset, None)
+    }
+
+    /// Start a cluster with the KVS running as a disk-tier node.
+    pub fn start_disk(config_path: &str, base_offset: u16) -> Self {
+        Self::start_inner(config_path, base_offset, Some("ebs"))
+    }
+
+    fn start_inner(config_path: &str, base_offset: u16, server_type: Option<&str>) -> Self {
         let bin_dir = server_bin_dir();
         let extra_path = server_path();
         let mut processes: Vec<Child> = Vec::new();
@@ -137,11 +168,17 @@ impl ServerGuard {
                 }
                 panic!("Server binary {} not found at {:?}", name, bin);
             }
-            let child = Command::new(&bin)
-                .args(["--config", config_path])
+            let mut cmd = Command::new(&bin);
+            cmd.args(["--config", config_path])
                 .env("PATH", &extra_path)
                 .stdout(Stdio::null())
-                .stderr(Stdio::null())
+                .stderr(Stdio::null());
+            if name == "anna-kvs" {
+                if let Some(st) = server_type {
+                    cmd.env("SERVER_TYPE", st);
+                }
+            }
+            let child = cmd
                 .spawn()
                 .unwrap_or_else(|e| panic!("Failed to spawn {}: {}", name, e));
             processes.push(child);
