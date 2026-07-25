@@ -2053,8 +2053,9 @@ async fn elasticity_storage_policy() {
     let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(41)).await;
 
-    // Poll until PUT succeeds
-    let deadline = Instant::now() + Duration::from_secs(TEST_SERVER_REPORT_PERIOD as u64 * 2);
+    // Poll until PUT succeeds — management node startup (restart count
+    // query) adds latency; use 60s to handle slow CI runners.
+    let deadline = Instant::now() + Duration::from_secs(60);
     let mut initial_put_ok = false;
     while Instant::now() < deadline {
         if client.put("elasticity_key_0", "value_0").await.is_ok() {
@@ -2204,8 +2205,9 @@ async fn underutilization_scale_in() {
     let mut client = KVSClient::new(&config, Some(42)).await;
 
     // PUT a small amount of data — poll until the cluster is ready.
-    // With management node, cluster startup takes longer (restart count query).
-    let deadline = Instant::now() + Duration::from_secs(30);
+    // With management node + 2 KVS nodes, cluster startup takes longer
+    // (restart count query + node join). Use 60s to handle slow CI runners.
+    let deadline = Instant::now() + Duration::from_secs(60);
     let mut put_ok = false;
     while Instant::now() < deadline {
         if client.put("scale_in_key", "small").await.is_ok() {
