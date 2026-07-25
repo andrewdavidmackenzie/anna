@@ -162,8 +162,23 @@ impl MonitorTestCluster {
     }
 
     fn start_with_config(&mut self, cfg: MonitorConfig) {
+        self.start_with_config_inner(cfg, None);
+    }
+
+    /// Start a cluster with the KVS running as a disk-tier node.
+    fn start_disk_with_config(&mut self, cfg: MonitorConfig) {
+        self.start_with_config_inner(cfg, Some("ebs"));
+    }
+
+    fn start_with_config_inner(&mut self, cfg: MonitorConfig, server_type: Option<&str>) {
         let config = self.config_dir.join("config.yml");
         write_monitor_config(&config, &cfg);
+
+        // Create ebs_0 subdirectory for disk-tier tests
+        let ebs_dir = std::path::Path::new(&cfg.ebs_path);
+        if ebs_dir.is_absolute() || cfg.ebs_path != "./" {
+            fs::create_dir_all(ebs_dir.join("ebs_0")).ok();
+        }
 
         let port_range_start = 6200 + self.base_offset;
         let port_range_end = 7200 + self.base_offset;
@@ -178,11 +193,17 @@ impl MonitorTestCluster {
                 self.shutdown();
                 panic!("Server binary {} not found", name);
             }
-            let child = Command::new(&bin)
-                .args(["--config", &config.to_string_lossy()])
+            let mut cmd = Command::new(&bin);
+            cmd.args(["--config", &config.to_string_lossy()])
                 .env("PATH", server_path())
                 .stdout(Stdio::null())
-                .stderr(Stdio::null())
+                .stderr(Stdio::null());
+            if name == "anna-kvs" {
+                if let Some(st) = server_type {
+                    cmd.env("SERVER_TYPE", st);
+                }
+            }
+            let child = cmd
                 .spawn()
                 .unwrap_or_else(|e| panic!("Failed to spawn {}: {}", name, e));
             self.processes.push((child, name.to_string()));
@@ -810,5 +831,69 @@ async fn cluster_topology_metadata() {
     assert_eq!(
         topo.ebs_thread_count, 1,
         "Expected 1 ebs thread in test config"
+    );
+}
+
+/// Test that the monitor collects stats from a disk-tier KVS node.
+/// This exercises the EBS branches in stats_helpers.cpp:
+/// - ebs_storage, ebs_occupancy, ebs_accesses population
+/// - avg/max EBS consumption percentage computation
+/// - EBS occupancy min/max/avg computation
+/// Uses base_offset=6300.
+#[tokio::test]
+#[cfg(unix)]
+#[serial(monitor)]
+async fn monitor_disk_tier_stats() {
+    use annalib::kvs_client::KVSClient;
+
+    if !server_bin_dir().join("anna-kvs").exists() {
+        eprintln!("SKIP: server binaries not built");
+        return;
+    }
+
+    let ebs_dir = std::env::temp_dir().join(format!("anna_ebs_monitor_{}", std::process::id()));
+    fs::create_dir_all(&ebs_dir).expect("Failed to create ebs dir");
+
+    let mut cluster = MonitorTestCluster::new(6300);
+    cluster.start_disk_with_config(MonitorConfig {
+        base_offset: 6300,
+        replication_memory: 0,
+        replication_ebs: 1,
+        ebs_path: ebs_dir.to_string_lossy().to_string(),
+        ..Default::default()
+    });
+
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(98)).await;
+
+    // PUT data so the disk-tier KVS has storage consumption to report
+    for i in 0..5 {
+        let key = format!("disk_stats_key_{}", i);
+        client
+            .put(&key, &"x".repeat(500))
+            .await
+            .unwrap_or_else(|e| panic!("PUT {} failed: {}", key, e));
+    }
+
+    // Wait for stats to be collected — the monitor needs at least one
+    // report cycle (server_report_period=3s) + one monitoring cycle (8s)
+    let deadline = Instant::now() + Duration::from_secs(REPORT_PERIOD as u64 * 2 + 10);
+    let mut stats_ok = false;
+    while Instant::now() < deadline {
+        if let Ok(s) = client.get_storage_stats(NODE_IP, NODE_IP, 0, "DISK").await {
+            if s.epoch > 0 && s.storage_consumption > 0 {
+                eprintln!(
+                    "Disk stats: consumption={}, occupancy={}, epoch={}",
+                    s.storage_consumption, s.occupancy, s.epoch
+                );
+                stats_ok = true;
+                break;
+            }
+        }
+        std::thread::sleep(Duration::from_secs(1));
+    }
+    assert!(
+        stats_ok,
+        "Monitor should collect disk-tier stats with storage_consumption > 0"
     );
 }
