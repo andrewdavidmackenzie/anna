@@ -1,8 +1,8 @@
 # Autoscaling and Policy Engine
 
-The second Anna paper (VLDB 2019) extended the system with autoscaling
-capabilities to adapt to changing workloads. Anna automatically adjusts
-its deployment to balance cost, latency, and fault tolerance.
+Anna includes autoscaling capabilities to adapt to changing workloads,
+automatically adjusting its deployment to balance cost, latency, and
+fault tolerance.
 
 ## Workload Challenges
 
@@ -31,8 +31,8 @@ Anna scales each storage tier independently by adding or removing nodes:
 
 ### 2. Multi-Master Selective Replication
 
-Unlike Anna v0 which replicated all keys uniformly, the extended Anna
-selectively replicates hot keys:
+When `policy.selective-rep` is enabled, Anna selectively replicates hot
+keys rather than replicating all keys uniformly:
 
 - The policy engine classifies keys as "hot" if their access frequency
   exceeds H standard deviations above the mean
@@ -207,7 +207,7 @@ to implement infrastructure provisioning in response to these messages.
 
 ## Performance Results
 
-From the VLDB 2019 evaluation:
+From the [VLDB 2019 paper](http://www.vikrams.io/papers/anna-vldb19.pdf) evaluation:
 
 - Anna outperforms AWS ElastiCache and Masstree by up to 10x in
   cost-effectiveness under various contention levels
