@@ -9,6 +9,7 @@
 mod common;
 
 use common::server_path;
+use serial_test::{parallel, serial};
 use std::fs;
 use std::io::Write;
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -45,6 +46,8 @@ struct NodeConfig {
     mgmt_ip: String,
     memory_cap_kb: Option<u32>,
     grace_period: u32,
+    server_report_period: u32,
+    monitoring_timeout: u32,
 }
 
 impl Default for NodeConfig {
@@ -64,6 +67,8 @@ impl Default for NodeConfig {
             mgmt_ip: "NULL".to_string(),
             memory_cap_kb: None,
             grace_period: TEST_GRACE_PERIOD,
+            server_report_period: TEST_SERVER_REPORT_PERIOD,
+            monitoring_timeout: TEST_MONITORING_TIMEOUT,
         }
     }
 }
@@ -134,8 +139,8 @@ replication:
         routing_threads = cfg.routing_threads,
         ebs_path = cfg.ebs_path,
         selective_rep = cfg.selective_rep,
-        server_report_period = TEST_SERVER_REPORT_PERIOD,
-        monitoring_timeout = TEST_MONITORING_TIMEOUT,
+        server_report_period = cfg.server_report_period,
+        monitoring_timeout = cfg.monitoring_timeout,
         grace_period = cfg.grace_period,
         elasticity = cfg.elasticity,
         tiering = cfg.tiering,
@@ -191,12 +196,6 @@ fn slo_policy_timeout() -> Duration {
 
 /// Maximum time to wait for the management node to receive an add_node.
 /// Needs: grace_period + monitoring cycle + stats report + buffer.
-fn elasticity_policy_timeout() -> Duration {
-    Duration::from_secs(
-        (TEST_GRACE_PERIOD + TEST_MONITORING_TIMEOUT * 2 + TEST_SERVER_REPORT_PERIOD) as u64,
-    )
-}
-
 fn wait_for_port(ip: &str, port: u16, timeout_secs: u64) -> bool {
     let addr = format!("{}:{}", ip, port);
     let deadline = Instant::now() + Duration::from_secs(timeout_secs);
@@ -508,6 +507,7 @@ fn skip_unless_multi_ip() -> bool {
 /// Uses base_offset=100.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn multi_node_cluster_join_and_data_access() {
     use annalib::kvs_client::KVSClient;
 
@@ -554,6 +554,7 @@ async fn multi_node_cluster_join_and_data_access() {
 /// Uses base_offset=2000 (ports 8000-9150)
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn multi_node_gossip_replication() {
     use annalib::kvs_client::KVSClient;
 
@@ -601,6 +602,7 @@ async fn multi_node_gossip_replication() {
 /// Uses base_offset=4000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn multi_node_address_cache_invalidation() {
     use annalib::kvs_client::KVSClient;
 
@@ -652,6 +654,7 @@ async fn multi_node_address_cache_invalidation() {
 /// Uses base_offset=6000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn multi_node_fault_tolerance() {
     use annalib::kvs_client::KVSClient;
 
@@ -705,6 +708,7 @@ async fn multi_node_fault_tolerance() {
 /// Uses base_offset=8000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn no_servers_error() {
     use annalib::kvs_client::KVSClient;
 
@@ -734,6 +738,7 @@ async fn no_servers_error() {
 /// Uses base_offset=10000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn virtual_nodes_key_distribution() {
     use annalib::kvs_client::KVSClient;
     use std::collections::HashMap;
@@ -797,6 +802,7 @@ async fn virtual_nodes_key_distribution() {
 /// Uses base_offset=12000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn multi_node_replica_survival() {
     use annalib::kvs_client::KVSClient;
 
@@ -850,6 +856,7 @@ async fn multi_node_replica_survival() {
 /// Uses base_offset=14000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn multi_node_rejoin() {
     use annalib::kvs_client::KVSClient;
 
@@ -905,6 +912,7 @@ async fn multi_node_rejoin() {
 /// Uses base_offset=16000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn stateless_routing_recovery() {
     use annalib::kvs_client::KVSClient;
 
@@ -962,6 +970,7 @@ async fn stateless_routing_recovery() {
 /// Uses base_offset=18000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn multi_threaded_routing() {
     use annalib::kvs_client::KVSClient;
 
@@ -1003,6 +1012,7 @@ async fn multi_threaded_routing() {
 /// Uses base_offset=20000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn replication_aware_routing() {
     use annalib::kvs_client::KVSClient;
 
@@ -1047,6 +1057,7 @@ async fn replication_aware_routing() {
 /// Uses base_offset=22000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn pending_request_queue() {
     use annalib::kvs_client::KVSClient;
 
@@ -1087,6 +1098,7 @@ async fn pending_request_queue() {
 /// Uses base_offset=24000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn key_migration_during_join() {
     use annalib::kvs_client::KVSClient;
 
@@ -1156,6 +1168,7 @@ async fn key_migration_during_join() {
 /// Uses base_offset=26000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn per_key_replication_metadata() {
     use annalib::kvs_client::KVSClient;
 
@@ -1204,6 +1217,7 @@ async fn per_key_replication_metadata() {
 /// Uses base_offset=28000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn self_depart_signal() {
     use annalib::kvs_client::KVSClient;
 
@@ -1228,8 +1242,10 @@ async fn self_depart_signal() {
     let kvs_label = format!("anna-kvs@{}", NODE1_IP);
     cluster.signal_self_depart(&kvs_label);
 
-    // Poll until the KVS process exits (server sleeps 2s after handler)
-    let deadline = Instant::now() + Duration::from_secs(10);
+    // Poll until the KVS process exits. signal_self_depart() sleeps 8s
+    // for gossip propagation, then the KVS sleeps 2s after the handler.
+    // On loaded CI runners, add extra margin.
+    let deadline = Instant::now() + Duration::from_secs(20);
     let mut kvs_exited = false;
     while Instant::now() < deadline {
         if cluster
@@ -1249,6 +1265,7 @@ async fn self_depart_signal() {
 /// Uses base_offset=30000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn disk_tier_basic() {
     use annalib::kvs_client::KVSClient;
 
@@ -1391,6 +1408,7 @@ async fn disk_tier_basic() {
 /// Uses base_offset=32000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn memory_tier_preference() {
     use annalib::kvs_client::KVSClient;
 
@@ -1431,6 +1449,7 @@ async fn memory_tier_preference() {
 /// Uses base_offset=34000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn cross_tier_gossip() {
     use annalib::kvs_client::KVSClient;
 
@@ -1480,6 +1499,7 @@ async fn cross_tier_gossip() {
 /// Uses base_offset=40000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn crash_detection_via_epoch() {
     use annalib::kvs_client::KVSClient;
 
@@ -1547,6 +1567,7 @@ async fn crash_detection_via_epoch() {
 /// Uses base_offset=36000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn replication_factor_change() {
     use annalib::kvs_client::KVSClient;
 
@@ -1595,6 +1616,7 @@ async fn replication_factor_change() {
 /// Uses base_offset=38000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn gossip_after_replication_change() {
     use annalib::kvs_client::KVSClient;
 
@@ -1633,6 +1655,7 @@ async fn gossip_after_replication_change() {
 /// Uses base_offset=25221 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn gossip_to_caches() {
     use annalib::kvs_client::KVSClient;
     use annalib::value_change_subscriber::ValueChangeSubscriber;
@@ -1701,6 +1724,7 @@ async fn gossip_to_caches() {
 /// Uses base_offset=400.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn slo_selective_replication() {
     use annalib::kvs_client::KVSClient;
     use annalib::proto::metadata::user_feedback::KeyLatency;
@@ -1824,6 +1848,7 @@ async fn slo_selective_replication() {
 /// Uses base_offset=500 to stay in safe port range.
 #[tokio::test]
 #[cfg(unix)]
+#[serial(multi_node)]
 async fn management_node_integration() {
     use annalib::kvs_client::KVSClient;
     use zeromq::{PullSocket, RepSocket, Socket, SocketRecv, SocketSend};
@@ -1911,7 +1936,10 @@ async fn management_node_integration() {
         }
     });
 
-    // Start cluster with mgmt_ip pointing to our mock
+    // Start cluster with mgmt_ip pointing to our mock.
+    // Use short timings so the func_nodes query arrives quickly.
+    let short_monitoring: u32 = 3;
+    let short_report: u32 = 2;
     let mut cluster = MultiNodeCluster::new(base_offset);
     let cfg = NodeConfig {
         node_ip: NODE1_IP,
@@ -1919,6 +1947,8 @@ async fn management_node_integration() {
         replication_memory: 1,
         base_offset,
         mgmt_ip: NODE1_IP.to_string(),
+        monitoring_timeout: short_monitoring,
+        server_report_period: short_report,
         ..Default::default()
     };
     cluster.start_full_node_with_config(cfg);
@@ -1926,8 +1956,10 @@ async fn management_node_integration() {
     let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(40)).await;
 
-    // Poll until PUT succeeds (cluster may need time to stabilize)
-    let deadline = Instant::now() + Duration::from_secs(TEST_SERVER_REPORT_PERIOD as u64 * 2);
+    // KVS port is confirmed up by start_full_node_with_config, so PUT
+    // should succeed quickly. Short poll as safety margin for routing
+    // address resolution.
+    let deadline = Instant::now() + Duration::from_secs(10);
     while Instant::now() < deadline {
         if client.put("mgmt_test_key", "mgmt_test_val").await.is_ok() {
             break;
@@ -1942,8 +1974,7 @@ async fn management_node_integration() {
 
     // The mock should receive: restart query (on startup) + func_nodes query
     // (after server_report_period). Total wait bounded by config constants.
-    let mgmt_timeout =
-        Duration::from_secs((TEST_SERVER_REPORT_PERIOD * 2 + TEST_MONITORING_TIMEOUT) as u64);
+    let mgmt_timeout = Duration::from_secs((short_report * 2 + short_monitoring) as u64);
     let result = tokio::time::timeout(mgmt_timeout, mgmt_handle).await;
     match result {
         Ok(Ok((restart, func))) => {
@@ -1969,6 +2000,7 @@ async fn management_node_integration() {
 /// Uses base_offset=600.
 #[tokio::test]
 #[cfg(unix)]
+#[serial(multi_node)]
 async fn elasticity_storage_policy() {
     use annalib::kvs_client::KVSClient;
     use zeromq::{PullSocket, RepSocket, Socket, SocketRecv, SocketSend};
@@ -2032,8 +2064,12 @@ async fn elasticity_storage_policy() {
         }
     });
 
-    // Start cluster with elasticity enabled and very small memory capacity
+    // Start cluster with elasticity enabled and very small memory capacity.
     // memory-cap-kb: 1 means 1 KB capacity. Storing any data exceeds 60%.
+    // Use short timings so the storage policy triggers quickly.
+    let short_grace: u32 = 3;
+    let short_monitoring: u32 = 3;
+    let short_report: u32 = 2;
     let mut cluster = MultiNodeCluster::new(base_offset);
     let cfg = NodeConfig {
         node_ip: NODE1_IP,
@@ -2043,6 +2079,9 @@ async fn elasticity_storage_policy() {
         elasticity: true,
         mgmt_ip: NODE1_IP.to_string(),
         memory_cap_kb: Some(1),
+        grace_period: short_grace,
+        monitoring_timeout: short_monitoring,
+        server_report_period: short_report,
         ..Default::default()
     };
     cluster.start_full_node_with_config(cfg);
@@ -2050,8 +2089,10 @@ async fn elasticity_storage_policy() {
     let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(41)).await;
 
-    // Poll until PUT succeeds
-    let deadline = Instant::now() + Duration::from_secs(TEST_SERVER_REPORT_PERIOD as u64 * 2);
+    // KVS port is confirmed up by start_full_node_with_config, so PUT
+    // should succeed quickly. Short poll as safety margin for routing
+    // address resolution.
+    let deadline = Instant::now() + Duration::from_secs(10);
     let mut initial_put_ok = false;
     while Instant::now() < deadline {
         if client.put("elasticity_key_0", "value_0").await.is_ok() {
@@ -2073,9 +2114,10 @@ async fn elasticity_storage_policy() {
             .unwrap_or_else(|e| panic!("PUT elasticity_key_{} failed: {}", i, e));
     }
 
-    // The storage policy needs: grace_period to elapse + a monitoring cycle
-    // where storage consumption > 60% of capacity (1 KB).
-    let result = tokio::time::timeout(elasticity_policy_timeout(), mgmt_handle).await;
+    // The storage policy needs: grace_period to elapse + monitoring cycles
+    // for stats collection and policy decision.
+    let timeout = Duration::from_secs((short_grace + short_monitoring * 6) as u64);
+    let result = tokio::time::timeout(timeout, mgmt_handle).await;
 
     match result {
         Ok(Ok(Some(msg))) => {
@@ -2108,7 +2150,9 @@ async fn elasticity_storage_policy() {
 /// Uses base_offset=700.
 #[tokio::test]
 #[cfg(unix)]
-#[ignore] // covered by elasticity_storage_policy which tests the full mgmt lifecycle
+#[serial(multi_node)]
+#[ignore] // Requires tight timing coordination between 2 KVS nodes + monitor;
+          // passes locally but flaky on CI. Coverage tracked in #467.
 async fn underutilization_scale_in() {
     use annalib::kvs_client::KVSClient;
     use zeromq::{PullSocket, RepSocket, Socket, SocketRecv, SocketSend};
@@ -2182,8 +2226,13 @@ async fn underutilization_scale_in() {
     // The SLO underutilization branch triggers remove_node.
     let mut cluster = MultiNodeCluster::new(base_offset);
 
-    // Use a short grace period (3s) so the underutilization path triggers quickly
+    // Use short timings so the underutilization path triggers quickly:
+    // - grace_period=3s: cooldown before policy engine acts
+    // - monitoring_timeout=3s: how often monitor collects stats and runs policies
+    // - server_report_period=2s: how often KVS reports stats to monitor
     let short_grace: u32 = 3;
+    let short_monitoring: u32 = 3;
+    let short_report: u32 = 2;
     let cfg1 = NodeConfig {
         node_ip: NODE1_IP,
         seed_ip: NODE1_IP,
@@ -2192,6 +2241,8 @@ async fn underutilization_scale_in() {
         elasticity: true,
         mgmt_ip: NODE1_IP.to_string(),
         grace_period: short_grace,
+        monitoring_timeout: short_monitoring,
+        server_report_period: short_report,
         ..Default::default()
     };
     cluster.start_full_node_with_config(cfg1);
@@ -2200,9 +2251,10 @@ async fn underutilization_scale_in() {
     let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(42)).await;
 
-    // PUT a small amount of data — poll until the cluster is ready.
-    // With management node, cluster startup takes longer (restart count query).
-    let deadline = Instant::now() + Duration::from_secs(30);
+    // KVS port is confirmed up by start_full_node_with_config, so PUT
+    // should succeed quickly. Short poll as safety margin for routing
+    // address resolution.
+    let deadline = Instant::now() + Duration::from_secs(10);
     let mut put_ok = false;
     while Instant::now() < deadline {
         if client.put("scale_in_key", "small").await.is_ok() {
@@ -2213,8 +2265,9 @@ async fn underutilization_scale_in() {
     }
     assert!(put_ok, "Initial PUT did not succeed");
 
-    // Needs: grace_period(3s) + monitoring cycles for stats + node departure
-    let timeout = Duration::from_secs((short_grace + TEST_MONITORING_TIMEOUT * 4) as u64);
+    // Needs: grace_period + several monitoring cycles for stats collection,
+    // policy decision, node self-departure, and depart-done ack.
+    let timeout = Duration::from_secs((short_grace + short_monitoring * 8) as u64);
     let result = tokio::time::timeout(timeout, mgmt_handle).await;
 
     match result {
@@ -2248,6 +2301,7 @@ async fn underutilization_scale_in() {
 /// Uses base_offset=7823.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn tiering_movement_policy() {
     use annalib::kvs_client::KVSClient;
 
@@ -2342,6 +2396,7 @@ async fn tiering_movement_policy() {
 /// Uses base_offset=9224. Requires 127.0.0.2 bindable.
 #[tokio::test]
 #[cfg(unix)]
+#[parallel(multi_node)]
 async fn replication_response_wrong_thread() {
     use annalib::kvs_client::KVSClient;
 
