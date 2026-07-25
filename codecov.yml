@@ -43,9 +43,21 @@ component_management:
         - clients/go/
 
 flags:
-  clients:
+  rust-client:
     paths:
-      - clients/
+      - clients/rust/
+    carryforward: true
+  cpp-client:
+    paths:
+      - clients/cpp/
+    carryforward: true
+  python-client:
+    paths:
+      - clients/python/
+    carryforward: true
+  go-client:
+    paths:
+      - clients/go/
     carryforward: true
   server-system-tests:
     paths:
