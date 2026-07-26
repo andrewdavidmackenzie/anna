@@ -20,9 +20,13 @@ SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/tests)
 INCLUDE_DIRECTORIES(.)
 
 ADD_SUBDIRECTORY(unit)
-ADD_SUBDIRECTORY(benchmark)
 ADD_SUBDIRECTORY(zmq)
 ADD_SUBDIRECTORY(system)
 ADD_SUBDIRECTORY(cli)
+
+# The benchmark is a server-side tool that depends on server libraries
+# (anna-hash-ring, lattice serialization). It should be moved to
+# server/cpp/tests/benchmark/ in a follow-up.
+# ADD_SUBDIRECTORY(benchmark)
 
 ADD_CUSTOM_TARGET(ctest ${CMAKE_CTEST_COMMAND})

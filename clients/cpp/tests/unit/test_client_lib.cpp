@@ -220,23 +220,17 @@ TEST(ClientLibTest, DeleteSendsEmptyPut) {
   EXPECT_EQ(client.keys_put_[0], "my_key");
   EXPECT_TRUE(result.succeeded());
 }
-TEST(ClientLibTest, MultipleKvsClientsShareLogger) {
-  spdlog::drop("client_log");
-
+TEST(ClientLibTest, MultipleKvsClientsCanCoexist) {
   annalib::ClientConfig config;
   config.routing_ips = {"127.0.0.1"};
   config.routing_thread_count = 1;
   config.ip = "127.0.0.1";
 
-  {
-    auto client1 = annalib::make_client(config, 10, 1000);
-    ASSERT_NE(client1, nullptr);
+  auto client1 = annalib::make_client(config, 10, 1000);
+  ASSERT_NE(client1, nullptr);
 
-    auto client2 = annalib::make_client(config, 11, 1000);
-    ASSERT_NE(client2, nullptr);
-  }
-
-  spdlog::drop("client_log");
+  auto client2 = annalib::make_client(config, 11, 1000);
+  ASSERT_NE(client2, nullptr);
 }
 
 TEST(ClientLibTest, GetOrderedSetReturnsAllValues) {
@@ -635,23 +629,24 @@ TEST(ClientLibTest, GetOrderedSetReturnsEmptyForEmptySet) {
 }
 
 TEST(ClientLibTest, GetCausalWithMultipleDependencies) {
-  MultiKeyCausalPayload<SetLattice<string>> payload;
-  payload.vector_clock.insert("client1", 3);
-  payload.vector_clock.insert("client2", 5);
-  payload.dependencies.insert(
-      "dep1",
-      VectorClock(map<string, MaxLattice<unsigned>>({{"dc1", 1}})));
-  payload.dependencies.insert(
-      "dep2",
-      VectorClock(map<string, MaxLattice<unsigned>>({{"dc2", 2}})));
-  payload.value.insert("multi_dep_val");
-
-  MultiKeyCausalLattice<SetLattice<string>> lattice(payload);
+  kvs::MultiKeyCausalValue mkc;
+  auto* vc = mkc.mutable_vector_clock();
+  (*vc)["client1"] = 3;
+  (*vc)["client2"] = 5;
+  auto* dep1 = mkc.add_dependencies();
+  dep1->set_key("dep1");
+  (*dep1->mutable_vector_clock())["dc1"] = 1;
+  auto* dep2 = mkc.add_dependencies();
+  dep2->set_key("dep2");
+  (*dep2->mutable_vector_clock())["dc2"] = 2;
+  mkc.add_values("multi_dep_val");
+  string payload;
+  mkc.SerializeToString(&payload);
 
   kvs::KeyResponse response;
   kvs::KeyTuple* tuple = response.add_tuples();
   tuple->set_lattice_type(kvs::LatticeType::MULTI_CAUSAL);
-  tuple->set_payload(serialize(lattice));
+  tuple->set_payload(payload);
 
   MockKvsClient client;
   client.responses_.push_back(response);
@@ -664,18 +659,19 @@ TEST(ClientLibTest, GetCausalWithMultipleDependencies) {
 }
 
 TEST(ClientLibTest, GetSingleCausalWithMultipleValues) {
-  VectorClockValuePair<SetLattice<string>> p;
-  p.vector_clock.insert("c1", 1);
-  p.vector_clock.insert("c2", 2);
-  p.value.insert("v1");
-  p.value.insert("v2");
-
-  SingleKeyCausalLattice<SetLattice<string>> lattice(p);
+  kvs::SingleKeyCausalValue skc;
+  auto* vc = skc.mutable_vector_clock();
+  (*vc)["c1"] = 1;
+  (*vc)["c2"] = 2;
+  skc.add_values("v1");
+  skc.add_values("v2");
+  string payload;
+  skc.SerializeToString(&payload);
 
   kvs::KeyResponse response;
   kvs::KeyTuple* tuple = response.add_tuples();
   tuple->set_lattice_type(kvs::LatticeType::SINGLE_CAUSAL);
-  tuple->set_payload(serialize(lattice));
+  tuple->set_payload(payload);
 
   MockKvsClient client;
   client.responses_.push_back(response);
