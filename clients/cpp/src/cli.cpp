@@ -87,21 +87,22 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
   string command = v[0];
   std::transform(command.begin(), command.end(), command.begin(), ::toupper);
 
+  try {
   if (command == "GET") {
     std::cout << annalib::get(client, v[1]) << std::endl;
   } else if (command == "GET_CAUSAL") {
     print_causal_value(annalib::get_causal(client, v[1]));
   } else if (command == "DELETE") {
     if (!annalib::del(client, v[1]).succeeded()) {
-      std::cout << "Failure!" << std::endl;
+      std::cerr << "Error: DELETE failed" << std::endl;
     }
   } else if (command == "PUT") {
     if (!annalib::put(client, v[1], v[2]).succeeded()) {
-      std::cout << "Failure!" << std::endl;
+      std::cerr << "Error: PUT failed" << std::endl;
     }
   } else if (command == "PUT_CAUSAL") {
     if (!annalib::put_causal(client, v[1], v[2]).succeeded()) {
-      std::cout << "Failure!" << std::endl;
+      std::cerr << "Error: PUT_CAUSAL failed" << std::endl;
     }
   } else if (command == "PUT_SET") {
     set<string> values;
@@ -109,7 +110,7 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
       values.insert(v[i]);
     }
     if (!annalib::put_set(client, v[1], values).succeeded()) {
-      std::cout << "Failure!" << std::endl;
+      std::cerr << "Error: PUT_SET failed" << std::endl;
     }
   } else if (command == "GET_SET") {
     print_set(annalib::get_set(client, v[1]));
@@ -119,7 +120,7 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
       values.insert(v[i]);
     }
     if (!annalib::put_ordered_set(client, v[1], values).succeeded()) {
-      std::cout << "Failure!" << std::endl;
+      std::cerr << "Error: PUT_ORDERED_SET failed" << std::endl;
     }
   } else if (command == "GET_ORDERED_SET") {
     vector<string> values = annalib::get_ordered_set(client, v[1]);
@@ -130,14 +131,14 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
     std::cout << "]" << std::endl;
   } else if (command == "PUT_SINGLE_CAUSAL") {
     if (!annalib::put_single_causal(client, v[1], v[2]).succeeded()) {
-      std::cout << "Failure!" << std::endl;
+      std::cerr << "Error: PUT_SINGLE_CAUSAL failed" << std::endl;
     }
   } else if (command == "GET_SINGLE_CAUSAL") {
     print_single_causal_value(annalib::get_single_causal(client, v[1]));
   } else if (command == "PUT_PRIORITY") {
     double priority = std::stod(v[2]);
     if (!annalib::put_priority(client, v[1], priority, v[3]).succeeded()) {
-      std::cout << "Failure!" << std::endl;
+      std::cerr << "Error: PUT_PRIORITY failed" << std::endl;
     }
   } else if (command == "GET_PRIORITY") {
     print_priority_value(annalib::get_priority(client, v[1]));
@@ -158,6 +159,9 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
   } else {
     std::cout << "Unrecognized command: " << command << std::endl
               << cli_usage() << std::endl;
+  }
+  } catch (const std::exception& e) {
+    std::cerr << "Error: " << e.what() << std::endl;
   }
 }
 

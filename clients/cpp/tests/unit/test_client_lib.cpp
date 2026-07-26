@@ -1030,3 +1030,51 @@ TEST(ClientLibTest, MultipleKvsClientsHaveDifferentSeeds) {
   // Different tid should yield different seeds
   EXPECT_NE(client1.get_seed(), client2.get_seed());
 }
+
+// --- Error handling tests ---
+
+TEST(ClientLibTest, GetThrowsOnKeyDne) {
+  MockKvsClient client;
+
+  kvs::KeyResponse response;
+  kvs::KeyTuple* tuple = response.add_tuples();
+  tuple->set_lattice_type(kvs::LatticeType::LWW);
+  tuple->set_error(kvs::AnnaError::KEY_DNE);
+  client.responses_.push_back(response);
+
+  EXPECT_THROW(annalib::get(&client, "missing_key"), std::runtime_error);
+}
+
+TEST(ClientLibTest, GetThrowsOnTopLevelError) {
+  MockKvsClient client;
+
+  kvs::KeyResponse response;
+  response.set_error(kvs::AnnaError::NO_SERVERS);
+  response.add_tuples();
+  client.responses_.push_back(response);
+
+  EXPECT_THROW(annalib::get(&client, "any_key"), std::runtime_error);
+}
+
+TEST(ClientLibTest, GetThrowsOnEmptyTuples) {
+  MockKvsClient client;
+
+  kvs::KeyResponse response;
+  // No tuples added
+  client.responses_.push_back(response);
+
+  EXPECT_THROW(annalib::get(&client, "any_key"), std::runtime_error);
+}
+
+TEST(ClientLibTest, PutResultErrorOnKeyDne) {
+  MockKvsClient client;
+
+  kvs::KeyResponse response;
+  response.set_response_id("0");
+  kvs::KeyTuple* tuple = response.add_tuples();
+  tuple->set_error(kvs::AnnaError::KEY_DNE);
+  client.responses_.push_back(response);
+
+  auto result = annalib::put(&client, "key", "value");
+  EXPECT_TRUE(result.error);
+}
