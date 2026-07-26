@@ -15,11 +15,12 @@
 #include "client_lib.hpp"
 #include "client_utils.hpp"
 
-#include <cassert>
+#include <chrono>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <stdexcept>
+#include <thread>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/wait.h>
@@ -55,6 +56,37 @@ std::unique_ptr<KvsClient> make_client(const ClientConfig& config,
 
 namespace {
 
+// Receive a response from the client, with a 10-second deadline.
+// Throws std::runtime_error if no response is received in time.
+vector<kvs::KeyResponse> receive_with_deadline(KvsClientInterface* client) {
+  auto deadline = std::chrono::system_clock::now() + std::chrono::seconds(10);
+  vector<kvs::KeyResponse> responses = client->receive_async();
+  while (responses.empty()) {
+    if (std::chrono::system_clock::now() > deadline) {
+      throw std::runtime_error("Request timed out: no response within 10s");
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    responses = client->receive_async();
+  }
+  return responses;
+}
+
+// Check a response for server-side errors (top-level and per-tuple).
+// Throws std::runtime_error with the error name if present.
+void check_response_error(const kvs::KeyResponse& response) {
+  if (response.error() != kvs::AnnaError::NO_ERROR) {
+    throw std::runtime_error(
+        kvs::AnnaError_Name(response.error()));
+  }
+  if (response.tuples_size() == 0) {
+    throw std::runtime_error("Empty response: no tuples");
+  }
+  if (response.tuples(0).error() != 0) {
+    throw std::runtime_error(
+        kvs::AnnaError_Name(response.tuples(0).error()));
+  }
+}
+
 // Convert a kvs::KeyResponse into a PutResult for the public API.
 PutResult to_put_result(const kvs::KeyResponse& response,
                         const string& expected_rid) {
@@ -63,7 +95,11 @@ PutResult to_put_result(const kvs::KeyResponse& response,
   result.response_id = response.response_id();
 
   if (result.response_id != expected_rid) {
-    std::cerr << "Invalid response: ID did not match request ID!" << std::endl;
+    result.error = true;
+  }
+
+  if (!result.error && response.tuples_size() > 0 &&
+      response.tuples(0).error() != 0) {
     result.error = true;
   }
 
@@ -118,34 +154,15 @@ map<string, string> get_multi(KvsClientInterface* client,
 
 string get(KvsClientInterface* client, const string& key) {
   client->get_async(key);
-
-  vector<kvs::KeyResponse> responses = client->receive_async();
-  while (responses.size() == 0) {
-    responses = client->receive_async();
-  }
-
-  if (responses.size() > 1) {
-    std::cerr << "Error: received more than one response" << std::endl;
-  }
-
-  assert(responses[0].tuples(0).lattice_type() == kvs::LatticeType::LWW);
+  auto responses = receive_with_deadline(client);
+  check_response_error(responses[0]);
   return decode_lww_value(responses[0].tuples(0).payload());
 }
 
 CausalValue get_causal(KvsClientInterface* client, const string& key) {
   client->get_async(key);
-
-  vector<kvs::KeyResponse> responses = client->receive_async();
-  while (responses.size() == 0) {
-    responses = client->receive_async();
-  }
-
-  if (responses.size() > 1) {
-    std::cerr << "Error: received more than one response" << std::endl;
-  }
-
-  assert(responses[0].tuples(0).lattice_type() ==
-         kvs::LatticeType::MULTI_CAUSAL);
+  auto responses = receive_with_deadline(client);
+  check_response_error(responses[0]);
 
   kvs::MultiKeyCausalValue mkc;
   mkc.ParseFromString(responses[0].tuples(0).payload());
@@ -175,10 +192,7 @@ PutResult put(KvsClientInterface* client, const string& key,
   string rid = client->put_async(key, make_lww_payload(value),
                                  kvs::LatticeType::LWW);
 
-  vector<kvs::KeyResponse> responses = client->receive_async();
-  while (responses.size() == 0) {
-    responses = client->receive_async();
-  }
+  auto responses = receive_with_deadline(client);
 
   return to_put_result(responses[0], rid);
 }
@@ -206,10 +220,7 @@ PutResult put_causal(KvsClientInterface* client, const string& key,
   string rid = client->put_async(key, payload,
                                  kvs::LatticeType::MULTI_CAUSAL);
 
-  vector<kvs::KeyResponse> responses = client->receive_async();
-  while (responses.size() == 0) {
-    responses = client->receive_async();
-  }
+  auto responses = receive_with_deadline(client);
 
   return to_put_result(responses[0], rid);
 }
@@ -219,27 +230,15 @@ PutResult put_set(KvsClientInterface* client, const string& key,
   string rid = client->put_async(key, make_set_payload(values),
                                  kvs::LatticeType::SET);
 
-  vector<kvs::KeyResponse> responses = client->receive_async();
-  while (responses.size() == 0) {
-    responses = client->receive_async();
-  }
+  auto responses = receive_with_deadline(client);
 
   return to_put_result(responses[0], rid);
 }
 
 set<string> get_set(KvsClientInterface* client, const string& key) {
   client->get_async(key);
-
-  vector<kvs::KeyResponse> responses = client->receive_async();
-  while (responses.size() == 0) {
-    responses = client->receive_async();
-  }
-
-  if (responses.size() > 1) {
-    std::cerr << "Error: received more than one response" << std::endl;
-  }
-
-  assert(responses[0].tuples(0).lattice_type() == kvs::LatticeType::SET);
+  auto responses = receive_with_deadline(client);
+  check_response_error(responses[0]);
 
   kvs::SetValue sv;
   sv.ParseFromString(responses[0].tuples(0).payload());
@@ -258,28 +257,15 @@ PutResult put_ordered_set(KvsClientInterface* client, const string& key,
   string rid = client->put_async(key, make_set_payload(values),
                                  kvs::LatticeType::ORDERED_SET);
 
-  vector<kvs::KeyResponse> responses = client->receive_async();
-  while (responses.size() == 0) {
-    responses = client->receive_async();
-  }
+  auto responses = receive_with_deadline(client);
 
   return to_put_result(responses[0], rid);
 }
 
 vector<string> get_ordered_set(KvsClientInterface* client, const string& key) {
   client->get_async(key);
-
-  vector<kvs::KeyResponse> responses = client->receive_async();
-  while (responses.size() == 0) {
-    responses = client->receive_async();
-  }
-
-  if (responses.size() > 1) {
-    std::cerr << "Error: received more than one response" << std::endl;
-  }
-
-  assert(responses[0].tuples(0).lattice_type() ==
-         kvs::LatticeType::ORDERED_SET);
+  auto responses = receive_with_deadline(client);
+  check_response_error(responses[0]);
 
   kvs::SetValue set_val;
   set_val.ParseFromString(responses[0].tuples(0).payload());
@@ -307,10 +293,7 @@ PutResult put_single_causal(KvsClientInterface* client,
   string rid = client->put_async(key, payload,
                                  kvs::LatticeType::SINGLE_CAUSAL);
 
-  vector<kvs::KeyResponse> responses = client->receive_async();
-  while (responses.size() == 0) {
-    responses = client->receive_async();
-  }
+  auto responses = receive_with_deadline(client);
 
   return to_put_result(responses[0], rid);
 }
@@ -318,18 +301,8 @@ PutResult put_single_causal(KvsClientInterface* client,
 SingleCausalValue get_single_causal(KvsClientInterface* client,
                                     const string& key) {
   client->get_async(key);
-
-  vector<kvs::KeyResponse> responses = client->receive_async();
-  while (responses.size() == 0) {
-    responses = client->receive_async();
-  }
-
-  if (responses.size() > 1) {
-    std::cerr << "Error: received more than one response" << std::endl;
-  }
-
-  assert(responses[0].tuples(0).lattice_type() ==
-         kvs::LatticeType::SINGLE_CAUSAL);
+  auto responses = receive_with_deadline(client);
+  check_response_error(responses[0]);
 
   kvs::SingleKeyCausalValue skc;
   skc.ParseFromString(responses[0].tuples(0).payload());
@@ -357,28 +330,15 @@ PutResult put_priority(KvsClientInterface* client, const string& key,
   string rid = client->put_async(key, payload,
                                  kvs::LatticeType::PRIORITY);
 
-  vector<kvs::KeyResponse> responses = client->receive_async();
-  while (responses.size() == 0) {
-    responses = client->receive_async();
-  }
+  auto responses = receive_with_deadline(client);
 
   return to_put_result(responses[0], rid);
 }
 
 PriorityResult get_priority(KvsClientInterface* client, const string& key) {
   client->get_async(key);
-
-  vector<kvs::KeyResponse> responses = client->receive_async();
-  while (responses.size() == 0) {
-    responses = client->receive_async();
-  }
-
-  if (responses.size() > 1) {
-    std::cerr << "Error: received more than one response" << std::endl;
-  }
-
-  assert(responses[0].tuples(0).lattice_type() ==
-         kvs::LatticeType::PRIORITY);
+  auto responses = receive_with_deadline(client);
+  check_response_error(responses[0]);
 
   kvs::PriorityValue pv;
   pv.ParseFromString(responses[0].tuples(0).payload());
