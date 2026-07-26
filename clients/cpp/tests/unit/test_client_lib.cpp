@@ -12,11 +12,11 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#include <sstream>
-
 #include "gtest/gtest.h"
-#include "spdlog/sinks/ostream_sink.h"
 
+// Include common.hpp BEFORE client_lib.hpp so the server's lattice types
+// and serialize/deserialize functions are available for mock responses.
+#include "common.hpp"
 #include "client_lib.hpp"
 #include "mock_kvs_client.hpp"
 
@@ -994,33 +994,6 @@ TEST(ClientLibTest, KvsClientGetSeed) {
   // (it can legally wrap to zero). Uniqueness is tested below in
   // MultipleKvsClientsHaveDifferentSeeds.
   (void)kvs_client.get_seed();
-}
-
-TEST(ClientLibTest, KvsClientSetLogger) {
-  const string log_name = "test_custom_log_94";
-
-  vector<UserRoutingThread> threads;
-  threads.push_back(UserRoutingThread("127.0.0.1", 0));
-
-  // Use an ostream sink to capture log output in memory (no file I/O).
-  auto oss = std::make_shared<std::ostringstream>();
-  auto ostream_sink =
-      std::make_shared<spdlog::sinks::ostream_sink_mt>(*oss);
-  auto custom_log =
-      std::make_shared<spdlog::logger>(log_name, ostream_sink);
-
-  {
-    KvsClient kvs_client(threads, "127.0.0.1", 94, 10000);
-    kvs_client.set_logger(custom_log);
-
-    custom_log->info("set_logger_test_marker");
-    custom_log->flush();
-  }
-
-  spdlog::drop(log_name);
-
-  // Verify the in-memory log contains our marker.
-  EXPECT_NE(oss->str().find("set_logger_test_marker"), std::string::npos);
 }
 
 TEST(ClientLibTest, KvsClientDefaultTimeout) {

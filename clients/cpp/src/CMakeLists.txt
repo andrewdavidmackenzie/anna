@@ -17,18 +17,22 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 SET(LIBRARY_DEPENDENCIES
     protobuf::libprotobuf
     kvs-proto
-    anna-zmq
 )
+
+# Client-local ZMQ utilities (decoupled from server/cpp/src/zmq/).
+ADD_LIBRARY(anna-client-zmq STATIC zmq/socket_cache.cpp zmq/zmq_util.cpp)
+TARGET_LINK_LIBRARIES(anna-client-zmq spdlog::spdlog ${ZeroMQ_LIBRARY})
+TARGET_INCLUDE_DIRECTORIES(anna-client-zmq PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 # The annalib client library: KVS operations (get/put/...) and process
 # management (start/stop/status), wrapping KvsClientInterface with no
 # dependency on stdin/stdout/argv. See issue #75.
 ADD_LIBRARY(anna-client-lib STATIC client_lib.cpp latency_reporter.cpp)
-TARGET_LINK_LIBRARIES(anna-client-lib spdlog::spdlog fmt::fmt ${ZeroMQ_LIBRARY} ${LIBRARY_DEPENDENCIES})
+TARGET_LINK_LIBRARIES(anna-client-lib anna-client-zmq fmt::fmt ${ZeroMQ_LIBRARY} ${LIBRARY_DEPENDENCIES})
 TARGET_INCLUDE_DIRECTORIES(anna-client-lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 # anna-cli is an example CLI built on top of anna-client-lib.
 ADD_EXECUTABLE(anna-cli cli.cpp)
-TARGET_LINK_LIBRARIES(anna-cli anna-client-lib spdlog::spdlog fmt::fmt ${ZeroMQ_LIBRARY} ${LIBRARY_DEPENDENCIES})
+TARGET_LINK_LIBRARIES(anna-cli anna-client-lib anna-client-zmq fmt::fmt ${ZeroMQ_LIBRARY} ${LIBRARY_DEPENDENCIES})
 
 SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/cli)
