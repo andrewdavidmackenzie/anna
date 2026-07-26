@@ -16,6 +16,10 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 
 FIND_PACKAGE(yaml-cpp REQUIRED)
 
+# The benchmark is a server-side tool that uses lattice serialization
+# and hash ring code. It needs the server include path.
+INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/../../server/cpp/src)
+
 SET(BENCHMARK_DEPENDENCIES
     protobuf::libprotobuf
     kvs-proto

@@ -17,3 +17,11 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 ADD_EXECUTABLE(run_lattice_tests run_lattice_tests.cpp)
 TARGET_LINK_LIBRARIES(run_lattice_tests spdlog::spdlog fmt::fmt GTest::gtest GTest::gmock)
 ADD_TEST(NAME LatticeTest COMMAND run_lattice_tests)
+
+ADD_EXECUTABLE(run_lattice_type_tests test_lattices.cpp)
+TARGET_LINK_LIBRARIES(run_lattice_type_tests kvs-proto spdlog::spdlog fmt::fmt GTest::gtest GTest::gtest_main)
+ADD_TEST(NAME LatticeTypeTests COMMAND run_lattice_type_tests)
+
+ADD_EXECUTABLE(run_serialization_tests test_serialization.cpp)
+TARGET_LINK_LIBRARIES(run_serialization_tests kvs-proto spdlog::spdlog fmt::fmt GTest::gtest GTest::gtest_main)
+ADD_TEST(NAME SerializationTests COMMAND run_serialization_tests)

@@ -14,9 +14,6 @@
 
 #include "gtest/gtest.h"
 
-// Include common.hpp BEFORE client_lib.hpp so the server's lattice types
-// and serialize/deserialize functions are available for mock responses.
-#include "common.hpp"
 #include "client_lib.hpp"
 #include "mock_kvs_client.hpp"
 
@@ -32,75 +29,98 @@ kvs::KeyResponse make_lww_response(const string& response_id,
   kvs::KeyResponse response;
   response.set_response_id(response_id);
 
+  kvs::LWWValue lww;
+  lww.set_timestamp(0);
+  lww.set_value(value);
+  string payload;
+  lww.SerializeToString(&payload);
+
   kvs::KeyTuple* tuple = response.add_tuples();
   tuple->set_lattice_type(kvs::LatticeType::LWW);
-  tuple->set_payload(serialize(
-      LWWPairLattice<string>(TimestampValuePair<string>(0, value))));
+  tuple->set_payload(payload);
 
   return response;
 }
 
 kvs::KeyResponse make_set_response(const set<string>& values) {
-  kvs::KeyResponse response;
+  kvs::SetValue sv;
+  for (const auto& v : values) {
+    sv.add_values(v);
+  }
+  string payload;
+  sv.SerializeToString(&payload);
 
+  kvs::KeyResponse response;
   kvs::KeyTuple* tuple = response.add_tuples();
   tuple->set_lattice_type(kvs::LatticeType::SET);
-  tuple->set_payload(serialize(values));
+  tuple->set_payload(payload);
 
   return response;
 }
 
 kvs::KeyResponse make_ordered_set_response(const set<string>& values) {
-  kvs::KeyResponse response;
+  kvs::SetValue sv;
+  for (const auto& v : values) {
+    sv.add_values(v);
+  }
+  string payload;
+  sv.SerializeToString(&payload);
 
+  kvs::KeyResponse response;
   kvs::KeyTuple* tuple = response.add_tuples();
   tuple->set_lattice_type(kvs::LatticeType::ORDERED_SET);
-  tuple->set_payload(serialize(values));
+  tuple->set_payload(payload);
 
   return response;
 }
 
 kvs::KeyResponse make_single_causal_response(const string& value) {
-  VectorClockValuePair<SetLattice<string>> p;
-  p.vector_clock.insert("client1", 1);
-  p.value.insert(value);
-
-  SingleKeyCausalLattice<SetLattice<string>> lattice(p);
+  kvs::SingleKeyCausalValue skc;
+  auto* vc = skc.mutable_vector_clock();
+  (*vc)["client1"] = 1;
+  skc.add_values(value);
+  string payload;
+  skc.SerializeToString(&payload);
 
   kvs::KeyResponse response;
   kvs::KeyTuple* tuple = response.add_tuples();
   tuple->set_lattice_type(kvs::LatticeType::SINGLE_CAUSAL);
-  tuple->set_payload(serialize(lattice));
+  tuple->set_payload(payload);
 
   return response;
 }
 
 kvs::KeyResponse make_priority_response(double priority, const string& value) {
-  PriorityLattice<double, string> lattice(
-      PriorityValuePair<double, string>(priority, value));
+  kvs::PriorityValue pv;
+  pv.set_priority(priority);
+  pv.set_value(value);
+  string payload;
+  pv.SerializeToString(&payload);
 
   kvs::KeyResponse response;
   kvs::KeyTuple* tuple = response.add_tuples();
   tuple->set_lattice_type(kvs::LatticeType::PRIORITY);
-  tuple->set_payload(serialize(lattice));
+  tuple->set_payload(payload);
 
   return response;
 }
 
 kvs::KeyResponse make_causal_response(const string& value) {
-  MultiKeyCausalPayload<SetLattice<string>> payload;
-  payload.vector_clock.insert("client1", 1);
-  payload.dependencies.insert(
-      "dep_key",
-      VectorClock(map<string, MaxLattice<unsigned>>({{"dep_client", 2}})));
-  payload.value.insert(value);
-
-  MultiKeyCausalLattice<SetLattice<string>> lattice(payload);
+  kvs::MultiKeyCausalValue mkc;
+  auto* vc = mkc.mutable_vector_clock();
+  (*vc)["client1"] = 1;
+  auto* dep = mkc.add_dependencies();
+  dep->set_key("dep_key");
+  auto* dep_vc = dep->mutable_vector_clock();
+  (*dep_vc)["dep_client"] = 2;
+  mkc.add_values(value);
+  string payload;
+  mkc.SerializeToString(&payload);
 
   kvs::KeyResponse response;
   kvs::KeyTuple* tuple = response.add_tuples();
   tuple->set_lattice_type(kvs::LatticeType::MULTI_CAUSAL);
-  tuple->set_payload(serialize(lattice));
+  tuple->set_payload(payload);
 
   return response;
 }
