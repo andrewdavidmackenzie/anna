@@ -236,7 +236,7 @@ TEST(LatencyReporterTest, FinishSendsToAllMonitoringIps) {
   ASSERT_EQ(mock.sent.size(), 3u);
 
   // Each message should go to a distinct socket (one per IP)
-  set<zmq::socket_t*> sockets;
+  std::unordered_set<zmq::socket_t*> sockets;
   for (const auto& m : mock.sent) {
     sockets.insert(m.socket);
   }

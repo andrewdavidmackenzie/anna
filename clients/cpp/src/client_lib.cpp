@@ -13,6 +13,7 @@
 //  limitations under the License.
 
 #include "client_lib.hpp"
+#include "client_utils.hpp"
 
 #include <cassert>
 #include <csignal>
@@ -24,7 +25,7 @@
 #include <sys/wait.h>
 
 // kZmqUtil is declared `extern` (in the global namespace) by
-// zmq/zmq_util.hpp and used by KvsClient/requests.hpp; this is its one
+// zmq/zmq_util.hpp and used by KvsClient; this is its one
 // definition for any binary that links against this library.
 namespace {
 ZmqUtil zmq_util;
@@ -69,6 +70,34 @@ PutResult to_put_result(const kvs::KeyResponse& response,
   return result;
 }
 
+// Build an LWW protobuf payload from a value string.
+string make_lww_payload(const string& value) {
+  kvs::LWWValue lww;
+  lww.set_timestamp(generate_timestamp(0));
+  lww.set_value(value);
+  string payload;
+  lww.SerializeToString(&payload);
+  return payload;
+}
+
+// Decode an LWW protobuf payload and return the value string.
+string decode_lww_value(const string& payload) {
+  kvs::LWWValue lww;
+  lww.ParseFromString(payload);
+  return lww.value();
+}
+
+// Build a SetValue protobuf payload from a set of strings.
+string make_set_payload(const set<string>& values) {
+  kvs::SetValue sv;
+  for (const auto& v : values) {
+    sv.add_values(v);
+  }
+  string payload;
+  sv.SerializeToString(&payload);
+  return payload;
+}
+
 }  // namespace
 
 PutResult del(KvsClientInterface* client, const string& key) {
@@ -100,11 +129,7 @@ string get(KvsClientInterface* client, const string& key) {
   }
 
   assert(responses[0].tuples(0).lattice_type() == kvs::LatticeType::LWW);
-
-  LWWPairLattice<string> lww_lattice =
-      deserialize_lww(responses[0].tuples(0).payload());
-
-  return lww_lattice.reveal().value;
+  return decode_lww_value(responses[0].tuples(0).payload());
 }
 
 CausalValue get_causal(KvsClientInterface* client, const string& key) {
@@ -122,23 +147,24 @@ CausalValue get_causal(KvsClientInterface* client, const string& key) {
   assert(responses[0].tuples(0).lattice_type() ==
          kvs::LatticeType::MULTI_CAUSAL);
 
-  MultiKeyCausalLattice<SetLattice<string>> mkcl =
-      MultiKeyCausalLattice<SetLattice<string>>(to_multi_key_causal_payload(
-          deserialize_multi_key_causal(responses[0].tuples(0).payload())));
+  kvs::MultiKeyCausalValue mkc;
+  mkc.ParseFromString(responses[0].tuples(0).payload());
 
   CausalValue result;
-  result.value = *(mkcl.reveal().value.reveal().begin());
-
-  for (const auto& pair : mkcl.reveal().vector_clock.reveal()) {
-    result.vector_clock.push_back({pair.first, pair.second.reveal()});
+  if (mkc.values_size() > 0) {
+    result.value = mkc.values(0);
   }
 
-  for (const auto& dep_key_vc_pair : mkcl.reveal().dependencies.reveal()) {
+  for (const auto& pair : mkc.vector_clock()) {
+    result.vector_clock.push_back({pair.first, pair.second});
+  }
+
+  for (const auto& dep : mkc.dependencies()) {
     vector<pair<string, unsigned>> vc;
-    for (const auto& vc_pair : dep_key_vc_pair.second.reveal()) {
-      vc.push_back({vc_pair.first, vc_pair.second.reveal()});
+    for (const auto& vc_pair : dep.vector_clock()) {
+      vc.push_back({vc_pair.first, vc_pair.second});
     }
-    result.dependencies[dep_key_vc_pair.first] = vc;
+    result.dependencies[dep.key()] = vc;
   }
 
   return result;
@@ -146,11 +172,8 @@ CausalValue get_causal(KvsClientInterface* client, const string& key) {
 
 PutResult put(KvsClientInterface* client, const string& key,
               const string& value) {
-  LWWPairLattice<string> val(
-      TimestampValuePair<string>(generate_timestamp(0), value));
-
-  string rid =
-      client->put_async(key, serialize(val), kvs::LatticeType::LWW);
+  string rid = client->put_async(key, make_lww_payload(value),
+                                 kvs::LatticeType::LWW);
 
   vector<kvs::KeyResponse> responses = client->receive_async();
   while (responses.size() == 0) {
@@ -162,20 +185,25 @@ PutResult put(KvsClientInterface* client, const string& key,
 
 PutResult put_causal(KvsClientInterface* client, const string& key,
                      const string& value) {
-  MultiKeyCausalPayload<SetLattice<string>> mkcp;
-  // construct a test client id - version pair
-  mkcp.vector_clock.insert("test", 1);
+  kvs::MultiKeyCausalValue mkc;
 
-  // construct one test dependency
-  mkcp.dependencies.insert(
-      "dep1", VectorClock(map<string, MaxLattice<unsigned>>({{"test1", 1}})));
+  // Vector clock: test client id with version 1
+  auto* vc = mkc.mutable_vector_clock();
+  (*vc)["test"] = 1;
 
-  // populate the value
-  mkcp.value.insert(value);
+  // One test dependency
+  auto* dep = mkc.add_dependencies();
+  dep->set_key("dep1");
+  auto* dep_vc = dep->mutable_vector_clock();
+  (*dep_vc)["test1"] = 1;
 
-  MultiKeyCausalLattice<SetLattice<string>> mkcl(mkcp);
+  // Value
+  mkc.add_values(value);
 
-  string rid = client->put_async(key, serialize(mkcl),
+  string payload;
+  mkc.SerializeToString(&payload);
+
+  string rid = client->put_async(key, payload,
                                  kvs::LatticeType::MULTI_CAUSAL);
 
   vector<kvs::KeyResponse> responses = client->receive_async();
@@ -188,7 +216,7 @@ PutResult put_causal(KvsClientInterface* client, const string& key,
 
 PutResult put_set(KvsClientInterface* client, const string& key,
                   const set<string>& values) {
-  string rid = client->put_async(key, serialize(SetLattice<string>(values)),
+  string rid = client->put_async(key, make_set_payload(values),
                                  kvs::LatticeType::SET);
 
   vector<kvs::KeyResponse> responses = client->receive_async();
@@ -213,16 +241,21 @@ set<string> get_set(KvsClientInterface* client, const string& key) {
 
   assert(responses[0].tuples(0).lattice_type() == kvs::LatticeType::SET);
 
-  SetLattice<string> latt = deserialize_set(responses[0].tuples(0).payload());
+  kvs::SetValue sv;
+  sv.ParseFromString(responses[0].tuples(0).payload());
 
-  return latt.reveal();
+  set<string> result;
+  for (const auto& v : sv.values()) {
+    result.insert(v);
+  }
+  return result;
 }
 
 PutResult put_ordered_set(KvsClientInterface* client, const string& key,
                           const set<string>& values) {
   // Same serialization as SET, but use ORDERED_SET lattice type so the
   // server stores as OrderedSetLattice.
-  string rid = client->put_async(key, serialize(SetLattice<string>(values)),
+  string rid = client->put_async(key, make_set_payload(values),
                                  kvs::LatticeType::ORDERED_SET);
 
   vector<kvs::KeyResponse> responses = client->receive_async();
@@ -259,15 +292,19 @@ vector<string> get_ordered_set(KvsClientInterface* client, const string& key) {
 
 PutResult put_single_causal(KvsClientInterface* client,
                             const string& key, const string& value) {
-  VectorClockValuePair<SetLattice<string>> p;
-  // construct a test client id - version pair
-  p.vector_clock.insert("test", 1);
-  // populate the value
-  p.value.insert(value);
+  kvs::SingleKeyCausalValue skc;
 
-  SingleKeyCausalLattice<SetLattice<string>> skcl(p);
+  // Vector clock: test client id with version 1
+  auto* vc = skc.mutable_vector_clock();
+  (*vc)["test"] = 1;
 
-  string rid = client->put_async(key, serialize(skcl),
+  // Value
+  skc.add_values(value);
+
+  string payload;
+  skc.SerializeToString(&payload);
+
+  string rid = client->put_async(key, payload,
                                  kvs::LatticeType::SINGLE_CAUSAL);
 
   vector<kvs::KeyResponse> responses = client->receive_async();
@@ -294,17 +331,15 @@ SingleCausalValue get_single_causal(KvsClientInterface* client,
   assert(responses[0].tuples(0).lattice_type() ==
          kvs::LatticeType::SINGLE_CAUSAL);
 
-  kvs::SingleKeyCausalValue cv =
-      deserialize_causal(responses[0].tuples(0).payload());
-  VectorClockValuePair<SetLattice<string>> p = to_vector_clock_value_pair(cv);
+  kvs::SingleKeyCausalValue skc;
+  skc.ParseFromString(responses[0].tuples(0).payload());
 
   SingleCausalValue result;
-  for (const auto& v : p.value.reveal()) {
+  for (const auto& v : skc.values()) {
     result.values.push_back(v);
   }
-
-  for (const auto& pair : p.vector_clock.reveal()) {
-    result.vector_clock.push_back({pair.first, pair.second.reveal()});
+  for (const auto& pair : skc.vector_clock()) {
+    result.vector_clock.push_back({pair.first, pair.second});
   }
 
   return result;
@@ -312,10 +347,14 @@ SingleCausalValue get_single_causal(KvsClientInterface* client,
 
 PutResult put_priority(KvsClientInterface* client, const string& key,
                        double priority, const string& value) {
-  PriorityLattice<double, string> pl(
-      PriorityValuePair<double, string>(priority, value));
+  kvs::PriorityValue pv;
+  pv.set_priority(priority);
+  pv.set_value(value);
 
-  string rid = client->put_async(key, serialize(pl),
+  string payload;
+  pv.SerializeToString(&payload);
+
+  string rid = client->put_async(key, payload,
                                  kvs::LatticeType::PRIORITY);
 
   vector<kvs::KeyResponse> responses = client->receive_async();
@@ -341,12 +380,12 @@ PriorityResult get_priority(KvsClientInterface* client, const string& key) {
   assert(responses[0].tuples(0).lattice_type() ==
          kvs::LatticeType::PRIORITY);
 
-  PriorityLattice<double, string> pl =
-      deserialize_priority(responses[0].tuples(0).payload());
+  kvs::PriorityValue pv;
+  pv.ParseFromString(responses[0].tuples(0).payload());
 
   PriorityResult result;
-  result.priority = pl.reveal().priority;
-  result.value = pl.reveal().value;
+  result.priority = pv.priority();
+  result.value = pv.value();
 
   return result;
 }

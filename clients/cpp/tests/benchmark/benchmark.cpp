@@ -15,6 +15,7 @@
 #include <stdlib.h>
 
 #include "benchmark.pb.h"
+#include "common.hpp"  // server lattice types for benchmark serialization
 #include "kvs_client.hpp"
 #include "zmq/zmq_util.hpp"
 #include "kvs/kvs_threads.hpp"
@@ -91,8 +92,6 @@ void run(const unsigned &thread_id,
   string logger_name = "benchmark_log_" + std::to_string(thread_id);
   auto log = spdlog::stdout_color_mt(logger_name);
   log->flush_on(spdlog::level::info);
-
-  client.set_logger(log);
   unsigned seed = client.get_seed();
 
   // observed per-key avg latency

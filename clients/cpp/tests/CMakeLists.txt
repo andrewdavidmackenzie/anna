@@ -19,6 +19,12 @@ SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/tests)
 
 INCLUDE_DIRECTORIES(.)
 
+# Tests that exercise server-internal lattice types, serialization, and
+# hash ring still need the server include path. The client library itself
+# no longer depends on it — only these test targets do. These tests
+# should be migrated to server/cpp/tests/ in a follow-up (#478).
+INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/../../server/cpp/src)
+
 ADD_SUBDIRECTORY(unit)
 ADD_SUBDIRECTORY(benchmark)
 ADD_SUBDIRECTORY(zmq)

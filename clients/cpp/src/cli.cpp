@@ -15,6 +15,7 @@
 #include <fstream>
 #include <algorithm>
 #include <string>
+#include "client_utils.hpp"
 
 #include "client_lib.hpp"
 
