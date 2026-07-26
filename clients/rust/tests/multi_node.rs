@@ -123,6 +123,7 @@ timings:
   monitoring_timeout: {monitoring_timeout}
   monitoring_response_timeout_ms: 1000
   data_redistribute_batch: 50
+  tombstone_gc_multiplier: 30
   grace_period: {grace_period}
 replication:
   memory: {replication_memory}

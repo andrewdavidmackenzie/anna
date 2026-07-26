@@ -29,6 +29,13 @@
 // Gossip period in microseconds (default 10 seconds)
 inline unsigned kGossipPeriod = 10000000;
 
+// Tombstone GC: multiplier of the gossip period. Tombstoned keys (size_ == 0)
+// are reaped after gossip_epoch * tombstone_gc_multiplier seconds. This must
+// be long enough for all replicas to receive the tombstone via gossip.
+// Default 30 means 30 * 10s = 5 minutes with the default gossip epoch.
+// Set to 0 to disable tombstone GC.
+inline unsigned kTombstoneGcMultiplier = 30;
+
 // Max keys redistributed per gossip batch
 inline unsigned kDataRedistributeThreshold = 50;
 

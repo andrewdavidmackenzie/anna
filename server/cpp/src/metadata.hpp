@@ -34,6 +34,9 @@ struct KeyReplication {
 struct KeyProperty {
   unsigned size_;
   kvs::LatticeType type_;
+  // When the key became a tombstone (size_ == 0). Only meaningful when
+  // size_ == 0; used by tombstone GC to decide when to reap the key.
+  std::chrono::time_point<std::chrono::system_clock> tombstone_time_;
 };
 
 inline bool operator==(const KeyReplication &lhs, const KeyReplication &rhs) {

@@ -296,6 +296,7 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
   auto gossip_end = std::chrono::system_clock::now();
   auto report_start = std::chrono::system_clock::now();
   auto report_end = std::chrono::system_clock::now();
+  auto gc_start = std::chrono::system_clock::now();
 
   unsigned long long working_time = 0;
   unsigned long long working_time_map[11] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -521,6 +522,38 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
 
       working_time += time_elapsed;
       working_time_map[10] += time_elapsed;
+    }
+
+    // Tombstone GC: reap deleted keys whose tombstone has expired.
+    // Runs on the same cadence as gossip to avoid continuous scanning.
+    if (kTombstoneGcMultiplier > 0 &&
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::system_clock::now() - gc_start)
+                .count() >= kGossipPeriod) {
+      auto gc_threshold =
+          std::chrono::microseconds(kGossipPeriod) * kTombstoneGcMultiplier;
+      auto now = std::chrono::system_clock::now();
+
+      vector<Key> keys_to_reap;
+      for (const auto &kv : stored_key_map) {
+        if (kv.second.size_ == 0 && !is_metadata(kv.first) &&
+            kv.second.tombstone_time_.time_since_epoch().count() > 0 &&
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                now - kv.second.tombstone_time_) > gc_threshold) {
+          keys_to_reap.push_back(kv.first);
+        }
+      }
+
+      for (const Key &key : keys_to_reap) {
+        if (serializers[stored_key_map[key].type_]->remove(key)) {
+          stored_key_map.erase(key);
+          log->info("Tombstone GC: reaped key {}", key);
+        } else {
+          log->error("Tombstone GC: failed to remove key {}", key);
+        }
+      }
+
+      gc_start = std::chrono::system_clock::now();
     }
 
     // Collect and store internal statistics,
@@ -814,6 +847,8 @@ int main(int argc, char *argv[]) {
       kGossipPeriod = timings["gossip_epoch"].as<unsigned>() * 1000000;
     if (timings["data_redistribute_batch"])
       kDataRedistributeThreshold = timings["data_redistribute_batch"].as<unsigned>();
+    if (timings["tombstone_gc_multiplier"])
+      kTombstoneGcMultiplier = timings["tombstone_gc_multiplier"].as<unsigned>();
   }
 
   YAML::Node threads = conf["threads"];

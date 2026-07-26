@@ -67,6 +67,22 @@ bool process_put(const Key &key, kvs::LatticeType lattice_type,
   }
   stored_key_map[key].size_ = static_cast<unsigned>(result);
   stored_key_map[key].type_ = std::move(lattice_type);
+
+  // Track when a key becomes a tombstone (empty value after a delete).
+  // Set the timestamp whenever the result is zero-length, so both new
+  // tombstones and transitions from non-zero get a correct timestamp.
+  if (result == 0) {
+    // Only update the timestamp if it hasn't been set yet (epoch value),
+    // or if this is a fresh transition to empty. This avoids resetting
+    // the clock when a tombstone is re-gossiped.
+    if (stored_key_map[key].tombstone_time_.time_since_epoch().count() == 0) {
+      stored_key_map[key].tombstone_time_ = std::chrono::system_clock::now();
+    }
+  } else {
+    // Key has a non-empty value — clear any tombstone timestamp.
+    stored_key_map[key].tombstone_time_ = {};
+  }
+
   return true;
 }
 
