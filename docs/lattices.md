@@ -223,8 +223,8 @@ support them, but no implementation exists in this codebase.
   transaction.
 - **Writes Follow Reads**: Would require the client to include the read
   version in write requests.
-- **PRAM**: Would compose monotonic reads, monotonic writes, and
-  read-your-writes — each of which would need explicit enforcement.
+- **PRAM**: Implemented — the composition of monotonic reads, monotonic
+  writes, and read-your-writes, all of which are now enforced.
 
 **Enforced session guarantees** (all client libraries):
 
@@ -234,26 +234,31 @@ support them, but no implementation exists in this codebase.
   guarantees that once a client reads a value, subsequent reads never
   return an older version.
 
+- **Monotonic Writes**: Each client maintains a high-water mark of
+  timestamps used in PUTs. Each subsequent PUT uses a timestamp strictly
+  greater than the previous one, even if two PUTs happen within the same
+  millisecond. This guarantees writes from the same client are always
+  ordered.
+
 - **Read Your Writes**: Each client caches the value and timestamp of
   its own PUTs. If a subsequent GET returns a stale value (older than
   the client's own write), the cached write value is returned instead.
   This guarantees a client always sees its own writes, even if routed to
   a replica that hasn't received the write via gossip yet.
 
-Both guarantees are automatic — no configuration or API changes needed.
+- **PRAM (Pipelined RAM)**: The combination of monotonic reads, monotonic
+  writes, and read-your-writes. All three are enforced, so PRAM
+  consistency holds automatically for every client session.
+
+All guarantees are automatic — no configuration or API changes needed.
 They apply to LWW values (the default lattice type). The caches are
 cleared when `clear_cache()` is called.
 
-**Emergent property** (not separately enforced):
-
-- **Monotonic Writes**: Emergent from LWW's monotonically increasing
-  timestamps. Not a separate implementation.
-
 ### Using Session Guarantees
 
-Monotonic reads and read-your-writes are enabled by default in all
-client libraries. No code changes are needed — the guarantees hold
-automatically for the lifetime of a client instance.
+PRAM consistency (monotonic reads, monotonic writes, and read-your-writes)
+is enabled by default in all client libraries. No code changes are needed
+— the guarantees hold automatically for the lifetime of a client instance.
 
 ```python
 # Python example
