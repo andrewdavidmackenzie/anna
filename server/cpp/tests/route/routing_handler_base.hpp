@@ -45,7 +45,7 @@ public:
     // reset all global variables
     kDefaultLocalReplication = 1;
     kDefaultGlobalMemoryReplication = 1;
-    kDefaultGlobalEbsReplication = 1;
+    kDefaultGlobalDiskReplication = 1;
     kThreadNum = 1;
   }
 
@@ -61,7 +61,7 @@ public:
       key_replication_map[key].global_replication_[Tier::MEMORY] =
           kDefaultGlobalMemoryReplication;
       key_replication_map[key].global_replication_[Tier::DISK] =
-          kDefaultGlobalEbsReplication;
+          kDefaultGlobalDiskReplication;
       key_replication_map[key].local_replication_[Tier::MEMORY] =
           kDefaultLocalReplication;
       key_replication_map[key].local_replication_[Tier::DISK] =

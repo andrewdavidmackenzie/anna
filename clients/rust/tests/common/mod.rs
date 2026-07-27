@@ -25,7 +25,7 @@ pub fn generate_config(base_offset: u16) -> String {
     generate_config_inner(base_offset, false)
 }
 
-/// Generate a config for a disk-tier KVS node (replication.memory=0, ebs=1).
+/// Generate a config for a disk-tier KVS node (replication.memory=0, disk=1).
 pub fn generate_disk_config(base_offset: u16) -> String {
     generate_config_inner(base_offset, true)
 }
@@ -40,13 +40,13 @@ fn generate_config_inner(base_offset: u16, disk_tier: bool) -> String {
     let config_path = config_dir.join("config.yml");
     let ip = "127.0.0.1";
 
-    let ebs_dir = config_dir.join("ebs");
-    fs::create_dir_all(&ebs_dir).expect("Failed to create ebs dir");
-    // The disk serializer writes files under <ebs_root>/ebs_<tid>/
+    let disk_dir = config_dir.join("disk");
+    fs::create_dir_all(&disk_dir).expect("Failed to create disk dir");
+    // The disk serializer writes files under <disk_root>/disk_<tid>/
     // and expects the subdirectory to exist.
-    fs::create_dir_all(ebs_dir.join("ebs_0")).expect("Failed to create ebs_0 dir");
+    fs::create_dir_all(disk_dir.join("disk_0")).expect("Failed to create disk_0 dir");
 
-    let (memory_rep, ebs_rep, ebs_cap) = if disk_tier { (0, 1, 256) } else { (1, 0, 0) };
+    let (memory_rep, disk_rep, disk_cap) = if disk_tier { (0, 1, 256) } else { (1, 0, 0) };
 
     let content = format!(
         r#"monitoring:
@@ -75,18 +75,18 @@ policy:
   elasticity: false
   selective-rep: false
   tiering: false
-ebs: {ebs_path}
+disk: {disk_path}
 capacities:
   memory-cap: 1
-  ebs-cap: {ebs_cap}
+  disk-cap: {disk_cap}
 threads:
   memory: 1
-  ebs: 1
+  disk: 1
   routing: 1
   benchmark: 1
 replication:
   memory: {memory_rep}
-  ebs: {ebs_rep}
+  disk: {disk_rep}
   minimum: 1
   local: 1
 ports:
@@ -103,10 +103,10 @@ timings:
 "#,
         ip = ip,
         base_offset = base_offset,
-        ebs_path = ebs_dir.to_string_lossy(),
+        disk_path = disk_dir.to_string_lossy(),
         memory_rep = memory_rep,
-        ebs_rep = ebs_rep,
-        ebs_cap = ebs_cap,
+        disk_rep = disk_rep,
+        disk_cap = disk_cap,
     );
     fs::write(&config_path, content).expect("Failed to write config");
     config_path.to_string_lossy().to_string()
@@ -153,7 +153,7 @@ impl ServerGuard {
 
     /// Start a cluster with the KVS running as a disk-tier node.
     pub fn start_disk(config_path: &str, base_offset: u16) -> Self {
-        Self::start_inner(config_path, base_offset, Some("ebs"))
+        Self::start_inner(config_path, base_offset, Some("disk"))
     }
 
     fn start_inner(config_path: &str, base_offset: u16, server_type: Option<&str>) -> Self {

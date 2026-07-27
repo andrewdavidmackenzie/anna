@@ -903,7 +903,7 @@ TEST(ClientLibTest, GetClusterTopologyDecodesProtobuf) {
   ClusterTopology topology;
   topology.set_routing_thread_count(2);
   topology.set_memory_thread_count(4);
-  topology.set_ebs_thread_count(1);
+  topology.set_disk_thread_count(1);
   string serialized;
   topology.SerializeToString(&serialized);
 
@@ -913,7 +913,7 @@ TEST(ClientLibTest, GetClusterTopologyDecodesProtobuf) {
 
   EXPECT_EQ(result.routing_thread_count(), 2u);
   EXPECT_EQ(result.memory_thread_count(), 4u);
-  EXPECT_EQ(result.ebs_thread_count(), 1u);
+  EXPECT_EQ(result.disk_thread_count(), 1u);
 
   ASSERT_EQ(client.keys_get_.size(), 1u);
   EXPECT_EQ(client.keys_get_[0], "ANNA_METADATA|cluster_topology");

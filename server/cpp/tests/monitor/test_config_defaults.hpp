@@ -46,12 +46,12 @@ TEST(ConfigDefaults, MinMemoryNodeConsumptionDefault) {
   EXPECT_DOUBLE_EQ(kMinMemoryNodeConsumption, 0.3);
 }
 
-TEST(ConfigDefaults, MaxEbsNodeConsumptionDefault) {
-  EXPECT_DOUBLE_EQ(kMaxEbsNodeConsumption, 0.75);
+TEST(ConfigDefaults, MaxDiskNodeConsumptionDefault) {
+  EXPECT_DOUBLE_EQ(kMaxDiskNodeConsumption, 0.75);
 }
 
-TEST(ConfigDefaults, MinEbsNodeConsumptionDefault) {
-  EXPECT_DOUBLE_EQ(kMinEbsNodeConsumption, 0.5);
+TEST(ConfigDefaults, MinDiskNodeConsumptionDefault) {
+  EXPECT_DOUBLE_EQ(kMinDiskNodeConsumption, 0.5);
 }
 
 TEST(ConfigDefaults, KeyPromotionThresholdDefault) {
@@ -66,8 +66,8 @@ TEST(ConfigDefaults, MinMemoryTierSizeDefault) {
   EXPECT_EQ(kMinMemoryTierSize, 1u);
 }
 
-TEST(ConfigDefaults, MinEbsTierSizeDefault) {
-  EXPECT_EQ(kMinEbsTierSize, 0u);
+TEST(ConfigDefaults, MinDiskTierSizeDefault) {
+  EXPECT_EQ(kMinDiskTierSize, 0u);
 }
 
 TEST(ConfigDefaults, ValueSizeDefault) {

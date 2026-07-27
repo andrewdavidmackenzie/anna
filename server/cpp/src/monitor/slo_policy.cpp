@@ -70,10 +70,10 @@ void slo_policy(logger log, GlobalRingMap &global_hash_rings,
               current_mem_rep < memory_node_count) {
             unsigned new_mem_rep =
                 std::min(memory_node_count, target_rep_factor);
-            unsigned new_ebs_rep =
+            unsigned new_disk_rep =
                 std::max(kMinimumReplicaNumber - new_mem_rep, (unsigned)0);
             requests[key] = create_new_replication_vector(
-                new_mem_rep, new_ebs_rep,
+                new_mem_rep, new_disk_rep,
                 key_replication_map[key].local_replication_[Tier::MEMORY],
                 key_replication_map[key].local_replication_[Tier::DISK]);
             log->info(
@@ -123,10 +123,10 @@ void slo_policy(logger log, GlobalRingMap &global_hash_rings,
                 (global_hash_rings[Tier::MEMORY].size() / kVirtualThreadNum)) {
           unsigned new_mem_rep =
               key_replication_map[key].global_replication_[Tier::MEMORY] - 1;
-          unsigned new_ebs_rep =
+          unsigned new_disk_rep =
               std::max(kMinimumReplicaNumber - new_mem_rep, (unsigned)0);
           requests[key] = create_new_replication_vector(
-              new_mem_rep, new_ebs_rep,
+              new_mem_rep, new_disk_rep,
               key_replication_map[key].local_replication_[Tier::MEMORY],
               key_replication_map[key].local_replication_[Tier::DISK]);
           log->info("Dereplication for key {}. M: {}->{}. E: {}->{}", key,

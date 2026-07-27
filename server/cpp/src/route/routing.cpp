@@ -21,7 +21,7 @@ unsigned kDefaultLocalReplication;
 unsigned kRoutingThreadCount;
 
 unsigned kMemoryNodeCapacity;
-unsigned kEbsNodeCapacity;
+unsigned kDiskNodeCapacity;
 
 ZmqUtil zmq_util;
 ZmqUtilInterface *kZmqUtil = &zmq_util;
@@ -169,17 +169,17 @@ int main(int argc, char *argv[]) {
 
   YAML::Node threads = conf["threads"];
   unsigned kMemoryThreadCount = threads["memory"].as<unsigned>();
-  unsigned kEbsThreadCount = threads["ebs"].as<unsigned>();
+  unsigned kDiskThreadCount = threads["disk"].as<unsigned>();
   kRoutingThreadCount = threads["routing"].as<unsigned>();
 
   YAML::Node capacities = conf["capacities"];
   kMemoryNodeCapacity = capacities["memory-cap"].as<unsigned>() * 1000000;
-  kEbsNodeCapacity = capacities["ebs-cap"].as<unsigned>() * 1000000;
+  kDiskNodeCapacity = capacities["disk-cap"].as<unsigned>() * 1000000;
 
   YAML::Node replication = conf["replication"];
   unsigned kDefaultGlobalMemoryReplication =
       replication["memory"].as<unsigned>();
-  unsigned kDefaultGlobalEbsReplication = replication["ebs"].as<unsigned>();
+  unsigned kDefaultGlobalDiskReplication = replication["disk"].as<unsigned>();
   kDefaultLocalReplication = replication["local"].as<unsigned>();
   if (replication["metadata"])
     kMetadataReplicationFactor = replication["metadata"].as<unsigned>();
@@ -199,8 +199,8 @@ int main(int argc, char *argv[]) {
       TierMetadata(Tier::MEMORY, kMemoryThreadCount,
                    kDefaultGlobalMemoryReplication, kMemoryNodeCapacity);
   kTierMetadata[Tier::DISK] =
-      TierMetadata(Tier::DISK, kEbsThreadCount, kDefaultGlobalEbsReplication,
-                   kEbsNodeCapacity);
+      TierMetadata(Tier::DISK, kDiskThreadCount, kDefaultGlobalDiskReplication,
+                   kDiskNodeCapacity);
 
   install_shutdown_handler();
 

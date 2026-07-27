@@ -48,8 +48,8 @@ struct MonitorConfig {
     selective_rep: bool,
     tiering: bool,
     replication_memory: u32,
-    replication_ebs: u32,
-    ebs_path: String,
+    replication_disk: u32,
+    disk_path: String,
 }
 
 impl Default for MonitorConfig {
@@ -59,8 +59,8 @@ impl Default for MonitorConfig {
             selective_rep: false,
             tiering: false,
             replication_memory: 1,
-            replication_ebs: 0,
-            ebs_path: "./".to_string(),
+            replication_disk: 0,
+            disk_path: "./".to_string(),
         }
     }
 }
@@ -96,13 +96,13 @@ policy:
   elasticity: false
   selective-rep: {selective_rep}
   tiering: {tiering}
-ebs: {ebs_path}
+disk: {disk_path}
 capacities:
   memory-cap: 1
-  ebs-cap: 256
+  disk-cap: 256
 threads:
   memory: 1
-  ebs: 1
+  disk: 1
   routing: 1
   benchmark: 1
 ports:
@@ -118,7 +118,7 @@ timings:
   grace_period: 5
 replication:
   memory: {replication_memory}
-  ebs: {replication_ebs}
+  disk: {replication_disk}
   minimum: 1
   local: 1
 ",
@@ -128,8 +128,8 @@ replication:
         selective_rep = cfg.selective_rep,
         tiering = cfg.tiering,
         replication_memory = cfg.replication_memory,
-        replication_ebs = cfg.replication_ebs,
-        ebs_path = cfg.ebs_path,
+        replication_disk = cfg.replication_disk,
+        disk_path = cfg.disk_path,
     )
     .expect("Failed to write config");
 }
@@ -168,17 +168,17 @@ impl MonitorTestCluster {
 
     /// Start a cluster with the KVS running as a disk-tier node.
     fn start_disk_with_config(&mut self, cfg: MonitorConfig) {
-        self.start_with_config_inner(cfg, Some("ebs"));
+        self.start_with_config_inner(cfg, Some("disk"));
     }
 
     fn start_with_config_inner(&mut self, cfg: MonitorConfig, server_type: Option<&str>) {
         let config = self.config_dir.join("config.yml");
         write_monitor_config(&config, &cfg);
 
-        // Create ebs_0 subdirectory for disk-tier tests
-        let ebs_dir = std::path::Path::new(&cfg.ebs_path);
-        if ebs_dir.is_absolute() || cfg.ebs_path != "./" {
-            fs::create_dir_all(ebs_dir.join("ebs_0")).ok();
+        // Create disk_0 subdirectory for disk-tier tests
+        let disk_dir = std::path::Path::new(&cfg.disk_path);
+        if disk_dir.is_absolute() || cfg.disk_path != "./" {
+            fs::create_dir_all(disk_dir.join("disk_0")).ok();
         }
 
         let port_range_start = 6200 + self.base_offset;
@@ -233,7 +233,7 @@ impl MonitorTestCluster {
         let child = Command::new(&bin)
             .args(["--config", &config.to_string_lossy()])
             .env("PATH", server_path())
-            .env("SERVER_TYPE", "ebs")
+            .env("SERVER_TYPE", "disk")
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
@@ -482,16 +482,16 @@ async fn cross_tier_data_movement() {
         return;
     }
 
-    let ebs_dir = std::env::temp_dir().join(format!("anna_ebs_test_{}", std::process::id()));
-    fs::create_dir_all(&ebs_dir).expect("Failed to create ebs dir");
+    let disk_dir = std::env::temp_dir().join(format!("anna_disk_test_{}", std::process::id()));
+    fs::create_dir_all(&disk_dir).expect("Failed to create disk dir");
 
     let mut cluster = MonitorTestCluster::new(5000);
     cluster.start_with_config(MonitorConfig {
         base_offset: 5000,
         tiering: true,
         replication_memory: 1,
-        replication_ebs: 1,
-        ebs_path: ebs_dir.to_string_lossy().to_string(),
+        replication_disk: 1,
+        disk_path: disk_dir.to_string_lossy().to_string(),
         ..Default::default()
     });
 
@@ -830,16 +830,16 @@ async fn cluster_topology_metadata() {
         "Expected 1 memory thread in test config"
     );
     assert_eq!(
-        topo.ebs_thread_count, 1,
-        "Expected 1 ebs thread in test config"
+        topo.disk_thread_count, 1,
+        "Expected 1 disk thread in test config"
     );
 }
 
 /// Test that the monitor collects stats from a disk-tier KVS node.
-/// This exercises the EBS branches in stats_helpers.cpp:
-/// - ebs_storage, ebs_occupancy, ebs_accesses population
-/// - avg/max EBS consumption percentage computation
-/// - EBS occupancy min/max/avg computation
+/// This exercises the disk-tier branches in stats_helpers.cpp:
+/// - disk_storage, disk_occupancy, disk_accesses population
+/// - avg/max disk consumption percentage computation
+/// - disk occupancy min/max/avg computation
 /// Uses base_offset=6300.
 #[tokio::test]
 #[cfg(unix)]
@@ -852,15 +852,15 @@ async fn monitor_disk_tier_stats() {
         return;
     }
 
-    let ebs_dir = std::env::temp_dir().join(format!("anna_ebs_monitor_{}", std::process::id()));
-    fs::create_dir_all(&ebs_dir).expect("Failed to create ebs dir");
+    let disk_dir = std::env::temp_dir().join(format!("anna_disk_monitor_{}", std::process::id()));
+    fs::create_dir_all(&disk_dir).expect("Failed to create disk dir");
 
     let mut cluster = MonitorTestCluster::new(6300);
     cluster.start_disk_with_config(MonitorConfig {
         base_offset: 6300,
         replication_memory: 0,
-        replication_ebs: 1,
-        ebs_path: ebs_dir.to_string_lossy().to_string(),
+        replication_disk: 1,
+        disk_path: disk_dir.to_string_lossy().to_string(),
         ..Default::default()
     });
 

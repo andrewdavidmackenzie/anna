@@ -28,8 +28,8 @@ inline unsigned kNodeAdditionBatchSize = 2;
 // define capacity for both tiers
 inline double kMaxMemoryNodeConsumption = 0.6;
 inline double kMinMemoryNodeConsumption = 0.3;
-inline double kMaxEbsNodeConsumption = 0.75;
-inline double kMinEbsNodeConsumption = 0.5;
+inline double kMaxDiskNodeConsumption = 0.75;
+inline double kMinDiskNodeConsumption = 0.5;
 
 // define threshold for promotion/demotion
 inline unsigned kKeyPromotionThreshold = 0;
@@ -37,7 +37,7 @@ inline unsigned kKeyDemotionThreshold = 1;
 
 // define minimum number of nodes for each tier
 inline unsigned kMinMemoryTierSize = 1;
-inline unsigned kMinEbsTierSize = 0;
+inline unsigned kMinDiskTierSize = 0;
 
 // value size in KB
 inline unsigned kValueSize = 256;
@@ -52,21 +52,21 @@ struct SummaryStats {
     key_access_mean = 0;
     key_access_std = 0;
     total_memory_access = 0;
-    total_ebs_access = 0;
+    total_disk_access = 0;
     total_memory_consumption = 0;
-    total_ebs_consumption = 0;
+    total_disk_consumption = 0;
     max_memory_consumption_percentage = 0;
-    max_ebs_consumption_percentage = 0;
+    max_disk_consumption_percentage = 0;
     avg_memory_consumption_percentage = 0;
-    avg_ebs_consumption_percentage = 0;
+    avg_disk_consumption_percentage = 0;
     required_memory_node = 0;
-    required_ebs_node = 0;
+    required_disk_node = 0;
     max_memory_occupancy = 0;
     min_memory_occupancy = 1;
     avg_memory_occupancy = 0;
-    max_ebs_occupancy = 0;
-    min_ebs_occupancy = 1;
-    avg_ebs_occupancy = 0;
+    max_disk_occupancy = 0;
+    min_disk_occupancy = 1;
+    avg_disk_occupancy = 0;
     min_occupancy_memory_public_ip = Address();
     min_occupancy_memory_private_ip = Address();
     avg_latency = 0;
@@ -77,21 +77,21 @@ struct SummaryStats {
   double key_access_mean;
   double key_access_std;
   unsigned total_memory_access;
-  unsigned total_ebs_access;
+  unsigned total_disk_access;
   unsigned long long total_memory_consumption;
-  unsigned long long total_ebs_consumption;
+  unsigned long long total_disk_consumption;
   double max_memory_consumption_percentage;
-  double max_ebs_consumption_percentage;
+  double max_disk_consumption_percentage;
   double avg_memory_consumption_percentage;
-  double avg_ebs_consumption_percentage;
+  double avg_disk_consumption_percentage;
   unsigned required_memory_node;
-  unsigned required_ebs_node;
+  unsigned required_disk_node;
   double max_memory_occupancy;
   double min_memory_occupancy;
   double avg_memory_occupancy;
-  double max_ebs_occupancy;
-  double min_ebs_occupancy;
-  double avg_ebs_occupancy;
+  double max_disk_occupancy;
+  double min_disk_occupancy;
+  double avg_disk_occupancy;
   Address min_occupancy_memory_public_ip;
   Address min_occupancy_memory_private_ip;
   double avg_latency;
@@ -104,15 +104,15 @@ void collect_internal_stats(
     logger log, unsigned &rid,
     map<Key, map<Address, unsigned>> &key_access_frequency,
     map<Key, unsigned> &key_size, StorageStats &memory_storage,
-    StorageStats &ebs_storage, OccupancyStats &memory_occupancy,
-    OccupancyStats &ebs_occupancy, AccessStats &memory_access,
-    AccessStats &ebs_access);
+    StorageStats &disk_storage, OccupancyStats &memory_occupancy,
+    OccupancyStats &disk_occupancy, AccessStats &memory_access,
+    AccessStats &disk_access);
 
 void compute_summary_stats(
     map<Key, map<Address, unsigned>> &key_access_frequency,
-    StorageStats &memory_storage, StorageStats &ebs_storage,
-    OccupancyStats &memory_occupancy, OccupancyStats &ebs_occupancy,
-    AccessStats &memory_access, AccessStats &ebs_access,
+    StorageStats &memory_storage, StorageStats &disk_storage,
+    OccupancyStats &memory_occupancy, OccupancyStats &disk_occupancy,
+    AccessStats &memory_access, AccessStats &disk_access,
     map<Key, unsigned> &key_access_summary, SummaryStats &ss, logger log,
     unsigned &server_monitoring_epoch);
 

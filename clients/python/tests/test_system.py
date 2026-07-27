@@ -51,18 +51,18 @@ server:
   public_ip: 127.0.0.1
   private_ip: 127.0.0.1
   mgmt_ip: "NULL"
-ebs: {ebs_dir}
+disk: {disk_dir}
 capacities:
   memory-cap: 1
-  ebs-cap: 0
+  disk-cap: 0
 threads:
   memory: 1
-  ebs: 1
+  disk: 1
   routing: 1
   benchmark: 1
 replication:
   memory: 1
-  ebs: 0
+  disk: 0
   minimum: 1
   local: 1
 policy:
@@ -79,12 +79,12 @@ def live_server(tmp_path_factory):
 
     server_dir = find_server_dir()
     work_dir = tmp_path_factory.mktemp("anna_system_test")
-    ebs_dir = str(work_dir / "test_data")
-    os.makedirs(ebs_dir, exist_ok=True)
+    disk_dir = str(work_dir / "test_data")
+    os.makedirs(disk_dir, exist_ok=True)
 
     config_path = str(work_dir / "test_config.yml")
     with open(config_path, "w") as f:
-        f.write(TEST_CONFIG_YAML.format(ebs_dir=ebs_dir))
+        f.write(TEST_CONFIG_YAML.format(disk_dir=disk_dir))
 
     log_path = str(work_dir / "server.log")
     procs = []

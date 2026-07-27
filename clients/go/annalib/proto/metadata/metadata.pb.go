@@ -426,10 +426,10 @@ type ClusterTopology struct {
 	RoutingThreadCount uint32 `protobuf:"varint,1,opt,name=routing_thread_count,json=routingThreadCount,proto3" json:"routing_thread_count,omitempty"`
 	// Number of memory-tier threads per KVS node.
 	MemoryThreadCount uint32 `protobuf:"varint,2,opt,name=memory_thread_count,json=memoryThreadCount,proto3" json:"memory_thread_count,omitempty"`
-	// Number of EBS-tier threads per KVS node.
-	EbsThreadCount uint32 `protobuf:"varint,3,opt,name=ebs_thread_count,json=ebsThreadCount,proto3" json:"ebs_thread_count,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Number of disk-tier threads per KVS node.
+	DiskThreadCount uint32 `protobuf:"varint,3,opt,name=disk_thread_count,json=diskThreadCount,proto3" json:"disk_thread_count,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ClusterTopology) Reset() {
@@ -476,9 +476,9 @@ func (x *ClusterTopology) GetMemoryThreadCount() uint32 {
 	return 0
 }
 
-func (x *ClusterTopology) GetEbsThreadCount() uint32 {
+func (x *ClusterTopology) GetDiskThreadCount() uint32 {
 	if x != nil {
-		return x.EbsThreadCount
+		return x.DiskThreadCount
 	}
 	return 0
 }
@@ -797,11 +797,11 @@ const file_metadata_proto_rawDesc = "" +
 	"\x04tier\x18\x01 \x01(\x0e2\x05.TierR\x04tier\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\rR\x05value\"G\n" +
 	"\x17ReplicationFactorUpdate\x12,\n" +
-	"\aupdates\x18\x01 \x03(\v2\x12.ReplicationFactorR\aupdates\"\x9d\x01\n" +
+	"\aupdates\x18\x01 \x03(\v2\x12.ReplicationFactorR\aupdates\"\x9f\x01\n" +
 	"\x0fClusterTopology\x120\n" +
 	"\x14routing_thread_count\x18\x01 \x01(\rR\x12routingThreadCount\x12.\n" +
-	"\x13memory_thread_count\x18\x02 \x01(\rR\x11memoryThreadCount\x12(\n" +
-	"\x10ebs_thread_count\x18\x03 \x01(\rR\x0eebsThreadCount*?\n" +
+	"\x13memory_thread_count\x18\x02 \x01(\rR\x11memoryThreadCount\x12*\n" +
+	"\x11disk_thread_count\x18\x03 \x01(\rR\x0fdiskThreadCount*?\n" +
 	"\x04Tier\x12\x14\n" +
 	"\x10TIER_UNSPECIFIED\x10\x00\x12\n" +
 	"\n" +

@@ -28,14 +28,14 @@
 // Global variables required by the linker (normally defined in main() files).
 unsigned kDefaultLocalReplication = 1;
 unsigned kDefaultGlobalMemoryReplication = 1;
-unsigned kDefaultGlobalEbsReplication = 0;
+unsigned kDefaultGlobalDiskReplication = 0;
 unsigned kMinimumReplicaNumber = 1;
 
 unsigned kMemoryNodeCapacity = 0;
-unsigned kEbsNodeCapacity = 0;
+unsigned kDiskNodeCapacity = 0;
 
 unsigned kMemoryThreadCount = 1;
-unsigned kEbsThreadCount = 1;
+unsigned kDiskThreadCount = 1;
 unsigned kRoutingThreadCount = 1;
 unsigned kThreadNum = 1;
 

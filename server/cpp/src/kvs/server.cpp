@@ -25,13 +25,13 @@ Tier kSelfTier;
 vector<Tier> kSelfTierIdVector;
 
 unsigned kMemoryThreadCount;
-unsigned kEbsThreadCount;
+unsigned kDiskThreadCount;
 
 unsigned kMemoryNodeCapacity;
-unsigned kEbsNodeCapacity;
+unsigned kDiskNodeCapacity;
 
 unsigned kDefaultGlobalMemoryReplication;
-unsigned kDefaultGlobalEbsReplication;
+unsigned kDefaultGlobalDiskReplication;
 unsigned kDefaultLocalReplication;
 
 hmap<Tier, TierMetadata, TierEnumHash> kTierMetadata;
@@ -42,7 +42,7 @@ ZmqUtilInterface *kZmqUtil = &zmq_util;
 HashRingUtil hash_ring_util;
 HashRingUtilInterface *kHashRingUtil = &hash_ring_util;
 
-void run(unsigned thread_id, string ebs_root, Address public_ip, Address private_ip,
+void run(unsigned thread_id, string disk_root, Address public_ip, Address private_ip,
          Address seed_ip, vector<Address> routing_ips,
          vector<Address> monitoring_ips, Address management_ip) {
   string log_name = "server_log_" + std::to_string(thread_id);
@@ -209,12 +209,12 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
     MemoryPriorityKVS *priority_kvs = new MemoryPriorityKVS();
     priority_serializer = new MemoryPrioritySerializer(priority_kvs);
   } else if (kSelfTier == Tier::DISK) {
-    lww_serializer = new DiskLWWSerializer(thread_id, ebs_root);
-    set_serializer = new DiskSetSerializer(thread_id, ebs_root);
-    ordered_set_serializer = new DiskOrderedSetSerializer(thread_id, ebs_root);
-    sk_causal_serializer = new DiskSingleKeyCausalSerializer(thread_id, ebs_root);
-    mk_causal_serializer = new DiskMultiKeyCausalSerializer(thread_id, ebs_root);
-    priority_serializer = new DiskPrioritySerializer(thread_id, ebs_root);
+    lww_serializer = new DiskLWWSerializer(thread_id, disk_root);
+    set_serializer = new DiskSetSerializer(thread_id, disk_root);
+    ordered_set_serializer = new DiskOrderedSetSerializer(thread_id, disk_root);
+    sk_causal_serializer = new DiskSingleKeyCausalSerializer(thread_id, disk_root);
+    mk_causal_serializer = new DiskMultiKeyCausalSerializer(thread_id, disk_root);
+    priority_serializer = new DiskPrioritySerializer(thread_id, disk_root);
   } else {
     log->info("Invalid node type");
     exit(1);
@@ -687,7 +687,7 @@ void run(unsigned thread_id, string ebs_root, Address public_ip, Address private
       {
         ClusterTopology topology;
         topology.set_memory_thread_count(kMemoryThreadCount);
-        topology.set_ebs_thread_count(kEbsThreadCount);
+        topology.set_disk_thread_count(kDiskThreadCount);
         string serialized_topology;
         topology.SerializeToString(&serialized_topology);
 
@@ -813,11 +813,11 @@ int main(int argc, char *argv[]) {
   if (stype != NULL) {
     if (strncmp(stype, "memory", 6) == 0) {
       kSelfTier = Tier::MEMORY;
-    } else if (strncmp(stype, "ebs", 3) == 0) {
+    } else if (strncmp(stype, "disk", 3) == 0) {
       kSelfTier = Tier::DISK;
     } else {
       std::cout << "Unrecognized server type " << stype
-                << ". Valid types are memory or ebs." << std::endl;
+                << ". Valid types are memory or disk." << std::endl;
       return 1;
     }
   } else {
@@ -859,7 +859,7 @@ int main(int argc, char *argv[]) {
 
   YAML::Node threads = conf["threads"];
   kMemoryThreadCount = threads["memory"].as<unsigned>();
-  kEbsThreadCount = threads["ebs"].as<unsigned>();
+  kDiskThreadCount = threads["disk"].as<unsigned>();
 
   YAML::Node capacities = conf["capacities"];
   if (capacities["memory-cap-kb"]) {
@@ -867,10 +867,10 @@ int main(int argc, char *argv[]) {
   } else {
     kMemoryNodeCapacity = capacities["memory-cap"].as<unsigned>() * 1000000;
   }
-  if (capacities["ebs-cap-kb"]) {
-    kEbsNodeCapacity = capacities["ebs-cap-kb"].as<unsigned>();
+  if (capacities["disk-cap-kb"]) {
+    kDiskNodeCapacity = capacities["disk-cap-kb"].as<unsigned>();
   } else {
-    kEbsNodeCapacity = capacities["ebs-cap"].as<unsigned>() * 1000000;
+    kDiskNodeCapacity = capacities["disk-cap"].as<unsigned>() * 1000000;
   }
 
   if (conf["hashing"]) {
@@ -885,7 +885,7 @@ int main(int argc, char *argv[]) {
 
   YAML::Node replication = conf["replication"];
   kDefaultGlobalMemoryReplication = replication["memory"].as<unsigned>();
-  kDefaultGlobalEbsReplication = replication["ebs"].as<unsigned>();
+  kDefaultGlobalDiskReplication = replication["disk"].as<unsigned>();
   kDefaultLocalReplication = replication["local"].as<unsigned>();
   if (replication["metadata"])
     kMetadataReplicationFactor = replication["metadata"].as<unsigned>();
@@ -906,10 +906,10 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  string ebs_root = conf["ebs"].as<string>();
+  string disk_root = conf["disk"].as<string>();
   // ensure terminated in a '/'
-  if (ebs_root.back() != '/') {
-    ebs_root += "/";
+  if (disk_root.back() != '/') {
+    disk_root += "/";
   }
 
   YAML::Node server = conf["server"];
@@ -936,8 +936,8 @@ int main(int argc, char *argv[]) {
       TierMetadata(Tier::MEMORY, kMemoryThreadCount,
                    kDefaultGlobalMemoryReplication, kMemoryNodeCapacity);
   kTierMetadata[Tier::DISK] =
-      TierMetadata(Tier::DISK, kEbsThreadCount, kDefaultGlobalEbsReplication,
-                   kEbsNodeCapacity);
+      TierMetadata(Tier::DISK, kDiskThreadCount, kDefaultGlobalDiskReplication,
+                   kDiskNodeCapacity);
 
   kThreadNum = kTierMetadata[kSelfTier].thread_number_;
 
@@ -946,12 +946,12 @@ int main(int argc, char *argv[]) {
   // start the initial threads based on kThreadNum
   vector<std::thread> worker_threads;
   for (unsigned thread_id = 1; thread_id < kThreadNum; thread_id++) {
-    worker_threads.push_back(std::thread(run, thread_id, ebs_root, public_ip, private_ip,
+    worker_threads.push_back(std::thread(run, thread_id, disk_root, public_ip, private_ip,
                                          seed_ip, routing_ips, monitoring_ips,
                                          mgmt_ip));
   }
 
-  run(0, ebs_root, public_ip, private_ip, seed_ip, routing_ips, monitoring_ips, mgmt_ip);
+  run(0, disk_root, public_ip, private_ip, seed_ip, routing_ips, monitoring_ips, mgmt_ip);
 
   // join on all worker threads to make sure they finish before exiting
   for (auto& t : worker_threads) {

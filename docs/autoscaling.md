@@ -47,7 +47,7 @@ keys rather than replicating all keys uniformly:
 Anna supports multiple storage tiers with different cost-performance profiles:
 
 - **Memory tier**: Fast RAM-based storage (e.g., AWS EC2 instances)
-- **Disk tier**: Cheaper flash-based storage (e.g., AWS EBS volumes)
+- **Disk tier**: Cheaper flash-based storage (e.g., disk volumes)
 - Hot data is **promoted** from disk to memory when access frequency
   exceeds a threshold
 - Cold data is **demoted** from memory to disk when access frequency drops
@@ -90,7 +90,7 @@ engine, which evaluates actions in this order:
 | H                | Key hotness threshold (std devs above mean)    | 3                              |
 | L                | Key coldness threshold (mean access frequency) | Mean                           |
 | P                | Key promotion threshold                        | 2 accesses in 60s              |
-| S_lower, S_upper | Storage consumption thresholds                 | Memory: 0.3-0.6, EBS: 0.5-0.75 |
+| S_lower, S_upper | Storage consumption thresholds                 | Memory: 0.3-0.6, Disk: 0.5-0.75 |
 | f_lower, f_upper | Latency thresholds (fraction of SLO)           | 0.5, 0.75                      |
 | C_lower, C_upper | Compute occupancy thresholds                   | 0.05, 0.20                     |
 | c                | Upper bound for latency ratio                  | 1.5                            |

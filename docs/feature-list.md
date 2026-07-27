@@ -44,7 +44,7 @@ mocks.
 | Feature           | Description                                           | System Tested |
 |-------------------|-------------------------------------------------------|---------------|
 | YAML config file  | All settings in a single YAML file                    | Yes           |
-| Thread counts     | `threads.memory`, `threads.ebs`, `threads.routing`    | Yes           |
+| Thread counts     | `threads.memory`, `threads.disk`, `threads.routing`    | Yes           |
 | Standalone mode   | `mgmt_ip: "NULL"` for local/non-k8s deployment       | Yes           |
 | Cluster topology  | seed_ip, mgmt_ip, monitoring/routing IPs              | Yes           |
 | ZeroMQ PUSH/PULL  | Async messaging between all components                | Yes           |
@@ -73,10 +73,10 @@ It is a client-side construct — see `docs/client-feature-list.md`.
 | Disk tier                     | File-based storage on configurable path               | Yes           |
 | Tier selection                | `SERVER_TYPE` env var selects storage medium           | Yes           |
 | Identical kernel across tiers | Same storage kernel, different serialization layer     | Yes           |
-| Node capacities               | `capacities.memory-cap`, `capacities.ebs-cap` (tested via `elasticity_storage_policy` with `memory-cap-kb: 1`) | Yes           |
+| Node capacities               | `capacities.memory-cap`, `capacities.disk-cap` (tested via `elasticity_storage_policy` with `memory-cap-kb: 1`) | Yes           |
 | Cross-tier data movement      | Promote hot data to memory, demote cold to disk       | Yes           |
 
-Note: `SERVER_TYPE` and `ebs` config should be renamed to storage-medium-agnostic
+Note: `SERVER_TYPE` and `disk` config should be renamed to storage-medium-agnostic
 terms (e.g., `STORAGE_MEDIUM=ram|file`).
 
 Cross-tier data movement is triggered by `anna-monitor` when `policy.tiering`
@@ -90,7 +90,7 @@ feature, not an autoscaling decision.
 | Feature                         | Description                                                  | System Tested |
 |---------------------------------|--------------------------------------------------------------|---------------|
 | Per-key replication factors     | Independent replication per key per tier                      | Yes           |
-| Default replication from config | `replication.memory`, `replication.ebs`, `replication.local`  | Yes           |
+| Default replication from config | `replication.memory`, `replication.disk`, `replication.local`  | Yes           |
 | Replication factor request      | Server fetches unknown factors from metadata                  | Yes           |
 | Replication factor change       | Monitor can dynamically adjust replication                    | Yes           |
 | Metadata stored as KVS data     | Replication info under `METADATA\|replication\|<key>`         | Yes           |

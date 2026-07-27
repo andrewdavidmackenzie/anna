@@ -36,9 +36,9 @@ tier and how they are distributed:
 ```
 
 - R_M: number of memory-tier nodes storing this key
-- R_E: number of EBS-tier nodes storing this key
+- R_E: number of disk-tier nodes storing this key
 - T_M: number of threads per memory node storing this key
-- T_E: number of threads per EBS node storing this key
+- T_E: number of threads per disk node storing this key
 
 The policy engine adjusts replication vectors dynamically based on workload.
 
@@ -68,7 +68,7 @@ Anna supports multiple storage tiers:
 | Tier       | Medium    | Performance                  | Cost  |
 |------------|-----------|------------------------------|-------|
 | Memory     | RAM       | Low latency, high throughput | High  |
-| Disk (EBS) | Flash/SSD | Higher latency               | Lower |
+| Disk | Flash/SSD | Higher latency               | Lower |
 
 The storage kernel is identical across tiers — only the serialization
 ("serde") layer differs. Memory-tier threads read/write memory buffers;

@@ -83,13 +83,13 @@ server:
   public_ip: 127.0.0.1
   private_ip: 127.0.0.1
   mgmt_ip: "NULL"
-ebs: test_data
+disk: test_data
 capacities:
   memory-cap: 1
-  ebs-cap: 0
+  disk-cap: 0
 threads:
   memory: 1
-  ebs: 1
+  disk: 1
   routing: 1
   benchmark: 1
 ports:
@@ -104,7 +104,7 @@ timings:
   grace_period: 120
 replication:
   memory: 1
-  ebs: 0
+  disk: 0
   minimum: 1
   local: 1
 policy:

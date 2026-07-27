@@ -6,21 +6,21 @@ namespace fs = std::filesystem;
 
 class DiskSerializerTest : public ::testing::Test {
 protected:
-  string ebs_root_;
+  string disk_root_;
   unsigned tid_ = 0;
 
   void SetUp() override {
-    ebs_root_ = (fs::temp_directory_path() / ("anna_disk_test_" + std::to_string(getpid()))).string() + "/";
-    fs::create_directories(ebs_root_ + "ebs_0");
+    disk_root_ = (fs::temp_directory_path() / ("anna_disk_test_" + std::to_string(getpid()))).string() + "/";
+    fs::create_directories(disk_root_ + "disk_0");
   }
 
   void TearDown() override {
-    fs::remove_all(ebs_root_);
+    fs::remove_all(disk_root_);
   }
 };
 
 TEST_F(DiskSerializerTest, LWWPutGet) {
-  DiskLWWSerializer serializer(tid_, ebs_root_);
+  DiskLWWSerializer serializer(tid_, disk_root_);
 
   kvs::LWWValue lww;
   lww.set_timestamp(100);
@@ -42,7 +42,7 @@ TEST_F(DiskSerializerTest, LWWPutGet) {
 }
 
 TEST_F(DiskSerializerTest, LWWGetMissing) {
-  DiskLWWSerializer serializer(tid_, ebs_root_);
+  DiskLWWSerializer serializer(tid_, disk_root_);
 
   kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
   serializer.get("nonexistent", error);
@@ -50,7 +50,7 @@ TEST_F(DiskSerializerTest, LWWGetMissing) {
 }
 
 TEST_F(DiskSerializerTest, LWWRemove) {
-  DiskLWWSerializer serializer(tid_, ebs_root_);
+  DiskLWWSerializer serializer(tid_, disk_root_);
 
   kvs::LWWValue lww;
   lww.set_timestamp(1);
@@ -67,7 +67,7 @@ TEST_F(DiskSerializerTest, LWWRemove) {
 }
 
 TEST_F(DiskSerializerTest, LWWRemoveNonexistent) {
-  DiskLWWSerializer serializer(tid_, ebs_root_);
+  DiskLWWSerializer serializer(tid_, disk_root_);
   // remove() returns false when the file does not exist.
   EXPECT_FALSE(serializer.remove("does_not_exist"));
   kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
@@ -76,7 +76,7 @@ TEST_F(DiskSerializerTest, LWWRemoveNonexistent) {
 }
 
 TEST_F(DiskSerializerTest, LWWLastWriterWins) {
-  DiskLWWSerializer serializer(tid_, ebs_root_);
+  DiskLWWSerializer serializer(tid_, disk_root_);
 
   kvs::LWWValue lww1;
   lww1.set_timestamp(100);
@@ -102,7 +102,7 @@ TEST_F(DiskSerializerTest, LWWLastWriterWins) {
 }
 
 TEST_F(DiskSerializerTest, SetPutGet) {
-  DiskSetSerializer serializer(tid_, ebs_root_);
+  DiskSetSerializer serializer(tid_, disk_root_);
 
   kvs::SetValue sv;
   sv.add_values("a");
@@ -121,7 +121,7 @@ TEST_F(DiskSerializerTest, SetPutGet) {
 }
 
 TEST_F(DiskSerializerTest, SetUnionMerge) {
-  DiskSetSerializer serializer(tid_, ebs_root_);
+  DiskSetSerializer serializer(tid_, disk_root_);
 
   kvs::SetValue sv1;
   sv1.add_values("a");
@@ -145,7 +145,7 @@ TEST_F(DiskSerializerTest, SetUnionMerge) {
 }
 
 TEST_F(DiskSerializerTest, PrioritySinglePutGet) {
-  DiskPrioritySerializer serializer(tid_, ebs_root_);
+  DiskPrioritySerializer serializer(tid_, disk_root_);
 
   kvs::PriorityValue pv;
   pv.set_priority(5.0);
@@ -166,7 +166,7 @@ TEST_F(DiskSerializerTest, PrioritySinglePutGet) {
 }
 
 TEST_F(DiskSerializerTest, PriorityLowestWins) {
-  DiskPrioritySerializer serializer(tid_, ebs_root_);
+  DiskPrioritySerializer serializer(tid_, disk_root_);
 
   kvs::PriorityValue pv1;
   pv1.set_priority(10.0);
@@ -191,7 +191,7 @@ TEST_F(DiskSerializerTest, PriorityLowestWins) {
 }
 
 TEST_F(DiskSerializerTest, PriorityEqualKeepsExisting) {
-  DiskPrioritySerializer serializer(tid_, ebs_root_);
+  DiskPrioritySerializer serializer(tid_, disk_root_);
 
   kvs::PriorityValue pv1;
   pv1.set_priority(5.0);
@@ -215,7 +215,7 @@ TEST_F(DiskSerializerTest, PriorityEqualKeepsExisting) {
 }
 
 TEST_F(DiskSerializerTest, OrderedSetPutGet) {
-  DiskOrderedSetSerializer serializer(tid_, ebs_root_);
+  DiskOrderedSetSerializer serializer(tid_, disk_root_);
 
   kvs::SetValue sv;
   sv.add_values("x");
@@ -230,7 +230,7 @@ TEST_F(DiskSerializerTest, OrderedSetPutGet) {
 }
 
 TEST_F(DiskSerializerTest, SingleCausalPutGet) {
-  DiskSingleKeyCausalSerializer serializer(tid_, ebs_root_);
+  DiskSingleKeyCausalSerializer serializer(tid_, disk_root_);
 
   kvs::SingleKeyCausalValue skc;
   (*skc.mutable_vector_clock())["test"] = 1;
@@ -245,7 +245,7 @@ TEST_F(DiskSerializerTest, SingleCausalPutGet) {
 }
 
 TEST_F(DiskSerializerTest, MultiCausalPutGet) {
-  DiskMultiKeyCausalSerializer serializer(tid_, ebs_root_);
+  DiskMultiKeyCausalSerializer serializer(tid_, disk_root_);
 
   kvs::MultiKeyCausalValue mkc;
   (*mkc.mutable_vector_clock())["test"] = 1;
@@ -262,7 +262,7 @@ TEST_F(DiskSerializerTest, MultiCausalPutGet) {
 // --- Tests for rejected-update branches (existing value kept) ---
 
 TEST_F(DiskSerializerTest, LWWOlderTimestampRejected) {
-  DiskLWWSerializer serializer(tid_, ebs_root_);
+  DiskLWWSerializer serializer(tid_, disk_root_);
 
   kvs::LWWValue lww1;
   lww1.set_timestamp(200);
@@ -292,7 +292,7 @@ TEST_F(DiskSerializerTest, LWWOlderTimestampRejected) {
 }
 
 TEST_F(DiskSerializerTest, PriorityHigherRejected) {
-  DiskPrioritySerializer serializer(tid_, ebs_root_);
+  DiskPrioritySerializer serializer(tid_, disk_root_);
 
   kvs::PriorityValue pv1;
   pv1.set_priority(1.0);
@@ -323,7 +323,7 @@ TEST_F(DiskSerializerTest, PriorityHigherRejected) {
 
 TEST_F(DiskSerializerTest, DiskWriteOpenFailure) {
   // Point at a non-existent directory so fstream open fails.
-  string bad_path = ebs_root_ + "no_such_dir/file";
+  string bad_path = disk_root_ + "no_such_dir/file";
   kvs::LWWValue lww;
   lww.set_timestamp(1);
   lww.set_value("test");
@@ -333,7 +333,7 @@ TEST_F(DiskSerializerTest, DiskWriteOpenFailure) {
 
 TEST_F(DiskSerializerTest, DiskReadParseFailure) {
   // Write garbage to a file, then attempt to read it as a protobuf.
-  string path = disk_fname(ebs_root_, tid_, "garbage_key");
+  string path = disk_fname(disk_root_, tid_, "garbage_key");
   {
     std::ofstream out(path, std::ios::binary);
     out << "this is not a valid protobuf";
@@ -348,20 +348,20 @@ TEST_F(DiskSerializerTest, DiskReadParseFailure) {
 
 TEST_F(DiskSerializerTest, DiskRemoveSuccess) {
   // Create a file and confirm disk_remove returns true.
-  string path = disk_fname(ebs_root_, tid_, "rm_key");
+  string path = disk_fname(disk_root_, tid_, "rm_key");
   { std::ofstream out(path); out << "data"; }
   EXPECT_TRUE(disk_remove(path));
 }
 
 TEST_F(DiskSerializerTest, DiskRemoveFailure) {
   // Attempt to remove a non-existent file.
-  string path = disk_fname(ebs_root_, tid_, "no_such_file");
+  string path = disk_fname(disk_root_, tid_, "no_such_file");
   EXPECT_FALSE(disk_remove(path));
 }
 
 TEST_F(DiskSerializerTest, PutToNonexistentDirectory) {
-  // Serializer with a bad ebs_root: put should fail since directory doesn't exist.
-  string bad_root = ebs_root_ + "nonexistent_subdir/";
+  // Serializer with a bad disk_root: put should fail since directory doesn't exist.
+  string bad_root = disk_root_ + "nonexistent_subdir/";
   DiskLWWSerializer serializer(tid_, bad_root);
 
   kvs::LWWValue lww;
@@ -376,7 +376,7 @@ TEST_F(DiskSerializerTest, PutToNonexistentDirectory) {
 // --- Tests for remove on other Disk serializer types ---
 
 TEST_F(DiskSerializerTest, SetRemove) {
-  DiskSetSerializer serializer(tid_, ebs_root_);
+  DiskSetSerializer serializer(tid_, disk_root_);
 
   kvs::SetValue sv;
   sv.add_values("a");
@@ -392,12 +392,12 @@ TEST_F(DiskSerializerTest, SetRemove) {
 }
 
 TEST_F(DiskSerializerTest, SetRemoveNonexistent) {
-  DiskSetSerializer serializer(tid_, ebs_root_);
+  DiskSetSerializer serializer(tid_, disk_root_);
   EXPECT_FALSE(serializer.remove("no_such_set_key"));
 }
 
 TEST_F(DiskSerializerTest, OrderedSetRemove) {
-  DiskOrderedSetSerializer serializer(tid_, ebs_root_);
+  DiskOrderedSetSerializer serializer(tid_, disk_root_);
 
   kvs::SetValue sv;
   sv.add_values("x");
@@ -413,12 +413,12 @@ TEST_F(DiskSerializerTest, OrderedSetRemove) {
 }
 
 TEST_F(DiskSerializerTest, OrderedSetRemoveNonexistent) {
-  DiskOrderedSetSerializer serializer(tid_, ebs_root_);
+  DiskOrderedSetSerializer serializer(tid_, disk_root_);
   EXPECT_FALSE(serializer.remove("no_such_oset_key"));
 }
 
 TEST_F(DiskSerializerTest, SingleCausalRemove) {
-  DiskSingleKeyCausalSerializer serializer(tid_, ebs_root_);
+  DiskSingleKeyCausalSerializer serializer(tid_, disk_root_);
 
   kvs::SingleKeyCausalValue skc;
   (*skc.mutable_vector_clock())["test"] = 1;
@@ -435,12 +435,12 @@ TEST_F(DiskSerializerTest, SingleCausalRemove) {
 }
 
 TEST_F(DiskSerializerTest, SingleCausalRemoveNonexistent) {
-  DiskSingleKeyCausalSerializer serializer(tid_, ebs_root_);
+  DiskSingleKeyCausalSerializer serializer(tid_, disk_root_);
   EXPECT_FALSE(serializer.remove("no_such_sc_key"));
 }
 
 TEST_F(DiskSerializerTest, MultiCausalRemove) {
-  DiskMultiKeyCausalSerializer serializer(tid_, ebs_root_);
+  DiskMultiKeyCausalSerializer serializer(tid_, disk_root_);
 
   kvs::MultiKeyCausalValue mkc;
   (*mkc.mutable_vector_clock())["test"] = 1;
@@ -457,12 +457,12 @@ TEST_F(DiskSerializerTest, MultiCausalRemove) {
 }
 
 TEST_F(DiskSerializerTest, MultiCausalRemoveNonexistent) {
-  DiskMultiKeyCausalSerializer serializer(tid_, ebs_root_);
+  DiskMultiKeyCausalSerializer serializer(tid_, disk_root_);
   EXPECT_FALSE(serializer.remove("no_such_mc_key"));
 }
 
 TEST_F(DiskSerializerTest, PriorityRemove) {
-  DiskPrioritySerializer serializer(tid_, ebs_root_);
+  DiskPrioritySerializer serializer(tid_, disk_root_);
 
   kvs::PriorityValue pv;
   pv.set_priority(5.0);
@@ -479,6 +479,6 @@ TEST_F(DiskSerializerTest, PriorityRemove) {
 }
 
 TEST_F(DiskSerializerTest, PriorityRemoveNonexistent) {
-  DiskPrioritySerializer serializer(tid_, ebs_root_);
+  DiskPrioritySerializer serializer(tid_, disk_root_);
   EXPECT_FALSE(serializer.remove("no_such_pri_key"));
 }

@@ -17,7 +17,7 @@
 void depart_done_handler(logger log, string &serialized,
                          map<Address, unsigned> &departing_node_map,
                          Address management_ip, bool &removing_memory_node,
-                         bool &removing_ebs_node, SocketCache &pushers,
+                         bool &removing_disk_node, SocketCache &pushers,
                          TimePoint &grace_start) {
   vector<string> tokens;
   split(serialized, '_', tokens);
@@ -36,8 +36,8 @@ void depart_done_handler(logger log, string &serialized,
         ntype = "memory";
         removing_memory_node = false;
       } else {
-        ntype = "ebs";
-        removing_ebs_node = false;
+        ntype = "disk";
+        removing_disk_node = false;
       }
 
       log->info("Removing {} node {}/{}.", ntype, departed_public_ip,

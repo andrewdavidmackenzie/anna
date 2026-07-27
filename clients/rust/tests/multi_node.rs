@@ -35,11 +35,11 @@ struct NodeConfig {
     node_ip: &'static str,
     seed_ip: &'static str,
     replication_memory: u32,
-    replication_ebs: u32,
+    replication_disk: u32,
     base_offset: u32,
     gossip_epoch: u32,
     routing_threads: u32,
-    ebs_path: String,
+    disk_path: String,
     selective_rep: bool,
     elasticity: bool,
     tiering: bool,
@@ -57,11 +57,11 @@ impl Default for NodeConfig {
             node_ip: NODE1_IP,
             seed_ip: NODE1_IP,
             replication_memory: 1,
-            replication_ebs: 0,
+            replication_disk: 0,
             base_offset: 0,
             gossip_epoch: TEST_GOSSIP_EPOCH,
             routing_threads: 1,
-            ebs_path: "./".to_string(),
+            disk_path: "./".to_string(),
             selective_rep: false,
             elasticity: false,
             tiering: false,
@@ -106,14 +106,14 @@ policy:
   elasticity: {elasticity}
   selective-rep: {selective_rep}
   tiering: {tiering}
-ebs: {ebs_path}
+disk: {disk_path}
 capacities:
   memory-cap: 1
-  ebs-cap: 256
+  disk-cap: 256
 {memory_cap_kb_line}
 threads:
   memory: 1
-  ebs: 1
+  disk: 1
   routing: {routing_threads}
   benchmark: 1
 ports:
@@ -129,18 +129,18 @@ timings:
   grace_period: {grace_period}
 replication:
   memory: {replication_memory}
-  ebs: {replication_ebs}
+  disk: {replication_disk}
   minimum: 1
   local: 1
 ",
         seed_ip = cfg.seed_ip,
         node_ip = cfg.node_ip,
         replication_memory = cfg.replication_memory,
-        replication_ebs = cfg.replication_ebs,
+        replication_disk = cfg.replication_disk,
         base_offset = cfg.base_offset,
         gossip_epoch = cfg.gossip_epoch,
         routing_threads = cfg.routing_threads,
-        ebs_path = cfg.ebs_path,
+        disk_path = cfg.disk_path,
         selective_rep = cfg.selective_rep,
         server_report_period = cfg.server_report_period,
         monitoring_timeout = cfg.monitoring_timeout,
@@ -311,14 +311,14 @@ impl MultiNodeCluster {
     }
 
     fn start_disk_kvs_node(&mut self, node_ip: &'static str, seed_ip: &'static str) {
-        let ebs_dir = self.config_dir.join(format!("ebs-{}", node_ip));
-        fs::create_dir_all(&ebs_dir).expect("Failed to create ebs dir");
+        let disk_dir = self.config_dir.join(format!("disk-{}", node_ip));
+        fs::create_dir_all(&disk_dir).expect("Failed to create disk dir");
         let cfg = NodeConfig {
             node_ip,
             seed_ip,
-            replication_ebs: 1,
+            replication_disk: 1,
             base_offset: self.base_offset,
-            ebs_path: ebs_dir.to_string_lossy().to_string(),
+            disk_path: disk_dir.to_string_lossy().to_string(),
             ..Default::default()
         };
         let config = self
@@ -330,7 +330,7 @@ impl MultiNodeCluster {
             "anna-kvs",
             &config,
             &server_path(),
-            &[("SERVER_TYPE", "ebs")],
+            &[("SERVER_TYPE", "disk")],
         ) {
             self.processes.push(ServerProcess {
                 child,
@@ -1265,7 +1265,7 @@ async fn self_depart_signal() {
     assert!(kvs_exited, "KVS should have exited after SIGUSR1");
 }
 
-/// Disk tier: start a KVS node with SERVER_TYPE=ebs, verify PUT/GET works.
+/// Disk tier: start a KVS node with SERVER_TYPE=disk, verify PUT/GET works.
 /// Uses base_offset=30000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
@@ -1282,7 +1282,7 @@ async fn disk_tier_basic() {
     // Start cluster with both tiers. Disk-only (replication_memory: 0) is
     // not yet fully working — see #444 for the ongoing fix.
     cluster.start_full_node_with_config(NodeConfig {
-        replication_ebs: 1,
+        replication_disk: 1,
         base_offset: 18015,
         ..Default::default()
     });
@@ -1422,7 +1422,7 @@ async fn memory_tier_preference() {
 
     let mut cluster = MultiNodeCluster::new(19216);
     cluster.start_full_node_with_config(NodeConfig {
-        replication_ebs: 1,
+        replication_disk: 1,
         base_offset: 19216,
         ..Default::default()
     });
@@ -1466,7 +1466,7 @@ async fn cross_tier_gossip() {
     // Start with replication on both tiers so data gossips across
     cluster.start_full_node_with_config(NodeConfig {
         replication_memory: 1,
-        replication_ebs: 1,
+        replication_disk: 1,
         base_offset: 20417,
         ..Default::default()
     });
@@ -2351,7 +2351,7 @@ async fn tiering_movement_policy() {
     // Start a node with both tiers, tiering enabled, short grace period
     cluster.start_full_node_with_config(NodeConfig {
         replication_memory: 1,
-        replication_ebs: 1,
+        replication_disk: 1,
         base_offset,
         tiering: true,
         grace_period: short_grace,
@@ -2364,7 +2364,7 @@ async fn tiering_movement_policy() {
     let config = cluster.client_config();
     let mut client = KVSClient::new(&config, Some(90)).await;
 
-    // PUT several keys — these start with memory_rep=1, ebs_rep=1
+    // PUT several keys — these start with memory_rep=1, disk_rep=1
     let deadline = Instant::now() + Duration::from_secs(15);
     while Instant::now() < deadline {
         let mut all_ok = true;

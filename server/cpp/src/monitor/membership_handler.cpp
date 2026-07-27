@@ -16,10 +16,10 @@
 
 void membership_handler(
     logger log, string &serialized, GlobalRingMap &global_hash_rings,
-    unsigned &new_memory_count, unsigned &new_ebs_count, TimePoint &grace_start,
+    unsigned &new_memory_count, unsigned &new_disk_count, TimePoint &grace_start,
     vector<Address> &routing_ips, StorageStats &memory_storage,
-    StorageStats &ebs_storage, OccupancyStats &memory_occupancy,
-    OccupancyStats &ebs_occupancy,
+    StorageStats &disk_storage, OccupancyStats &memory_occupancy,
+    OccupancyStats &disk_occupancy,
     map<Key, map<Address, unsigned>> &key_access_frequency) {
   vector<string> v;
 
@@ -49,8 +49,8 @@ void membership_handler(
       global_hash_rings[tier].insert(new_server_public_ip,
                                      new_server_private_ip, 0, 0);
 
-      if (new_ebs_count > 0) {
-        new_ebs_count -= 1;
+      if (new_disk_count > 0) {
+        new_disk_count -= 1;
       }
 
       // reset grace period timer
@@ -84,12 +84,12 @@ void membership_handler(
         }
       }
     } else if (tier == Tier::DISK) {
-      ebs_storage.erase(new_server_private_ip);
-      ebs_occupancy.erase(new_server_private_ip);
+      disk_storage.erase(new_server_private_ip);
+      disk_occupancy.erase(new_server_private_ip);
 
       // NOTE: No const here because we are calling erase
       for (auto &key_access_pair : key_access_frequency) {
-        for (unsigned i = 0; i < kEbsThreadCount; i++) {
+        for (unsigned i = 0; i < kDiskThreadCount; i++) {
           key_access_pair.second.erase(new_server_private_ip + ":" +
                                        std::to_string(i));
         }

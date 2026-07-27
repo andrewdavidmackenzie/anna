@@ -32,7 +32,7 @@
 
 unsigned kDefaultLocalReplication = 1;
 unsigned kDefaultGlobalMemoryReplication = 1;
-unsigned kDefaultGlobalEbsReplication = 1;
+unsigned kDefaultGlobalDiskReplication = 1;
 unsigned kThreadNum = 1;
 
 Tier kSelfTier = Tier::ROUTING;
@@ -40,7 +40,7 @@ Tier kSelfTier = Tier::ROUTING;
 vector<Tier> kSelfTierIdVector = {kSelfTier};
 hmap<Tier, TierMetadata, TierEnumHash> kTierMetadata = {};
 
-unsigned kEbsThreadNum = 1;
+unsigned kDiskThreadNum = 1;
 unsigned kMemoryThreadNum = 1;
 unsigned kRoutingThreadCount = 1;
 
