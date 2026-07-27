@@ -482,3 +482,29 @@ TEST_F(DiskSerializerTest, PriorityRemoveNonexistent) {
   DiskPrioritySerializer serializer(tid_, disk_root_);
   EXPECT_FALSE(serializer.remove("no_such_pri_key"));
 }
+
+// Test that serializers append trailing slash to disk_root if missing.
+TEST_F(DiskSerializerTest, DiskRootWithoutTrailingSlash) {
+  // Remove trailing slash from disk_root.
+  string root_no_slash = disk_root_;
+  if (root_no_slash.back() == '/') {
+    root_no_slash.pop_back();
+  }
+  // LWW serializer should work fine -- it appends '/' internally.
+  DiskLWWSerializer lww_ser(tid_, root_no_slash);
+  kvs::LWWValue lww;
+  lww.set_timestamp(1);
+  lww.set_value("slash_test");
+  string payload;
+  lww.SerializeToString(&payload);
+  EXPECT_GT(lww_ser.put("slash_key", payload), 0);
+
+  // Priority serializer should also work.
+  DiskPrioritySerializer pri_ser(tid_, root_no_slash);
+  kvs::PriorityValue pv;
+  pv.set_priority(1.0);
+  pv.set_value("pri_slash_test");
+  string ppayload;
+  pv.SerializeToString(&ppayload);
+  EXPECT_GT(pri_ser.put("pri_slash_key", ppayload), 0);
+}
