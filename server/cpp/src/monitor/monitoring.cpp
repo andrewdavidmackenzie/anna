@@ -19,13 +19,13 @@
 #include "yaml-cpp/yaml.h"
 
 unsigned kMemoryThreadCount;
-unsigned kEbsThreadCount;
+unsigned kDiskThreadCount;
 
 unsigned kMemoryNodeCapacity;
-unsigned kEbsNodeCapacity;
+unsigned kDiskNodeCapacity;
 
 unsigned kDefaultGlobalMemoryReplication;
-unsigned kDefaultGlobalEbsReplication;
+unsigned kDefaultGlobalDiskReplication;
 unsigned kDefaultLocalReplication;
 unsigned kMinimumReplicaNumber;
 
@@ -91,7 +91,7 @@ int main(int argc, char *argv[]) {
   if (policy["min_memory_nodes"])
     kMinMemoryTierSize = policy["min_memory_nodes"].as<unsigned>();
   if (policy["min_disk_nodes"])
-    kMinEbsTierSize = policy["min_disk_nodes"].as<unsigned>();
+    kMinDiskTierSize = policy["min_disk_nodes"].as<unsigned>();
   if (policy["warmup_key_count"]) {
     unsigned val = policy["warmup_key_count"].as<unsigned>();
     if (val > kMaxWarmupKeyCount) {
@@ -109,9 +109,9 @@ int main(int argc, char *argv[]) {
     if (storage["memory_lower"])
       kMinMemoryNodeConsumption = storage["memory_lower"].as<double>();
     if (storage["disk_upper"])
-      kMaxEbsNodeConsumption = storage["disk_upper"].as<double>();
+      kMaxDiskNodeConsumption = storage["disk_upper"].as<double>();
     if (storage["disk_lower"])
-      kMinEbsNodeConsumption = storage["disk_lower"].as<double>();
+      kMinDiskNodeConsumption = storage["disk_lower"].as<double>();
   }
 
   if (policy["tiering_thresholds"]) {
@@ -151,7 +151,7 @@ int main(int argc, char *argv[]) {
 
   YAML::Node threads = conf["threads"];
   kMemoryThreadCount = threads["memory"].as<unsigned>();
-  kEbsThreadCount = threads["ebs"].as<unsigned>();
+  kDiskThreadCount = threads["disk"].as<unsigned>();
 
   YAML::Node capacities = conf["capacities"];
   if (capacities["memory-cap-kb"]) {
@@ -159,10 +159,10 @@ int main(int argc, char *argv[]) {
   } else {
     kMemoryNodeCapacity = capacities["memory-cap"].as<unsigned>() * 1000000;
   }
-  if (capacities["ebs-cap-kb"]) {
-    kEbsNodeCapacity = capacities["ebs-cap-kb"].as<unsigned>();
+  if (capacities["disk-cap-kb"]) {
+    kDiskNodeCapacity = capacities["disk-cap-kb"].as<unsigned>();
   } else {
-    kEbsNodeCapacity = capacities["ebs-cap"].as<unsigned>() * 1000000;
+    kDiskNodeCapacity = capacities["disk-cap"].as<unsigned>() * 1000000;
   }
 
   if (conf["hashing"]) {
@@ -180,7 +180,7 @@ int main(int argc, char *argv[]) {
 
   YAML::Node replication = conf["replication"];
   kDefaultGlobalMemoryReplication = replication["memory"].as<unsigned>();
-  kDefaultGlobalEbsReplication = replication["ebs"].as<unsigned>();
+  kDefaultGlobalDiskReplication = replication["disk"].as<unsigned>();
   kDefaultLocalReplication = replication["local"].as<unsigned>();
   kMinimumReplicaNumber = replication["minimum"].as<unsigned>();
   if (replication["metadata"])
@@ -192,8 +192,8 @@ int main(int argc, char *argv[]) {
       TierMetadata(Tier::MEMORY, kMemoryThreadCount,
                    kDefaultGlobalMemoryReplication, kMemoryNodeCapacity);
   kTierMetadata[Tier::DISK] =
-      TierMetadata(Tier::DISK, kEbsThreadCount, kDefaultGlobalEbsReplication,
-                   kEbsNodeCapacity);
+      TierMetadata(Tier::DISK, kDiskThreadCount, kDefaultGlobalDiskReplication,
+                   kDiskNodeCapacity);
 
   GlobalRingMap global_hash_rings;
   LocalRingMap local_hash_rings;
@@ -210,7 +210,7 @@ int main(int argc, char *argv[]) {
   map<Key, KeyReplication> key_replication_map;
 
   unsigned memory_node_count;
-  unsigned ebs_node_count;
+  unsigned disk_node_count;
 
   map<Key, map<Address, unsigned>> key_access_frequency;
 
@@ -220,15 +220,15 @@ int main(int argc, char *argv[]) {
 
   StorageStats memory_storage;
 
-  StorageStats ebs_storage;
+  StorageStats disk_storage;
 
   OccupancyStats memory_occupancy;
 
-  OccupancyStats ebs_occupancy;
+  OccupancyStats disk_occupancy;
 
   AccessStats memory_accesses;
 
-  AccessStats ebs_accesses;
+  AccessStats disk_accesses;
 
   SummaryStats ss;
 
@@ -277,9 +277,9 @@ int main(int argc, char *argv[]) {
   auto grace_start = std::chrono::system_clock::now();
 
   unsigned new_memory_count = 0;
-  unsigned new_ebs_count = 0;
+  unsigned new_disk_count = 0;
   bool removing_memory_node = false;
-  bool removing_ebs_node = false;
+  bool removing_disk_node = false;
 
   unsigned server_monitoring_epoch = 0;
 
@@ -308,15 +308,15 @@ int main(int argc, char *argv[]) {
       }
 
       membership_handler(log, serialized, global_hash_rings, new_memory_count,
-                         new_ebs_count, grace_start, routing_ips,
-                         memory_storage, ebs_storage, memory_occupancy,
-                         ebs_occupancy, key_access_frequency);
+                         new_disk_count, grace_start, routing_ips,
+                         memory_storage, disk_storage, memory_occupancy,
+                         disk_occupancy, key_access_frequency);
     }
 
     if (pollitems[1].revents & ZMQ_POLLIN) {
       string serialized = kZmqUtil->recv_string(&depart_done_puller);
       depart_done_handler(log, serialized, departing_node_map, management_ip,
-                          removing_memory_node, removing_ebs_node, pushers,
+                          removing_memory_node, removing_disk_node, pushers,
                           grace_start);
     }
 
@@ -335,23 +335,23 @@ int main(int argc, char *argv[]) {
 
       memory_node_count =
           global_hash_rings[Tier::MEMORY].size() / kVirtualThreadNum;
-      ebs_node_count = global_hash_rings[Tier::DISK].size() / kVirtualThreadNum;
+      disk_node_count = global_hash_rings[Tier::DISK].size() / kVirtualThreadNum;
 
       key_access_frequency.clear();
       key_access_summary.clear();
 
       memory_storage.clear();
-      ebs_storage.clear();
+      disk_storage.clear();
 
       memory_occupancy.clear();
-      ebs_occupancy.clear();
+      disk_occupancy.clear();
 
       ss.clear();
 
       collect_internal_stats(
           global_hash_rings, local_hash_rings, pushers, mt, response_puller,
-          log, rid, key_access_frequency, key_size, memory_storage, ebs_storage,
-          memory_occupancy, ebs_occupancy, memory_accesses, ebs_accesses);
+          log, rid, key_access_frequency, key_size, memory_storage, disk_storage,
+          memory_occupancy, disk_occupancy, memory_accesses, disk_accesses);
 
       // Crash detection: nodes that reported stats before but stopped
       auto now = std::chrono::system_clock::now();
@@ -365,7 +365,7 @@ int main(int argc, char *argv[]) {
         }
       };
       mark_reporting(memory_occupancy);
-      mark_reporting(ebs_occupancy);
+      mark_reporting(disk_occupancy);
 
       // Only check nodes that were previously seen but stopped reporting
       vector<Address> dead_nodes;
@@ -415,9 +415,9 @@ int main(int argc, char *argv[]) {
         last_epoch_change.erase(node_id);
       }
 
-      compute_summary_stats(key_access_frequency, memory_storage, ebs_storage,
-                            memory_occupancy, ebs_occupancy, memory_accesses,
-                            ebs_accesses, key_access_summary, ss, log,
+      compute_summary_stats(key_access_frequency, memory_storage, disk_storage,
+                            memory_occupancy, disk_occupancy, memory_accesses,
+                            disk_accesses, key_access_summary, ss, log,
                             server_monitoring_epoch);
 
       collect_external_stats(user_latency, user_throughput, ss, log);
@@ -432,13 +432,13 @@ int main(int argc, char *argv[]) {
       }
 
       storage_policy(log, global_hash_rings, grace_start, ss, memory_node_count,
-                     ebs_node_count, new_memory_count, new_ebs_count,
-                     removing_ebs_node, management_ip, mt, departing_node_map,
+                     disk_node_count, new_memory_count, new_disk_count,
+                     removing_disk_node, management_ip, mt, departing_node_map,
                      pushers);
 
       movement_policy(log, global_hash_rings, local_hash_rings, grace_start, ss,
-                      memory_node_count, ebs_node_count, new_memory_count,
-                      new_ebs_count, management_ip, key_replication_map,
+                      memory_node_count, disk_node_count, new_memory_count,
+                      new_disk_count, management_ip, key_replication_map,
                       key_access_summary, key_size, mt, pushers,
                       response_puller, routing_ips, rid);
 

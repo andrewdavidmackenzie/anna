@@ -56,7 +56,7 @@ static void apply_policy_config(const YAML::Node &conf) {
     if (policy["min_memory_nodes"])
       kMinMemoryTierSize = policy["min_memory_nodes"].as<unsigned>();
     if (policy["min_disk_nodes"])
-      kMinEbsTierSize = policy["min_disk_nodes"].as<unsigned>();
+      kMinDiskTierSize = policy["min_disk_nodes"].as<unsigned>();
     if (policy["warmup_key_count"]) {
       unsigned val = policy["warmup_key_count"].as<unsigned>();
       kWarmupKeyCount = std::min(val, kMaxWarmupKeyCount);
@@ -69,9 +69,9 @@ static void apply_policy_config(const YAML::Node &conf) {
       if (storage["memory_lower"])
         kMinMemoryNodeConsumption = storage["memory_lower"].as<double>();
       if (storage["disk_upper"])
-        kMaxEbsNodeConsumption = storage["disk_upper"].as<double>();
+        kMaxDiskNodeConsumption = storage["disk_upper"].as<double>();
       if (storage["disk_lower"])
-        kMinEbsNodeConsumption = storage["disk_lower"].as<double>();
+        kMinDiskNodeConsumption = storage["disk_lower"].as<double>();
     }
 
     if (policy["tiering_thresholds"]) {
@@ -156,12 +156,12 @@ protected:
   unsigned saved_kNodeAdditionBatchSize;
   double saved_kMaxMemoryNodeConsumption;
   double saved_kMinMemoryNodeConsumption;
-  double saved_kMaxEbsNodeConsumption;
-  double saved_kMinEbsNodeConsumption;
+  double saved_kMaxDiskNodeConsumption;
+  double saved_kMinDiskNodeConsumption;
   unsigned saved_kKeyPromotionThreshold;
   unsigned saved_kKeyDemotionThreshold;
   unsigned saved_kMinMemoryTierSize;
-  unsigned saved_kMinEbsTierSize;
+  unsigned saved_kMinDiskTierSize;
   unsigned saved_kValueSize;
   double saved_kSloOccupancyUpper;
   double saved_kSloOccupancyLower;
@@ -181,12 +181,12 @@ protected:
     saved_kNodeAdditionBatchSize = kNodeAdditionBatchSize;
     saved_kMaxMemoryNodeConsumption = kMaxMemoryNodeConsumption;
     saved_kMinMemoryNodeConsumption = kMinMemoryNodeConsumption;
-    saved_kMaxEbsNodeConsumption = kMaxEbsNodeConsumption;
-    saved_kMinEbsNodeConsumption = kMinEbsNodeConsumption;
+    saved_kMaxDiskNodeConsumption = kMaxDiskNodeConsumption;
+    saved_kMinDiskNodeConsumption = kMinDiskNodeConsumption;
     saved_kKeyPromotionThreshold = kKeyPromotionThreshold;
     saved_kKeyDemotionThreshold = kKeyDemotionThreshold;
     saved_kMinMemoryTierSize = kMinMemoryTierSize;
-    saved_kMinEbsTierSize = kMinEbsTierSize;
+    saved_kMinDiskTierSize = kMinDiskTierSize;
     saved_kValueSize = kValueSize;
     saved_kSloOccupancyUpper = kSloOccupancyUpper;
     saved_kSloOccupancyLower = kSloOccupancyLower;
@@ -207,12 +207,12 @@ protected:
     kNodeAdditionBatchSize = saved_kNodeAdditionBatchSize;
     kMaxMemoryNodeConsumption = saved_kMaxMemoryNodeConsumption;
     kMinMemoryNodeConsumption = saved_kMinMemoryNodeConsumption;
-    kMaxEbsNodeConsumption = saved_kMaxEbsNodeConsumption;
-    kMinEbsNodeConsumption = saved_kMinEbsNodeConsumption;
+    kMaxDiskNodeConsumption = saved_kMaxDiskNodeConsumption;
+    kMinDiskNodeConsumption = saved_kMinDiskNodeConsumption;
     kKeyPromotionThreshold = saved_kKeyPromotionThreshold;
     kKeyDemotionThreshold = saved_kKeyDemotionThreshold;
     kMinMemoryTierSize = saved_kMinMemoryTierSize;
-    kMinEbsTierSize = saved_kMinEbsTierSize;
+    kMinDiskTierSize = saved_kMinDiskTierSize;
     kValueSize = saved_kValueSize;
     kSloOccupancyUpper = saved_kSloOccupancyUpper;
     kSloOccupancyLower = saved_kSloOccupancyLower;
@@ -260,7 +260,7 @@ TEST_F(ConfigYamlParsingTest, PolicyMinDiskNodes) {
   auto path = write_temp_yaml("policy:\n  min_disk_nodes: 2\n");
   YAML::Node conf = YAML::LoadFile(path);
   apply_policy_config(conf);
-  EXPECT_EQ(kMinEbsTierSize, 2u);
+  EXPECT_EQ(kMinDiskTierSize, 2u);
   std::remove(path.c_str());
 }
 
@@ -295,7 +295,7 @@ TEST_F(ConfigYamlParsingTest, PolicyStorageDiskUpper) {
       "policy:\n  storage:\n    disk_upper: 0.9\n");
   YAML::Node conf = YAML::LoadFile(path);
   apply_policy_config(conf);
-  EXPECT_DOUBLE_EQ(kMaxEbsNodeConsumption, 0.9);
+  EXPECT_DOUBLE_EQ(kMaxDiskNodeConsumption, 0.9);
   std::remove(path.c_str());
 }
 
@@ -304,7 +304,7 @@ TEST_F(ConfigYamlParsingTest, PolicyStorageDiskLower) {
       "policy:\n  storage:\n    disk_lower: 0.4\n");
   YAML::Node conf = YAML::LoadFile(path);
   apply_policy_config(conf);
-  EXPECT_DOUBLE_EQ(kMinEbsNodeConsumption, 0.4);
+  EXPECT_DOUBLE_EQ(kMinDiskNodeConsumption, 0.4);
   std::remove(path.c_str());
 }
 
@@ -502,12 +502,12 @@ TEST_F(ConfigYamlParsingTest, FullConfigOverridesAllKeys) {
   EXPECT_EQ(kNodeAdditionBatchSize, 10u);
   EXPECT_EQ(kValueSize, 1024u);
   EXPECT_EQ(kMinMemoryTierSize, 5u);
-  EXPECT_EQ(kMinEbsTierSize, 3u);
+  EXPECT_EQ(kMinDiskTierSize, 3u);
   EXPECT_EQ(kWarmupKeyCount, 100u);
   EXPECT_DOUBLE_EQ(kMaxMemoryNodeConsumption, 0.9);
   EXPECT_DOUBLE_EQ(kMinMemoryNodeConsumption, 0.1);
-  EXPECT_DOUBLE_EQ(kMaxEbsNodeConsumption, 0.95);
-  EXPECT_DOUBLE_EQ(kMinEbsNodeConsumption, 0.2);
+  EXPECT_DOUBLE_EQ(kMaxDiskNodeConsumption, 0.95);
+  EXPECT_DOUBLE_EQ(kMinDiskNodeConsumption, 0.2);
   EXPECT_EQ(kKeyPromotionThreshold, 10u);
   EXPECT_EQ(kKeyDemotionThreshold, 5u);
   EXPECT_EQ(kSloWorst, 1000u);

@@ -224,10 +224,10 @@ public:
 
 // Common disk I/O helpers shared by all disk serializers.
 // Each serializer stores protobuf values as files at:
-//   <ebs_root>/ebs_<tid>/<key>
+//   <disk_root>/disk_<tid>/<key>
 
-inline string disk_fname(const string &ebs_root, unsigned tid, const Key &key) {
-  return ebs_root + "ebs_" + std::to_string(tid) + "/" + key;
+inline string disk_fname(const string &disk_root, unsigned tid, const Key &key) {
+  return disk_root + "disk_" + std::to_string(tid) + "/" + key;
 }
 
 template <typename T>
@@ -279,20 +279,20 @@ inline bool disk_remove(const string &path) {
 
 class DiskLWWSerializer : public Serializer {
   unsigned tid_;
-  string ebs_root_;
+  string disk_root_;
 
 public:
-  DiskLWWSerializer(unsigned &tid, string ebs_root) : tid_(tid) {
-    ebs_root_ = ebs_root;
-    if (ebs_root_.back() != '/') {
-      ebs_root_ += "/";
+  DiskLWWSerializer(unsigned &tid, string disk_root) : tid_(tid) {
+    disk_root_ = disk_root;
+    if (disk_root_.back() != '/') {
+      disk_root_ += "/";
     }
   }
 
   string get(const Key &key, kvs::AnnaError &error) {
     string res;
     kvs::LWWValue value;
-    if (disk_read(disk_fname(ebs_root_, tid_, key), value, error)) {
+    if (disk_read(disk_fname(disk_root_, tid_, key), value, error)) {
       if (value.value() == "") {
         error = kvs::AnnaError::KEY_DNE;
       } else {
@@ -306,7 +306,7 @@ public:
     kvs::LWWValue input_value;
     input_value.ParseFromString(serialized);
 
-    string path = disk_fname(ebs_root_, tid_, key);
+    string path = disk_fname(disk_root_, tid_, key);
     kvs::LWWValue original_value;
     kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
 
@@ -322,24 +322,24 @@ public:
   }
 
   bool remove(const Key &key) {
-    return disk_remove(disk_fname(ebs_root_, tid_, key));
+    return disk_remove(disk_fname(disk_root_, tid_, key));
   }
 };
 
 class DiskSetSerializer : public Serializer {
   unsigned tid_;
-  string ebs_root_;
+  string disk_root_;
 
 public:
-  DiskSetSerializer(unsigned &tid, string ebs_root) : tid_(tid) {
-    ebs_root_ = ebs_root;
-    if (ebs_root_.back() != '/') ebs_root_ += "/";
+  DiskSetSerializer(unsigned &tid, string disk_root) : tid_(tid) {
+    disk_root_ = disk_root;
+    if (disk_root_.back() != '/') disk_root_ += "/";
   }
 
   string get(const Key &key, kvs::AnnaError &error) {
     string res;
     kvs::SetValue value;
-    if (disk_read(disk_fname(ebs_root_, tid_, key), value, error)) {
+    if (disk_read(disk_fname(disk_root_, tid_, key), value, error)) {
       if (value.values_size() == 0) {
         error = kvs::AnnaError::KEY_DNE;
       } else {
@@ -353,7 +353,7 @@ public:
     kvs::SetValue input_value;
     input_value.ParseFromString(serialized);
 
-    string path = disk_fname(ebs_root_, tid_, key);
+    string path = disk_fname(disk_root_, tid_, key);
     kvs::SetValue original_value;
     kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
 
@@ -376,24 +376,24 @@ public:
   }
 
   bool remove(const Key &key) {
-    return disk_remove(disk_fname(ebs_root_, tid_, key));
+    return disk_remove(disk_fname(disk_root_, tid_, key));
   }
 };
 
 class DiskOrderedSetSerializer : public Serializer {
   unsigned tid_;
-  string ebs_root_;
+  string disk_root_;
 
 public:
-  DiskOrderedSetSerializer(unsigned &tid, string ebs_root) : tid_(tid) {
-    ebs_root_ = ebs_root;
-    if (ebs_root_.back() != '/') ebs_root_ += "/";
+  DiskOrderedSetSerializer(unsigned &tid, string disk_root) : tid_(tid) {
+    disk_root_ = disk_root;
+    if (disk_root_.back() != '/') disk_root_ += "/";
   }
 
   string get(const Key &key, kvs::AnnaError &error) {
     string res;
     kvs::SetValue value;
-    if (disk_read(disk_fname(ebs_root_, tid_, key), value, error)) {
+    if (disk_read(disk_fname(disk_root_, tid_, key), value, error)) {
       value.SerializeToString(&res);
     }
     return res;
@@ -403,7 +403,7 @@ public:
     kvs::SetValue input_value;
     input_value.ParseFromString(serialized);
 
-    string path = disk_fname(ebs_root_, tid_, key);
+    string path = disk_fname(disk_root_, tid_, key);
     kvs::SetValue original_value;
     kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
 
@@ -426,24 +426,24 @@ public:
   }
 
   bool remove(const Key &key) {
-    return disk_remove(disk_fname(ebs_root_, tid_, key));
+    return disk_remove(disk_fname(disk_root_, tid_, key));
   }
 };
 
 class DiskSingleKeyCausalSerializer : public Serializer {
   unsigned tid_;
-  string ebs_root_;
+  string disk_root_;
 
 public:
-  DiskSingleKeyCausalSerializer(unsigned &tid, string ebs_root) : tid_(tid) {
-    ebs_root_ = ebs_root;
-    if (ebs_root_.back() != '/') ebs_root_ += "/";
+  DiskSingleKeyCausalSerializer(unsigned &tid, string disk_root) : tid_(tid) {
+    disk_root_ = disk_root;
+    if (disk_root_.back() != '/') disk_root_ += "/";
   }
 
   string get(const Key &key, kvs::AnnaError &error) {
     string res;
     kvs::SingleKeyCausalValue value;
-    if (disk_read(disk_fname(ebs_root_, tid_, key), value, error)) {
+    if (disk_read(disk_fname(disk_root_, tid_, key), value, error)) {
       if (value.values_size() == 0) {
         error = kvs::AnnaError::KEY_DNE;
       } else {
@@ -457,7 +457,7 @@ public:
     kvs::SingleKeyCausalValue input_value;
     input_value.ParseFromString(serialized);
 
-    string path = disk_fname(ebs_root_, tid_, key);
+    string path = disk_fname(disk_root_, tid_, key);
     kvs::SingleKeyCausalValue original_value;
     kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
 
@@ -504,24 +504,24 @@ public:
   }
 
   bool remove(const Key &key) {
-    return disk_remove(disk_fname(ebs_root_, tid_, key));
+    return disk_remove(disk_fname(disk_root_, tid_, key));
   }
 };
 
 class DiskMultiKeyCausalSerializer : public Serializer {
   unsigned tid_;
-  string ebs_root_;
+  string disk_root_;
 
 public:
-  DiskMultiKeyCausalSerializer(unsigned &tid, string ebs_root) : tid_(tid) {
-    ebs_root_ = ebs_root;
-    if (ebs_root_.back() != '/') ebs_root_ += "/";
+  DiskMultiKeyCausalSerializer(unsigned &tid, string disk_root) : tid_(tid) {
+    disk_root_ = disk_root;
+    if (disk_root_.back() != '/') disk_root_ += "/";
   }
 
   string get(const Key &key, kvs::AnnaError &error) {
     string res;
     kvs::MultiKeyCausalValue value;
-    if (disk_read(disk_fname(ebs_root_, tid_, key), value, error)) {
+    if (disk_read(disk_fname(disk_root_, tid_, key), value, error)) {
       if (value.values_size() == 0) {
         error = kvs::AnnaError::KEY_DNE;
       } else {
@@ -535,7 +535,7 @@ public:
     kvs::MultiKeyCausalValue input_value;
     input_value.ParseFromString(serialized);
 
-    string path = disk_fname(ebs_root_, tid_, key);
+    string path = disk_fname(disk_root_, tid_, key);
     kvs::MultiKeyCausalValue original_value;
     kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
 
@@ -613,24 +613,24 @@ public:
   }
 
   bool remove(const Key &key) {
-    return disk_remove(disk_fname(ebs_root_, tid_, key));
+    return disk_remove(disk_fname(disk_root_, tid_, key));
   }
 };
 
 class DiskPrioritySerializer : public Serializer {
   unsigned tid_;
-  string ebs_root_;
+  string disk_root_;
 
   //! Compute the name of the file that stores a value for a given key
   string fname(const Key &key) const {
-    return ebs_root_ + "ebs_" + std::to_string(tid_) + "/" + key;
+    return disk_root_ + "disk_" + std::to_string(tid_) + "/" + key;
   }
 
 public:
-  DiskPrioritySerializer(unsigned tid, string ebs_root) : tid_(tid) {
-    ebs_root_ = ebs_root;
-    if (ebs_root_.back() != '/') {
-      ebs_root_ += "/";
+  DiskPrioritySerializer(unsigned tid, string disk_root) : tid_(tid) {
+    disk_root_ = disk_root;
+    if (disk_root_.back() != '/') {
+      disk_root_ += "/";
     }
   }
 

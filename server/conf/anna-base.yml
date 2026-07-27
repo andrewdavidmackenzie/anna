@@ -1,10 +1,10 @@
-ebs: /ebs
+disk: /disk
 capacities: # in GB
   memory-cap: 45 
-  ebs-cap: 256
+  disk-cap: 256
 threads:
   memory: 4
-  ebs: 4
+  disk: 4
   routing: 4
   benchmark: 4
 hashing:
@@ -23,7 +23,7 @@ timings:
   garbage_collect_period_us: 10000000
 replication:
   memory: 1
-  ebs: 0
+  disk: 0
   minimum: 1
   local: 1
   metadata: 1

@@ -140,6 +140,6 @@ message ClusterTopology {
   // Number of memory-tier threads per KVS node.
   uint32 memory_thread_count = 2;
 
-  // Number of EBS-tier threads per KVS node.
-  uint32 ebs_thread_count = 3;
+  // Number of disk-tier threads per KVS node.
+  uint32 disk_thread_count = 3;
 }

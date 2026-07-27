@@ -349,7 +349,7 @@ class TestGetClusterTopology:
         topology = ClusterTopology()
         topology.routing_thread_count = 2
         topology.memory_thread_count = 4
-        topology.ebs_thread_count = 1
+        topology.disk_thread_count = 1
         inner = topology.SerializeToString()
 
         with patch.object(client, 'get_bytes', return_value=inner):
@@ -358,7 +358,7 @@ class TestGetClusterTopology:
         assert result == {
             'routing_thread_count': 2,
             'memory_thread_count': 4,
-            'ebs_thread_count': 1,
+            'disk_thread_count': 1,
         }
 
     def test_returns_none_when_key_missing(self):

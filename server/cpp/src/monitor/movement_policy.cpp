@@ -18,8 +18,8 @@
 void movement_policy(logger log, GlobalRingMap &global_hash_rings,
                      LocalRingMap &local_hash_rings, TimePoint &grace_start,
                      SummaryStats &ss, unsigned &memory_node_count,
-                     unsigned &ebs_node_count, unsigned &new_memory_count,
-                     unsigned &new_ebs_count, Address management_ip,
+                     unsigned &disk_node_count, unsigned &new_memory_count,
+                     unsigned &new_disk_count, Address management_ip,
                      map<Key, KeyReplication> &key_replication_map,
                      map<Key, unsigned> &key_access_summary,
                      map<Key, unsigned> &key_size, MonitoringThread &mt,
@@ -85,12 +85,12 @@ void movement_policy(logger log, GlobalRingMap &global_hash_rings,
   requests.clear();
   required_storage = 0;
 
-  // demote cold keys to ebs tier
+  // demote cold keys to disk tier
   if (kEnableTiering) {
     free_storage =
-        (kMaxEbsNodeConsumption * kTierMetadata[Tier::DISK].node_capacity_ *
-             ebs_node_count -
-         ss.total_ebs_consumption);
+        (kMaxDiskNodeConsumption * kTierMetadata[Tier::DISK].node_capacity_ *
+             disk_node_count -
+         ss.total_disk_consumption);
     overflow = false;
 
     for (const auto &key_access_pair : key_access_summary) {
@@ -114,16 +114,16 @@ void movement_policy(logger log, GlobalRingMap &global_hash_rings,
                               routing_ips, key_replication_map, pushers, mt,
                               response_puller, log, rid);
 
-    log->info("Demoting {} keys into EBS tier.", requests.size());
-    if (kEnableElasticity && overflow && new_ebs_count == 0 &&
+    log->info("Demoting {} keys into disk tier.", requests.size());
+    if (kEnableElasticity && overflow && new_disk_count == 0 &&
         time_elapsed > kGracePeriod) {
-      unsigned total_ebs_node_needed = ceil(
-          (ss.total_ebs_consumption + required_storage) /
-          (kMaxEbsNodeConsumption * kTierMetadata[Tier::DISK].node_capacity_));
+      unsigned total_disk_node_needed = ceil(
+          (ss.total_disk_consumption + required_storage) /
+          (kMaxDiskNodeConsumption * kTierMetadata[Tier::DISK].node_capacity_));
 
-      if (total_ebs_node_needed > ebs_node_count) {
-        unsigned node_to_add = (total_ebs_node_needed - ebs_node_count);
-        add_node(log, "ebs", node_to_add, new_ebs_count, pushers,
+      if (total_disk_node_needed > disk_node_count) {
+        unsigned node_to_add = (total_disk_node_needed - disk_node_count);
+        add_node(log, "disk", node_to_add, new_disk_count, pushers,
                  management_ip);
       }
     }

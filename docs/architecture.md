@@ -45,7 +45,7 @@ threads, each pinned to a CPU core. Each thread:
 - Uses **consistent hashing** with virtual nodes for key partitioning
 
 The storage kernel is identical across memory and disk tiers — the only
-difference is the serialization layer (memory buffer vs. EBS volume).
+difference is the serialization layer (memory buffer vs. disk volume).
 
 ### Monitoring Node (anna-monitor)
 

@@ -1450,7 +1450,7 @@ mod tests {
         let topo = ClusterTopology {
             routing_thread_count: 2,
             memory_thread_count: 4,
-            ebs_thread_count: 1,
+            disk_thread_count: 1,
         };
         let worker = "tcp://127.0.0.1:6200";
         let meta_key = "ANNA_METADATA|cluster_topology";
@@ -1751,14 +1751,14 @@ mod tests {
         let topo = ClusterTopology {
             routing_thread_count: 2,
             memory_thread_count: 4,
-            ebs_thread_count: 1,
+            disk_thread_count: 1,
         };
         let encoded = topo.encode_to_vec();
         let decoded =
             KVSClient::decode_cluster_topology(&encoded).expect("failed to decode topology");
         assert_eq!(decoded.routing_thread_count, 2);
         assert_eq!(decoded.memory_thread_count, 4);
-        assert_eq!(decoded.ebs_thread_count, 1);
+        assert_eq!(decoded.disk_thread_count, 1);
     }
 
     #[test]

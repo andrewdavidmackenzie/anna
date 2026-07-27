@@ -177,7 +177,7 @@ inline vector<string> split_metadata_key(Key key) {
 inline void warmup_key_replication_map_to_defaults(
     map<Key, KeyReplication> &key_replication_map,
     unsigned &kDefaultGlobalMemoryReplication,
-    unsigned &kDefaultGlobalEbsReplication,
+    unsigned &kDefaultGlobalDiskReplication,
     unsigned &kDefaultLocalReplication) {
   for (unsigned i = 1; i <= kWarmupKeyCount; i++) {
     // key is 8 bytes
@@ -185,7 +185,7 @@ inline void warmup_key_replication_map_to_defaults(
     key_replication_map[key].global_replication_[Tier::MEMORY] =
         kDefaultGlobalMemoryReplication;
     key_replication_map[key].global_replication_[Tier::DISK] =
-        kDefaultGlobalEbsReplication;
+        kDefaultGlobalDiskReplication;
     key_replication_map[key].local_replication_[Tier::MEMORY] =
         kDefaultLocalReplication;
     key_replication_map[key].local_replication_[Tier::DISK] =

@@ -644,7 +644,7 @@ class AnnaTcpClient(BaseAnnaClient):
         ANNA_METADATA|cluster_topology.
 
         Returns a dict with routing_thread_count, memory_thread_count,
-        ebs_thread_count, or None if the key does not exist.
+        disk_thread_count, or None if the key does not exist.
         """
         raw = self.get_bytes("ANNA_METADATA|cluster_topology")
         if raw is None:
@@ -655,7 +655,7 @@ class AnnaTcpClient(BaseAnnaClient):
         return {
             'routing_thread_count': topology.routing_thread_count,
             'memory_thread_count': topology.memory_thread_count,
-            'ebs_thread_count': topology.ebs_thread_count,
+            'disk_thread_count': topology.disk_thread_count,
         }
 
     def get_monitoring_ips(self):

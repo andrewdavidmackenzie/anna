@@ -21,9 +21,9 @@ void collect_internal_stats(
     logger log, unsigned &rid,
     map<Key, map<Address, unsigned>> &key_access_frequency,
     map<Key, unsigned> &key_size, StorageStats &memory_storage,
-    StorageStats &ebs_storage, OccupancyStats &memory_occupancy,
-    OccupancyStats &ebs_occupancy, AccessStats &memory_accesses,
-    AccessStats &ebs_accesses) {
+    StorageStats &disk_storage, OccupancyStats &memory_occupancy,
+    OccupancyStats &disk_occupancy, AccessStats &memory_accesses,
+    AccessStats &disk_accesses) {
   map<Address, kvs::KeyRequest> addr_request_map;
 
   for (const Tier &tier : kAllTiers) {
@@ -82,10 +82,10 @@ void collect_internal_stats(
                   std::pair<double, unsigned>(stat.occupancy(), stat.epoch());
               memory_accesses[ip_pair][tid] = stat.access_count();
             } else {
-              ebs_storage[ip_pair][tid] = stat.storage_consumption();
-              ebs_occupancy[ip_pair][tid] =
+              disk_storage[ip_pair][tid] = stat.storage_consumption();
+              disk_occupancy[ip_pair][tid] =
                   std::pair<double, unsigned>(stat.occupancy(), stat.epoch());
-              ebs_accesses[ip_pair][tid] = stat.access_count();
+              disk_accesses[ip_pair][tid] = stat.access_count();
             }
           } else if (metadata_type == "access") {
             // deserialized the value
@@ -122,9 +122,9 @@ void collect_internal_stats(
 
 void compute_summary_stats(
     map<Key, map<Address, unsigned>> &key_access_frequency,
-    StorageStats &memory_storage, StorageStats &ebs_storage,
-    OccupancyStats &memory_occupancy, OccupancyStats &ebs_occupancy,
-    AccessStats &memory_accesses, AccessStats &ebs_accesses,
+    StorageStats &memory_storage, StorageStats &disk_storage,
+    OccupancyStats &memory_occupancy, OccupancyStats &disk_occupancy,
+    AccessStats &memory_accesses, AccessStats &disk_accesses,
     map<Key, unsigned> &key_access_summary, SummaryStats &ss, logger log,
     unsigned &server_monitoring_epoch) {
   // compute key access summary
@@ -165,14 +165,14 @@ void compute_summary_stats(
     }
   }
 
-  for (const auto &access : ebs_accesses) {
+  for (const auto &access : disk_accesses) {
     for (const auto &thread_access : access.second) {
-      ss.total_ebs_access += thread_access.second;
+      ss.total_disk_access += thread_access.second;
     }
   }
 
-  log->info("Total accesses: memory={}, ebs={}", ss.total_memory_access,
-            ss.total_ebs_access);
+  log->info("Total accesses: memory={}, disk={}", ss.total_memory_access,
+            ss.total_disk_access);
 
   // compute storage consumption related statistics
   unsigned m_count = 0;
@@ -198,21 +198,21 @@ void compute_summary_stats(
     m_count += 1;
   }
 
-  for (const auto &ebs_storage : ebs_storage) {
+  for (const auto &disk_storage : disk_storage) {
     unsigned total_thread_consumption = 0;
 
-    for (const auto &thread_storage : ebs_storage.second) {
-      ss.total_ebs_consumption += thread_storage.second;
+    for (const auto &thread_storage : disk_storage.second) {
+      ss.total_disk_consumption += thread_storage.second;
       total_thread_consumption += thread_storage.second;
     }
 
     double percentage = (double)total_thread_consumption /
                         (double)kTierMetadata[Tier::DISK].node_capacity_;
-    log->info("EBS node {} storage consumption is {}.", ebs_storage.first,
+    log->info("Disk node {} storage consumption is {}.", disk_storage.first,
               percentage);
 
-    if (percentage > ss.max_ebs_consumption_percentage) {
-      ss.max_ebs_consumption_percentage = percentage;
+    if (percentage > ss.max_disk_consumption_percentage) {
+      ss.max_disk_consumption_percentage = percentage;
     }
     e_count += 1;
   }
@@ -228,25 +228,25 @@ void compute_summary_stats(
   }
 
   if (e_count != 0) {
-    ss.avg_ebs_consumption_percentage =
-        (double)ss.total_ebs_consumption /
+    ss.avg_disk_consumption_percentage =
+        (double)ss.total_disk_consumption /
         ((double)e_count * kTierMetadata[Tier::DISK].node_capacity_);
-    log->info("Average EBS node consumption is {}.",
-              ss.avg_ebs_consumption_percentage);
-    log->info("Max EBS node consumption is {}.",
-              ss.max_ebs_consumption_percentage);
+    log->info("Average Disk node consumption is {}.",
+              ss.avg_disk_consumption_percentage);
+    log->info("Max Disk node consumption is {}.",
+              ss.max_disk_consumption_percentage);
   }
 
   ss.required_memory_node = ceil(
       ss.total_memory_consumption /
       (kMaxMemoryNodeConsumption * kTierMetadata[Tier::MEMORY].node_capacity_));
-  ss.required_ebs_node =
-      ceil(ss.total_ebs_consumption /
-           (kMaxEbsNodeConsumption * kTierMetadata[Tier::DISK].node_capacity_));
+  ss.required_disk_node =
+      ceil(ss.total_disk_consumption /
+           (kMaxDiskNodeConsumption * kTierMetadata[Tier::DISK].node_capacity_));
 
   log->info("The system requires {} new memory nodes.",
             ss.required_memory_node);
-  log->info("The system requires {} new EBS nodes.", ss.required_ebs_node);
+  log->info("The system requires {} new Disk nodes.", ss.required_disk_node);
 
   // compute occupancy related statistics
   double sum_memory_occupancy = 0.0;
@@ -294,19 +294,19 @@ void compute_summary_stats(
   log->info("Average memory node occupancy is {}.",
             std::to_string(ss.avg_memory_occupancy));
 
-  double sum_ebs_occupancy = 0.0;
+  double sum_disk_occupancy = 0.0;
 
   count = 0;
 
-  for (const auto &ebs_occ : ebs_occupancy) {
+  for (const auto &disk_occ : disk_occupancy) {
     double sum_thread_occupancy = 0.0;
     unsigned thread_count = 0;
 
-    for (const auto &thread_occ : ebs_occ.second) {
+    for (const auto &thread_occ : disk_occ.second) {
       log->info(
-          "EBS node {} thread {} occupancy is {} at epoch {} (monitoring epoch "
+          "Disk node {} thread {} occupancy is {} at epoch {} (monitoring epoch "
           "{}).",
-          ebs_occ.first, thread_occ.first, thread_occ.second.first,
+          disk_occ.first, thread_occ.first, thread_occ.second.first,
           thread_occ.second.second, server_monitoring_epoch);
 
       sum_thread_occupancy += thread_occ.second.first;
@@ -314,26 +314,26 @@ void compute_summary_stats(
     }
 
     double node_occupancy = sum_thread_occupancy / thread_count;
-    sum_ebs_occupancy += node_occupancy;
+    sum_disk_occupancy += node_occupancy;
 
-    if (node_occupancy > ss.max_ebs_occupancy) {
-      ss.max_ebs_occupancy = node_occupancy;
+    if (node_occupancy > ss.max_disk_occupancy) {
+      ss.max_disk_occupancy = node_occupancy;
     }
 
-    if (node_occupancy < ss.min_ebs_occupancy) {
-      ss.min_ebs_occupancy = node_occupancy;
+    if (node_occupancy < ss.min_disk_occupancy) {
+      ss.min_disk_occupancy = node_occupancy;
     }
 
     count += 1;
   }
 
-  ss.avg_ebs_occupancy = sum_ebs_occupancy / count;
-  log->info("Max EBS node occupancy is {}.",
-            std::to_string(ss.max_ebs_occupancy));
-  log->info("Min EBS node occupancy is {}.",
-            std::to_string(ss.min_ebs_occupancy));
-  log->info("Average EBS node occupancy is {}.",
-            std::to_string(ss.avg_ebs_occupancy));
+  ss.avg_disk_occupancy = sum_disk_occupancy / count;
+  log->info("Max Disk node occupancy is {}.",
+            std::to_string(ss.max_disk_occupancy));
+  log->info("Min Disk node occupancy is {}.",
+            std::to_string(ss.min_disk_occupancy));
+  log->info("Average Disk node occupancy is {}.",
+            std::to_string(ss.avg_disk_occupancy));
 }
 
 void collect_external_stats(map<string, double> &user_latency,

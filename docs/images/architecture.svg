@@ -147,7 +147,7 @@
 
   <!-- Disk Tier -->
   <rect x="40" y="55" width="620" height="130" rx="10" fill="#e3f2fd" stroke="#68a" stroke-width="1.5"/>
-  <text x="350" y="80" text-anchor="middle" font-size="14" font-weight="bold" fill="#468">Disk Tier (EBS)</text>
+  <text x="350" y="80" text-anchor="middle" font-size="14" font-weight="bold" fill="#468">Disk Tier</text>
 
   <g transform="translate(60, 90)">
     <rect width="170" height="80" rx="6" fill="#fff" stroke="#8ab" stroke-width="1"/>
@@ -155,11 +155,11 @@
     <rect x="10" y="28" width="65" height="22" rx="3" fill="#e1f0ff" stroke="#8ab"/>
     <text x="42" y="43" text-anchor="middle" font-size="9" fill="#468">anna-kvs</text>
     <rect x="10" y="54" width="65" height="22" rx="3" fill="#cce5ff" stroke="#68a"/>
-    <text x="42" y="69" text-anchor="middle" font-size="9" fill="#468">EBS Vol</text>
+    <text x="42" y="69" text-anchor="middle" font-size="9" fill="#468">Disk Vol</text>
     <rect x="90" y="28" width="65" height="22" rx="3" fill="#e1f0ff" stroke="#8ab"/>
     <text x="122" y="43" text-anchor="middle" font-size="9" fill="#468">anna-kvs</text>
     <rect x="90" y="54" width="65" height="22" rx="3" fill="#cce5ff" stroke="#68a"/>
-    <text x="122" y="69" text-anchor="middle" font-size="9" fill="#468">EBS Vol</text>
+    <text x="122" y="69" text-anchor="middle" font-size="9" fill="#468">Disk Vol</text>
   </g>
 
   <g transform="translate(280, 90)">
@@ -168,11 +168,11 @@
     <rect x="10" y="28" width="65" height="22" rx="3" fill="#e1f0ff" stroke="#8ab"/>
     <text x="42" y="43" text-anchor="middle" font-size="9" fill="#468">anna-kvs</text>
     <rect x="10" y="54" width="65" height="22" rx="3" fill="#cce5ff" stroke="#68a"/>
-    <text x="42" y="69" text-anchor="middle" font-size="9" fill="#468">EBS Vol</text>
+    <text x="42" y="69" text-anchor="middle" font-size="9" fill="#468">Disk Vol</text>
     <rect x="90" y="28" width="65" height="22" rx="3" fill="#e1f0ff" stroke="#8ab"/>
     <text x="122" y="43" text-anchor="middle" font-size="9" fill="#468">anna-kvs</text>
     <rect x="90" y="54" width="65" height="22" rx="3" fill="#cce5ff" stroke="#68a"/>
-    <text x="122" y="69" text-anchor="middle" font-size="9" fill="#468">EBS Vol</text>
+    <text x="122" y="69" text-anchor="middle" font-size="9" fill="#468">Disk Vol</text>
   </g>
 
   <!-- Arrow: Memory to Disk tier (data movement) -->

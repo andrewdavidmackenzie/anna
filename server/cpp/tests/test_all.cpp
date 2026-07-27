@@ -43,7 +43,7 @@ unsigned kThreadNum = 1;
 vector<unsigned> kSelfTierIdVector = {kSelfTierId};
 map<TierId, TierMetadata> kTierMetadata = {};
 
-unsigned kEbsThreadCount = 1;
+unsigned kDiskThreadCount = 1;
 unsigned kMemoryThreadCount = 1;
 unsigned kRoutingThreadCount = 1;
 

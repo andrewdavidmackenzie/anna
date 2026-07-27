@@ -47,11 +47,11 @@ the compiled-in default is used, preserving backward-compatible behavior.
 
 ## Storage Configuration
 
-### EBS Root (`ebs:`)
+### Disk Root (`disk:`)
 
 | Config Key | Required | Default | Meaning |
 |------------|----------|---------|---------|
-| `ebs` | Yes | — | Root directory for disk-tier storage |
+| `disk` | Yes | — | Root directory for disk-tier storage |
 
 ### Capacities (`capacities:`)
 
@@ -59,8 +59,8 @@ the compiled-in default is used, preserving backward-compatible behavior.
 |------------|-------------|---------|---------|
 | `capacities.memory-cap` | `kMemoryNodeCapacity` | — | Memory tier capacity per node (GB, multiplied by 1M for KB) |
 | `capacities.memory-cap-kb` | `kMemoryNodeCapacity` | — | Memory tier capacity per node (KB, used directly) |
-| `capacities.ebs-cap` | `kEbsNodeCapacity` | — | Disk tier capacity per node (GB) |
-| `capacities.ebs-cap-kb` | `kEbsNodeCapacity` | — | Disk tier capacity per node (KB) |
+| `capacities.disk-cap` | `kDiskNodeCapacity` | — | Disk tier capacity per node (GB) |
+| `capacities.disk-cap-kb` | `kDiskNodeCapacity` | — | Disk tier capacity per node (KB) |
 
 If both `-cap` and `-cap-kb` variants are present, the `-kb` variant takes precedence.
 
@@ -69,7 +69,7 @@ If both `-cap` and `-cap-kb` variants are present, the `-kb` variant takes prece
 | Config Key | C++ Variable | Default | Meaning |
 |------------|-------------|---------|---------|
 | `threads.memory` | `kMemoryThreadCount` | — | Threads per memory-tier node |
-| `threads.ebs` | `kEbsThreadCount` | — | Threads per disk-tier node |
+| `threads.disk` | `kDiskThreadCount` | — | Threads per disk-tier node |
 | `threads.routing` | `kRoutingThreadCount` | — | Threads per routing node |
 | `threads.benchmark` | — | — | Benchmark threads (not used by server) |
 
@@ -84,7 +84,7 @@ If both `-cap` and `-cap-kb` variants are present, the `-kb` variant takes prece
 | Config Key | C++ Variable | Default | Meaning |
 |------------|-------------|---------|---------|
 | `replication.memory` | `kDefaultGlobalMemoryReplication` | — | Default global replication factor for memory tier |
-| `replication.ebs` | `kDefaultGlobalEbsReplication` | — | Default global replication factor for disk tier |
+| `replication.disk` | `kDefaultGlobalDiskReplication` | — | Default global replication factor for disk tier |
 | `replication.local` | `kDefaultLocalReplication` | — | Default local (intra-node) replication factor |
 | `replication.minimum` | `kMinimumReplicaNumber` | — | Minimum total replica count |
 | `replication.metadata` | `kMetadataReplicationFactor` | `1` | Global replication factor for metadata keys |
@@ -119,7 +119,7 @@ These parameters control the autoscaling policy engine. See
 | `policy.node_addition_batch_size` | `kNodeAdditionBatchSize` | `2` | Nodes added concurrently during scaling |
 | `policy.assumed_value_size_kb` | `kValueSize` | `256` | Assumed value size (KB) for capacity calculations |
 | `policy.min_memory_nodes` | `kMinMemoryTierSize` | `1` | Minimum number of memory-tier nodes |
-| `policy.min_disk_nodes` | `kMinEbsTierSize` | `0` | Minimum number of disk-tier nodes |
+| `policy.min_disk_nodes` | `kMinDiskTierSize` | `0` | Minimum number of disk-tier nodes |
 | `policy.warmup_key_count` | `kWarmupKeyCount` | `1000000` | Keys to pre-populate in replication map (max 99,999,999) |
 
 ### Storage Thresholds (`policy.storage:`)
@@ -128,8 +128,8 @@ These parameters control the autoscaling policy engine. See
 |------------|-------------|---------|---------|
 | `policy.storage.memory_upper` | `kMaxMemoryNodeConsumption` | `0.6` | Upper storage threshold for memory tier (0.0-1.0) |
 | `policy.storage.memory_lower` | `kMinMemoryNodeConsumption` | `0.3` | Lower storage threshold for memory tier (0.0-1.0) |
-| `policy.storage.disk_upper` | `kMaxEbsNodeConsumption` | `0.75` | Upper storage threshold for disk tier (0.0-1.0) |
-| `policy.storage.disk_lower` | `kMinEbsNodeConsumption` | `0.5` | Lower storage threshold for disk tier (0.0-1.0) |
+| `policy.storage.disk_upper` | `kMaxDiskNodeConsumption` | `0.75` | Upper storage threshold for disk tier (0.0-1.0) |
+| `policy.storage.disk_lower` | `kMinDiskNodeConsumption` | `0.5` | Lower storage threshold for disk tier (0.0-1.0) |
 
 ### Tiering Thresholds (`policy.tiering_thresholds:`)
 
@@ -186,13 +186,13 @@ policy:
     latency_target_us: 3000
     occupancy_upper: 0.15
     occupancy_lower: 0.05
-ebs: ./
+disk: ./
 capacities:
   memory-cap: 1
-  ebs-cap: 0
+  disk-cap: 0
 threads:
   memory: 1
-  ebs: 1
+  disk: 1
   routing: 1
   benchmark: 1
 hashing:
@@ -211,7 +211,7 @@ timings:
   garbage_collect_period_us: 10000000
 replication:
   memory: 1
-  ebs: 0
+  disk: 0
   minimum: 1
   local: 1
   metadata: 1

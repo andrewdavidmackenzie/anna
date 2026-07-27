@@ -16,38 +16,53 @@
 
 #include "kvs.pb.h"
 #include "metadata.pb.h"
-#include "kvs/kvs_common.hpp"
-#include "kvs/server_utils.hpp"
 #include "monitor/monitoring_utils.hpp"
-#include "metadata.hpp"
-#include "threads.hpp"
+#include "monitor/monitoring_handlers.hpp"
+#include "monitor/policies.hpp"
+#include "mock/mock_zmq_utils.hpp"
+#include "mock/mock_hash_utils.hpp"
+#include "spdlog/sinks/stdout_color_sinks.h"
+#include "spdlog/spdlog.h"
 
-#include "test_config_defaults.hpp"
-#include "test_config_yaml_parsing.hpp"
+MockZmqUtil mock_zmq_util;
+ZmqUtilInterface *kZmqUtil = &mock_zmq_util;
 
-// Global variables required by the linker (normally defined in main() files).
+MockHashRingUtil mock_hash_ring_util;
+HashRingUtilInterface *kHashRingUtil = &mock_hash_ring_util;
+
+// Global variables required by linker.
 unsigned kDefaultLocalReplication = 1;
 unsigned kDefaultGlobalMemoryReplication = 1;
 unsigned kDefaultGlobalDiskReplication = 0;
 unsigned kMinimumReplicaNumber = 1;
-
-unsigned kMemoryNodeCapacity = 0;
-unsigned kDiskNodeCapacity = 0;
-
+unsigned kMemoryNodeCapacity = 1000000;
+unsigned kDiskNodeCapacity = 1000000;
 unsigned kMemoryThreadCount = 1;
 unsigned kDiskThreadCount = 1;
 unsigned kRoutingThreadCount = 1;
 unsigned kThreadNum = 1;
-
 Tier kSelfTier = Tier::MEMORY;
 vector<Tier> kSelfTierIdVector = {Tier::MEMORY};
 hmap<Tier, TierMetadata, TierEnumHash> kTierMetadata = {};
-
 bool kEnableTiering = false;
 bool kEnableElasticity = false;
 bool kEnableSelectiveRep = false;
 
+logger log_ = spdlog::stdout_color_mt("monitor_test_log");
+
+#include "test_compute_summary_stats.hpp"
+#include "test_storage_policy.hpp"
+#include "test_depart_done_handler.hpp"
+#include "test_membership_handler.hpp"
+
 int main(int argc, char *argv[]) {
+  log_->set_level(spdlog::level::off);
+  kTierMetadata[Tier::MEMORY] =
+      TierMetadata(Tier::MEMORY, kMemoryThreadCount,
+                   kDefaultGlobalMemoryReplication, kMemoryNodeCapacity);
+  kTierMetadata[Tier::DISK] =
+      TierMetadata(Tier::DISK, kDiskThreadCount, kDefaultGlobalDiskReplication,
+                   kDiskNodeCapacity);
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

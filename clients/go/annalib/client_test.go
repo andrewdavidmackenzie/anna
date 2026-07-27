@@ -1509,7 +1509,7 @@ func TestGetClusterTopologyWithMock(t *testing.T) {
 	topology := &metadatapb.ClusterTopology{
 		RoutingThreadCount: 2,
 		MemoryThreadCount:  4,
-		EbsThreadCount:     1,
+		DiskThreadCount:     1,
 	}
 	topologyBytes, _ := proto.Marshal(topology)
 	lww := &kvspb.LWWValue{Timestamp: 100, Value: topologyBytes}
@@ -1538,8 +1538,8 @@ func TestGetClusterTopologyWithMock(t *testing.T) {
 	if result.MemoryThreadCount != 4 {
 		t.Errorf("expected memory_thread_count=4, got %d", result.MemoryThreadCount)
 	}
-	if result.EbsThreadCount != 1 {
-		t.Errorf("expected ebs_thread_count=1, got %d", result.EbsThreadCount)
+	if result.DiskThreadCount != 1 {
+		t.Errorf("expected disk_thread_count=1, got %d", result.DiskThreadCount)
 	}
 }
 

@@ -34,16 +34,16 @@ extern Tier kSelfTier;
 extern vector<Tier> kSelfTierIdVector;
 
 extern unsigned kMemoryNodeCapacity;
-extern unsigned kEbsNodeCapacity;
+extern unsigned kDiskNodeCapacity;
 
 // the number of threads running in this executable
 extern unsigned kThreadNum;
 extern unsigned kMemoryThreadCount;
-extern unsigned kEbsThreadCount;
+extern unsigned kDiskThreadCount;
 extern unsigned kRoutingThreadCount;
 
 extern unsigned kDefaultGlobalMemoryReplication;
-extern unsigned kDefaultGlobalEbsReplication;
+extern unsigned kDefaultGlobalDiskReplication;
 extern unsigned kDefaultLocalReplication;
 extern unsigned kMinimumReplicaNumber;
 

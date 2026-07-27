@@ -41,13 +41,13 @@ policy:
     latency_target_us: 3000
     occupancy_upper: 0.15
     occupancy_lower: 0.05
-ebs: ./
+disk: ./
 capacities: # in GB
   memory-cap: 1 
-  ebs-cap: 0
+  disk-cap: 0
 threads:
   memory: 1
-  ebs: 1
+  disk: 1
   routing: 1
   benchmark: 1
 hashing:
@@ -66,7 +66,7 @@ timings:
   garbage_collect_period_us: 10000000
 replication:
   memory: 1
-  ebs: 0
+  disk: 0
   minimum: 1
   local: 1
   metadata: 1

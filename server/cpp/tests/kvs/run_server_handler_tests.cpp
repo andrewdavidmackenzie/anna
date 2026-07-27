@@ -39,7 +39,7 @@ unsigned kThreadNum = 1;
 vector<Tier> kSelfTierIdVector = {kSelfTier};
 hmap<Tier, TierMetadata, TierEnumHash> kTierMetadata = {};
 
-unsigned kEbsThreadNum = 1;
+unsigned kDiskThreadNum = 1;
 unsigned kMemoryThreadNum = 1;
 unsigned kRoutingThreadNum = 1;
 
