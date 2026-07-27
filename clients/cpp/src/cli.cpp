@@ -238,13 +238,17 @@ int main(int argc, char* argv[]) {
     } else if (arg == "--config" && i + 1 < argc) {
       config_filename = argv[++i];
     } else if (arg == "--keys" && i + 1 < argc) {
-      bench_config.num_keys = std::stoul(argv[++i]);
+      try { bench_config.num_keys = std::stoul(argv[++i]); }
+      catch (...) { std::cerr << "Error: invalid --keys value" << std::endl; return 1; }
     } else if (arg == "--value-size" && i + 1 < argc) {
-      bench_config.value_size = std::stoul(argv[++i]);
+      try { bench_config.value_size = std::stoul(argv[++i]); }
+      catch (...) { std::cerr << "Error: invalid --value-size value" << std::endl; return 1; }
     } else if (arg == "--duration" && i + 1 < argc) {
-      bench_config.duration = std::stoul(argv[++i]);
+      try { bench_config.duration = std::stoul(argv[++i]); }
+      catch (...) { std::cerr << "Error: invalid --duration value" << std::endl; return 1; }
     } else if (arg == "--report" && i + 1 < argc) {
-      bench_config.report_period = std::stoul(argv[++i]);
+      try { bench_config.report_period = std::stoul(argv[++i]); }
+      catch (...) { std::cerr << "Error: invalid --report value" << std::endl; return 1; }
     } else if (arg == "--workload" && i + 1 < argc) {
       bench_workload = argv[++i];
     } else if (command.empty()) {
@@ -297,7 +301,12 @@ int main(int argc, char* argv[]) {
     vector<annalib::BenchResult> results;
     for (const string& wl : workloads) {
       bench_config.workload = wl;
-      results.push_back(annalib::bench(client.get(), bench_config));
+      try {
+        results.push_back(annalib::bench(client.get(), bench_config));
+      } catch (const std::exception& e) {
+        std::cerr << "Error running " << wl << " workload: " << e.what()
+                  << std::endl;
+      }
       std::cout << std::endl;
     }
 

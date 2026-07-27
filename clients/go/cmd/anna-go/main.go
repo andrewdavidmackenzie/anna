@@ -56,16 +56,36 @@ func main() {
 			clientIP = args[i+1]
 			i++
 		case args[i] == "--keys" && i+1 < len(args):
-			benchKeys, _ = strconv.Atoi(args[i+1])
+			v, err := strconv.Atoi(args[i+1])
+			if err != nil || v <= 0 {
+				fmt.Fprintf(os.Stderr, "error: invalid --keys value %q\n", args[i+1])
+				os.Exit(1)
+			}
+			benchKeys = v
 			i++
 		case args[i] == "--value-size" && i+1 < len(args):
-			benchValueSize, _ = strconv.Atoi(args[i+1])
+			v, err := strconv.Atoi(args[i+1])
+			if err != nil || v < 0 {
+				fmt.Fprintf(os.Stderr, "error: invalid --value-size value %q\n", args[i+1])
+				os.Exit(1)
+			}
+			benchValueSize = v
 			i++
 		case args[i] == "--duration" && i+1 < len(args):
-			benchDuration, _ = strconv.Atoi(args[i+1])
+			v, err := strconv.Atoi(args[i+1])
+			if err != nil || v <= 0 {
+				fmt.Fprintf(os.Stderr, "error: invalid --duration value %q\n", args[i+1])
+				os.Exit(1)
+			}
+			benchDuration = v
 			i++
 		case args[i] == "--report" && i+1 < len(args):
-			benchReport, _ = strconv.Atoi(args[i+1])
+			v, err := strconv.Atoi(args[i+1])
+			if err != nil || v <= 0 {
+				fmt.Fprintf(os.Stderr, "error: invalid --report value %q\n", args[i+1])
+				os.Exit(1)
+			}
+			benchReport = v
 			i++
 		case args[i] == "--workload" && i+1 < len(args):
 			benchWorkload = args[i+1]
@@ -433,16 +453,28 @@ func runBench(client *annalib.KVSClient, numKeys, valueSize, duration, reportPer
 		// Warmup
 		fmt.Printf("Warming up %d keys (%d bytes each)...\n", numKeys, valueSize)
 		warmupStart := time.Now()
+		warmupErrors := 0
 		for i := 1; i <= numKeys; i++ {
-			_ = client.Put(benchKey(i), value)
+			if err := client.Put(benchKey(i), value); err != nil {
+				warmupErrors++
+			}
 		}
-		fmt.Printf("Warmup complete in %d ms\n", time.Since(warmupStart).Milliseconds())
+		fmt.Printf("Warmup complete in %d ms", time.Since(warmupStart).Milliseconds())
+		if warmupErrors > 0 {
+			fmt.Printf(" (%d errors)", warmupErrors)
+			if warmupErrors == numKeys {
+				fmt.Println("\nAll warmup PUTs failed, aborting benchmark")
+				return
+			}
+		}
+		fmt.Println()
 
 		fmt.Printf("Running %s benchmark for %ds (%d keys, %d B values)...\n",
 			wl, duration, numKeys, valueSize)
 
 		totalOps := 0
 		epochOps := 0
+		errors := 0
 		throughputSum := 0.0
 		epochs := 0
 		seed := uint32(time.Now().UnixNano())
@@ -457,16 +489,24 @@ func runBench(client *annalib.KVSClient, numKeys, valueSize, duration, reportPer
 
 			switch wl {
 			case "GET":
-				_, _ = client.Get(key)
+				if _, err := client.Get(key); err != nil {
+					errors++
+				}
 				totalOps++
 				epochOps++
 			case "PUT":
-				_ = client.Put(key, value)
+				if err := client.Put(key, value); err != nil {
+					errors++
+				}
 				totalOps++
 				epochOps++
 			default: // MIXED
-				_ = client.Put(key, value)
-				_, _ = client.Get(key)
+				if err := client.Put(key, value); err != nil {
+					errors++
+				}
+				if _, err := client.Get(key); err != nil {
+					errors++
+				}
 				totalOps += 2
 				epochOps += 2
 			}
@@ -488,8 +528,8 @@ func runBench(client *annalib.KVSClient, numKeys, valueSize, duration, reportPer
 		}
 
 		elapsed := time.Since(benchStart).Seconds()
-		avgTP := throughputSum / float64(epochs)
-		if epochs == 0 {
+		avgTP := 0.0
+		if elapsed > 0 {
 			avgTP = float64(totalOps) / elapsed
 		}
 		avgLat := 0.0
@@ -499,6 +539,9 @@ func runBench(client *annalib.KVSClient, numKeys, valueSize, duration, reportPer
 
 		fmt.Printf("\n=== %s Results ===\n", wl)
 		fmt.Printf("Total ops:      %d\n", totalOps)
+		if errors > 0 {
+			fmt.Printf("Errors:         %d\n", errors)
+		}
 		fmt.Printf("Elapsed:        %.2f s\n", elapsed)
 		fmt.Printf("Avg throughput: %d ops/sec\n", int(avgTP))
 		fmt.Printf("Avg latency:    %.1f us/op\n\n", avgLat)

@@ -659,10 +659,22 @@ void Transaction::rollback() {
 
 static string generate_bench_key(unsigned n) {
   string s = std::to_string(n);
+  if (s.length() >= 8) {
+    return s;
+  }
   return string(8 - s.length(), '0') + s;
 }
 
 BenchResult bench(KvsClientInterface* client, const BenchConfig& config) {
+  if (config.num_keys == 0) {
+    throw std::invalid_argument("num_keys must be > 0");
+  }
+  if (config.report_period == 0) {
+    throw std::invalid_argument("report_period must be > 0");
+  }
+  if (config.duration == 0) {
+    throw std::invalid_argument("duration must be > 0");
+  }
   string value(config.value_size, 'a');
 
   // Warm up: populate keys.
@@ -743,8 +755,8 @@ BenchResult bench(KvsClientInterface* client, const BenchConfig& config) {
   double elapsed = std::chrono::duration<double>(
                         std::chrono::steady_clock::now() - bench_start)
                         .count();
-  double avg_throughput = (epochs > 0) ? throughput_sum / epochs
-                                       : static_cast<double>(total_ops) / elapsed;
+  double avg_throughput = (elapsed > 0) ? static_cast<double>(total_ops) / elapsed
+                                        : 0;
   double avg_latency_us = (avg_throughput > 0) ? 1000000.0 / avg_throughput : 0;
 
   std::cout << "\n=== " << wl << " Results ===" << std::endl;

@@ -232,7 +232,7 @@ def run_bench(client, args):
                 break
 
         elapsed = time_mod.monotonic() - bench_start
-        avg_tp = throughput_sum / epochs if epochs > 0 else total_ops / elapsed
+        avg_tp = total_ops / elapsed if elapsed > 0 else 0
         avg_lat = 1_000_000.0 / avg_tp if avg_tp > 0 else 0
 
         print(f"\n=== {wl} Results ===")
@@ -259,7 +259,9 @@ def main():
     parser.add_argument("--value-size", type=int, default=256, help="Bench: value size in bytes")
     parser.add_argument("--duration", type=int, default=10, help="Bench: duration in seconds")
     parser.add_argument("--report", type=int, default=2, help="Bench: report period in seconds")
-    parser.add_argument("--workload", help="Bench: GET, PUT, MIXED, or ALL")
+    parser.add_argument("--workload", choices=["GET", "PUT", "MIXED", "ALL"],
+                        type=str.upper, default="ALL",
+                        help="Bench: GET, PUT, MIXED, or ALL")
     parser.add_argument("command", choices=["start", "stop", "status", "cli", "bench", "help"],
                         help="Command to run")
     parser.add_argument("input_file", nargs="?", help="Input file for cli command")
@@ -300,6 +302,14 @@ def main():
             parser.error("--routing is required for the bench command")
         if not args.client_ip:
             parser.error("--client-ip is required for the bench command")
+        if args.keys <= 0:
+            parser.error("--keys must be > 0")
+        if args.value_size < 0:
+            parser.error("--value-size must be >= 0")
+        if args.duration <= 0:
+            parser.error("--duration must be > 0")
+        if args.report <= 0:
+            parser.error("--report must be > 0")
         from .client import AnnaTcpClient
         client = AnnaTcpClient(args.routing, args.client_ip, local=True)
         run_bench(client, args)

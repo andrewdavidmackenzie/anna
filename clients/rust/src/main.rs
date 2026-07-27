@@ -504,7 +504,7 @@ fn get_app() -> Command {
                         .long("keys")
                         .num_args(1)
                         .default_value("1000")
-                        .value_parser(clap::value_parser!(u64))
+                        .value_parser(clap::value_parser!(u64).range(1..))
                         .help("Number of keys to use in the benchmark"),
                 )
                 .arg(
@@ -520,7 +520,7 @@ fn get_app() -> Command {
                         .long("duration")
                         .num_args(1)
                         .default_value("10")
-                        .value_parser(clap::value_parser!(u64))
+                        .value_parser(clap::value_parser!(u64).range(1..))
                         .help("Duration of each workload in seconds"),
                 )
                 .arg(
@@ -528,7 +528,7 @@ fn get_app() -> Command {
                         .long("report")
                         .num_args(1)
                         .default_value("2")
-                        .value_parser(clap::value_parser!(u64))
+                        .value_parser(clap::value_parser!(u64).range(1..))
                         .help("Report interval in seconds"),
                 )
                 .arg(
@@ -628,7 +628,7 @@ async fn run_bench(client: &mut KVSClient, args: &ArgMatches) -> Result<()> {
     );
 
     let workloads: Vec<&str> = match workload.as_str() {
-        "ALL" => vec!["PUT", "GET", "MIXED"],
+        "ALL" => vec!["GET", "PUT", "MIXED"],
         other => vec![other],
     };
 
@@ -672,7 +672,11 @@ async fn run_workload(
     println!();
     println!("--- {} workload ---", workload);
 
-    let mut rng = SimpleRng::new(Instant::now().elapsed().as_nanos().wrapping_add(42) as u64);
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(42);
+    let mut rng = SimpleRng::new(seed);
 
     let start = Instant::now();
     let mut total_ops: u64 = 0;
