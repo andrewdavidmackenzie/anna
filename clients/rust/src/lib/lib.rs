@@ -59,6 +59,8 @@ pub mod latency_reporter;
 pub mod proto;
 /// `threads` provides helper methods related to anna threads
 pub mod threads;
+/// Client-side transactions for Read Committed and Item Cut Isolation.
+pub mod transaction;
 /// Types used by KVS
 pub mod types;
 /// Subscribe to value changes for specific keys via the KVS gossip mechanism.

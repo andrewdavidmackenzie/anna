@@ -2608,6 +2608,53 @@ func makeLWWResponse(key string, value string, timestamp uint64) []byte {
 	return respBytes
 }
 
+func TestWritesFollowReadsTimestamp(t *testing.T) {
+	putResp := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "k", Error: kvspb.AnnaError_NO_ERROR}},
+	}
+	putRespBytes, _ := proto.Marshal(putResp)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "k", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &sequenceMockTransport{
+		routingResp: routingBytes,
+		dataResps: [][]byte{
+			makeLWWResponse("k", "val", 999999), // GET response with high timestamp
+			putRespBytes,                         // PUT response
+		},
+	}
+	client := &KVSClient{
+		routingThreads:  []*UserRoutingThread{NewUserRoutingThread("127.0.0.1", 0)},
+		rid:             0,
+		ut:              NewUserThread("127.0.0.1", 0),
+		rng:             rand.New(rand.NewSource(42)),
+		keyAddressCache: make(map[string][]string),
+		tp:              tp,
+		lwwReadCache:    make(map[string]lwwCacheEntry),
+	}
+
+	// Read with high timestamp
+	_, _ = client.Get("k")
+
+	if client.lastSeenTs < 999999 {
+		t.Errorf("lastSeenTs should be >= 999999 after GET, got %d", client.lastSeenTs)
+	}
+
+	// Write same key — should get timestamp > 999999
+	_ = client.Put("k", "after_read")
+	if cached, ok := client.lwwReadCache["k"]; ok {
+		if cached.timestamp <= 999999 {
+			t.Errorf("Write timestamp (%d) should be > read timestamp (999999)", cached.timestamp)
+		}
+	} else {
+		t.Error("Expected cached write for 'k'")
+	}
+}
+
 func TestPutTimestampsStrictlyIncrease(t *testing.T) {
 	putResp := &kvspb.KeyResponse{
 		Tuples: []*kvspb.KeyTuple{{Key: "k", Error: kvspb.AnnaError_NO_ERROR}},
@@ -2642,6 +2689,74 @@ func TestPutTimestampsStrictlyIncrease(t *testing.T) {
 
 	if ts2 <= ts1 {
 		t.Errorf("Second PUT timestamp (%d) should be > first (%d)", ts2, ts1)
+	}
+}
+
+func TestTransactionPutThenGet(t *testing.T) {
+	tp := &mockTransport{recvData: map[bool][]byte{}}
+	client := newTestClient(tp)
+	txn := client.BeginTransaction()
+
+	txn.Put("k", "buffered")
+	val, err := txn.Get("k")
+	if err != nil {
+		t.Fatalf("Transaction Get failed: %v", err)
+	}
+	if val != "buffered" {
+		t.Errorf("Transaction Get = %q, want %q", val, "buffered")
+	}
+}
+
+func TestTransactionCommit(t *testing.T) {
+	putResp := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "k", Error: kvspb.AnnaError_NO_ERROR}},
+	}
+	putRespBytes, _ := proto.Marshal(putResp)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "k", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &sequenceMockTransport{
+		routingResp: routingBytes,
+		dataResps:   [][]byte{putRespBytes},
+	}
+	client := &KVSClient{
+		routingThreads:  []*UserRoutingThread{NewUserRoutingThread("127.0.0.1", 0)},
+		rid:             0,
+		ut:              NewUserThread("127.0.0.1", 0),
+		rng:             rand.New(rand.NewSource(42)),
+		keyAddressCache: make(map[string][]string),
+		tp:              tp,
+		lwwReadCache:    make(map[string]lwwCacheEntry),
+	}
+
+	txn := client.BeginTransaction()
+	txn.Put("k", "committed_val")
+	err := txn.Commit()
+	if err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	// After commit, the client's lwwReadCache should have the value
+	if _, ok := client.lwwReadCache["k"]; !ok {
+		t.Error("Commit should flush writes to client cache")
+	}
+}
+
+func TestTransactionRollback(t *testing.T) {
+	tp := &mockTransport{recvData: map[bool][]byte{}}
+	client := newTestClient(tp)
+	txn := client.BeginTransaction()
+
+	txn.Put("k", "should_discard")
+	txn.Rollback()
+
+	// After rollback, client should have no cached read for the key
+	if _, ok := client.lwwReadCache["k"]; ok {
+		t.Error("Rollback should not leave cached writes")
 	}
 }
 

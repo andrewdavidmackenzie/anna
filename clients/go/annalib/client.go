@@ -39,8 +39,9 @@ type KVSClient struct {
 	tp              transport
 	// Monotonic read cache: per-key high-water mark of LWW timestamps.
 	lwwReadCache map[string]lwwCacheEntry
-	// High-water mark for write timestamps.
-	lastWriteTs uint64
+	// High-water mark of timestamps seen (reads and writes) for
+	// Writes Follow Reads guarantee.
+	lastSeenTs uint64
 }
 
 type zmqTransport struct {
@@ -457,6 +458,9 @@ func (c *KVSClient) Get(key string) (string, error) {
 		return cached.value, nil
 	}
 
+	if timestamp > c.lastSeenTs {
+		c.lastSeenTs = timestamp
+	}
 	c.lwwReadCache[key] = lwwCacheEntry{timestamp: timestamp, value: value}
 	return value, nil
 }
@@ -464,10 +468,10 @@ func (c *KVSClient) Get(key string) (string, error) {
 // Put stores a key-value pair (LWW lattice).
 func (c *KVSClient) Put(key, value string) error {
 	ts := generateTimestamp()
-	if ts <= c.lastWriteTs {
-		ts = c.lastWriteTs + 1
+	if ts <= c.lastSeenTs {
+		ts = c.lastSeenTs + 1
 	}
-	c.lastWriteTs = ts
+	c.lastSeenTs = ts
 	lww := &kvspb.LWWValue{
 		Timestamp: ts,
 		Value:     []byte(value),
@@ -1056,4 +1060,60 @@ func (c *KVSClient) evictAddress(key, addr string) {
 // ClearCache clears the key-address cache.
 func (c *KVSClient) ClearCache() {
 	c.keyAddressCache = make(map[string][]string)
+}
+
+// Transaction provides client-side Read Committed and Item Cut Isolation.
+// Writes are buffered locally until Commit(). Reads are cached for
+// repeatable reads within the transaction.
+type Transaction struct {
+	client      *KVSClient
+	writeBuffer map[string]string
+	readCache   map[string]string
+}
+
+// BeginTransaction starts a new client-side transaction.
+func (c *KVSClient) BeginTransaction() *Transaction {
+	return &Transaction{
+		client:      c,
+		writeBuffer: make(map[string]string),
+		readCache:   make(map[string]string),
+	}
+}
+
+// Put buffers a write. Not sent until Commit().
+func (t *Transaction) Put(key, value string) {
+	t.writeBuffer[key] = value
+	t.readCache[key] = value
+}
+
+// Get reads a key. Returns the buffered write if present, otherwise reads
+// from the server and caches for repeatable reads.
+func (t *Transaction) Get(key string) (string, error) {
+	if cached, ok := t.readCache[key]; ok {
+		return cached, nil
+	}
+	value, err := t.client.Get(key)
+	if err != nil {
+		return "", err
+	}
+	t.readCache[key] = value
+	return value, nil
+}
+
+// Commit flushes all buffered writes to the server.
+func (t *Transaction) Commit() error {
+	for key, value := range t.writeBuffer {
+		if err := t.client.Put(key, value); err != nil {
+			return err
+		}
+	}
+	t.writeBuffer = make(map[string]string)
+	t.readCache = make(map[string]string)
+	return nil
+}
+
+// Rollback discards all buffered writes.
+func (t *Transaction) Rollback() {
+	t.writeBuffer = make(map[string]string)
+	t.readCache = make(map[string]string)
 }
