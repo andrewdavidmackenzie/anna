@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7d801f01.js";
+            window.path_to_searchindex_js = "searchindex-b465e93d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e6cef21f.js"></script>
@@ -646,12 +646,20 @@ as achievable through lattice composition (see Bailis et al., “Coordination
 Avoidance in Database Systems”, VLDB 2015). Anna’s architecture could
 support them, but no implementation exists in this codebase.</p>
 <ul>
-<li><strong>Read Committed / Read Uncommitted</strong>: Would require client-side
-transaction buffering and a commit protocol.</li>
-<li><strong>Item Cut Isolation</strong>: Would require a client-side read cache per
-transaction.</li>
-<li><strong>Writes Follow Reads</strong>: Would require the client to include the read
-version in write requests.</li>
+<li><strong>Read Committed</strong>: Implemented via the <code>Transaction</code> API. Writes are
+buffered locally and flushed atomically on <code>commit()</code>. Reads within a
+transaction see only committed data from other clients plus the
+transaction’s own buffered writes.</li>
+<li><strong>Item Cut Isolation</strong>: Implemented via the <code>Transaction</code> API. The first
+read of each key within a transaction is cached; subsequent reads return
+the cached value (repeatable read).</li>
+<li><strong>Writes Follow Reads</strong>: Implemented. Each client tracks the highest
+LWW timestamp seen across all reads and writes (<code>last_seen_ts</code>). Every
+PUT uses a timestamp strictly greater than this high-water mark, so
+writes are always causally ordered after any previously observed value.</li>
+<li><strong>Read Uncommitted</strong>: The default behavior without transactions — writes
+are sent immediately and reads may see uncommitted data from concurrent
+writers. No additional implementation needed.</li>
 <li><strong>PRAM</strong>: Implemented — the composition of monotonic reads, monotonic
 writes, and read-your-writes, all of which are now enforced.</li>
 </ul>
@@ -720,6 +728,40 @@ Available in all client libraries (Rust, C++, Python, Go).</li>
 <li>These guarantees apply to LWW values (the default) for both single-key
 and multi-key reads. Other lattice types (Set, Causal, Priority) do
 not have timestamp-based tracking.</li>
+</ul>
+<h3 id="using-transactions"><a class="header" href="#using-transactions">Using Transactions</a></h3>
+<p>For stronger consistency (Read Committed and Item Cut Isolation), use the
+<code>Transaction</code> API. Available in all client libraries.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Rust
+let mut txn = annalib::transaction::Transaction::begin(&amp;mut client);
+txn.put("key1", "value1");            // buffered locally
+let v = txn.get("key2").await?;       // reads from server, cached
+let v2 = txn.get("key2").await?;      // returns cached (repeatable read)
+txn.commit().await?;                  // flushes all writes
+<span class="boring">}</span></code></pre>
+<pre><code class="language-python"># Python
+txn = client.begin_transaction()
+txn.put("key1", value1)               # buffered locally
+v = txn.get("key2")                   # reads from server, cached
+txn.commit()                          # flushes all writes
+# txn.rollback()                      # or discard all writes
+</code></pre>
+<pre><code class="language-go">// Go
+txn := client.BeginTransaction()
+txn.Put("key1", "value1")
+v, _ := txn.Get("key2")
+txn.Commit()
+</code></pre>
+<p><strong>Transaction guarantees:</strong></p>
+<ul>
+<li><strong>Read Committed</strong>: Reads see only committed data. The transaction’s own
+uncommitted writes are visible via the local buffer.</li>
+<li><strong>Item Cut Isolation</strong>: Reading the same key twice returns the same value
+(repeatable read within the transaction).</li>
+<li><strong>Rollback</strong>: <code>rollback()</code> discards all buffered writes without sending
+them to the server.</li>
 </ul>
 <h3 id="stronger-consistency-levels-not-supported-by-anna"><a class="header" href="#stronger-consistency-levels-not-supported-by-anna">Stronger Consistency Levels (Not Supported by Anna)</a></h3>
 <p>Anna deliberately does not implement the two strongest consistency levels.
