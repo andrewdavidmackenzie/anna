@@ -97,6 +97,7 @@ timings:
   monitoring_timeout: 30
   gossip_epoch: 10
   data_redistribute_batch: 50
+  tombstone_gc_multiplier: 30
   grace_period: 120
   monitoring_response_timeout_ms: 10000
 "#,
