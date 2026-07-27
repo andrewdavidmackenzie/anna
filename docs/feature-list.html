@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-397aea22.js";
+            window.path_to_searchindex_js = "../searchindex-2e32a1f4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-65030116.js"></script>
@@ -230,7 +230,7 @@ mocks.</p>
 </thead>
 <tbody>
 <tr><td>YAML config file</td><td>All settings in a single YAML file</td><td>Yes</td></tr>
-<tr><td>Thread counts</td><td><code>threads.memory</code>, <code>threads.ebs</code>, <code>threads.routing</code></td><td>Yes</td></tr>
+<tr><td>Thread counts</td><td><code>threads.memory</code>, <code>threads.disk</code>, <code>threads.routing</code></td><td>Yes</td></tr>
 <tr><td>Standalone mode</td><td><code>mgmt_ip: "NULL"</code> for local/non-k8s deployment</td><td>Yes</td></tr>
 <tr><td>Cluster topology</td><td>seed_ip, mgmt_ip, monitoring/routing IPs</td><td>Yes</td></tr>
 <tr><td>ZeroMQ PUSH/PULL</td><td>Async messaging between all components</td><td>Yes</td></tr>
@@ -268,12 +268,12 @@ It is a client-side construct — see <code>docs/client-feature-list.md</code>.<
 <tr><td>Disk tier</td><td>File-based storage on configurable path</td><td>Yes</td></tr>
 <tr><td>Tier selection</td><td><code>SERVER_TYPE</code> env var selects storage medium</td><td>Yes</td></tr>
 <tr><td>Identical kernel across tiers</td><td>Same storage kernel, different serialization layer</td><td>Yes</td></tr>
-<tr><td>Node capacities</td><td><code>capacities.memory-cap</code>, <code>capacities.ebs-cap</code> (tested via <code>elasticity_storage_policy</code> with <code>memory-cap-kb: 1</code>)</td><td>Yes</td></tr>
+<tr><td>Node capacities</td><td><code>capacities.memory-cap</code>, <code>capacities.disk-cap</code> (tested via <code>elasticity_storage_policy</code> with <code>memory-cap-kb: 1</code>)</td><td>Yes</td></tr>
 <tr><td>Cross-tier data movement</td><td>Promote hot data to memory, demote cold to disk</td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
-<p>Note: <code>SERVER_TYPE</code> and <code>ebs</code> config should be renamed to storage-medium-agnostic
+<p>Note: <code>SERVER_TYPE</code> and <code>disk</code> config should be renamed to storage-medium-agnostic
 terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <p>Cross-tier data movement is triggered by <code>anna-monitor</code> when <code>policy.tiering</code>
 is enabled, but the mechanism is a replication factor change — a storage
@@ -287,7 +287,7 @@ feature, not an autoscaling decision.</p>
 </thead>
 <tbody>
 <tr><td>Per-key replication factors</td><td>Independent replication per key per tier</td><td>Yes</td></tr>
-<tr><td>Default replication from config</td><td><code>replication.memory</code>, <code>replication.ebs</code>, <code>replication.local</code></td><td>Yes</td></tr>
+<tr><td>Default replication from config</td><td><code>replication.memory</code>, <code>replication.disk</code>, <code>replication.local</code></td><td>Yes</td></tr>
 <tr><td>Replication factor request</td><td>Server fetches unknown factors from metadata</td><td>Yes</td></tr>
 <tr><td>Replication factor change</td><td>Monitor can dynamically adjust replication</td><td>Yes</td></tr>
 <tr><td>Metadata stored as KVS data</td><td>Replication info under <code>METADATA|replication|&lt;key&gt;</code></td><td>Yes</td></tr>

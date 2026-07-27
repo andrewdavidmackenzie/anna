@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-397aea22.js";
+            window.path_to_searchindex_js = "searchindex-2e32a1f4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-65030116.js"></script>
@@ -257,9 +257,9 @@ tier and how they are distributed:</p>
 </code></pre>
 <ul>
 <li>R_M: number of memory-tier nodes storing this key</li>
-<li>R_E: number of EBS-tier nodes storing this key</li>
+<li>R_E: number of disk-tier nodes storing this key</li>
 <li>T_M: number of threads per memory node storing this key</li>
-<li>T_E: number of threads per EBS node storing this key</li>
+<li>T_E: number of threads per disk node storing this key</li>
 </ul>
 <p>The policy engine adjusts replication vectors dynamically based on workload.</p>
 <h2 id="hash-rings"><a class="header" href="#hash-rings">Hash Rings</a></h2>
@@ -287,7 +287,7 @@ tier and how they are distributed:</p>
 </thead>
 <tbody>
 <tr><td>Memory</td><td>RAM</td><td>Low latency, high throughput</td><td>High</td></tr>
-<tr><td>Disk (EBS)</td><td>Flash/SSD</td><td>Higher latency</td><td>Lower</td></tr>
+<tr><td>Disk</td><td>Flash/SSD</td><td>Higher latency</td><td>Lower</td></tr>
 </tbody>
 </table>
 </div>
@@ -372,7 +372,7 @@ threads, each pinned to a CPU core. Each thread:</p>
 <li>Uses <strong>consistent hashing</strong> with virtual nodes for key partitioning</li>
 </ul>
 <p>The storage kernel is identical across memory and disk tiers — the only
-difference is the serialization layer (memory buffer vs. EBS volume).</p>
+difference is the serialization layer (memory buffer vs. disk volume).</p>
 <h3 id="monitoring-node-anna-monitor"><a class="header" href="#monitoring-node-anna-monitor">Monitoring Node (anna-monitor)</a></h3>
 <p>The monitoring system collects statistics and drives the policy engine:</p>
 <ul>
@@ -902,7 +902,7 @@ exceeds H standard deviations above the mean</li>
 <p>Anna supports multiple storage tiers with different cost-performance profiles:</p>
 <ul>
 <li><strong>Memory tier</strong>: Fast RAM-based storage (e.g., AWS EC2 instances)</li>
-<li><strong>Disk tier</strong>: Cheaper flash-based storage (e.g., AWS EBS volumes)</li>
+<li><strong>Disk tier</strong>: Cheaper flash-based storage (e.g., disk volumes)</li>
 <li>Hot data is <strong>promoted</strong> from disk to memory when access frequency
 exceeds a threshold</li>
 <li>Cold data is <strong>demoted</strong> from memory to disk when access frequency drops</li>
@@ -950,7 +950,7 @@ can be removed to save cost</li>
 <tr><td>H</td><td>Key hotness threshold (std devs above mean)</td><td>3</td></tr>
 <tr><td>L</td><td>Key coldness threshold (mean access frequency)</td><td>Mean</td></tr>
 <tr><td>P</td><td>Key promotion threshold</td><td>2 accesses in 60s</td></tr>
-<tr><td>S_lower, S_upper</td><td>Storage consumption thresholds</td><td>Memory: 0.3-0.6, EBS: 0.5-0.75</td></tr>
+<tr><td>S_lower, S_upper</td><td>Storage consumption thresholds</td><td>Memory: 0.3-0.6, Disk: 0.5-0.75</td></tr>
 <tr><td>f_lower, f_upper</td><td>Latency thresholds (fraction of SLO)</td><td>0.5, 0.75</td></tr>
 <tr><td>C_lower, C_upper</td><td>Compute occupancy thresholds</td><td>0.05, 0.20</td></tr>
 <tr><td>c</td><td>Upper bound for latency ratio</td><td>1.5</td></tr>
@@ -1132,7 +1132,7 @@ mocks.</p>
 </thead>
 <tbody>
 <tr><td>YAML config file</td><td>All settings in a single YAML file</td><td>Yes</td></tr>
-<tr><td>Thread counts</td><td><code>threads.memory</code>, <code>threads.ebs</code>, <code>threads.routing</code></td><td>Yes</td></tr>
+<tr><td>Thread counts</td><td><code>threads.memory</code>, <code>threads.disk</code>, <code>threads.routing</code></td><td>Yes</td></tr>
 <tr><td>Standalone mode</td><td><code>mgmt_ip: "NULL"</code> for local/non-k8s deployment</td><td>Yes</td></tr>
 <tr><td>Cluster topology</td><td>seed_ip, mgmt_ip, monitoring/routing IPs</td><td>Yes</td></tr>
 <tr><td>ZeroMQ PUSH/PULL</td><td>Async messaging between all components</td><td>Yes</td></tr>
@@ -1170,12 +1170,12 @@ It is a client-side construct — see <code>docs/client-feature-list.md</code>.<
 <tr><td>Disk tier</td><td>File-based storage on configurable path</td><td>Yes</td></tr>
 <tr><td>Tier selection</td><td><code>SERVER_TYPE</code> env var selects storage medium</td><td>Yes</td></tr>
 <tr><td>Identical kernel across tiers</td><td>Same storage kernel, different serialization layer</td><td>Yes</td></tr>
-<tr><td>Node capacities</td><td><code>capacities.memory-cap</code>, <code>capacities.ebs-cap</code> (tested via <code>elasticity_storage_policy</code> with <code>memory-cap-kb: 1</code>)</td><td>Yes</td></tr>
+<tr><td>Node capacities</td><td><code>capacities.memory-cap</code>, <code>capacities.disk-cap</code> (tested via <code>elasticity_storage_policy</code> with <code>memory-cap-kb: 1</code>)</td><td>Yes</td></tr>
 <tr><td>Cross-tier data movement</td><td>Promote hot data to memory, demote cold to disk</td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
-<p>Note: <code>SERVER_TYPE</code> and <code>ebs</code> config should be renamed to storage-medium-agnostic
+<p>Note: <code>SERVER_TYPE</code> and <code>disk</code> config should be renamed to storage-medium-agnostic
 terms (e.g., <code>STORAGE_MEDIUM=ram|file</code>).</p>
 <p>Cross-tier data movement is triggered by <code>anna-monitor</code> when <code>policy.tiering</code>
 is enabled, but the mechanism is a replication factor change — a storage
@@ -1189,7 +1189,7 @@ feature, not an autoscaling decision.</p>
 </thead>
 <tbody>
 <tr><td>Per-key replication factors</td><td>Independent replication per key per tier</td><td>Yes</td></tr>
-<tr><td>Default replication from config</td><td><code>replication.memory</code>, <code>replication.ebs</code>, <code>replication.local</code></td><td>Yes</td></tr>
+<tr><td>Default replication from config</td><td><code>replication.memory</code>, <code>replication.disk</code>, <code>replication.local</code></td><td>Yes</td></tr>
 <tr><td>Replication factor request</td><td>Server fetches unknown factors from metadata</td><td>Yes</td></tr>
 <tr><td>Replication factor change</td><td>Monitor can dynamically adjust replication</td><td>Yes</td></tr>
 <tr><td>Metadata stored as KVS data</td><td>Replication info under <code>METADATA|replication|&lt;key&gt;</code></td><td>Yes</td></tr>
@@ -1690,14 +1690,14 @@ the compiled-in default is used, preserving backward-compatible behavior.</p>
 </table>
 </div>
 <h2 id="storage-configuration"><a class="header" href="#storage-configuration">Storage Configuration</a></h2>
-<h3 id="ebs-root-ebs"><a class="header" href="#ebs-root-ebs">EBS Root (<code>ebs:</code>)</a></h3>
+<h3 id="disk-root-disk"><a class="header" href="#disk-root-disk">Disk Root (<code>disk:</code>)</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Config Key</th><th>Required</th><th>Default</th><th>Meaning</th></tr>
 </thead>
 <tbody>
-<tr><td><code>ebs</code></td><td>Yes</td><td>—</td><td>Root directory for disk-tier storage</td></tr>
+<tr><td><code>disk</code></td><td>Yes</td><td>—</td><td>Root directory for disk-tier storage</td></tr>
 </tbody>
 </table>
 </div>
@@ -1710,8 +1710,8 @@ the compiled-in default is used, preserving backward-compatible behavior.</p>
 <tbody>
 <tr><td><code>capacities.memory-cap</code></td><td><code>kMemoryNodeCapacity</code></td><td>—</td><td>Memory tier capacity per node (GB, multiplied by 1M for KB)</td></tr>
 <tr><td><code>capacities.memory-cap-kb</code></td><td><code>kMemoryNodeCapacity</code></td><td>—</td><td>Memory tier capacity per node (KB, used directly)</td></tr>
-<tr><td><code>capacities.ebs-cap</code></td><td><code>kEbsNodeCapacity</code></td><td>—</td><td>Disk tier capacity per node (GB)</td></tr>
-<tr><td><code>capacities.ebs-cap-kb</code></td><td><code>kEbsNodeCapacity</code></td><td>—</td><td>Disk tier capacity per node (KB)</td></tr>
+<tr><td><code>capacities.disk-cap</code></td><td><code>kDiskNodeCapacity</code></td><td>—</td><td>Disk tier capacity per node (GB)</td></tr>
+<tr><td><code>capacities.disk-cap-kb</code></td><td><code>kDiskNodeCapacity</code></td><td>—</td><td>Disk tier capacity per node (KB)</td></tr>
 </tbody>
 </table>
 </div>
@@ -1724,7 +1724,7 @@ the compiled-in default is used, preserving backward-compatible behavior.</p>
 </thead>
 <tbody>
 <tr><td><code>threads.memory</code></td><td><code>kMemoryThreadCount</code></td><td>—</td><td>Threads per memory-tier node</td></tr>
-<tr><td><code>threads.ebs</code></td><td><code>kEbsThreadCount</code></td><td>—</td><td>Threads per disk-tier node</td></tr>
+<tr><td><code>threads.disk</code></td><td><code>kDiskThreadCount</code></td><td>—</td><td>Threads per disk-tier node</td></tr>
 <tr><td><code>threads.routing</code></td><td><code>kRoutingThreadCount</code></td><td>—</td><td>Threads per routing node</td></tr>
 <tr><td><code>threads.benchmark</code></td><td>—</td><td>—</td><td>Benchmark threads (not used by server)</td></tr>
 </tbody>
@@ -1749,7 +1749,7 @@ the compiled-in default is used, preserving backward-compatible behavior.</p>
 </thead>
 <tbody>
 <tr><td><code>replication.memory</code></td><td><code>kDefaultGlobalMemoryReplication</code></td><td>—</td><td>Default global replication factor for memory tier</td></tr>
-<tr><td><code>replication.ebs</code></td><td><code>kDefaultGlobalEbsReplication</code></td><td>—</td><td>Default global replication factor for disk tier</td></tr>
+<tr><td><code>replication.disk</code></td><td><code>kDefaultGlobalDiskReplication</code></td><td>—</td><td>Default global replication factor for disk tier</td></tr>
 <tr><td><code>replication.local</code></td><td><code>kDefaultLocalReplication</code></td><td>—</td><td>Default local (intra-node) replication factor</td></tr>
 <tr><td><code>replication.minimum</code></td><td><code>kMinimumReplicaNumber</code></td><td>—</td><td>Minimum total replica count</td></tr>
 <tr><td><code>replication.metadata</code></td><td><code>kMetadataReplicationFactor</code></td><td><code>1</code></td><td>Global replication factor for metadata keys</td></tr>
@@ -1792,7 +1792,7 @@ the compiled-in default is used, preserving backward-compatible behavior.</p>
 <tr><td><code>policy.node_addition_batch_size</code></td><td><code>kNodeAdditionBatchSize</code></td><td><code>2</code></td><td>Nodes added concurrently during scaling</td></tr>
 <tr><td><code>policy.assumed_value_size_kb</code></td><td><code>kValueSize</code></td><td><code>256</code></td><td>Assumed value size (KB) for capacity calculations</td></tr>
 <tr><td><code>policy.min_memory_nodes</code></td><td><code>kMinMemoryTierSize</code></td><td><code>1</code></td><td>Minimum number of memory-tier nodes</td></tr>
-<tr><td><code>policy.min_disk_nodes</code></td><td><code>kMinEbsTierSize</code></td><td><code>0</code></td><td>Minimum number of disk-tier nodes</td></tr>
+<tr><td><code>policy.min_disk_nodes</code></td><td><code>kMinDiskTierSize</code></td><td><code>0</code></td><td>Minimum number of disk-tier nodes</td></tr>
 <tr><td><code>policy.warmup_key_count</code></td><td><code>kWarmupKeyCount</code></td><td><code>1000000</code></td><td>Keys to pre-populate in replication map (max 99,999,999)</td></tr>
 </tbody>
 </table>
@@ -1806,8 +1806,8 @@ the compiled-in default is used, preserving backward-compatible behavior.</p>
 <tbody>
 <tr><td><code>policy.storage.memory_upper</code></td><td><code>kMaxMemoryNodeConsumption</code></td><td><code>0.6</code></td><td>Upper storage threshold for memory tier (0.0-1.0)</td></tr>
 <tr><td><code>policy.storage.memory_lower</code></td><td><code>kMinMemoryNodeConsumption</code></td><td><code>0.3</code></td><td>Lower storage threshold for memory tier (0.0-1.0)</td></tr>
-<tr><td><code>policy.storage.disk_upper</code></td><td><code>kMaxEbsNodeConsumption</code></td><td><code>0.75</code></td><td>Upper storage threshold for disk tier (0.0-1.0)</td></tr>
-<tr><td><code>policy.storage.disk_lower</code></td><td><code>kMinEbsNodeConsumption</code></td><td><code>0.5</code></td><td>Lower storage threshold for disk tier (0.0-1.0)</td></tr>
+<tr><td><code>policy.storage.disk_upper</code></td><td><code>kMaxDiskNodeConsumption</code></td><td><code>0.75</code></td><td>Upper storage threshold for disk tier (0.0-1.0)</td></tr>
+<tr><td><code>policy.storage.disk_lower</code></td><td><code>kMinDiskNodeConsumption</code></td><td><code>0.5</code></td><td>Lower storage threshold for disk tier (0.0-1.0)</td></tr>
 </tbody>
 </table>
 </div>
@@ -1874,13 +1874,13 @@ policy:
     latency_target_us: 3000
     occupancy_upper: 0.15
     occupancy_lower: 0.05
-ebs: ./
+disk: ./
 capacities:
   memory-cap: 1
-  ebs-cap: 0
+  disk-cap: 0
 threads:
   memory: 1
-  ebs: 1
+  disk: 1
   routing: 1
   benchmark: 1
 hashing:
@@ -1899,7 +1899,7 @@ timings:
   garbage_collect_period_us: 10000000
 replication:
   memory: 1
-  ebs: 0
+  disk: 0
   minimum: 1
   local: 1
   metadata: 1

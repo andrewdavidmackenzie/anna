@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-397aea22.js";
+            window.path_to_searchindex_js = "../searchindex-2e32a1f4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-65030116.js"></script>
@@ -221,7 +221,7 @@ exceeds H standard deviations above the mean</li>
 <p>Anna supports multiple storage tiers with different cost-performance profiles:</p>
 <ul>
 <li><strong>Memory tier</strong>: Fast RAM-based storage (e.g., AWS EC2 instances)</li>
-<li><strong>Disk tier</strong>: Cheaper flash-based storage (e.g., AWS EBS volumes)</li>
+<li><strong>Disk tier</strong>: Cheaper flash-based storage (e.g., disk volumes)</li>
 <li>Hot data is <strong>promoted</strong> from disk to memory when access frequency
 exceeds a threshold</li>
 <li>Cold data is <strong>demoted</strong> from memory to disk when access frequency drops</li>
@@ -269,7 +269,7 @@ can be removed to save cost</li>
 <tr><td>H</td><td>Key hotness threshold (std devs above mean)</td><td>3</td></tr>
 <tr><td>L</td><td>Key coldness threshold (mean access frequency)</td><td>Mean</td></tr>
 <tr><td>P</td><td>Key promotion threshold</td><td>2 accesses in 60s</td></tr>
-<tr><td>S_lower, S_upper</td><td>Storage consumption thresholds</td><td>Memory: 0.3-0.6, EBS: 0.5-0.75</td></tr>
+<tr><td>S_lower, S_upper</td><td>Storage consumption thresholds</td><td>Memory: 0.3-0.6, Disk: 0.5-0.75</td></tr>
 <tr><td>f_lower, f_upper</td><td>Latency thresholds (fraction of SLO)</td><td>0.5, 0.75</td></tr>
 <tr><td>C_lower, C_upper</td><td>Compute occupancy thresholds</td><td>0.05, 0.20</td></tr>
 <tr><td>c</td><td>Upper bound for latency ratio</td><td>1.5</td></tr>

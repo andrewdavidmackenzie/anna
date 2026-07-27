@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-397aea22.js";
+            window.path_to_searchindex_js = "../searchindex-2e32a1f4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-65030116.js"></script>
@@ -204,9 +204,9 @@ tier and how they are distributed:</p>
 </code></pre>
 <ul>
 <li>R_M: number of memory-tier nodes storing this key</li>
-<li>R_E: number of EBS-tier nodes storing this key</li>
+<li>R_E: number of disk-tier nodes storing this key</li>
 <li>T_M: number of threads per memory node storing this key</li>
-<li>T_E: number of threads per EBS node storing this key</li>
+<li>T_E: number of threads per disk node storing this key</li>
 </ul>
 <p>The policy engine adjusts replication vectors dynamically based on workload.</p>
 <h2 id="hash-rings"><a class="header" href="#hash-rings">Hash Rings</a></h2>
@@ -234,7 +234,7 @@ tier and how they are distributed:</p>
 </thead>
 <tbody>
 <tr><td>Memory</td><td>RAM</td><td>Low latency, high throughput</td><td>High</td></tr>
-<tr><td>Disk (EBS)</td><td>Flash/SSD</td><td>Higher latency</td><td>Lower</td></tr>
+<tr><td>Disk</td><td>Flash/SSD</td><td>Higher latency</td><td>Lower</td></tr>
 </tbody>
 </table>
 </div>

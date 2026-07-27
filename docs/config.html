@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-397aea22.js";
+            window.path_to_searchindex_js = "../searchindex-2e32a1f4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-65030116.js"></script>
@@ -244,14 +244,14 @@ the compiled-in default is used, preserving backward-compatible behavior.</p>
 </table>
 </div>
 <h2 id="storage-configuration"><a class="header" href="#storage-configuration">Storage Configuration</a></h2>
-<h3 id="ebs-root-ebs"><a class="header" href="#ebs-root-ebs">EBS Root (<code>ebs:</code>)</a></h3>
+<h3 id="disk-root-disk"><a class="header" href="#disk-root-disk">Disk Root (<code>disk:</code>)</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Config Key</th><th>Required</th><th>Default</th><th>Meaning</th></tr>
 </thead>
 <tbody>
-<tr><td><code>ebs</code></td><td>Yes</td><td>—</td><td>Root directory for disk-tier storage</td></tr>
+<tr><td><code>disk</code></td><td>Yes</td><td>—</td><td>Root directory for disk-tier storage</td></tr>
 </tbody>
 </table>
 </div>
@@ -264,8 +264,8 @@ the compiled-in default is used, preserving backward-compatible behavior.</p>
 <tbody>
 <tr><td><code>capacities.memory-cap</code></td><td><code>kMemoryNodeCapacity</code></td><td>—</td><td>Memory tier capacity per node (GB, multiplied by 1M for KB)</td></tr>
 <tr><td><code>capacities.memory-cap-kb</code></td><td><code>kMemoryNodeCapacity</code></td><td>—</td><td>Memory tier capacity per node (KB, used directly)</td></tr>
-<tr><td><code>capacities.ebs-cap</code></td><td><code>kEbsNodeCapacity</code></td><td>—</td><td>Disk tier capacity per node (GB)</td></tr>
-<tr><td><code>capacities.ebs-cap-kb</code></td><td><code>kEbsNodeCapacity</code></td><td>—</td><td>Disk tier capacity per node (KB)</td></tr>
+<tr><td><code>capacities.disk-cap</code></td><td><code>kDiskNodeCapacity</code></td><td>—</td><td>Disk tier capacity per node (GB)</td></tr>
+<tr><td><code>capacities.disk-cap-kb</code></td><td><code>kDiskNodeCapacity</code></td><td>—</td><td>Disk tier capacity per node (KB)</td></tr>
 </tbody>
 </table>
 </div>
@@ -278,7 +278,7 @@ the compiled-in default is used, preserving backward-compatible behavior.</p>
 </thead>
 <tbody>
 <tr><td><code>threads.memory</code></td><td><code>kMemoryThreadCount</code></td><td>—</td><td>Threads per memory-tier node</td></tr>
-<tr><td><code>threads.ebs</code></td><td><code>kEbsThreadCount</code></td><td>—</td><td>Threads per disk-tier node</td></tr>
+<tr><td><code>threads.disk</code></td><td><code>kDiskThreadCount</code></td><td>—</td><td>Threads per disk-tier node</td></tr>
 <tr><td><code>threads.routing</code></td><td><code>kRoutingThreadCount</code></td><td>—</td><td>Threads per routing node</td></tr>
 <tr><td><code>threads.benchmark</code></td><td>—</td><td>—</td><td>Benchmark threads (not used by server)</td></tr>
 </tbody>
@@ -303,7 +303,7 @@ the compiled-in default is used, preserving backward-compatible behavior.</p>
 </thead>
 <tbody>
 <tr><td><code>replication.memory</code></td><td><code>kDefaultGlobalMemoryReplication</code></td><td>—</td><td>Default global replication factor for memory tier</td></tr>
-<tr><td><code>replication.ebs</code></td><td><code>kDefaultGlobalEbsReplication</code></td><td>—</td><td>Default global replication factor for disk tier</td></tr>
+<tr><td><code>replication.disk</code></td><td><code>kDefaultGlobalDiskReplication</code></td><td>—</td><td>Default global replication factor for disk tier</td></tr>
 <tr><td><code>replication.local</code></td><td><code>kDefaultLocalReplication</code></td><td>—</td><td>Default local (intra-node) replication factor</td></tr>
 <tr><td><code>replication.minimum</code></td><td><code>kMinimumReplicaNumber</code></td><td>—</td><td>Minimum total replica count</td></tr>
 <tr><td><code>replication.metadata</code></td><td><code>kMetadataReplicationFactor</code></td><td><code>1</code></td><td>Global replication factor for metadata keys</td></tr>
@@ -346,7 +346,7 @@ the compiled-in default is used, preserving backward-compatible behavior.</p>
 <tr><td><code>policy.node_addition_batch_size</code></td><td><code>kNodeAdditionBatchSize</code></td><td><code>2</code></td><td>Nodes added concurrently during scaling</td></tr>
 <tr><td><code>policy.assumed_value_size_kb</code></td><td><code>kValueSize</code></td><td><code>256</code></td><td>Assumed value size (KB) for capacity calculations</td></tr>
 <tr><td><code>policy.min_memory_nodes</code></td><td><code>kMinMemoryTierSize</code></td><td><code>1</code></td><td>Minimum number of memory-tier nodes</td></tr>
-<tr><td><code>policy.min_disk_nodes</code></td><td><code>kMinEbsTierSize</code></td><td><code>0</code></td><td>Minimum number of disk-tier nodes</td></tr>
+<tr><td><code>policy.min_disk_nodes</code></td><td><code>kMinDiskTierSize</code></td><td><code>0</code></td><td>Minimum number of disk-tier nodes</td></tr>
 <tr><td><code>policy.warmup_key_count</code></td><td><code>kWarmupKeyCount</code></td><td><code>1000000</code></td><td>Keys to pre-populate in replication map (max 99,999,999)</td></tr>
 </tbody>
 </table>
@@ -360,8 +360,8 @@ the compiled-in default is used, preserving backward-compatible behavior.</p>
 <tbody>
 <tr><td><code>policy.storage.memory_upper</code></td><td><code>kMaxMemoryNodeConsumption</code></td><td><code>0.6</code></td><td>Upper storage threshold for memory tier (0.0-1.0)</td></tr>
 <tr><td><code>policy.storage.memory_lower</code></td><td><code>kMinMemoryNodeConsumption</code></td><td><code>0.3</code></td><td>Lower storage threshold for memory tier (0.0-1.0)</td></tr>
-<tr><td><code>policy.storage.disk_upper</code></td><td><code>kMaxEbsNodeConsumption</code></td><td><code>0.75</code></td><td>Upper storage threshold for disk tier (0.0-1.0)</td></tr>
-<tr><td><code>policy.storage.disk_lower</code></td><td><code>kMinEbsNodeConsumption</code></td><td><code>0.5</code></td><td>Lower storage threshold for disk tier (0.0-1.0)</td></tr>
+<tr><td><code>policy.storage.disk_upper</code></td><td><code>kMaxDiskNodeConsumption</code></td><td><code>0.75</code></td><td>Upper storage threshold for disk tier (0.0-1.0)</td></tr>
+<tr><td><code>policy.storage.disk_lower</code></td><td><code>kMinDiskNodeConsumption</code></td><td><code>0.5</code></td><td>Lower storage threshold for disk tier (0.0-1.0)</td></tr>
 </tbody>
 </table>
 </div>
@@ -428,13 +428,13 @@ policy:
     latency_target_us: 3000
     occupancy_upper: 0.15
     occupancy_lower: 0.05
-ebs: ./
+disk: ./
 capacities:
   memory-cap: 1
-  ebs-cap: 0
+  disk-cap: 0
 threads:
   memory: 1
-  ebs: 1
+  disk: 1
   routing: 1
   benchmark: 1
 hashing:
@@ -453,7 +453,7 @@ timings:
   garbage_collect_period_us: 10000000
 replication:
   memory: 1
-  ebs: 0
+  disk: 0
   minimum: 1
   local: 1
   metadata: 1
