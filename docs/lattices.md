@@ -226,16 +226,65 @@ support them, but no implementation exists in this codebase.
 - **PRAM**: Would compose monotonic reads, monotonic writes, and
   read-your-writes — each of which would need explicit enforcement.
 
-**Emergent properties**:
-- **Monotonic Reads**: **Enforced** in all client libraries. Each client
-  tracks the highest LWW timestamp seen per key. If a GET response has
-  a lower timestamp (e.g., from a stale replica), the client returns the
-  previously cached value instead. This guarantees that once a client
-  reads a value, subsequent reads never return an older version.
+**Enforced session guarantees** (all client libraries):
+
+- **Monotonic Reads**: Each client tracks the highest LWW timestamp seen
+  per key. If a GET response has a lower timestamp (e.g., from a stale
+  replica), the client returns the previously cached value instead. This
+  guarantees that once a client reads a value, subsequent reads never
+  return an older version.
+
+- **Read Your Writes**: Each client caches the value and timestamp of
+  its own PUTs. If a subsequent GET returns a stale value (older than
+  the client's own write), the cached write value is returned instead.
+  This guarantees a client always sees its own writes, even if routed to
+  a replica that hasn't received the write via gossip yet.
+
+Both guarantees are automatic — no configuration or API changes needed.
+They apply to LWW values (the default lattice type). The caches are
+cleared when `clear_cache()` is called.
+
+**Emergent property** (not separately enforced):
+
 - **Monotonic Writes**: Emergent from LWW's monotonically increasing
   timestamps. Not a separate implementation.
-- **Read Your Writes**: Holds when reading from the same replica that
-  accepted the write. Not guaranteed across replicas.
+
+### Using Session Guarantees
+
+Monotonic reads and read-your-writes are enabled by default in all
+client libraries. No code changes are needed — the guarantees hold
+automatically for the lifetime of a client instance.
+
+```python
+# Python example
+client = AnnaTcpClient("127.0.0.1", "127.0.0.1", local=True)
+client.put("key", LWWPairLattice(timestamp, b"value"))
+
+# This GET is guaranteed to return "value" or a newer version,
+# even if routed to a stale replica — the client's write cache
+# ensures it.
+result = client.get("key")
+```
+
+```rust
+// Rust example
+let mut client = KVSClient::new(&config, Some(0)).await;
+client.put("key", "value").await?;
+
+// Guaranteed to return "value" or a newer version
+let val = client.get("key").await?;
+```
+
+**Important notes:**
+- Guarantees are per-client-instance. Two separate client instances
+  do not share caches and do not see each other's writes until gossip
+  propagates them.
+- Calling `clear_cache()` resets the tracking. After clearing, a stale
+  read is possible until the client builds up its cache again.
+  Available in all client libraries (Rust, C++, Python, Go).
+- These guarantees apply to LWW values (the default) for both single-key
+  and multi-key reads. Other lattice types (Set, Causal, Priority) do
+  not have timestamp-based tracking.
 
 ### Stronger Consistency Levels (Not Supported by Anna)
 

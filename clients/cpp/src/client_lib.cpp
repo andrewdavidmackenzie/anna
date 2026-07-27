@@ -119,7 +119,14 @@ string make_lww_payload(const string& value) {
 // Monotonic read cache: per-key high-water mark of LWW timestamps and
 // the corresponding value. When a GET returns a stale timestamp, the
 // cached value is returned instead, guaranteeing monotonic reads.
+// TODO: This should be per-client-instance, not namespace-global.
+// Currently safe for single-client-per-process but would need to move
+// into KvsClient for multi-client scenarios.
 map<string, pair<uint64_t, string>> lww_read_cache;
+
+// High-water mark for write timestamps, ensuring each PUT uses a
+// strictly increasing timestamp even within the same millisecond.
+uint64_t last_write_ts = 0;
 
 // Decode an LWW protobuf payload and return the value string,
 // enforcing monotonic reads via the lww_read_cache.
@@ -209,12 +216,29 @@ CausalValue get_causal(KvsClientInterface* client, const string& key) {
 
 PutResult put(KvsClientInterface* client, const string& key,
               const string& value) {
-  string rid = client->put_async(key, make_lww_payload(value),
-                                 kvs::LatticeType::LWW);
+  uint64_t ts = generate_timestamp(0);
+  if (ts <= last_write_ts) {
+    ts = last_write_ts + 1;
+  }
+  last_write_ts = ts;
+  kvs::LWWValue lww;
+  lww.set_timestamp(ts);
+  lww.set_value(value);
+  string payload;
+  lww.SerializeToString(&payload);
+
+  string rid = client->put_async(key, payload, kvs::LatticeType::LWW);
 
   auto responses = receive_with_deadline(client);
 
-  return to_put_result(responses[0], rid);
+  auto result = to_put_result(responses[0], rid);
+
+  // Cache the written value for read-your-writes consistency.
+  if (!result.error) {
+    lww_read_cache[key] = {ts, value};
+  }
+
+  return result;
 }
 
 PutResult put_causal(KvsClientInterface* client, const string& key,

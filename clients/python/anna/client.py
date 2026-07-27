@@ -109,6 +109,11 @@ class AnnaTcpClient(BaseAnnaClient):
         # stale timestamp, the cached value is returned instead.
         self._lww_read_cache = {}
 
+    def clear_cache(self):
+        """Clear the key-address cache and the monotonic read cache."""
+        self.address_cache.clear()
+        self._lww_read_cache.clear()
+
     def set_timeout(self, timeout_ms):
         """Set the request timeout in milliseconds."""
         self._timeout_ms = timeout_ms
@@ -240,7 +245,15 @@ class AnnaTcpClient(BaseAnnaClient):
                         if attempt < max_retries:
                             retry_keys.append(tup.key)
                     elif tup.error == NO_ERROR:
-                        results[tup.key] = self._deserialize(tup)
+                        value = self._deserialize(tup)
+                        # Monotonic read / read-your-writes enforcement
+                        if hasattr(value, 'ts'):
+                            cached = self._lww_read_cache.get(tup.key)
+                            if cached is not None and value.ts < cached.ts:
+                                value = cached
+                            else:
+                                self._lww_read_cache[tup.key] = value
+                        results[tup.key] = value
 
             pending = retry_keys
 
@@ -346,6 +359,11 @@ class AnnaTcpClient(BaseAnnaClient):
                     retry_keys.append(tup.key)
                 else:
                     results[tup.key] = (tup.error == NO_ERROR)
+                    # Cache written LWW values for read-your-writes.
+                    if tup.error == NO_ERROR:
+                        value = kv_map.get(tup.key)
+                        if value is not None and hasattr(value, 'ts'):
+                            self._lww_read_cache[tup.key] = value
 
             pending = retry_keys
 

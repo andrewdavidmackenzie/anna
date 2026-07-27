@@ -39,6 +39,8 @@ type KVSClient struct {
 	tp              transport
 	// Monotonic read cache: per-key high-water mark of LWW timestamps.
 	lwwReadCache map[string]lwwCacheEntry
+	// High-water mark for write timestamps.
+	lastWriteTs uint64
 }
 
 type zmqTransport struct {
@@ -461,7 +463,16 @@ func (c *KVSClient) Get(key string) (string, error) {
 
 // Put stores a key-value pair (LWW lattice).
 func (c *KVSClient) Put(key, value string) error {
-	payload, err := buildLWWPayload(value)
+	ts := generateTimestamp()
+	if ts <= c.lastWriteTs {
+		ts = c.lastWriteTs + 1
+	}
+	c.lastWriteTs = ts
+	lww := &kvspb.LWWValue{
+		Timestamp: ts,
+		Value:     []byte(value),
+	}
+	payload, err := proto.Marshal(lww)
 	if err != nil {
 		return &KVSError{Message: fmt.Sprintf("PUT: %v", err)}
 	}
@@ -472,7 +483,13 @@ func (c *KVSClient) Put(key, value string) error {
 	}
 
 	_, err = validateResponse(response, "PUT")
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Cache the written value for read-your-writes consistency.
+	c.lwwReadCache[key] = lwwCacheEntry{timestamp: ts, value: value}
+	return nil
 }
 
 // GetSet retrieves a set of values by key (Set lattice).
