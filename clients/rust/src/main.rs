@@ -827,4 +827,88 @@ mod test {
             err
         );
     }
+
+    #[test]
+    fn bench_key_pads_small_numbers() {
+        assert_eq!(bench_key(1), "00000001");
+        assert_eq!(bench_key(42), "00000042");
+        assert_eq!(bench_key(1000000), "01000000");
+    }
+
+    #[test]
+    fn bench_key_large_numbers() {
+        assert_eq!(bench_key(99999999), "99999999");
+        assert_eq!(bench_key(100000000), "100000000");
+    }
+
+    #[test]
+    fn simple_rng_produces_bounded_values() {
+        let mut rng = SimpleRng::new(12345);
+        for _ in 0..100 {
+            let v = rng.next_bounded(1000);
+            assert!(v < 1000);
+        }
+    }
+
+    #[test]
+    fn simple_rng_different_seeds_differ() {
+        let mut rng1 = SimpleRng::new(1);
+        let mut rng2 = SimpleRng::new(2);
+        let mut differ = false;
+        for _ in 0..10 {
+            if rng1.next_bounded(1000) != rng2.next_bounded(1000) {
+                differ = true;
+                break;
+            }
+        }
+        assert!(differ, "different seeds should produce different sequences");
+    }
+
+    #[test]
+    fn bench_clap_rejects_zero_keys() {
+        let app = get_app();
+        let result = app.try_get_matches_from(vec![
+            "anna",
+            "--routing",
+            "tcp://127.0.0.1:6450",
+            "--client-ip",
+            "127.0.0.1",
+            "bench",
+            "--keys",
+            "0",
+        ]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn bench_clap_rejects_zero_duration() {
+        let app = get_app();
+        let result = app.try_get_matches_from(vec![
+            "anna",
+            "--routing",
+            "tcp://127.0.0.1:6450",
+            "--client-ip",
+            "127.0.0.1",
+            "bench",
+            "--duration",
+            "0",
+        ]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn bench_clap_rejects_invalid_workload() {
+        let app = get_app();
+        let result = app.try_get_matches_from(vec![
+            "anna",
+            "--routing",
+            "tcp://127.0.0.1:6450",
+            "--client-ip",
+            "127.0.0.1",
+            "bench",
+            "--workload",
+            "INVALID",
+        ]);
+        assert!(result.is_err());
+    }
 }

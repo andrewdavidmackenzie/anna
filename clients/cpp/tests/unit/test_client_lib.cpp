@@ -1102,3 +1102,67 @@ TEST(ClientLibTest, TransactionRollbackDiscardsWrites) {
   // get("k") would go to the mock client which has no responses,
   // so we just verify rollback doesn't crash and clears state.
 }
+
+// --- Bench tests ---
+
+TEST(BenchTest, ZeroKeysThrows) {
+  AutoRespondMockKvsClient client;
+  annalib::BenchConfig config;
+  config.num_keys = 0;
+  EXPECT_THROW(annalib::bench(&client, config), std::invalid_argument);
+}
+
+TEST(BenchTest, ZeroDurationThrows) {
+  AutoRespondMockKvsClient client;
+  annalib::BenchConfig config;
+  config.duration = 0;
+  EXPECT_THROW(annalib::bench(&client, config), std::invalid_argument);
+}
+
+TEST(BenchTest, ZeroReportPeriodThrows) {
+  AutoRespondMockKvsClient client;
+  annalib::BenchConfig config;
+  config.report_period = 0;
+  EXPECT_THROW(annalib::bench(&client, config), std::invalid_argument);
+}
+
+TEST(BenchTest, GetWorkloadRuns) {
+  AutoRespondMockKvsClient client;
+  annalib::BenchConfig config;
+  config.num_keys = 10;
+  config.value_size = 16;
+  config.duration = 1;
+  config.report_period = 1;
+  config.workload = "GET";
+  annalib::BenchResult result = annalib::bench(&client, config);
+  EXPECT_EQ(result.workload, "GET");
+  EXPECT_GT(result.total_ops, 0u);
+  EXPECT_GT(result.avg_throughput, 0.0);
+  EXPECT_GT(result.elapsed_seconds, 0.0);
+}
+
+TEST(BenchTest, PutWorkloadRuns) {
+  AutoRespondMockKvsClient client;
+  annalib::BenchConfig config;
+  config.num_keys = 10;
+  config.value_size = 16;
+  config.duration = 1;
+  config.report_period = 1;
+  config.workload = "PUT";
+  annalib::BenchResult result = annalib::bench(&client, config);
+  EXPECT_EQ(result.workload, "PUT");
+  EXPECT_GT(result.total_ops, 0u);
+}
+
+TEST(BenchTest, MixedWorkloadRuns) {
+  AutoRespondMockKvsClient client;
+  annalib::BenchConfig config;
+  config.num_keys = 10;
+  config.value_size = 16;
+  config.duration = 1;
+  config.report_period = 1;
+  config.workload = "MIXED";
+  annalib::BenchResult result = annalib::bench(&client, config);
+  EXPECT_EQ(result.workload, "MIXED");
+  EXPECT_GT(result.total_ops, 0u);
+}

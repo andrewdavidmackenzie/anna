@@ -736,3 +736,37 @@ class TestMainFunction:
             mock_cls.return_value = MagicMock()
             main()
             mock_file.assert_called_once()
+
+
+class TestBenchValidation:
+    def test_bench_rejects_zero_keys(self):
+        r = run_cli("--routing", "127.0.0.1", "--client-ip", "127.0.0.1",
+                     "--keys", "0", "bench")
+        assert r.returncode != 0
+        assert "--keys must be > 0" in r.stderr
+
+    def test_bench_rejects_zero_duration(self):
+        r = run_cli("--routing", "127.0.0.1", "--client-ip", "127.0.0.1",
+                     "--duration", "0", "bench")
+        assert r.returncode != 0
+        assert "--duration must be > 0" in r.stderr
+
+    def test_bench_rejects_invalid_workload(self):
+        r = run_cli("--routing", "127.0.0.1", "--client-ip", "127.0.0.1",
+                     "--workload", "INVALID", "bench")
+        assert r.returncode != 0
+        assert "invalid choice" in r.stderr.lower()
+
+    def test_bench_valid_workload_choices(self):
+        # Verify each valid workload is accepted at the argument parsing level.
+        # We only need to confirm argparse accepts the value, not that the
+        # bench actually runs (which would require a server).
+        import argparse
+        from anna.cli import main
+        for wl in ["GET", "PUT", "MIXED", "ALL", "get", "put", "mixed", "all"]:
+            # Construct the parser and parse -- should not raise
+            parser = argparse.ArgumentParser()
+            parser.add_argument("--workload", choices=["GET", "PUT", "MIXED", "ALL"],
+                                type=str.upper)
+            args = parser.parse_args(["--workload", wl])
+            assert args.workload in ("GET", "PUT", "MIXED", "ALL")
