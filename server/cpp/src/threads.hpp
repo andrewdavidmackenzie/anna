@@ -29,6 +29,9 @@ const unsigned kUserKeyAddressPort = 6850;
 // The port on which cache nodes listen for updates from the KVS.
 const unsigned kCacheUpdatePort = 7150;
 
+// The port on which the management node listens for scaling commands.
+inline unsigned kManagementNodePort = 7001;
+
 inline unsigned kBaseOffset = 0;
 
 class CacheThread {

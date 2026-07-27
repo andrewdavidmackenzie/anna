@@ -65,10 +65,43 @@ replication:
   ebs: 0
   minimum: 1
   local: 1
+  metadata: 1
+  metadata_local: 1
+hashing:
+  virtual_nodes_per_thread: 3000
+ports:
+  base_offset: 0
+  management: 7001
+timings:
+  server_report_period: 15
+  key_monitoring_period: 60
+  monitoring_timeout: 30
+  gossip_epoch: 10
+  data_redistribute_batch: 50
+  tombstone_gc_multiplier: 30
+  grace_period: 120
+  garbage_collect_period_us: 10000000
 policy:
   elasticity: false
   selective-rep: false
   tiering: false
+  node_addition_batch_size: 2
+  assumed_value_size_kb: 256
+  min_memory_nodes: 1
+  min_disk_nodes: 0
+  warmup_key_count: 1000000
+  storage:
+    memory_upper: 0.6
+    memory_lower: 0.3
+    disk_upper: 0.75
+    disk_lower: 0.5
+  tiering_thresholds:
+    promotion_threshold: 0
+    demotion_threshold: 1
+  slo:
+    latency_target_us: 3000
+    occupancy_upper: 0.15
+    occupancy_lower: 0.05
 """)
 
     if not os.path.exists(test_data):

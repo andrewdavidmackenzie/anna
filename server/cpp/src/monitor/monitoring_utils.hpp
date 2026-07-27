@@ -23,24 +23,29 @@ inline unsigned kMonitoringThreshold = 30;
 inline unsigned kGracePeriod = 120;
 
 // the default number of nodes to add concurrently for storage
-const unsigned kNodeAdditionBatchSize = 2;
+inline unsigned kNodeAdditionBatchSize = 2;
 
 // define capacity for both tiers
-const double kMaxMemoryNodeConsumption = 0.6;
-const double kMinMemoryNodeConsumption = 0.3;
-const double kMaxEbsNodeConsumption = 0.75;
-const double kMinEbsNodeConsumption = 0.5;
+inline double kMaxMemoryNodeConsumption = 0.6;
+inline double kMinMemoryNodeConsumption = 0.3;
+inline double kMaxEbsNodeConsumption = 0.75;
+inline double kMinEbsNodeConsumption = 0.5;
 
 // define threshold for promotion/demotion
-const unsigned kKeyPromotionThreshold = 0;
-const unsigned kKeyDemotionThreshold = 1;
+inline unsigned kKeyPromotionThreshold = 0;
+inline unsigned kKeyDemotionThreshold = 1;
 
 // define minimum number of nodes for each tier
-const unsigned kMinMemoryTierSize = 1;
-const unsigned kMinEbsTierSize = 0;
+inline unsigned kMinMemoryTierSize = 1;
+inline unsigned kMinEbsTierSize = 0;
 
 // value size in KB
-const unsigned kValueSize = 256;
+inline unsigned kValueSize = 256;
+
+// SLO occupancy thresholds: min occupancy to trigger node addition (upper)
+// and max occupancy to trigger node removal (lower)
+inline double kSloOccupancyUpper = 0.15;
+inline double kSloOccupancyLower = 0.05;
 
 struct SummaryStats {
   void clear() {

@@ -20,6 +20,12 @@
 
 const string kMetadataTypeReplication = "replication";
 
+// warmup key count for pre-populating the replication map.
+// The warmup loop generates 8-character zero-padded keys, so the maximum
+// safe value is 99,999,999 (8 digits).
+inline unsigned kWarmupKeyCount = 1000000;
+const unsigned kMaxWarmupKeyCount = 99999999;
+
 struct TierEnumHash {
   template <typename T> std::size_t operator()(T t) const {
     return static_cast<std::size_t>(t);
@@ -173,7 +179,7 @@ inline void warmup_key_replication_map_to_defaults(
     unsigned &kDefaultGlobalMemoryReplication,
     unsigned &kDefaultGlobalEbsReplication,
     unsigned &kDefaultLocalReplication) {
-  for (unsigned i = 1; i <= 1000000; i++) {
+  for (unsigned i = 1; i <= kWarmupKeyCount; i++) {
     // key is 8 bytes
     Key key = string(8 - std::to_string(i).length(), '0') + std::to_string(i);
     key_replication_map[key].global_replication_[Tier::MEMORY] =

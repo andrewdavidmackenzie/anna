@@ -833,8 +833,12 @@ int main(int argc, char *argv[]) {
   // read the YAML conf
   YAML::Node conf = YAML::LoadFile(argv[2]);
 
-  if (conf["ports"] && conf["ports"]["base_offset"]) {
-    kBaseOffset = conf["ports"]["base_offset"].as<unsigned>();
+  if (conf["ports"]) {
+    YAML::Node ports = conf["ports"];
+    if (ports["base_offset"])
+      kBaseOffset = ports["base_offset"].as<unsigned>();
+    if (ports["management"])
+      kManagementNodePort = ports["management"].as<unsigned>();
   }
 
   if (conf["timings"]) {
@@ -849,6 +853,8 @@ int main(int argc, char *argv[]) {
       kDataRedistributeThreshold = timings["data_redistribute_batch"].as<unsigned>();
     if (timings["tombstone_gc_multiplier"])
       kTombstoneGcMultiplier = timings["tombstone_gc_multiplier"].as<unsigned>();
+    if (timings["garbage_collect_period_us"])
+      kGarbageCollectThreshold = timings["garbage_collect_period_us"].as<unsigned>();
   }
 
   YAML::Node threads = conf["threads"];
@@ -867,10 +873,38 @@ int main(int argc, char *argv[]) {
     kEbsNodeCapacity = capacities["ebs-cap"].as<unsigned>() * 1000000;
   }
 
+  if (conf["hashing"]) {
+    YAML::Node hashing = conf["hashing"];
+    if (hashing["virtual_nodes_per_thread"]) {
+      unsigned val = hashing["virtual_nodes_per_thread"].as<unsigned>();
+      if (val > 0) {
+        kVirtualThreadNum = val;
+      }
+    }
+  }
+
   YAML::Node replication = conf["replication"];
   kDefaultGlobalMemoryReplication = replication["memory"].as<unsigned>();
   kDefaultGlobalEbsReplication = replication["ebs"].as<unsigned>();
   kDefaultLocalReplication = replication["local"].as<unsigned>();
+  if (replication["metadata"])
+    kMetadataReplicationFactor = replication["metadata"].as<unsigned>();
+  if (replication["metadata_local"])
+    kMetadataLocalReplicationFactor = replication["metadata_local"].as<unsigned>();
+
+  if (conf["policy"]) {
+    YAML::Node policy = conf["policy"];
+    if (policy["warmup_key_count"]) {
+      unsigned val = policy["warmup_key_count"].as<unsigned>();
+      kWarmupKeyCount = std::min(val, kMaxWarmupKeyCount);
+    }
+    if (policy["slo"] && policy["slo"]["latency_target_us"]) {
+      unsigned val = policy["slo"]["latency_target_us"].as<unsigned>();
+      if (val > 0) {
+        kSloWorst = val;
+      }
+    }
+  }
 
   string ebs_root = conf["ebs"].as<string>();
   // ensure terminated in a '/'

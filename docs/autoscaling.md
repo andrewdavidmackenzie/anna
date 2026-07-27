@@ -95,6 +95,11 @@ engine, which evaluates actions in this order:
 | C_lower, C_upper | Compute occupancy thresholds                   | 0.05, 0.20                     |
 | c                | Upper bound for latency ratio                  | 1.5                            |
 
+Most policy knobs (storage thresholds, tier promotion/demotion, SLO
+targets, and node scaling limits) are configurable via the YAML config
+file. See the [Configuration Reference](config.md) for the full list of
+config keys, defaults, and valid ranges.
+
 ## Port Configuration for Multi-Node Deployments
 
 Anna uses a range of ports (6000–7150) for inter-node communication.

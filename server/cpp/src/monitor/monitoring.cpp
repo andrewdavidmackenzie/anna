@@ -56,8 +56,12 @@ int main(int argc, char *argv[]) {
   // read the YAML conf
   YAML::Node conf = YAML::LoadFile(argv[2]);
 
-  if (conf["ports"] && conf["ports"]["base_offset"]) {
-    kBaseOffset = conf["ports"]["base_offset"].as<unsigned>();
+  if (conf["ports"]) {
+    YAML::Node ports = conf["ports"];
+    if (ports["base_offset"])
+      kBaseOffset = ports["base_offset"].as<unsigned>();
+    if (ports["management"])
+      kManagementNodePort = ports["management"].as<unsigned>();
   }
 
   unsigned monitoringResponseTimeout = 10000;
@@ -80,6 +84,67 @@ int main(int argc, char *argv[]) {
   kEnableSelectiveRep = policy["selective-rep"].as<bool>();
   kEnableTiering = policy["tiering"].as<bool>();
 
+  if (policy["node_addition_batch_size"])
+    kNodeAdditionBatchSize = policy["node_addition_batch_size"].as<unsigned>();
+  if (policy["assumed_value_size_kb"])
+    kValueSize = policy["assumed_value_size_kb"].as<unsigned>();
+  if (policy["min_memory_nodes"])
+    kMinMemoryTierSize = policy["min_memory_nodes"].as<unsigned>();
+  if (policy["min_disk_nodes"])
+    kMinEbsTierSize = policy["min_disk_nodes"].as<unsigned>();
+  if (policy["warmup_key_count"]) {
+    unsigned val = policy["warmup_key_count"].as<unsigned>();
+    if (val > kMaxWarmupKeyCount) {
+      log->warn("warmup_key_count {} exceeds max safe value {}; clamping.",
+                val, kMaxWarmupKeyCount);
+      val = kMaxWarmupKeyCount;
+    }
+    kWarmupKeyCount = val;
+  }
+
+  if (policy["storage"]) {
+    YAML::Node storage = policy["storage"];
+    if (storage["memory_upper"])
+      kMaxMemoryNodeConsumption = storage["memory_upper"].as<double>();
+    if (storage["memory_lower"])
+      kMinMemoryNodeConsumption = storage["memory_lower"].as<double>();
+    if (storage["disk_upper"])
+      kMaxEbsNodeConsumption = storage["disk_upper"].as<double>();
+    if (storage["disk_lower"])
+      kMinEbsNodeConsumption = storage["disk_lower"].as<double>();
+  }
+
+  if (policy["tiering_thresholds"]) {
+    YAML::Node tiering_thresholds = policy["tiering_thresholds"];
+    if (tiering_thresholds["promotion_threshold"])
+      kKeyPromotionThreshold = tiering_thresholds["promotion_threshold"].as<unsigned>();
+    if (tiering_thresholds["demotion_threshold"])
+      kKeyDemotionThreshold = tiering_thresholds["demotion_threshold"].as<unsigned>();
+  }
+
+  if (policy["slo"]) {
+    YAML::Node slo = policy["slo"];
+    if (slo["latency_target_us"]) {
+      unsigned val = slo["latency_target_us"].as<unsigned>();
+      if (val == 0) {
+        log->error("latency_target_us must be > 0; keeping default {}.",
+                   kSloWorst);
+      } else {
+        kSloWorst = val;
+      }
+    }
+    if (slo["occupancy_upper"])
+      kSloOccupancyUpper = slo["occupancy_upper"].as<double>();
+    if (slo["occupancy_lower"])
+      kSloOccupancyLower = slo["occupancy_lower"].as<double>();
+    if (kSloOccupancyLower > kSloOccupancyUpper) {
+      log->error("slo.occupancy_lower ({}) > occupancy_upper ({}); "
+                 "swapping values.",
+                 kSloOccupancyLower, kSloOccupancyUpper);
+      std::swap(kSloOccupancyLower, kSloOccupancyUpper);
+    }
+  }
+
   log->info("Elasticity policy enabled: {}", kEnableElasticity);
   log->info("Tiering policy enabled: {}", kEnableTiering);
   log->info("Selective replication policy enabled: {}", kEnableSelectiveRep);
@@ -100,11 +165,28 @@ int main(int argc, char *argv[]) {
     kEbsNodeCapacity = capacities["ebs-cap"].as<unsigned>() * 1000000;
   }
 
+  if (conf["hashing"]) {
+    YAML::Node hashing = conf["hashing"];
+    if (hashing["virtual_nodes_per_thread"]) {
+      unsigned val = hashing["virtual_nodes_per_thread"].as<unsigned>();
+      if (val == 0) {
+        log->error("virtual_nodes_per_thread must be > 0; keeping default {}.",
+                   kVirtualThreadNum);
+      } else {
+        kVirtualThreadNum = val;
+      }
+    }
+  }
+
   YAML::Node replication = conf["replication"];
   kDefaultGlobalMemoryReplication = replication["memory"].as<unsigned>();
   kDefaultGlobalEbsReplication = replication["ebs"].as<unsigned>();
   kDefaultLocalReplication = replication["local"].as<unsigned>();
   kMinimumReplicaNumber = replication["minimum"].as<unsigned>();
+  if (replication["metadata"])
+    kMetadataReplicationFactor = replication["metadata"].as<unsigned>();
+  if (replication["metadata_local"])
+    kMetadataLocalReplicationFactor = replication["metadata_local"].as<unsigned>();
 
   kTierMetadata[Tier::MEMORY] =
       TierMetadata(Tier::MEMORY, kMemoryThreadCount,
