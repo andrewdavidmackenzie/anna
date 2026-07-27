@@ -25,6 +25,11 @@ type transport interface {
 }
 
 // KVSClient communicates with the Anna KVS via ZeroMQ.
+type lwwCacheEntry struct {
+	timestamp uint64
+	value     string
+}
+
 type KVSClient struct {
 	routingThreads  []*UserRoutingThread
 	rid             int
@@ -32,6 +37,8 @@ type KVSClient struct {
 	rng             *rand.Rand
 	keyAddressCache map[string][]string
 	tp              transport
+	// Monotonic read cache: per-key high-water mark of LWW timestamps.
+	lwwReadCache map[string]lwwCacheEntry
 }
 
 type zmqTransport struct {
@@ -92,6 +99,7 @@ func NewKVSClient(config *ClientConfig, tid int) (*KVSClient, error) {
 		rng:             rng,
 		keyAddressCache: make(map[string][]string),
 		tp:              tp,
+		lwwReadCache:    make(map[string]lwwCacheEntry),
 	}, nil
 }
 
@@ -304,12 +312,12 @@ func buildLWWPayload(value string) ([]byte, error) {
 	return proto.Marshal(lww)
 }
 
-func parseLWWPayload(payload []byte) (string, error) {
+func parseLWWPayload(payload []byte) (string, uint64, error) {
 	var lww kvspb.LWWValue
 	if err := proto.Unmarshal(payload, &lww); err != nil {
-		return "", fmt.Errorf("failed to decode LWW value: %w", err)
+		return "", 0, fmt.Errorf("failed to decode LWW value: %w", err)
 	}
-	return string(lww.Value), nil
+	return string(lww.Value), lww.Timestamp, nil
 }
 
 func buildSetPayload(values []string) ([]byte, error) {
@@ -436,7 +444,19 @@ func (c *KVSClient) Get(key string) (string, error) {
 		return "", err
 	}
 
-	return parseLWWPayload(tuple.Payload)
+	value, timestamp, err := parseLWWPayload(tuple.Payload)
+	if err != nil {
+		return "", err
+	}
+
+	// Monotonic read enforcement: if we've seen a higher timestamp for
+	// this key, return the cached value instead of the stale one.
+	if cached, ok := c.lwwReadCache[key]; ok && timestamp < cached.timestamp {
+		return cached.value, nil
+	}
+
+	c.lwwReadCache[key] = lwwCacheEntry{timestamp: timestamp, value: value}
+	return value, nil
 }
 
 // Put stores a key-value pair (LWW lattice).

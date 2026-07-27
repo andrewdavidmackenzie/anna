@@ -58,6 +58,11 @@ pub struct KVSClient {
     key_address_cache: HashMap<Key, HashSet<Address>>,
     timeout: Duration,
     transport: Transport,
+    /// Monotonic read tracking: per-key high-water mark of LWW timestamps
+    /// and the corresponding value. When a GET returns a stale timestamp
+    /// (lower than the tracked max), the cached value is returned instead,
+    /// guaranteeing monotonic reads.
+    lww_read_cache: HashMap<Key, (u64, Vec<u8>)>,
 }
 
 impl KVSClient {
@@ -118,6 +123,7 @@ impl KVSClient {
                 key_address_puller,
                 response_puller,
             },
+            lww_read_cache: HashMap::new(),
         }
     }
 
@@ -135,6 +141,7 @@ impl KVSClient {
             transport: Transport::Mock {
                 responses: std::collections::VecDeque::new(),
             },
+            lww_read_cache: HashMap::new(),
         }
     }
 
@@ -437,8 +444,9 @@ impl KVSClient {
     /// metadata keys that contain serialized protobuf payloads.
     pub async fn get_bytes<K: AsRef<str> + Display>(&mut self, key: K) -> Result<Vec<u8>> {
         debug!("GET_BYTES: {}", key);
+        let key_str = key.as_ref().to_string();
         let response = self
-            .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
+            .send_data_request(&key_str, RequestType::Get as i32, None, None)
             .await
             .ok_or_else(|| Error::Kvs("GET_BYTES: request failed or timed out".into()))?;
 
@@ -446,6 +454,18 @@ impl KVSClient {
 
         let lww = LwwValue::decode(tuple.payload.as_slice())
             .map_err(|e| Error::Kvs(format!("GET_BYTES: failed to decode LWW value: {}", e)))?;
+
+        // Monotonic read enforcement: if we've seen a higher timestamp for
+        // this key before, return the cached value instead of the stale one.
+        if let Some((cached_ts, cached_val)) = self.lww_read_cache.get(&key_str) {
+            if lww.timestamp < *cached_ts {
+                return Ok(cached_val.clone());
+            }
+        }
+
+        // Update the high-water mark for this key.
+        self.lww_read_cache
+            .insert(key_str, (lww.timestamp, lww.value.clone()));
         Ok(lww.value)
     }
 
@@ -1135,9 +1155,10 @@ impl KVSClient {
         }
     }
 
-    /// Clear the key-address cache.
+    /// Clear the key-address cache and the monotonic read cache.
     pub fn clear_cache(&mut self) {
-        self.key_address_cache.clear()
+        self.key_address_cache.clear();
+        self.lww_read_cache.clear();
     }
 
     /// Set the request timeout duration.
@@ -1167,8 +1188,12 @@ mod tests {
     }
 
     fn make_get_response(key: &str, value: &[u8]) -> Vec<u8> {
+        make_get_response_with_ts(key, value, 1)
+    }
+
+    fn make_get_response_with_ts(key: &str, value: &[u8], timestamp: u64) -> Vec<u8> {
         let lww = LwwValue {
-            timestamp: 1,
+            timestamp,
             value: value.to_vec(),
         };
         let response = KeyResponse {
@@ -1703,5 +1728,74 @@ mod tests {
         let encoded = set.encode_to_vec();
         let decoded = KVSClient::decode_monitoring_ips(&encoded);
         assert!(decoded.is_empty());
+    }
+
+    #[tokio::test]
+    async fn monotonic_read_returns_cached_on_stale() {
+        let mut client = mock_client(200);
+        let worker = "tcp://127.0.0.1:6200";
+        let key = "mono_key";
+
+        // First read: timestamp 100, value "new"
+        client.push_mock_response(true, Some(make_routing_response(key, worker)));
+        client.push_mock_response(false, Some(make_get_response_with_ts(key, b"new", 100)));
+        let val = client.get(key).await.expect("first GET failed");
+        assert_eq!(val, "new");
+
+        // Second read: stale timestamp 50, value "old" — should return cached "new"
+        client.push_mock_response(false, Some(make_get_response_with_ts(key, b"old", 50)));
+        let val = client.get(key).await.expect("stale GET failed");
+        assert_eq!(
+            val, "new",
+            "Monotonic read should return cached value on stale response"
+        );
+    }
+
+    #[tokio::test]
+    async fn monotonic_read_updates_on_newer() {
+        let mut client = mock_client(201);
+        let worker = "tcp://127.0.0.1:6200";
+        let key = "mono_key2";
+
+        // First read: timestamp 100
+        client.push_mock_response(true, Some(make_routing_response(key, worker)));
+        client.push_mock_response(false, Some(make_get_response_with_ts(key, b"first", 100)));
+        let val = client.get(key).await.expect("first GET failed");
+        assert_eq!(val, "first");
+
+        // Second read: newer timestamp 200 — should update and return new value
+        client.push_mock_response(false, Some(make_get_response_with_ts(key, b"second", 200)));
+        let val = client.get(key).await.expect("newer GET failed");
+        assert_eq!(
+            val, "second",
+            "Monotonic read should accept newer timestamp"
+        );
+    }
+
+    #[tokio::test]
+    async fn monotonic_read_cache_cleared_with_clear_cache() {
+        let mut client = mock_client(202);
+        let worker = "tcp://127.0.0.1:6200";
+        let key = "mono_clear";
+
+        // Read with timestamp 100
+        client.push_mock_response(true, Some(make_routing_response(key, worker)));
+        client.push_mock_response(false, Some(make_get_response_with_ts(key, b"cached", 100)));
+        client.get(key).await.expect("first GET failed");
+
+        // Clear cache
+        client.clear_cache();
+
+        // Read with lower timestamp 50 — should succeed since cache was cleared
+        client.push_mock_response(true, Some(make_routing_response(key, worker)));
+        client.push_mock_response(
+            false,
+            Some(make_get_response_with_ts(key, b"after_clear", 50)),
+        );
+        let val = client.get(key).await.expect("GET after clear failed");
+        assert_eq!(
+            val, "after_clear",
+            "After clear_cache, stale values should be accepted"
+        );
     }
 }

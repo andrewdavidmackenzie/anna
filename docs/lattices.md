@@ -226,10 +226,12 @@ support them, but no implementation exists in this codebase.
 - **PRAM**: Would compose monotonic reads, monotonic writes, and
   read-your-writes — each of which would need explicit enforcement.
 
-**Emergent properties** (not enforced, but partially hold):
-- **Monotonic Reads**: Holds on a single replica because lattice merge is
-  monotonically increasing. Not guaranteed across replicas during gossip
-  convergence (stale reads are possible).
+**Emergent properties**:
+- **Monotonic Reads**: **Enforced** in all client libraries. Each client
+  tracks the highest LWW timestamp seen per key. If a GET response has
+  a lower timestamp (e.g., from a stale replica), the client returns the
+  previously cached value instead. This guarantees that once a client
+  reads a value, subsequent reads never return an older version.
 - **Monotonic Writes**: Emergent from LWW's monotonically increasing
   timestamps. Not a separate implementation.
 - **Read Your Writes**: Holds when reading from the same replica that
