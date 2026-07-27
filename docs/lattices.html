@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e79ec4b0.js";
+            window.path_to_searchindex_js = "../searchindex-7d801f01.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e6cef21f.js"></script>
@@ -391,8 +391,8 @@ transaction buffering and a commit protocol.</li>
 transaction.</li>
 <li><strong>Writes Follow Reads</strong>: Would require the client to include the read
 version in write requests.</li>
-<li><strong>PRAM</strong>: Would compose monotonic reads, monotonic writes, and
-read-your-writes — each of which would need explicit enforcement.</li>
+<li><strong>PRAM</strong>: Implemented — the composition of monotonic reads, monotonic
+writes, and read-your-writes, all of which are now enforced.</li>
 </ul>
 <p><strong>Enforced session guarantees</strong> (all client libraries):</p>
 <ul>
@@ -404,25 +404,32 @@ guarantees that once a client reads a value, subsequent reads never
 return an older version.</p>
 </li>
 <li>
+<p><strong>Monotonic Writes</strong>: Each client maintains a high-water mark of
+timestamps used in PUTs. Each subsequent PUT uses a timestamp strictly
+greater than the previous one, even if two PUTs happen within the same
+millisecond. This guarantees writes from the same client are always
+ordered.</p>
+</li>
+<li>
 <p><strong>Read Your Writes</strong>: Each client caches the value and timestamp of
 its own PUTs. If a subsequent GET returns a stale value (older than
 the client’s own write), the cached write value is returned instead.
 This guarantees a client always sees its own writes, even if routed to
 a replica that hasn’t received the write via gossip yet.</p>
 </li>
+<li>
+<p><strong>PRAM (Pipelined RAM)</strong>: The combination of monotonic reads, monotonic
+writes, and read-your-writes. All three are enforced, so PRAM
+consistency holds automatically for every client session.</p>
+</li>
 </ul>
-<p>Both guarantees are automatic — no configuration or API changes needed.
+<p>All guarantees are automatic — no configuration or API changes needed.
 They apply to LWW values (the default lattice type). The caches are
 cleared when <code>clear_cache()</code> is called.</p>
-<p><strong>Emergent property</strong> (not separately enforced):</p>
-<ul>
-<li><strong>Monotonic Writes</strong>: Emergent from LWW’s monotonically increasing
-timestamps. Not a separate implementation.</li>
-</ul>
 <h3 id="using-session-guarantees"><a class="header" href="#using-session-guarantees">Using Session Guarantees</a></h3>
-<p>Monotonic reads and read-your-writes are enabled by default in all
-client libraries. No code changes are needed — the guarantees hold
-automatically for the lifetime of a client instance.</p>
+<p>PRAM consistency (monotonic reads, monotonic writes, and read-your-writes)
+is enabled by default in all client libraries. No code changes are needed
+— the guarantees hold automatically for the lifetime of a client instance.</p>
 <pre><code class="language-python"># Python example
 client = AnnaTcpClient("127.0.0.1", "127.0.0.1", local=True)
 client.put("key", LWWPairLattice(timestamp, b"value"))
