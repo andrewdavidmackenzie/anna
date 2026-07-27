@@ -48,6 +48,7 @@ struct NodeConfig {
     grace_period: u32,
     server_report_period: u32,
     monitoring_timeout: u32,
+    tombstone_gc_multiplier: u32,
 }
 
 impl Default for NodeConfig {
@@ -69,6 +70,7 @@ impl Default for NodeConfig {
             grace_period: TEST_GRACE_PERIOD,
             server_report_period: TEST_SERVER_REPORT_PERIOD,
             monitoring_timeout: TEST_MONITORING_TIMEOUT,
+            tombstone_gc_multiplier: 30,
         }
     }
 }
@@ -123,7 +125,7 @@ timings:
   monitoring_timeout: {monitoring_timeout}
   monitoring_response_timeout_ms: 1000
   data_redistribute_batch: 50
-  tombstone_gc_multiplier: 30
+  tombstone_gc_multiplier: {tombstone_gc_multiplier}
   grace_period: {grace_period}
 replication:
   memory: {replication_memory}
@@ -143,6 +145,7 @@ replication:
         server_report_period = cfg.server_report_period,
         monitoring_timeout = cfg.monitoring_timeout,
         grace_period = cfg.grace_period,
+        tombstone_gc_multiplier = cfg.tombstone_gc_multiplier,
         elasticity = cfg.elasticity,
         tiering = cfg.tiering,
         mgmt_ip = cfg.mgmt_ip,
@@ -2523,5 +2526,84 @@ async fn replication_response_wrong_thread() {
         success_count >= 10,
         "Expected at least 10/20 keys readable after node depart, got {}",
         success_count
+    );
+}
+
+/// Test tombstone GC: delete a key, wait for the tombstone TTL to expire,
+/// verify the key is fully reaped (storage consumption drops).
+/// Uses gossip_epoch=2, tombstone_gc_multiplier=1 → TTL = 2s.
+/// Uses base_offset=26422.
+#[tokio::test]
+#[cfg(unix)]
+#[parallel(multi_node)]
+async fn tombstone_gc() {
+    use annalib::kvs_client::KVSClient;
+
+    if !server_bin_dir().join("anna-kvs").exists() {
+        eprintln!("SKIP: server binaries not built");
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(26422);
+    cluster.start_full_node_with_config(NodeConfig {
+        base_offset: 26422,
+        gossip_epoch: 2,
+        server_report_period: 2,
+        tombstone_gc_multiplier: 1, // TTL = 2s * 1 = 2s
+        ..Default::default()
+    });
+
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(73)).await;
+
+    // PUT several keys with non-trivial values
+    for i in 0..10 {
+        client
+            .put(&format!("gc_key_{}", i), &"x".repeat(500))
+            .await
+            .unwrap_or_else(|e| panic!("PUT gc_key_{} failed: {}", i, e));
+    }
+
+    // Verify keys exist
+    let val = client.get("gc_key_0").await.expect("GET gc_key_0 failed");
+    assert_eq!(val.len(), 500);
+
+    // Wait for stats to be reported so we can measure storage before delete
+    std::thread::sleep(Duration::from_secs(3));
+    let stats_before = client
+        .get_storage_stats(NODE1_IP, NODE1_IP, 0, "MEMORY")
+        .await
+        .expect("get_storage_stats before failed");
+    assert!(
+        stats_before.storage_consumption > 0,
+        "Storage should be non-zero after PUTs"
+    );
+
+    // DELETE all keys
+    for i in 0..10 {
+        client
+            .delete(&format!("gc_key_{}", i))
+            .await
+            .unwrap_or_else(|e| panic!("DELETE gc_key_{} failed: {}", i, e));
+    }
+
+    // Verify keys return KEY_DNE
+    let result = client.get("gc_key_0").await;
+    assert!(result.is_err(), "GET after DELETE should fail");
+
+    // Wait for tombstone TTL (2s) + gossip cycle (2s) + stats report (2s)
+    // to ensure GC has run and stats reflect the reduced storage.
+    std::thread::sleep(Duration::from_secs(8));
+
+    let stats_after = client
+        .get_storage_stats(NODE1_IP, NODE1_IP, 0, "MEMORY")
+        .await
+        .expect("get_storage_stats after failed");
+
+    assert!(
+        stats_after.storage_consumption < stats_before.storage_consumption,
+        "Storage should decrease after tombstone GC: before={}, after={}",
+        stats_before.storage_consumption,
+        stats_after.storage_consumption
     );
 }
