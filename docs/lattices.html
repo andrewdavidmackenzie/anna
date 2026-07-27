@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d3e4b893.js";
+            window.path_to_searchindex_js = "../searchindex-e79ec4b0.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e6cef21f.js"></script>
@@ -394,17 +394,64 @@ version in write requests.</li>
 <li><strong>PRAM</strong>: Would compose monotonic reads, monotonic writes, and
 read-your-writes — each of which would need explicit enforcement.</li>
 </ul>
-<p><strong>Emergent properties</strong>:</p>
+<p><strong>Enforced session guarantees</strong> (all client libraries):</p>
 <ul>
-<li><strong>Monotonic Reads</strong>: <strong>Enforced</strong> in all client libraries. Each client
-tracks the highest LWW timestamp seen per key. If a GET response has
-a lower timestamp (e.g., from a stale replica), the client returns the
-previously cached value instead. This guarantees that once a client
-reads a value, subsequent reads never return an older version.</li>
+<li>
+<p><strong>Monotonic Reads</strong>: Each client tracks the highest LWW timestamp seen
+per key. If a GET response has a lower timestamp (e.g., from a stale
+replica), the client returns the previously cached value instead. This
+guarantees that once a client reads a value, subsequent reads never
+return an older version.</p>
+</li>
+<li>
+<p><strong>Read Your Writes</strong>: Each client caches the value and timestamp of
+its own PUTs. If a subsequent GET returns a stale value (older than
+the client’s own write), the cached write value is returned instead.
+This guarantees a client always sees its own writes, even if routed to
+a replica that hasn’t received the write via gossip yet.</p>
+</li>
+</ul>
+<p>Both guarantees are automatic — no configuration or API changes needed.
+They apply to LWW values (the default lattice type). The caches are
+cleared when <code>clear_cache()</code> is called.</p>
+<p><strong>Emergent property</strong> (not separately enforced):</p>
+<ul>
 <li><strong>Monotonic Writes</strong>: Emergent from LWW’s monotonically increasing
 timestamps. Not a separate implementation.</li>
-<li><strong>Read Your Writes</strong>: Holds when reading from the same replica that
-accepted the write. Not guaranteed across replicas.</li>
+</ul>
+<h3 id="using-session-guarantees"><a class="header" href="#using-session-guarantees">Using Session Guarantees</a></h3>
+<p>Monotonic reads and read-your-writes are enabled by default in all
+client libraries. No code changes are needed — the guarantees hold
+automatically for the lifetime of a client instance.</p>
+<pre><code class="language-python"># Python example
+client = AnnaTcpClient("127.0.0.1", "127.0.0.1", local=True)
+client.put("key", LWWPairLattice(timestamp, b"value"))
+
+# This GET is guaranteed to return "value" or a newer version,
+# even if routed to a stale replica — the client's write cache
+# ensures it.
+result = client.get("key")
+</code></pre>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Rust example
+let mut client = KVSClient::new(&amp;config, Some(0)).await;
+client.put("key", "value").await?;
+
+// Guaranteed to return "value" or a newer version
+let val = client.get("key").await?;
+<span class="boring">}</span></code></pre>
+<p><strong>Important notes:</strong></p>
+<ul>
+<li>Guarantees are per-client-instance. Two separate client instances
+do not share caches and do not see each other’s writes until gossip
+propagates them.</li>
+<li>Calling <code>clear_cache()</code> resets the tracking. After clearing, a stale
+read is possible until the client builds up its cache again.
+Available in all client libraries (Rust, C++, Python, Go).</li>
+<li>These guarantees apply to LWW values (the default) for both single-key
+and multi-key reads. Other lattice types (Set, Causal, Priority) do
+not have timestamp-based tracking.</li>
 </ul>
 <h3 id="stronger-consistency-levels-not-supported-by-anna"><a class="header" href="#stronger-consistency-levels-not-supported-by-anna">Stronger Consistency Levels (Not Supported by Anna)</a></h3>
 <p>Anna deliberately does not implement the two strongest consistency levels.
