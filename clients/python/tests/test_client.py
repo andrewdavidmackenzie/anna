@@ -823,6 +823,53 @@ class TestMonotonicReads:
         result2 = self._get_with_timestamp(client, "k", "old", 50)
         assert result2["k"].reveal() == b"new"
 
+    def test_read_your_writes_returns_put_value(self):
+        client = make_client()
+
+        # PUT a value
+        key = "ryw_key"
+        from anna.lattices import LWWPairLattice
+        import time
+        ts = int(time.time() * 1000) << 8
+        put_value = LWWPairLattice(ts, b"my_write")
+
+        client.address_cache[key] = ["tcp://127.0.0.1:6200"]
+        mock_send_sock = MagicMock()
+        client.pusher_cache = MagicMock()
+        client.pusher_cache.get.return_value = mock_send_sock
+
+        put_response = KeyResponse()
+        put_response.response_id = "placeholder"
+        put_tup = put_response.tuples.add()
+        put_tup.key = key
+        put_tup.error = NO_ERROR
+
+        with patch("anna.client.send_request"), \
+             patch("anna.client.recv_response") as mock_recv:
+            def recv_side_effect(req_ids, sock, cls, timeout=10000):
+                put_response.response_id = req_ids[0]
+                return [put_response]
+            mock_recv.side_effect = recv_side_effect
+            client.put(key, put_value)
+
+        # GET returns stale value (timestamp 1, much older than our PUT)
+        result = self._get_with_timestamp(client, key, "stale", 1)
+        assert result[key].reveal() == b"my_write"
+
+    def test_clear_cache_resets_monotonic_read(self):
+        client = make_client()
+
+        # First read: timestamp 100
+        result1 = self._get_with_timestamp(client, "k", "cached", 100)
+        assert result1["k"].reveal() == b"cached"
+
+        # Clear cache
+        client.clear_cache()
+
+        # Read with lower timestamp 50 — should succeed since cache was cleared
+        result2 = self._get_with_timestamp(client, "k", "after_clear", 50)
+        assert result2["k"].reveal() == b"after_clear"
+
     def test_monotonic_read_updates_on_newer(self):
         client = make_client()
 
@@ -831,6 +878,62 @@ class TestMonotonicReads:
 
         result2 = self._get_with_timestamp(client, "k", "second", 200)
         assert result2["k"].reveal() == b"second"
+
+
+class TestGetMultiMonotonicReads:
+    def test_get_multi_returns_cached_on_stale(self):
+        """get_multi should enforce monotonic reads using the LWW cache."""
+        client = make_client()
+
+        # Seed the cache via a regular GET with timestamp 100
+        lww_val = LWWValue()
+        lww_val.timestamp = 100
+        lww_val.value = b"cached_val"
+
+        response = KeyResponse()
+        response.response_id = "placeholder"
+        tup = response.tuples.add()
+        tup.key = "mk"
+        tup.lattice_type = LWW
+        tup.payload = lww_val.SerializeToString()
+        tup.error = NO_ERROR
+
+        client.address_cache["mk"] = ["tcp://127.0.0.1:6200"]
+        mock_send_sock = MagicMock()
+        client.pusher_cache = MagicMock()
+        client.pusher_cache.get.return_value = mock_send_sock
+
+        with patch("anna.client.send_request"), \
+             patch("anna.client.recv_response") as mock_recv:
+            def recv_side_effect(req_ids, sock, cls, timeout=10000):
+                response.response_id = req_ids[0]
+                return [response]
+            mock_recv.side_effect = recv_side_effect
+            client.get("mk")
+
+        # Now get_multi with a stale response (timestamp 50)
+        stale_lww = LWWValue()
+        stale_lww.timestamp = 50
+        stale_lww.value = b"stale_val"
+
+        stale_response = KeyResponse()
+        stale_response.response_id = "placeholder"
+        stale_tup = stale_response.tuples.add()
+        stale_tup.key = "mk"
+        stale_tup.lattice_type = LWW
+        stale_tup.payload = stale_lww.SerializeToString()
+        stale_tup.error = NO_ERROR
+
+        with patch("anna.client.send_request"), \
+             patch("anna.client.recv_response") as mock_recv:
+            def recv_side_effect2(req_ids, sock, cls, timeout=10000):
+                stale_response.response_id = req_ids[0]
+                return [stale_response]
+            mock_recv.side_effect = recv_side_effect2
+            result = client.get_multi(["mk"])
+
+        assert "mk" in result
+        assert result["mk"].reveal() == b"cached_val"
 
 
 class TestResponseAddress:

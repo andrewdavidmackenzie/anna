@@ -2608,6 +2608,43 @@ func makeLWWResponse(key string, value string, timestamp uint64) []byte {
 	return respBytes
 }
 
+func TestPutTimestampsStrictlyIncrease(t *testing.T) {
+	putResp := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "k", Error: kvspb.AnnaError_NO_ERROR}},
+	}
+	putRespBytes, _ := proto.Marshal(putResp)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "k", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &sequenceMockTransport{
+		routingResp: routingBytes,
+		dataResps:   [][]byte{putRespBytes, putRespBytes},
+	}
+	client := &KVSClient{
+		routingThreads:  []*UserRoutingThread{NewUserRoutingThread("127.0.0.1", 0)},
+		rid:             0,
+		ut:              NewUserThread("127.0.0.1", 0),
+		rng:             rand.New(rand.NewSource(42)),
+		keyAddressCache: make(map[string][]string),
+		tp:              tp,
+		lwwReadCache:    make(map[string]lwwCacheEntry),
+	}
+
+	// Two rapid PUTs — second should get a strictly higher timestamp
+	_ = client.Put("k", "first")
+	ts1 := client.lwwReadCache["k"].timestamp
+	_ = client.Put("k", "second")
+	ts2 := client.lwwReadCache["k"].timestamp
+
+	if ts2 <= ts1 {
+		t.Errorf("Second PUT timestamp (%d) should be > first (%d)", ts2, ts1)
+	}
+}
+
 func TestMonotonicReadReturnsCachedOnStale(t *testing.T) {
 	routingResp := &kvspb.KeyAddressResponse{
 		Error:     kvspb.AnnaError_NO_ERROR,
@@ -2646,6 +2683,50 @@ func TestMonotonicReadReturnsCachedOnStale(t *testing.T) {
 	}
 	if val2 != "new" {
 		t.Errorf("stale Get should return cached value %q, got %q", "new", val2)
+	}
+}
+
+func TestReadYourWritesReturnsPutValue(t *testing.T) {
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "k", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	// PUT response (success, no payload needed)
+	putResp := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "k", Error: kvspb.AnnaError_NO_ERROR}},
+	}
+	putRespBytes, _ := proto.Marshal(putResp)
+
+	tp := &sequenceMockTransport{
+		routingResp: routingBytes,
+		dataResps: [][]byte{
+			putRespBytes,                          // PUT response
+			makeLWWResponse("k", "stale", 1),      // stale GET response
+		},
+	}
+	client := &KVSClient{
+		routingThreads:  []*UserRoutingThread{NewUserRoutingThread("127.0.0.1", 0)},
+		rid:             0,
+		ut:              NewUserThread("127.0.0.1", 0),
+		rng:             rand.New(rand.NewSource(42)),
+		keyAddressCache: make(map[string][]string),
+		tp:              tp,
+		lwwReadCache:    make(map[string]lwwCacheEntry),
+	}
+
+	err := client.Put("k", "my_write")
+	if err != nil {
+		t.Fatalf("Put failed: %v", err)
+	}
+
+	val, err := client.Get("k")
+	if err != nil {
+		t.Fatalf("Get after Put failed: %v", err)
+	}
+	if val != "my_write" {
+		t.Errorf("Read-your-writes: Get = %q, want %q", val, "my_write")
 	}
 }
 
