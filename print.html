@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-4d7fee97.js";
+            window.path_to_searchindex_js = "searchindex-d3e4b893.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e6cef21f.js"></script>
@@ -655,11 +655,13 @@ version in write requests.</li>
 <li><strong>PRAM</strong>: Would compose monotonic reads, monotonic writes, and
 read-your-writes — each of which would need explicit enforcement.</li>
 </ul>
-<p><strong>Emergent properties</strong> (not enforced, but partially hold):</p>
+<p><strong>Emergent properties</strong>:</p>
 <ul>
-<li><strong>Monotonic Reads</strong>: Holds on a single replica because lattice merge is
-monotonically increasing. Not guaranteed across replicas during gossip
-convergence (stale reads are possible).</li>
+<li><strong>Monotonic Reads</strong>: <strong>Enforced</strong> in all client libraries. Each client
+tracks the highest LWW timestamp seen per key. If a GET response has
+a lower timestamp (e.g., from a stale replica), the client returns the
+previously cached value instead. This guarantees that once a client
+reads a value, subsequent reads never return an older version.</li>
 <li><strong>Monotonic Writes</strong>: Emergent from LWW’s monotonically increasing
 timestamps. Not a separate implementation.</li>
 <li><strong>Read Your Writes</strong>: Holds when reading from the same replica that
