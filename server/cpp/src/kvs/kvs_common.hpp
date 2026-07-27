@@ -18,16 +18,16 @@
 #include "kvs/kvs_types.hpp"
 #include "metadata.pb.h"
 
-const unsigned kMetadataReplicationFactor = 1;
-const unsigned kMetadataLocalReplicationFactor = 1;
+inline unsigned kMetadataReplicationFactor = 1;
+inline unsigned kMetadataLocalReplicationFactor = 1;
 
-const unsigned kVirtualThreadNum = 3000;
+inline unsigned kVirtualThreadNum = 3000;
 
 const vector<Tier> kAllTiers = {
     Tier::MEMORY,
     Tier::DISK}; // TODO(vikram): Is there a better way to make this vector?
 
-const unsigned kSloWorst = 3000;
+inline unsigned kSloWorst = 3000;
 
 // run-time constants
 extern Tier kSelfTier;

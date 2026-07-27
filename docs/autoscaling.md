@@ -95,6 +95,110 @@ engine, which evaluates actions in this order:
 | C_lower, C_upper | Compute occupancy thresholds                   | 0.05, 0.20                     |
 | c                | Upper bound for latency ratio                  | 1.5                            |
 
+All policy knobs listed above are now configurable via the YAML config file.
+See [Configurable Parameters](#configurable-parameters) below for the full
+list of config keys, defaults, and valid ranges.
+
+## Configurable Parameters
+
+All parameters below are optional in the YAML config. When omitted, the
+default value is used, preserving backward-compatible behavior.
+
+### Policy Parameters (`policy:`)
+
+| Config Key | C++ Variable | Default | Meaning | Valid Range |
+|------------|-------------|---------|---------|-------------|
+| `policy.node_addition_batch_size` | `kNodeAdditionBatchSize` | `2` | Number of nodes added concurrently during storage scaling | >= 1 |
+| `policy.assumed_value_size_kb` | `kValueSize` | `256` | Assumed value size (KB) for capacity calculations | > 0 |
+| `policy.min_memory_nodes` | `kMinMemoryTierSize` | `1` | Minimum number of memory-tier nodes | >= 0 |
+| `policy.min_disk_nodes` | `kMinEbsTierSize` | `0` | Minimum number of disk-tier nodes | >= 0 |
+| `policy.warmup_key_count` | `kWarmupKeyCount` | `1000000` | Number of keys to pre-populate in replication map | >= 0 |
+
+### Storage Thresholds (`policy.storage:`)
+
+| Config Key | C++ Variable | Default | Meaning | Valid Range |
+|------------|-------------|---------|---------|-------------|
+| `policy.storage.memory_upper` | `kMaxMemoryNodeConsumption` | `0.6` | Upper storage threshold for memory tier | 0.0-1.0 |
+| `policy.storage.memory_lower` | `kMinMemoryNodeConsumption` | `0.3` | Lower storage threshold for memory tier | 0.0-1.0 |
+| `policy.storage.disk_upper` | `kMaxEbsNodeConsumption` | `0.75` | Upper storage threshold for disk tier | 0.0-1.0 |
+| `policy.storage.disk_lower` | `kMinEbsNodeConsumption` | `0.5` | Lower storage threshold for disk tier | 0.0-1.0 |
+
+### Tiering Thresholds (`policy.tiering_thresholds:`)
+
+| Config Key | C++ Variable | Default | Meaning | Valid Range |
+|------------|-------------|---------|---------|-------------|
+| `policy.tiering_thresholds.promotion_threshold` | `kKeyPromotionThreshold` | `0` | Access count to trigger key promotion to memory | >= 0 |
+| `policy.tiering_thresholds.demotion_threshold` | `kKeyDemotionThreshold` | `1` | Access count below which key is demoted to disk | >= 0 |
+
+### SLO Parameters (`policy.slo:`)
+
+| Config Key | C++ Variable | Default | Meaning | Valid Range |
+|------------|-------------|---------|---------|-------------|
+| `policy.slo.latency_target_us` | `kSloWorst` | `3000` | SLO worst-case latency target (microseconds) | > 0 |
+| `policy.slo.occupancy_upper` | `kSloOccupancyUpper` | `0.15` | Min memory occupancy to trigger node addition | 0.0-1.0 |
+| `policy.slo.occupancy_lower` | `kSloOccupancyLower` | `0.05` | Max memory occupancy to trigger node removal | 0.0-1.0 |
+
+### Hashing Parameters (`hashing:`)
+
+| Config Key | C++ Variable | Default | Meaning | Valid Range |
+|------------|-------------|---------|---------|-------------|
+| `hashing.virtual_nodes_per_thread` | `kVirtualThreadNum` | `3000` | Virtual nodes per thread in consistent hash ring | > 0 |
+
+### Replication Parameters (`replication:`)
+
+| Config Key | C++ Variable | Default | Meaning | Valid Range |
+|------------|-------------|---------|---------|-------------|
+| `replication.metadata` | `kMetadataReplicationFactor` | `1` | Global replication factor for metadata keys | >= 1 |
+| `replication.metadata_local` | `kMetadataLocalReplicationFactor` | `1` | Local replication factor for metadata keys | >= 1 |
+
+### Timing Parameters (`timings:`)
+
+| Config Key | C++ Variable | Default | Meaning | Valid Range |
+|------------|-------------|---------|---------|-------------|
+| `timings.garbage_collect_period_us` | `kGarbageCollectThreshold` | `10000000` | Memory GC trigger interval (microseconds) | > 0 |
+
+### Port Parameters (`ports:`)
+
+| Config Key | C++ Variable | Default | Meaning | Valid Range |
+|------------|-------------|---------|---------|-------------|
+| `ports.management` | `kManagementNodePort` | `7001` | Management node port for scaling commands | 1-65535 |
+
+### Example Configuration
+
+```yaml
+policy:
+  elasticity: true
+  selective-rep: true
+  tiering: false
+  node_addition_batch_size: 2
+  assumed_value_size_kb: 256
+  min_memory_nodes: 1
+  min_disk_nodes: 0
+  warmup_key_count: 1000000
+  storage:
+    memory_upper: 0.6
+    memory_lower: 0.3
+    disk_upper: 0.75
+    disk_lower: 0.5
+  tiering_thresholds:
+    promotion_threshold: 0
+    demotion_threshold: 1
+  slo:
+    latency_target_us: 3000
+    occupancy_upper: 0.15
+    occupancy_lower: 0.05
+hashing:
+  virtual_nodes_per_thread: 3000
+ports:
+  base_offset: 0
+  management: 7001
+timings:
+  garbage_collect_period_us: 10000000
+replication:
+  metadata: 1
+  metadata_local: 1
+```
+
 ## Port Configuration for Multi-Node Deployments
 
 Anna uses a range of ports (6000–7150) for inter-node communication.

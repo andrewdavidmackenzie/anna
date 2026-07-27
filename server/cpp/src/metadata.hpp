@@ -20,6 +20,9 @@
 
 const string kMetadataTypeReplication = "replication";
 
+// warmup key count for pre-populating the replication map
+inline unsigned kWarmupKeyCount = 1000000;
+
 struct TierEnumHash {
   template <typename T> std::size_t operator()(T t) const {
     return static_cast<std::size_t>(t);
@@ -173,7 +176,7 @@ inline void warmup_key_replication_map_to_defaults(
     unsigned &kDefaultGlobalMemoryReplication,
     unsigned &kDefaultGlobalEbsReplication,
     unsigned &kDefaultLocalReplication) {
-  for (unsigned i = 1; i <= 1000000; i++) {
+  for (unsigned i = 1; i <= kWarmupKeyCount; i++) {
     // key is 8 bytes
     Key key = string(8 - std::to_string(i).length(), '0') + std::to_string(i);
     key_replication_map[key].global_replication_[Tier::MEMORY] =

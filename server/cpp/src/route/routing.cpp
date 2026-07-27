@@ -149,8 +149,18 @@ int main(int argc, char *argv[]) {
 
   YAML::Node conf = YAML::LoadFile(argv[2]);
 
-  if (conf["ports"] && conf["ports"]["base_offset"]) {
-    kBaseOffset = conf["ports"]["base_offset"].as<unsigned>();
+  if (conf["ports"]) {
+    YAML::Node ports = conf["ports"];
+    if (ports["base_offset"])
+      kBaseOffset = ports["base_offset"].as<unsigned>();
+    if (ports["management"])
+      kManagementNodePort = ports["management"].as<unsigned>();
+  }
+
+  if (conf["hashing"]) {
+    YAML::Node hashing = conf["hashing"];
+    if (hashing["virtual_nodes_per_thread"])
+      kVirtualThreadNum = hashing["virtual_nodes_per_thread"].as<unsigned>();
   }
 
   YAML::Node threads = conf["threads"];
@@ -167,6 +177,10 @@ int main(int argc, char *argv[]) {
       replication["memory"].as<unsigned>();
   unsigned kDefaultGlobalEbsReplication = replication["ebs"].as<unsigned>();
   kDefaultLocalReplication = replication["local"].as<unsigned>();
+  if (replication["metadata"])
+    kMetadataReplicationFactor = replication["metadata"].as<unsigned>();
+  if (replication["metadata_local"])
+    kMetadataLocalReplicationFactor = replication["metadata_local"].as<unsigned>();
 
   YAML::Node routing = conf["routing"];
   Address ip = routing["ip"].as<string>();

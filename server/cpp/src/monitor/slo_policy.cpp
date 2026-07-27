@@ -33,7 +33,7 @@ void slo_policy(logger log, GlobalRingMap &global_hash_rings,
               kSloWorst);
 
     // figure out if we should do hot key replication or add nodes
-    if (kEnableElasticity && ss.min_memory_occupancy > 0.15) {
+    if (kEnableElasticity && ss.min_memory_occupancy > kSloOccupancyUpper) {
       unsigned node_to_add =
           ceil((ss.avg_latency / kSloWorst - 1) * memory_node_count);
 
@@ -102,7 +102,7 @@ void slo_policy(logger log, GlobalRingMap &global_hash_rings,
                                 response_puller, log, rid);
     }
   } else if (kEnableElasticity && !removing_memory_node &&
-             ss.min_memory_occupancy < 0.05 &&
+             ss.min_memory_occupancy < kSloOccupancyLower &&
              memory_node_count > std::max(ss.required_memory_node,
                                           (unsigned)kMinMemoryTierSize)) {
     log->info("Node {}/{} is severely underutilized.",
