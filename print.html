@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-b465e93d.js";
+            window.path_to_searchindex_js = "searchindex-397aea22.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-e6cef21f.js"></script>
+        <script src="toc-65030116.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -957,6 +957,10 @@ can be removed to save cost</li>
 </tbody>
 </table>
 </div>
+<p>Most policy knobs (storage thresholds, tier promotion/demotion, SLO
+targets, and node scaling limits) are configurable via the YAML config
+file. See the <a href="#configuration-reference">Configuration Reference</a> for the full list of
+config keys, defaults, and valid ranges.</p>
 <h2 id="port-configuration-for-multi-node-deployments"><a class="header" href="#port-configuration-for-multi-node-deployments">Port Configuration for Multi-Node Deployments</a></h2>
 <p>Anna uses a range of ports (6000–7150) for inter-node communication.
 The YAML config supports a <code>ports.base_offset</code> setting that shifts all
@@ -1615,6 +1619,292 @@ thread per process in local mode.</p>
 <h2 id="running-anna-in-cluster-mode"><a class="header" href="#running-anna-in-cluster-mode">Running Anna in cluster mode</a></h2>
 <p>For instructions on how to run Anna in cluster mode, please see the <code>hydro-project/cluster</code>
 <a href="https://github.com/hydro-project/cluster">repository</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="configuration-reference"><a class="header" href="#configuration-reference">Configuration Reference</a></h1>
+<p>Anna is configured via YAML files in <code>server/conf/</code>. Three files are provided:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>File</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>anna-config.yml</code></td><td>Default local development configuration</td></tr>
+<tr><td><code>anna-local.yml</code></td><td>Identical to <code>anna-config.yml</code> (convenience copy)</td></tr>
+<tr><td><code>anna-base.yml</code></td><td>Production-oriented configuration with higher capacities</td></tr>
+</tbody>
+</table>
+</div>
+<p>All parameters below are optional unless noted otherwise. When omitted,
+the compiled-in default is used, preserving backward-compatible behavior.</p>
+<h2 id="network-configuration"><a class="header" href="#network-configuration">Network Configuration</a></h2>
+<h3 id="monitoring-monitoring"><a class="header" href="#monitoring-monitoring">Monitoring (<code>monitoring:</code>)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Config Key</th><th>Required</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>monitoring.ip</code></td><td>Yes</td><td>—</td><td>IP address of the monitoring node</td></tr>
+<tr><td><code>monitoring.mgmt_ip</code></td><td>Yes</td><td>—</td><td>IP address of the management node</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="routing-routing"><a class="header" href="#routing-routing">Routing (<code>routing:</code>)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Config Key</th><th>Required</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>routing.ip</code></td><td>Yes</td><td>—</td><td>IP address of this routing node</td></tr>
+<tr><td><code>routing.monitoring</code></td><td>Yes</td><td>—</td><td>List of monitoring node IPs</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="server-server"><a class="header" href="#server-server">Server (<code>server:</code>)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Config Key</th><th>Required</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>server.public_ip</code></td><td>Yes</td><td>—</td><td>Public IP of this KVS node</td></tr>
+<tr><td><code>server.private_ip</code></td><td>Yes</td><td>—</td><td>Private IP of this KVS node</td></tr>
+<tr><td><code>server.seed_ip</code></td><td>Yes</td><td>—</td><td>IP of the seed node to join</td></tr>
+<tr><td><code>server.mgmt_ip</code></td><td>Yes</td><td>—</td><td>Management node IP (or “NULL”)</td></tr>
+<tr><td><code>server.routing</code></td><td>Yes</td><td>—</td><td>List of routing node IPs</td></tr>
+<tr><td><code>server.monitoring</code></td><td>Yes</td><td>—</td><td>List of monitoring node IPs</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="ports-ports"><a class="header" href="#ports-ports">Ports (<code>ports:</code>)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Config Key</th><th>C++ Variable</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>ports.base_offset</code></td><td><code>kBaseOffset</code></td><td><code>0</code></td><td>Offset added to all port numbers</td></tr>
+<tr><td><code>ports.management</code></td><td><code>kManagementNodePort</code></td><td><code>7001</code></td><td>Management node port for scaling commands</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="storage-configuration"><a class="header" href="#storage-configuration">Storage Configuration</a></h2>
+<h3 id="ebs-root-ebs"><a class="header" href="#ebs-root-ebs">EBS Root (<code>ebs:</code>)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Config Key</th><th>Required</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>ebs</code></td><td>Yes</td><td>—</td><td>Root directory for disk-tier storage</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="capacities-capacities"><a class="header" href="#capacities-capacities">Capacities (<code>capacities:</code>)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Config Key</th><th>C++ Variable</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>capacities.memory-cap</code></td><td><code>kMemoryNodeCapacity</code></td><td>—</td><td>Memory tier capacity per node (GB, multiplied by 1M for KB)</td></tr>
+<tr><td><code>capacities.memory-cap-kb</code></td><td><code>kMemoryNodeCapacity</code></td><td>—</td><td>Memory tier capacity per node (KB, used directly)</td></tr>
+<tr><td><code>capacities.ebs-cap</code></td><td><code>kEbsNodeCapacity</code></td><td>—</td><td>Disk tier capacity per node (GB)</td></tr>
+<tr><td><code>capacities.ebs-cap-kb</code></td><td><code>kEbsNodeCapacity</code></td><td>—</td><td>Disk tier capacity per node (KB)</td></tr>
+</tbody>
+</table>
+</div>
+<p>If both <code>-cap</code> and <code>-cap-kb</code> variants are present, the <code>-kb</code> variant takes precedence.</p>
+<h2 id="thread-configuration-threads"><a class="header" href="#thread-configuration-threads">Thread Configuration (<code>threads:</code>)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Config Key</th><th>C++ Variable</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>threads.memory</code></td><td><code>kMemoryThreadCount</code></td><td>—</td><td>Threads per memory-tier node</td></tr>
+<tr><td><code>threads.ebs</code></td><td><code>kEbsThreadCount</code></td><td>—</td><td>Threads per disk-tier node</td></tr>
+<tr><td><code>threads.routing</code></td><td><code>kRoutingThreadCount</code></td><td>—</td><td>Threads per routing node</td></tr>
+<tr><td><code>threads.benchmark</code></td><td>—</td><td>—</td><td>Benchmark threads (not used by server)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="hashing-configuration-hashing"><a class="header" href="#hashing-configuration-hashing">Hashing Configuration (<code>hashing:</code>)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Config Key</th><th>C++ Variable</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>hashing.virtual_nodes_per_thread</code></td><td><code>kVirtualThreadNum</code></td><td><code>3000</code></td><td>Virtual nodes per thread in consistent hash ring (must be &gt; 0)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="replication-configuration-replication"><a class="header" href="#replication-configuration-replication">Replication Configuration (<code>replication:</code>)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Config Key</th><th>C++ Variable</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>replication.memory</code></td><td><code>kDefaultGlobalMemoryReplication</code></td><td>—</td><td>Default global replication factor for memory tier</td></tr>
+<tr><td><code>replication.ebs</code></td><td><code>kDefaultGlobalEbsReplication</code></td><td>—</td><td>Default global replication factor for disk tier</td></tr>
+<tr><td><code>replication.local</code></td><td><code>kDefaultLocalReplication</code></td><td>—</td><td>Default local (intra-node) replication factor</td></tr>
+<tr><td><code>replication.minimum</code></td><td><code>kMinimumReplicaNumber</code></td><td>—</td><td>Minimum total replica count</td></tr>
+<tr><td><code>replication.metadata</code></td><td><code>kMetadataReplicationFactor</code></td><td><code>1</code></td><td>Global replication factor for metadata keys</td></tr>
+<tr><td><code>replication.metadata_local</code></td><td><code>kMetadataLocalReplicationFactor</code></td><td><code>1</code></td><td>Local replication factor for metadata keys</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="timing-configuration-timings"><a class="header" href="#timing-configuration-timings">Timing Configuration (<code>timings:</code>)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Config Key</th><th>C++ Variable</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>timings.server_report_period</code></td><td><code>kServerReportThreshold</code></td><td><code>15</code></td><td>Server stats report period (seconds)</td></tr>
+<tr><td><code>timings.key_monitoring_period</code></td><td><code>kKeyMonitoringThreshold</code></td><td><code>60</code></td><td>Key access monitoring period (seconds)</td></tr>
+<tr><td><code>timings.monitoring_timeout</code></td><td><code>kMonitoringThreshold</code></td><td><code>30</code></td><td>Monitoring response timeout (seconds)</td></tr>
+<tr><td><code>timings.monitoring_response_timeout_ms</code></td><td>—</td><td><code>10000</code></td><td>Monitoring ZMQ poll timeout (milliseconds)</td></tr>
+<tr><td><code>timings.gossip_epoch</code></td><td><code>kGossipPeriod</code></td><td><code>10</code></td><td>Gossip period (seconds, stored internally as microseconds)</td></tr>
+<tr><td><code>timings.data_redistribute_batch</code></td><td><code>kDataRedistributeThreshold</code></td><td><code>50</code></td><td>Max keys redistributed per gossip batch</td></tr>
+<tr><td><code>timings.tombstone_gc_multiplier</code></td><td><code>kTombstoneGcMultiplier</code></td><td><code>30</code></td><td>Tombstone GC: multiplier of gossip period</td></tr>
+<tr><td><code>timings.grace_period</code></td><td><code>kGracePeriod</code></td><td><code>120</code></td><td>Grace period after scaling (seconds)</td></tr>
+<tr><td><code>timings.garbage_collect_period_us</code></td><td><code>kGarbageCollectThreshold</code></td><td><code>10000000</code></td><td>Memory GC trigger interval (microseconds)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="policy-configuration-policy"><a class="header" href="#policy-configuration-policy">Policy Configuration (<code>policy:</code>)</a></h2>
+<p>These parameters control the autoscaling policy engine. See
+<a href="#autoscaling-and-policy-engine">Autoscaling and Policy Engine</a> for how they are used.</p>
+<h3 id="top-level-policy-keys"><a class="header" href="#top-level-policy-keys">Top-level Policy Keys</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Config Key</th><th>C++ Variable</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>policy.elasticity</code></td><td><code>kEnableElasticity</code></td><td><code>false</code></td><td>Enable horizontal elasticity</td></tr>
+<tr><td><code>policy.selective-rep</code></td><td><code>kEnableSelectiveRep</code></td><td><code>false</code></td><td>Enable selective hot-key replication</td></tr>
+<tr><td><code>policy.tiering</code></td><td><code>kEnableTiering</code></td><td><code>false</code></td><td>Enable vertical tiering</td></tr>
+<tr><td><code>policy.node_addition_batch_size</code></td><td><code>kNodeAdditionBatchSize</code></td><td><code>2</code></td><td>Nodes added concurrently during scaling</td></tr>
+<tr><td><code>policy.assumed_value_size_kb</code></td><td><code>kValueSize</code></td><td><code>256</code></td><td>Assumed value size (KB) for capacity calculations</td></tr>
+<tr><td><code>policy.min_memory_nodes</code></td><td><code>kMinMemoryTierSize</code></td><td><code>1</code></td><td>Minimum number of memory-tier nodes</td></tr>
+<tr><td><code>policy.min_disk_nodes</code></td><td><code>kMinEbsTierSize</code></td><td><code>0</code></td><td>Minimum number of disk-tier nodes</td></tr>
+<tr><td><code>policy.warmup_key_count</code></td><td><code>kWarmupKeyCount</code></td><td><code>1000000</code></td><td>Keys to pre-populate in replication map (max 99,999,999)</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="storage-thresholds-policystorage"><a class="header" href="#storage-thresholds-policystorage">Storage Thresholds (<code>policy.storage:</code>)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Config Key</th><th>C++ Variable</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>policy.storage.memory_upper</code></td><td><code>kMaxMemoryNodeConsumption</code></td><td><code>0.6</code></td><td>Upper storage threshold for memory tier (0.0-1.0)</td></tr>
+<tr><td><code>policy.storage.memory_lower</code></td><td><code>kMinMemoryNodeConsumption</code></td><td><code>0.3</code></td><td>Lower storage threshold for memory tier (0.0-1.0)</td></tr>
+<tr><td><code>policy.storage.disk_upper</code></td><td><code>kMaxEbsNodeConsumption</code></td><td><code>0.75</code></td><td>Upper storage threshold for disk tier (0.0-1.0)</td></tr>
+<tr><td><code>policy.storage.disk_lower</code></td><td><code>kMinEbsNodeConsumption</code></td><td><code>0.5</code></td><td>Lower storage threshold for disk tier (0.0-1.0)</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="tiering-thresholds-policytiering_thresholds"><a class="header" href="#tiering-thresholds-policytiering_thresholds">Tiering Thresholds (<code>policy.tiering_thresholds:</code>)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Config Key</th><th>C++ Variable</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>policy.tiering_thresholds.promotion_threshold</code></td><td><code>kKeyPromotionThreshold</code></td><td><code>0</code></td><td>Access count to trigger key promotion to memory</td></tr>
+<tr><td><code>policy.tiering_thresholds.demotion_threshold</code></td><td><code>kKeyDemotionThreshold</code></td><td><code>1</code></td><td>Access count below which key is demoted to disk</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="slo-parameters-policyslo"><a class="header" href="#slo-parameters-policyslo">SLO Parameters (<code>policy.slo:</code>)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Config Key</th><th>C++ Variable</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>policy.slo.latency_target_us</code></td><td><code>kSloWorst</code></td><td><code>3000</code></td><td>SLO worst-case latency target (microseconds, must be &gt; 0)</td></tr>
+<tr><td><code>policy.slo.occupancy_upper</code></td><td><code>kSloOccupancyUpper</code></td><td><code>0.15</code></td><td>Min memory occupancy to trigger node addition (0.0-1.0)</td></tr>
+<tr><td><code>policy.slo.occupancy_lower</code></td><td><code>kSloOccupancyLower</code></td><td><code>0.05</code></td><td>Max memory occupancy to trigger node removal (0.0-1.0)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="example-configuration"><a class="header" href="#example-configuration">Example Configuration</a></h2>
+<pre><code class="language-yaml">monitoring:
+  mgmt_ip: 127.0.0.1
+  ip: 127.0.0.1
+routing:
+  monitoring:
+    - 127.0.0.1
+  ip: 127.0.0.1
+server:
+  monitoring:
+    - 127.0.0.1
+  routing:
+    - 127.0.0.1
+  seed_ip: 127.0.0.1
+  public_ip: 127.0.0.1
+  private_ip: 127.0.0.1
+  mgmt_ip: "NULL"
+policy:
+  elasticity: false
+  selective-rep: false
+  tiering: false
+  node_addition_batch_size: 2
+  assumed_value_size_kb: 256
+  min_memory_nodes: 1
+  min_disk_nodes: 0
+  warmup_key_count: 1000000
+  storage:
+    memory_upper: 0.6
+    memory_lower: 0.3
+    disk_upper: 0.75
+    disk_lower: 0.5
+  tiering_thresholds:
+    promotion_threshold: 0
+    demotion_threshold: 1
+  slo:
+    latency_target_us: 3000
+    occupancy_upper: 0.15
+    occupancy_lower: 0.05
+ebs: ./
+capacities:
+  memory-cap: 1
+  ebs-cap: 0
+threads:
+  memory: 1
+  ebs: 1
+  routing: 1
+  benchmark: 1
+hashing:
+  virtual_nodes_per_thread: 3000
+ports:
+  base_offset: 0
+  management: 7001
+timings:
+  server_report_period: 15
+  key_monitoring_period: 60
+  monitoring_timeout: 30
+  gossip_epoch: 10
+  data_redistribute_batch: 50
+  tombstone_gc_multiplier: 30
+  grace_period: 120
+  garbage_collect_period_us: 10000000
+replication:
+  memory: 1
+  ebs: 0
+  minimum: 1
+  local: 1
+  metadata: 1
+  metadata_local: 1
+</code></pre>
 
                     </main>
 

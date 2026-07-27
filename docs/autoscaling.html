@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b465e93d.js";
+            window.path_to_searchindex_js = "../searchindex-397aea22.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-e6cef21f.js"></script>
+        <script src="../toc-65030116.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -276,6 +276,10 @@ can be removed to save cost</li>
 </tbody>
 </table>
 </div>
+<p>Most policy knobs (storage thresholds, tier promotion/demotion, SLO
+targets, and node scaling limits) are configurable via the YAML config
+file. See the <a href="config.html">Configuration Reference</a> for the full list of
+config keys, defaults, and valid ranges.</p>
 <h2 id="port-configuration-for-multi-node-deployments"><a class="header" href="#port-configuration-for-multi-node-deployments">Port Configuration for Multi-Node Deployments</a></h2>
 <p>Anna uses a range of ports (6000–7150) for inter-node communication.
 The YAML config supports a <code>ports.base_offset</code> setting that shifts all
