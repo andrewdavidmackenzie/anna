@@ -784,6 +784,55 @@ class TestConfigurableTimeout:
         assert client.get_timeout() == 5000
 
 
+class TestMonotonicReads:
+    def _get_with_timestamp(self, client, key, value, timestamp):
+        """Helper: mock a GET that returns an LWW value with a specific timestamp."""
+        lww_val = LWWValue()
+        lww_val.timestamp = timestamp
+        lww_val.value = value.encode()
+
+        response = KeyResponse()
+        response.response_id = "placeholder"
+        tup = response.tuples.add()
+        tup.key = key
+        tup.lattice_type = LWW
+        tup.payload = lww_val.SerializeToString()
+        tup.error = NO_ERROR
+
+        client.address_cache[key] = ["tcp://127.0.0.1:6200"]
+        mock_send_sock = MagicMock()
+        client.pusher_cache = MagicMock()
+        client.pusher_cache.get.return_value = mock_send_sock
+
+        with patch("anna.client.send_request"), \
+             patch("anna.client.recv_response") as mock_recv:
+            def recv_side_effect(req_ids, sock, cls, timeout=10000):
+                response.response_id = req_ids[0]
+                return [response]
+            mock_recv.side_effect = recv_side_effect
+            return client.get(key)
+
+    def test_monotonic_read_returns_cached_on_stale(self):
+        client = make_client()
+
+        # First read: timestamp 100
+        result1 = self._get_with_timestamp(client, "k", "new", 100)
+        assert result1["k"].reveal() == b"new"
+
+        # Second read: stale timestamp 50 — should return cached "new"
+        result2 = self._get_with_timestamp(client, "k", "old", 50)
+        assert result2["k"].reveal() == b"new"
+
+    def test_monotonic_read_updates_on_newer(self):
+        client = make_client()
+
+        result1 = self._get_with_timestamp(client, "k", "first", 100)
+        assert result1["k"].reveal() == b"first"
+
+        result2 = self._get_with_timestamp(client, "k", "second", 200)
+        assert result2["k"].reveal() == b"second"
+
+
 class TestResponseAddress:
     def test_returns_connect_address(self):
         client = make_client()

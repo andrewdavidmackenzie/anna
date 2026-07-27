@@ -116,8 +116,28 @@ string make_lww_payload(const string& value) {
   return payload;
 }
 
-// Decode an LWW protobuf payload and return the value string.
-string decode_lww_value(const string& payload) {
+// Monotonic read cache: per-key high-water mark of LWW timestamps and
+// the corresponding value. When a GET returns a stale timestamp, the
+// cached value is returned instead, guaranteeing monotonic reads.
+map<string, pair<uint64_t, string>> lww_read_cache;
+
+// Decode an LWW protobuf payload and return the value string,
+// enforcing monotonic reads via the lww_read_cache.
+string decode_lww_value(const string& key, const string& payload) {
+  kvs::LWWValue lww;
+  lww.ParseFromString(payload);
+
+  auto it = lww_read_cache.find(key);
+  if (it != lww_read_cache.end() && lww.timestamp() < it->second.first) {
+    return it->second.second;
+  }
+
+  lww_read_cache[key] = {lww.timestamp(), lww.value()};
+  return lww.value();
+}
+
+// Decode without monotonic read enforcement (for internal/metadata use).
+string decode_lww_value_raw(const string& payload) {
   kvs::LWWValue lww;
   lww.ParseFromString(payload);
   return lww.value();
@@ -156,7 +176,7 @@ string get(KvsClientInterface* client, const string& key) {
   client->get_async(key);
   auto responses = receive_with_deadline(client);
   check_response_error(responses[0]);
-  return decode_lww_value(responses[0].tuples(0).payload());
+  return decode_lww_value(key, responses[0].tuples(0).payload());
 }
 
 CausalValue get_causal(KvsClientInterface* client, const string& key) {

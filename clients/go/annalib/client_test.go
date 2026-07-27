@@ -373,7 +373,7 @@ func TestBuildAndParseLWWPayload(t *testing.T) {
 		t.Fatalf("buildLWWPayload failed: %v", err)
 	}
 
-	val, err := parseLWWPayload(payload)
+	val, _, err := parseLWWPayload(payload)
 	if err != nil {
 		t.Fatalf("parseLWWPayload failed: %v", err)
 	}
@@ -383,7 +383,7 @@ func TestBuildAndParseLWWPayload(t *testing.T) {
 }
 
 func TestParseLWWPayloadInvalid(t *testing.T) {
-	_, err := parseLWWPayload([]byte{0xff, 0xff})
+	_, _, err := parseLWWPayload([]byte{0xff, 0xff})
 	if err == nil {
 		t.Error("expected error for invalid LWW payload")
 	}
@@ -449,6 +449,7 @@ func newTestClient(tp transport) *KVSClient {
 		rng:             rand.New(rand.NewSource(42)),
 		keyAddressCache: make(map[string][]string),
 		tp:              tp,
+		lwwReadCache:    make(map[string]lwwCacheEntry),
 	}
 }
 
@@ -2565,5 +2566,120 @@ func TestQueryRoutingResponseError(t *testing.T) {
 	addrs := client.queryRouting("key")
 	if addrs != nil {
 		t.Errorf("expected nil addresses on routing error, got %v", addrs)
+	}
+}
+
+// sequenceMockTransport returns responses in order: first routing, then
+// data responses from a queue. This allows testing multiple GETs with
+// different server responses.
+type sequenceMockTransport struct {
+	routingResp []byte
+	dataResps   [][]byte
+	dataIdx     int
+	sentMsgs    []sentMsg
+}
+
+func (m *sequenceMockTransport) sendRequest(msg []byte, addr string) error {
+	m.sentMsgs = append(m.sentMsgs, sentMsg{data: msg, addr: addr})
+	return nil
+}
+
+func (m *sequenceMockTransport) recvResponse(useKeyAddress bool) ([]byte, error) {
+	if useKeyAddress {
+		return m.routingResp, nil
+	}
+	if m.dataIdx < len(m.dataResps) {
+		resp := m.dataResps[m.dataIdx]
+		m.dataIdx++
+		return resp, nil
+	}
+	return nil, fmt.Errorf("no more mock responses")
+}
+
+func (m *sequenceMockTransport) close() error { return nil }
+
+func makeLWWResponse(key string, value string, timestamp uint64) []byte {
+	lww := &kvspb.LWWValue{Timestamp: timestamp, Value: []byte(value)}
+	lwwBytes, _ := proto.Marshal(lww)
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: key, Error: kvspb.AnnaError_NO_ERROR, Payload: lwwBytes}},
+	}
+	respBytes, _ := proto.Marshal(response)
+	return respBytes
+}
+
+func TestMonotonicReadReturnsCachedOnStale(t *testing.T) {
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "k", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &sequenceMockTransport{
+		routingResp: routingBytes,
+		dataResps: [][]byte{
+			makeLWWResponse("k", "new", 100),
+			makeLWWResponse("k", "old", 50), // stale
+		},
+	}
+	client := &KVSClient{
+		routingThreads:  []*UserRoutingThread{NewUserRoutingThread("127.0.0.1", 0)},
+		rid:             0,
+		ut:              NewUserThread("127.0.0.1", 0),
+		rng:             rand.New(rand.NewSource(42)),
+		keyAddressCache: make(map[string][]string),
+		tp:              tp,
+		lwwReadCache:    make(map[string]lwwCacheEntry),
+	}
+
+	val1, err := client.Get("k")
+	if err != nil {
+		t.Fatalf("first Get failed: %v", err)
+	}
+	if val1 != "new" {
+		t.Errorf("first Get = %q, want %q", val1, "new")
+	}
+
+	val2, err := client.Get("k")
+	if err != nil {
+		t.Fatalf("second Get failed: %v", err)
+	}
+	if val2 != "new" {
+		t.Errorf("stale Get should return cached value %q, got %q", "new", val2)
+	}
+}
+
+func TestMonotonicReadUpdatesOnNewer(t *testing.T) {
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "k", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &sequenceMockTransport{
+		routingResp: routingBytes,
+		dataResps: [][]byte{
+			makeLWWResponse("k", "first", 100),
+			makeLWWResponse("k", "second", 200), // newer
+		},
+	}
+	client := &KVSClient{
+		routingThreads:  []*UserRoutingThread{NewUserRoutingThread("127.0.0.1", 0)},
+		rid:             0,
+		ut:              NewUserThread("127.0.0.1", 0),
+		rng:             rand.New(rand.NewSource(42)),
+		keyAddressCache: make(map[string][]string),
+		tp:              tp,
+		lwwReadCache:    make(map[string]lwwCacheEntry),
+	}
+
+	val1, _ := client.Get("k")
+	if val1 != "first" {
+		t.Errorf("first Get = %q, want %q", val1, "first")
+	}
+
+	val2, _ := client.Get("k")
+	if val2 != "second" {
+		t.Errorf("newer Get = %q, want %q", val2, "second")
 	}
 }
