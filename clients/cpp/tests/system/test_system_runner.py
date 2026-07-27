@@ -54,7 +54,7 @@ server:
 disk: test_data
 capacities:
   memory-cap: 1
-  disk-cap: 0
+  disk-cap: 1
 threads:
   memory: 1
   disk: 1
@@ -106,6 +106,8 @@ policy:
 
     if not os.path.exists(test_data):
         os.makedirs(test_data)
+    # Create disk_0 directory for disk-tier serializer
+    os.makedirs(os.path.join(test_data, "disk_0"), exist_ok=True)
 
     # Start in dependency order: monitor first, then route, then kvs.
     binaries = ["anna-monitor", "anna-route", "anna-kvs"]
