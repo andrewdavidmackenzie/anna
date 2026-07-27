@@ -159,8 +159,12 @@ int main(int argc, char *argv[]) {
 
   if (conf["hashing"]) {
     YAML::Node hashing = conf["hashing"];
-    if (hashing["virtual_nodes_per_thread"])
-      kVirtualThreadNum = hashing["virtual_nodes_per_thread"].as<unsigned>();
+    if (hashing["virtual_nodes_per_thread"]) {
+      unsigned val = hashing["virtual_nodes_per_thread"].as<unsigned>();
+      if (val > 0) {
+        kVirtualThreadNum = val;
+      }
+    }
   }
 
   YAML::Node threads = conf["threads"];

@@ -875,8 +875,12 @@ int main(int argc, char *argv[]) {
 
   if (conf["hashing"]) {
     YAML::Node hashing = conf["hashing"];
-    if (hashing["virtual_nodes_per_thread"])
-      kVirtualThreadNum = hashing["virtual_nodes_per_thread"].as<unsigned>();
+    if (hashing["virtual_nodes_per_thread"]) {
+      unsigned val = hashing["virtual_nodes_per_thread"].as<unsigned>();
+      if (val > 0) {
+        kVirtualThreadNum = val;
+      }
+    }
   }
 
   YAML::Node replication = conf["replication"];
@@ -890,10 +894,16 @@ int main(int argc, char *argv[]) {
 
   if (conf["policy"]) {
     YAML::Node policy = conf["policy"];
-    if (policy["warmup_key_count"])
-      kWarmupKeyCount = policy["warmup_key_count"].as<unsigned>();
-    if (policy["slo"] && policy["slo"]["latency_target_us"])
-      kSloWorst = policy["slo"]["latency_target_us"].as<unsigned>();
+    if (policy["warmup_key_count"]) {
+      unsigned val = policy["warmup_key_count"].as<unsigned>();
+      kWarmupKeyCount = std::min(val, kMaxWarmupKeyCount);
+    }
+    if (policy["slo"] && policy["slo"]["latency_target_us"]) {
+      unsigned val = policy["slo"]["latency_target_us"].as<unsigned>();
+      if (val > 0) {
+        kSloWorst = val;
+      }
+    }
   }
 
   string ebs_root = conf["ebs"].as<string>();

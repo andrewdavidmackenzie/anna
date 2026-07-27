@@ -92,8 +92,15 @@ int main(int argc, char *argv[]) {
     kMinMemoryTierSize = policy["min_memory_nodes"].as<unsigned>();
   if (policy["min_disk_nodes"])
     kMinEbsTierSize = policy["min_disk_nodes"].as<unsigned>();
-  if (policy["warmup_key_count"])
-    kWarmupKeyCount = policy["warmup_key_count"].as<unsigned>();
+  if (policy["warmup_key_count"]) {
+    unsigned val = policy["warmup_key_count"].as<unsigned>();
+    if (val > kMaxWarmupKeyCount) {
+      log->warn("warmup_key_count {} exceeds max safe value {}; clamping.",
+                val, kMaxWarmupKeyCount);
+      val = kMaxWarmupKeyCount;
+    }
+    kWarmupKeyCount = val;
+  }
 
   if (policy["storage"]) {
     YAML::Node storage = policy["storage"];
@@ -117,12 +124,25 @@ int main(int argc, char *argv[]) {
 
   if (policy["slo"]) {
     YAML::Node slo = policy["slo"];
-    if (slo["latency_target_us"])
-      kSloWorst = slo["latency_target_us"].as<unsigned>();
+    if (slo["latency_target_us"]) {
+      unsigned val = slo["latency_target_us"].as<unsigned>();
+      if (val == 0) {
+        log->error("latency_target_us must be > 0; keeping default {}.",
+                   kSloWorst);
+      } else {
+        kSloWorst = val;
+      }
+    }
     if (slo["occupancy_upper"])
       kSloOccupancyUpper = slo["occupancy_upper"].as<double>();
     if (slo["occupancy_lower"])
       kSloOccupancyLower = slo["occupancy_lower"].as<double>();
+    if (kSloOccupancyLower > kSloOccupancyUpper) {
+      log->error("slo.occupancy_lower ({}) > occupancy_upper ({}); "
+                 "swapping values.",
+                 kSloOccupancyLower, kSloOccupancyUpper);
+      std::swap(kSloOccupancyLower, kSloOccupancyUpper);
+    }
   }
 
   log->info("Elasticity policy enabled: {}", kEnableElasticity);
@@ -147,8 +167,15 @@ int main(int argc, char *argv[]) {
 
   if (conf["hashing"]) {
     YAML::Node hashing = conf["hashing"];
-    if (hashing["virtual_nodes_per_thread"])
-      kVirtualThreadNum = hashing["virtual_nodes_per_thread"].as<unsigned>();
+    if (hashing["virtual_nodes_per_thread"]) {
+      unsigned val = hashing["virtual_nodes_per_thread"].as<unsigned>();
+      if (val == 0) {
+        log->error("virtual_nodes_per_thread must be > 0; keeping default {}.",
+                   kVirtualThreadNum);
+      } else {
+        kVirtualThreadNum = val;
+      }
+    }
   }
 
   YAML::Node replication = conf["replication"];

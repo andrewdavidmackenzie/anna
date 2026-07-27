@@ -20,8 +20,11 @@
 
 const string kMetadataTypeReplication = "replication";
 
-// warmup key count for pre-populating the replication map
+// warmup key count for pre-populating the replication map.
+// The warmup loop generates 8-character zero-padded keys, so the maximum
+// safe value is 99,999,999 (8 digits).
 inline unsigned kWarmupKeyCount = 1000000;
+const unsigned kMaxWarmupKeyCount = 99999999;
 
 struct TierEnumHash {
   template <typename T> std::size_t operator()(T t) const {

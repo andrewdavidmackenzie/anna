@@ -16,6 +16,14 @@
 // This ensures that behavior is unchanged when no config overrides are
 // provided.
 
+#include "gtest/gtest.h"
+
+#include "kvs/kvs_common.hpp"
+#include "kvs/server_utils.hpp"
+#include "metadata.hpp"
+#include "monitor/monitoring_utils.hpp"
+#include "threads.hpp"
+
 // --- monitoring_utils.hpp defaults ---
 
 TEST(ConfigDefaults, MonitoringThresholdDefault) {
@@ -124,4 +132,11 @@ TEST(ConfigDefaults, BaseOffsetDefault) {
 
 TEST(ConfigDefaults, WarmupKeyCountDefault) {
   EXPECT_EQ(kWarmupKeyCount, 1000000u);
+}
+
+TEST(ConfigDefaults, MaxWarmupKeyCountSafeForKeyFormat) {
+  // The warmup loop generates 8-char zero-padded keys, so max must fit
+  // in 8 digits (i.e., <= 99,999,999).
+  EXPECT_EQ(kMaxWarmupKeyCount, 99999999u);
+  EXPECT_LE(kWarmupKeyCount, kMaxWarmupKeyCount);
 }

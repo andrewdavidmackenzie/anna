@@ -13,6 +13,7 @@
 # Building and Running
 - [Building anna](docs/building-anna.md)
 - [Running anna](docs/running.md)
+- [Configuration Reference](docs/config.md)
 
 # Clients
 Anna has four client implementations (C++, Rust, Python, Go), each with a

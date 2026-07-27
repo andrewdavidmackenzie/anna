@@ -19,7 +19,15 @@
 #include <cstdio>
 #include <fstream>
 #include <string>
+#include <unistd.h>
 
+#include "gtest/gtest.h"
+
+#include "kvs/kvs_common.hpp"
+#include "kvs/server_utils.hpp"
+#include "metadata.hpp"
+#include "monitor/monitoring_utils.hpp"
+#include "threads.hpp"
 #include "yaml-cpp/yaml.h"
 
 // Helper: write YAML content to a temp file and return the path.
@@ -49,8 +57,10 @@ static void apply_policy_config(const YAML::Node &conf) {
       kMinMemoryTierSize = policy["min_memory_nodes"].as<unsigned>();
     if (policy["min_disk_nodes"])
       kMinEbsTierSize = policy["min_disk_nodes"].as<unsigned>();
-    if (policy["warmup_key_count"])
-      kWarmupKeyCount = policy["warmup_key_count"].as<unsigned>();
+    if (policy["warmup_key_count"]) {
+      unsigned val = policy["warmup_key_count"].as<unsigned>();
+      kWarmupKeyCount = std::min(val, kMaxWarmupKeyCount);
+    }
 
     if (policy["storage"]) {
       YAML::Node storage = policy["storage"];
@@ -74,12 +84,19 @@ static void apply_policy_config(const YAML::Node &conf) {
 
     if (policy["slo"]) {
       YAML::Node slo = policy["slo"];
-      if (slo["latency_target_us"])
-        kSloWorst = slo["latency_target_us"].as<unsigned>();
+      if (slo["latency_target_us"]) {
+        unsigned val = slo["latency_target_us"].as<unsigned>();
+        if (val > 0) {
+          kSloWorst = val;
+        }
+      }
       if (slo["occupancy_upper"])
         kSloOccupancyUpper = slo["occupancy_upper"].as<double>();
       if (slo["occupancy_lower"])
         kSloOccupancyLower = slo["occupancy_lower"].as<double>();
+      if (kSloOccupancyLower > kSloOccupancyUpper) {
+        std::swap(kSloOccupancyLower, kSloOccupancyUpper);
+      }
     }
   }
 }
@@ -99,8 +116,12 @@ static void apply_ports_config(const YAML::Node &conf) {
 static void apply_hashing_config(const YAML::Node &conf) {
   if (conf["hashing"]) {
     YAML::Node hashing = conf["hashing"];
-    if (hashing["virtual_nodes_per_thread"])
-      kVirtualThreadNum = hashing["virtual_nodes_per_thread"].as<unsigned>();
+    if (hashing["virtual_nodes_per_thread"]) {
+      unsigned val = hashing["virtual_nodes_per_thread"].as<unsigned>();
+      if (val > 0) {
+        kVirtualThreadNum = val;
+      }
+    }
   }
 }
 
@@ -499,5 +520,48 @@ TEST_F(ConfigYamlParsingTest, FullConfigOverridesAllKeys) {
   EXPECT_EQ(kMetadataLocalReplicationFactor, 3u);
   EXPECT_EQ(kGarbageCollectThreshold, 99999u);
 
+  std::remove(path.c_str());
+}
+
+// --- validation tests ---
+
+TEST_F(ConfigYamlParsingTest, ZeroLatencyTargetIsRejected) {
+  auto path = write_temp_yaml(
+      "policy:\n  slo:\n    latency_target_us: 0\n");
+  YAML::Node conf = YAML::LoadFile(path);
+  apply_policy_config(conf);
+  // kSloWorst should remain at default (3000), not set to 0.
+  EXPECT_EQ(kSloWorst, 3000u);
+  std::remove(path.c_str());
+}
+
+TEST_F(ConfigYamlParsingTest, ZeroVirtualNodesIsRejected) {
+  auto path =
+      write_temp_yaml("hashing:\n  virtual_nodes_per_thread: 0\n");
+  YAML::Node conf = YAML::LoadFile(path);
+  apply_hashing_config(conf);
+  // kVirtualThreadNum should remain at default (3000), not set to 0.
+  EXPECT_EQ(kVirtualThreadNum, 3000u);
+  std::remove(path.c_str());
+}
+
+TEST_F(ConfigYamlParsingTest, WarmupKeyCountCappedAtMax) {
+  auto path =
+      write_temp_yaml("policy:\n  warmup_key_count: 200000000\n");
+  YAML::Node conf = YAML::LoadFile(path);
+  apply_policy_config(conf);
+  // Should be clamped to kMaxWarmupKeyCount (99999999).
+  EXPECT_EQ(kWarmupKeyCount, 99999999u);
+  std::remove(path.c_str());
+}
+
+TEST_F(ConfigYamlParsingTest, OccupancyLowerGreaterThanUpperIsSwapped) {
+  auto path = write_temp_yaml(
+      "policy:\n  slo:\n    occupancy_upper: 0.05\n    occupancy_lower: 0.15\n");
+  YAML::Node conf = YAML::LoadFile(path);
+  apply_policy_config(conf);
+  // Values should be swapped so lower <= upper.
+  EXPECT_DOUBLE_EQ(kSloOccupancyLower, 0.05);
+  EXPECT_DOUBLE_EQ(kSloOccupancyUpper, 0.15);
   std::remove(path.c_str());
 }
