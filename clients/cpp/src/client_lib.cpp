@@ -15,7 +15,9 @@
 #include "client_lib.hpp"
 #include "client_utils.hpp"
 
+#include <algorithm>
 #include <chrono>
+#include <iomanip>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -651,6 +653,118 @@ PutResult Transaction::commit() {
 void Transaction::rollback() {
   write_buffer_.clear();
   read_cache_.clear();
+}
+
+// --- Benchmark ---
+
+static string generate_bench_key(unsigned n) {
+  string s = std::to_string(n);
+  return string(8 - s.length(), '0') + s;
+}
+
+BenchResult bench(KvsClientInterface* client, const BenchConfig& config) {
+  string value(config.value_size, 'a');
+
+  // Warm up: populate keys.
+  std::cout << "Warming up " << config.num_keys << " keys ("
+            << config.value_size << " bytes each)..." << std::endl;
+  auto warmup_start = std::chrono::steady_clock::now();
+  for (unsigned i = 1; i <= config.num_keys; i++) {
+    put(client, generate_bench_key(i), value);
+  }
+  auto warmup_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now() - warmup_start)
+                             .count();
+  std::cout << "Warmup complete in " << warmup_elapsed << " ms" << std::endl;
+
+  // Determine workload type.
+  string wl = config.workload;
+  std::transform(wl.begin(), wl.end(), wl.begin(), ::toupper);
+
+  std::cout << "Running " << wl << " benchmark for " << config.duration
+            << "s (" << config.num_keys << " keys, "
+            << config.value_size << " B values)..." << std::endl;
+
+  unsigned seed = static_cast<unsigned>(
+      std::chrono::steady_clock::now().time_since_epoch().count());
+  size_t total_ops = 0;
+  size_t epoch_ops = 0;
+  double throughput_sum = 0;
+  unsigned epochs = 0;
+
+  auto bench_start = std::chrono::steady_clock::now();
+  auto epoch_start = bench_start;
+
+  while (true) {
+    unsigned k = rand_r(&seed) % config.num_keys + 1;
+    string key = generate_bench_key(k);
+
+    if (wl == "GET") {
+      get(client, key);
+      total_ops += 1;
+      epoch_ops += 1;
+    } else if (wl == "PUT") {
+      put(client, key, value);
+      total_ops += 1;
+      epoch_ops += 1;
+    } else {
+      // MIXED: PUT then GET
+      put(client, key, value);
+      get(client, key);
+      total_ops += 2;
+      epoch_ops += 2;
+    }
+
+    auto now = std::chrono::steady_clock::now();
+    auto epoch_elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                              now - epoch_start)
+                              .count();
+
+    if (epoch_elapsed >= config.report_period) {
+      epochs += 1;
+      double secs = std::chrono::duration<double>(now - epoch_start).count();
+      double throughput = static_cast<double>(epoch_ops) / secs;
+      throughput_sum += throughput;
+      std::cout << "[Epoch " << epochs << "] Throughput: "
+                << static_cast<unsigned>(throughput) << " ops/sec"
+                << std::endl;
+      epoch_ops = 0;
+      epoch_start = now;
+    }
+
+    auto total_elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                              now - bench_start)
+                              .count();
+    if (total_elapsed >= config.duration) {
+      break;
+    }
+  }
+
+  double elapsed = std::chrono::duration<double>(
+                        std::chrono::steady_clock::now() - bench_start)
+                        .count();
+  double avg_throughput = (epochs > 0) ? throughput_sum / epochs
+                                       : static_cast<double>(total_ops) / elapsed;
+  double avg_latency_us = (avg_throughput > 0) ? 1000000.0 / avg_throughput : 0;
+
+  std::cout << "\n=== " << wl << " Results ===" << std::endl;
+  std::cout << "Total ops:      " << total_ops << std::endl;
+  std::cout << "Elapsed:        " << std::fixed << std::setprecision(2)
+            << elapsed << " s" << std::endl;
+  std::cout << "Avg throughput: " << static_cast<unsigned>(avg_throughput)
+            << " ops/sec" << std::endl;
+  std::cout << "Avg latency:    " << std::fixed << std::setprecision(1)
+            << avg_latency_us << " us/op" << std::endl;
+
+  BenchResult result;
+  result.workload = wl;
+  result.num_keys = config.num_keys;
+  result.value_size = config.value_size;
+  result.avg_throughput = avg_throughput;
+  result.avg_latency_us = avg_latency_us;
+  result.total_ops = static_cast<unsigned>(total_ops);
+  result.elapsed_seconds = elapsed;
+  return result;
 }
 
 }  // namespace annalib

@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	annalib "github.com/andrewdavidmackenzie/anna/clients/go/annalib"
 )
@@ -33,6 +35,11 @@ func main() {
 	serverConfig := ""
 	routingAddr := ""
 	clientIP := "127.0.0.1"
+	benchKeys := 1000
+	benchValueSize := 256
+	benchDuration := 10
+	benchReport := 2
+	benchWorkload := ""
 	args := os.Args[1:]
 
 	// Parse flags.
@@ -47,6 +54,21 @@ func main() {
 			i++
 		case args[i] == "--client-ip" && i+1 < len(args):
 			clientIP = args[i+1]
+			i++
+		case args[i] == "--keys" && i+1 < len(args):
+			benchKeys, _ = strconv.Atoi(args[i+1])
+			i++
+		case args[i] == "--value-size" && i+1 < len(args):
+			benchValueSize, _ = strconv.Atoi(args[i+1])
+			i++
+		case args[i] == "--duration" && i+1 < len(args):
+			benchDuration, _ = strconv.Atoi(args[i+1])
+			i++
+		case args[i] == "--report" && i+1 < len(args):
+			benchReport, _ = strconv.Atoi(args[i+1])
+			i++
+		case args[i] == "--workload" && i+1 < len(args):
+			benchWorkload = args[i+1]
 			i++
 		default:
 			filtered = append(filtered, args[i])
@@ -116,6 +138,16 @@ func main() {
 		} else {
 			cliInteractive(client, configFilePath)
 		}
+
+	case "bench":
+		config := buildClientConfig(routingAddr, clientIP)
+		client, err := annalib.NewKVSClient(config, 0)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		defer client.Close()
+		runBench(client, benchKeys, benchValueSize, benchDuration, benchReport, benchWorkload)
 
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", args[0])
@@ -366,6 +398,120 @@ func cliInteractive(client *annalib.KVSClient, configFilePath string) {
 			return
 		}
 		fmt.Print("anna> ")
+	}
+}
+
+func benchKey(n int) string {
+	s := strconv.Itoa(n)
+	if len(s) < 8 {
+		s = strings.Repeat("0", 8-len(s)) + s
+	}
+	return s
+}
+
+type benchResult struct {
+	workload  string
+	avgTP     float64
+	avgLatUS  float64
+	totalOps  int
+	elapsed   float64
+}
+
+func runBench(client *annalib.KVSClient, numKeys, valueSize, duration, reportPeriod int, workloadArg string) {
+	wl := strings.ToUpper(workloadArg)
+	var workloads []string
+	if wl == "" || wl == "ALL" {
+		workloads = []string{"GET", "PUT", "MIXED"}
+	} else {
+		workloads = []string{wl}
+	}
+
+	value := strings.Repeat("a", valueSize)
+	var results []benchResult
+
+	for _, wl := range workloads {
+		// Warmup
+		fmt.Printf("Warming up %d keys (%d bytes each)...\n", numKeys, valueSize)
+		warmupStart := time.Now()
+		for i := 1; i <= numKeys; i++ {
+			_ = client.Put(benchKey(i), value)
+		}
+		fmt.Printf("Warmup complete in %d ms\n", time.Since(warmupStart).Milliseconds())
+
+		fmt.Printf("Running %s benchmark for %ds (%d keys, %d B values)...\n",
+			wl, duration, numKeys, valueSize)
+
+		totalOps := 0
+		epochOps := 0
+		throughputSum := 0.0
+		epochs := 0
+		seed := uint32(time.Now().UnixNano())
+
+		benchStart := time.Now()
+		epochStart := benchStart
+
+		for {
+			seed = seed*1103515245 + 12345
+			k := int(seed%uint32(numKeys)) + 1
+			key := benchKey(k)
+
+			switch wl {
+			case "GET":
+				_, _ = client.Get(key)
+				totalOps++
+				epochOps++
+			case "PUT":
+				_ = client.Put(key, value)
+				totalOps++
+				epochOps++
+			default: // MIXED
+				_ = client.Put(key, value)
+				_, _ = client.Get(key)
+				totalOps += 2
+				epochOps += 2
+			}
+
+			now := time.Now()
+			if now.Sub(epochStart).Seconds() >= float64(reportPeriod) {
+				epochs++
+				secs := now.Sub(epochStart).Seconds()
+				tp := float64(epochOps) / secs
+				throughputSum += tp
+				fmt.Printf("[Epoch %d] Throughput: %d ops/sec\n", epochs, int(tp))
+				epochOps = 0
+				epochStart = now
+			}
+
+			if now.Sub(benchStart).Seconds() >= float64(duration) {
+				break
+			}
+		}
+
+		elapsed := time.Since(benchStart).Seconds()
+		avgTP := throughputSum / float64(epochs)
+		if epochs == 0 {
+			avgTP = float64(totalOps) / elapsed
+		}
+		avgLat := 0.0
+		if avgTP > 0 {
+			avgLat = 1_000_000.0 / avgTP
+		}
+
+		fmt.Printf("\n=== %s Results ===\n", wl)
+		fmt.Printf("Total ops:      %d\n", totalOps)
+		fmt.Printf("Elapsed:        %.2f s\n", elapsed)
+		fmt.Printf("Avg throughput: %d ops/sec\n", int(avgTP))
+		fmt.Printf("Avg latency:    %.1f us/op\n\n", avgLat)
+
+		results = append(results, benchResult{wl, avgTP, avgLat, totalOps, elapsed})
+	}
+
+	fmt.Println("\n=== Benchmark Summary (Go) ===")
+	fmt.Printf("%-10s %12s %14s %12s %10s\n", "Workload", "Ops/sec", "Latency(us)", "Total ops", "Time(s)")
+	fmt.Println(strings.Repeat("-", 58))
+	for _, r := range results {
+		fmt.Printf("%-10s %12d %14.1f %12d %10.2f\n",
+			r.workload, int(r.avgTP), r.avgLatUS, r.totalOps, r.elapsed)
 	}
 }
 

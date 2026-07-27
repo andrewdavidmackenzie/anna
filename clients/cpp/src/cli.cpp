@@ -14,6 +14,7 @@
 
 #include <fstream>
 #include <algorithm>
+#include <iomanip>
 #include <string>
 #include "client_utils.hpp"
 
@@ -191,7 +192,13 @@ string usage(const string& name) {
   return name +
          " --routing <ip>[,<ip>...] --client-ip <ip> [--threads <n>] "
          "<command> [CLI command file]\n"
-         "Valid commands are help, start, stop, status, cli\n";
+         "Valid commands are help, start, stop, status, cli, bench\n"
+         "\nbench options:\n"
+         "  --keys <n>       key space size (default: 1000)\n"
+         "  --value-size <n> value size in bytes (default: 256)\n"
+         "  --duration <n>   benchmark duration in seconds (default: 10)\n"
+         "  --report <n>     seconds between reports (default: 2)\n"
+         "  --workload <w>   GET, PUT, or MIXED (default: all three)\n";
 }
 
 }  // namespace
@@ -202,14 +209,23 @@ int main(int argc, char* argv[]) {
   //   --client-ip ip         this client's IP address (required)
   //   --threads n            routing threads per IP (default: 1)
   //   --config path          config file for server start/stop (optional)
-  //   <command>              CLI / START / STOP / STATUS / HELP
+  //   <command>              CLI / START / STOP / STATUS / HELP / BENCH
   //   [file]                 command file when command is CLI
+  //   --keys n               bench: key space size
+  //   --value-size n         bench: value size in bytes
+  //   --duration n           bench: total duration in seconds
+  //   --report n             bench: report period in seconds
+  //   --workload w           bench: GET, PUT, MIXED, or ALL
   string routing_arg;
   string client_ip;
   string config_filename;
   unsigned thread_count = 1;
   string command;
   string cli_file;
+
+  // Bench-specific args
+  annalib::BenchConfig bench_config;
+  string bench_workload;
 
   for (int i = 1; i < argc; i++) {
     string arg = argv[i];
@@ -221,6 +237,16 @@ int main(int argc, char* argv[]) {
       thread_count = std::stoul(argv[++i]);
     } else if (arg == "--config" && i + 1 < argc) {
       config_filename = argv[++i];
+    } else if (arg == "--keys" && i + 1 < argc) {
+      bench_config.num_keys = std::stoul(argv[++i]);
+    } else if (arg == "--value-size" && i + 1 < argc) {
+      bench_config.value_size = std::stoul(argv[++i]);
+    } else if (arg == "--duration" && i + 1 < argc) {
+      bench_config.duration = std::stoul(argv[++i]);
+    } else if (arg == "--report" && i + 1 < argc) {
+      bench_config.report_period = std::stoul(argv[++i]);
+    } else if (arg == "--workload" && i + 1 < argc) {
+      bench_workload = argv[++i];
     } else if (command.empty()) {
       command = arg;
     } else if (cli_file.empty()) {
@@ -236,7 +262,8 @@ int main(int argc, char* argv[]) {
   }
 
   // Commands that need a connected client require --routing and --client-ip
-  if (command == "CLI" || command == "GET" || command == "PUT") {
+  if (command == "CLI" || command == "GET" || command == "PUT" ||
+      command == "BENCH") {
     if (routing_arg.empty() || client_ip.empty()) {
       std::cerr << "Error: --routing and --client-ip are required for "
                 << command << std::endl;
@@ -254,7 +281,43 @@ int main(int argc, char* argv[]) {
     split(routing_arg, ',', config.routing_ips);
   }
 
-  if (command == "CLI") {
+  if (command == "BENCH") {
+    std::unique_ptr<KvsClient> client = annalib::make_client(config);
+
+    // Determine which workloads to run
+    vector<string> workloads;
+    if (bench_workload.empty() || bench_workload == "ALL") {
+      workloads = {"GET", "PUT", "MIXED"};
+    } else {
+      string wl = bench_workload;
+      std::transform(wl.begin(), wl.end(), wl.begin(), ::toupper);
+      workloads = {wl};
+    }
+
+    vector<annalib::BenchResult> results;
+    for (const string& wl : workloads) {
+      bench_config.workload = wl;
+      results.push_back(annalib::bench(client.get(), bench_config));
+      std::cout << std::endl;
+    }
+
+    // Print summary table
+    std::cout << "\n=== Benchmark Summary (C++) ===" << std::endl;
+    std::cout << std::left << std::setw(10) << "Workload"
+              << std::right << std::setw(12) << "Ops/sec"
+              << std::setw(14) << "Latency(us)"
+              << std::setw(12) << "Total ops"
+              << std::setw(10) << "Time(s)" << std::endl;
+    std::cout << string(58, '-') << std::endl;
+    for (const auto& r : results) {
+      std::cout << std::left << std::setw(10) << r.workload
+                << std::right << std::setw(12) << static_cast<unsigned>(r.avg_throughput)
+                << std::setw(14) << std::fixed << std::setprecision(1) << r.avg_latency_us
+                << std::setw(12) << r.total_ops
+                << std::setw(10) << std::setprecision(2) << r.elapsed_seconds
+                << std::endl;
+    }
+  } else if (command == "CLI") {
     std::unique_ptr<KvsClient> client = annalib::make_client(config);
 
     if (cli_file.empty()) {
