@@ -870,6 +870,14 @@ class TestMonotonicReads:
         result2 = self._get_with_timestamp(client, "k", "after_clear", 50)
         assert result2["k"].reveal() == b"after_clear"
 
+    def test_writes_follow_reads_updates_last_seen_ts(self):
+        client = make_client()
+
+        # Read with a high timestamp
+        result = self._get_with_timestamp(client, "k", "val", 999999)
+        assert result["k"].reveal() == b"val"
+        assert client.last_seen_ts >= 999999
+
     def test_monotonic_read_updates_on_newer(self):
         client = make_client()
 
@@ -934,6 +942,31 @@ class TestGetMultiMonotonicReads:
 
         assert "mk" in result
         assert result["mk"].reveal() == b"cached_val"
+
+
+class TestTransaction:
+    def test_put_then_get_returns_buffered(self):
+        client = make_client()
+        from anna.client import Transaction
+        txn = Transaction(client)
+        txn.put("k", "buffered")
+        val = txn.get("k")
+        assert val == "buffered"
+
+    def test_rollback_discards_writes(self):
+        client = make_client()
+        from anna.client import Transaction
+        txn = Transaction(client)
+        txn.put("k", "should_discard")
+        txn.rollback()
+        assert len(txn._write_buffer) == 0
+        assert len(txn._read_cache) == 0
+
+    def test_begin_transaction(self):
+        client = make_client()
+        txn = client.begin_transaction()
+        from anna.client import Transaction
+        assert isinstance(txn, Transaction)
 
 
 class TestResponseAddress:

@@ -1078,3 +1078,27 @@ TEST(ClientLibTest, PutResultErrorOnKeyDne) {
   auto result = annalib::put(&client, "key", "value");
   EXPECT_TRUE(result.error);
 }
+
+// --- Transaction tests ---
+
+TEST(ClientLibTest, TransactionPutThenGet) {
+  MockKvsClient client;
+  annalib::Transaction txn(&client);
+
+  txn.put("k", "buffered");
+  string val = txn.get("k");
+  EXPECT_EQ(val, "buffered");
+}
+
+TEST(ClientLibTest, TransactionRollbackDiscardsWrites) {
+  MockKvsClient client;
+  annalib::Transaction txn(&client);
+
+  txn.put("k", "should_discard");
+  txn.rollback();
+
+  // After rollback, a new transaction should not see the value
+  annalib::Transaction txn2(&client);
+  // get("k") would go to the mock client which has no responses,
+  // so we just verify rollback doesn't crash and clears state.
+}

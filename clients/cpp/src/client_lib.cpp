@@ -124,9 +124,10 @@ string make_lww_payload(const string& value) {
 // into KvsClient for multi-client scenarios.
 map<string, pair<uint64_t, string>> lww_read_cache;
 
-// High-water mark for write timestamps, ensuring each PUT uses a
-// strictly increasing timestamp even within the same millisecond.
-uint64_t last_write_ts = 0;
+// High-water mark of timestamps seen by this client (reads and writes).
+// Ensures each PUT uses a timestamp strictly greater than any previously
+// seen timestamp, providing the Writes Follow Reads guarantee.
+uint64_t last_seen_ts = 0;
 
 // Decode an LWW protobuf payload and return the value string,
 // enforcing monotonic reads via the lww_read_cache.
@@ -139,6 +140,9 @@ string decode_lww_value(const string& key, const string& payload) {
     return it->second.second;
   }
 
+  if (lww.timestamp() > last_seen_ts) {
+    last_seen_ts = lww.timestamp();
+  }
   lww_read_cache[key] = {lww.timestamp(), lww.value()};
   return lww.value();
 }
@@ -217,10 +221,10 @@ CausalValue get_causal(KvsClientInterface* client, const string& key) {
 PutResult put(KvsClientInterface* client, const string& key,
               const string& value) {
   uint64_t ts = generate_timestamp(0);
-  if (ts <= last_write_ts) {
-    ts = last_write_ts + 1;
+  if (ts <= last_seen_ts) {
+    ts = last_seen_ts + 1;
   }
-  last_write_ts = ts;
+  last_seen_ts = ts;
   kvs::LWWValue lww;
   lww.set_timestamp(ts);
   lww.set_value(value);
@@ -615,6 +619,38 @@ int stop() {
   }
 
   return killed;
+}
+
+void Transaction::put(const string& key, const string& value) {
+  write_buffer_[key] = value;
+  read_cache_[key] = value;
+}
+
+string Transaction::get(const string& key) {
+  auto it = read_cache_.find(key);
+  if (it != read_cache_.end()) {
+    return it->second;
+  }
+  string value = annalib::get(client_, key);
+  read_cache_[key] = value;
+  return value;
+}
+
+PutResult Transaction::commit() {
+  PutResult last_result;
+  last_result.error = false;
+  for (const auto& kv : write_buffer_) {
+    last_result = annalib::put(client_, kv.first, kv.second);
+    if (last_result.error) break;
+  }
+  write_buffer_.clear();
+  read_cache_.clear();
+  return last_result;
+}
+
+void Transaction::rollback() {
+  write_buffer_.clear();
+  read_cache_.clear();
 }
 
 }  // namespace annalib

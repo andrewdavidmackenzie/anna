@@ -109,6 +109,16 @@ class AnnaTcpClient(BaseAnnaClient):
         # stale timestamp, the cached value is returned instead.
         self._lww_read_cache = {}
 
+        # High-water mark of timestamps seen (reads and writes) for
+        # Writes Follow Reads: callers can use last_seen_ts to generate
+        # write timestamps that are causally after any previously read value.
+        self.last_seen_ts = 0
+
+    def _update_seen_ts(self, value):
+        """Update the high-water mark from an LWW value's timestamp."""
+        if hasattr(value, 'ts') and value.ts > self.last_seen_ts:
+            self.last_seen_ts = value.ts
+
     def clear_cache(self):
         """Clear the key-address cache and the monotonic read cache."""
         self.address_cache.clear()
@@ -177,6 +187,7 @@ class AnnaTcpClient(BaseAnnaClient):
                             if cached is not None and value.ts < cached.ts:
                                 value = cached
                             else:
+                                self._update_seen_ts(value)
                                 self._lww_read_cache[tup.key] = value
                         kv_pairs[tup.key] = value
 
@@ -252,6 +263,7 @@ class AnnaTcpClient(BaseAnnaClient):
                             if cached is not None and value.ts < cached.ts:
                                 value = cached
                             else:
+                                self._update_seen_ts(value)
                                 self._lww_read_cache[tup.key] = value
                         results[tup.key] = value
 
@@ -363,6 +375,7 @@ class AnnaTcpClient(BaseAnnaClient):
                     if tup.error == NO_ERROR:
                         value = kv_map.get(tup.key)
                         if value is not None and hasattr(value, 'ts'):
+                            self._update_seen_ts(value)
                             self._lww_read_cache[tup.key] = value
 
             pending = retry_keys
@@ -723,3 +736,52 @@ class AnnaTcpClient(BaseAnnaClient):
     @property
     def response_address(self):
         return self.ut.get_request_pull_connect_addr()
+
+    def begin_transaction(self):
+        """Begin a client-side transaction.
+
+        Returns a Transaction object that buffers writes and caches reads.
+        Call commit() to flush writes or rollback() to discard them.
+        """
+        return Transaction(self)
+
+
+class Transaction:
+    """Client-side transaction providing Read Committed and Item Cut Isolation.
+
+    Writes are buffered locally until commit(). Reads are cached for
+    repeatable reads within the transaction.
+    """
+
+    def __init__(self, client):
+        self._client = client
+        self._write_buffer = {}
+        self._read_cache = {}
+
+    def put(self, key, value):
+        """Buffer a PUT. Not sent until commit()."""
+        self._write_buffer[key] = value
+        self._read_cache[key] = value
+
+    def get(self, key):
+        """Read a key. Returns buffered write if present, otherwise reads
+        from server and caches for repeatable reads."""
+        if key in self._read_cache:
+            return self._read_cache[key]
+        result = self._client.get(key)
+        if key in result and result[key] is not None:
+            self._read_cache[key] = result[key]
+            return result[key]
+        return None
+
+    def commit(self):
+        """Flush all buffered writes to the server."""
+        for key, value in self._write_buffer.items():
+            self._client.put(key, value)
+        self._write_buffer.clear()
+        self._read_cache.clear()
+
+    def rollback(self):
+        """Discard all buffered writes."""
+        self._write_buffer.clear()
+        self._read_cache.clear()

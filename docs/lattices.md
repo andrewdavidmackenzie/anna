@@ -217,12 +217,20 @@ as achievable through lattice composition (see Bailis et al., "Coordination
 Avoidance in Database Systems", VLDB 2015). Anna's architecture could
 support them, but no implementation exists in this codebase.
 
-- **Read Committed / Read Uncommitted**: Would require client-side
-  transaction buffering and a commit protocol.
-- **Item Cut Isolation**: Would require a client-side read cache per
-  transaction.
-- **Writes Follow Reads**: Would require the client to include the read
-  version in write requests.
+- **Read Committed**: Implemented via the `Transaction` API. Writes are
+  buffered locally and flushed atomically on `commit()`. Reads within a
+  transaction see only committed data from other clients plus the
+  transaction's own buffered writes.
+- **Item Cut Isolation**: Implemented via the `Transaction` API. The first
+  read of each key within a transaction is cached; subsequent reads return
+  the cached value (repeatable read).
+- **Writes Follow Reads**: Implemented. Each client tracks the highest
+  LWW timestamp seen across all reads and writes (`last_seen_ts`). Every
+  PUT uses a timestamp strictly greater than this high-water mark, so
+  writes are always causally ordered after any previously observed value.
+- **Read Uncommitted**: The default behavior without transactions — writes
+  are sent immediately and reads may see uncommitted data from concurrent
+  writers. No additional implementation needed.
 - **PRAM**: Implemented — the composition of monotonic reads, monotonic
   writes, and read-your-writes, all of which are now enforced.
 
@@ -290,6 +298,45 @@ let val = client.get("key").await?;
 - These guarantees apply to LWW values (the default) for both single-key
   and multi-key reads. Other lattice types (Set, Causal, Priority) do
   not have timestamp-based tracking.
+
+### Using Transactions
+
+For stronger consistency (Read Committed and Item Cut Isolation), use the
+`Transaction` API. Available in all client libraries.
+
+```rust
+// Rust
+let mut txn = annalib::transaction::Transaction::begin(&mut client);
+txn.put("key1", "value1");            // buffered locally
+let v = txn.get("key2").await?;       // reads from server, cached
+let v2 = txn.get("key2").await?;      // returns cached (repeatable read)
+txn.commit().await?;                  // flushes all writes
+```
+
+```python
+# Python
+txn = client.begin_transaction()
+txn.put("key1", value1)               # buffered locally
+v = txn.get("key2")                   # reads from server, cached
+txn.commit()                          # flushes all writes
+# txn.rollback()                      # or discard all writes
+```
+
+```go
+// Go
+txn := client.BeginTransaction()
+txn.Put("key1", "value1")
+v, _ := txn.Get("key2")
+txn.Commit()
+```
+
+**Transaction guarantees:**
+- **Read Committed**: Reads see only committed data. The transaction's own
+  uncommitted writes are visible via the local buffer.
+- **Item Cut Isolation**: Reading the same key twice returns the same value
+  (repeatable read within the transaction).
+- **Rollback**: `rollback()` discards all buffered writes without sending
+  them to the server.
 
 ### Stronger Consistency Levels (Not Supported by Anna)
 

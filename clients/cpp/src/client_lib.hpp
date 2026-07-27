@@ -207,6 +207,34 @@ vector<string> status();
 // Returns the number of processes killed.
 int stop();
 
+// Client-side transaction providing Read Committed and Item Cut Isolation.
+// Writes are buffered locally until commit(). Reads within a transaction
+// are cached for repeatable reads (Item Cut Isolation). The local write
+// buffer is checked first so uncommitted writes are visible within the
+// transaction (read-your-writes).
+class Transaction {
+ public:
+  Transaction(KvsClientInterface* client) : client_(client) {}
+
+  // Buffer a PUT. Not sent until commit().
+  void put(const string& key, const string& value);
+
+  // Read a key. Returns buffered write if present, otherwise reads from
+  // server and caches the result for repeatable reads.
+  string get(const string& key);
+
+  // Flush all buffered writes to the server.
+  PutResult commit();
+
+  // Discard all buffered writes.
+  void rollback();
+
+ private:
+  KvsClientInterface* client_;
+  std::unordered_map<string, string> write_buffer_;
+  std::unordered_map<string, string> read_cache_;
+};
+
 }  // namespace annalib
 
 #endif  // INCLUDE_CLIENT_LIB_HPP_
