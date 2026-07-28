@@ -14,6 +14,7 @@
 
 #include <fstream>
 #include <algorithm>
+#include <iomanip>
 #include <string>
 #include "client_utils.hpp"
 
@@ -71,8 +72,9 @@ void print_priority_value(const annalib::PriorityResult& result) {
 string cli_usage() {
   return "Valid commands are GET, GET_SET, GET_ORDERED_SET, GET_CAUSAL, "
          "GET_SINGLE_CAUSAL, GET_PRIORITY, PUT, PUT_SET, PUT_ORDERED_SET, "
-         "PUT_CAUSAL, PUT_SINGLE_CAUSAL, PUT_PRIORITY, DELETE, START, STOP, "
-         "STATUS, HELP and EXIT";
+         "PUT_CAUSAL, PUT_SINGLE_CAUSAL, PUT_PRIORITY, DELETE, "
+         "BENCH [keys] [value_size] [duration] [workload], "
+         "START, STOP, STATUS, HELP and EXIT";
 }
 
 void execute_cli_command(KvsClientInterface* client, const string& config_file,
@@ -142,6 +144,13 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
     }
   } else if (command == "GET_PRIORITY") {
     print_priority_value(annalib::get_priority(client, v[1]));
+  } else if (command == "BENCH") {
+    annalib::BenchConfig bc;
+    if (v.size() > 1) bc.num_keys = std::stoul(v[1]);
+    if (v.size() > 2) bc.value_size = std::stoul(v[2]);
+    if (v.size() > 3) bc.duration = std::stoul(v[3]);
+    string wl_arg = (v.size() > 4) ? v[4] : "ALL";
+    annalib::bench_suite(client, bc, annalib::parse_workloads(wl_arg));
   } else if (command == "STATUS") {
     for (const string& name : annalib::status()) {
       std::cout << name << " process is running" << std::endl;
@@ -191,7 +200,13 @@ string usage(const string& name) {
   return name +
          " --routing <ip>[,<ip>...] --client-ip <ip> [--threads <n>] "
          "<command> [CLI command file]\n"
-         "Valid commands are help, start, stop, status, cli\n";
+         "Valid commands are help, start, stop, status, cli, bench\n"
+         "\nbench options:\n"
+         "  --keys <n>       key space size (default: 1000)\n"
+         "  --value-size <n> value size in bytes (default: 256)\n"
+         "  --duration <n>   benchmark duration in seconds (default: 10)\n"
+         "  --report <n>     seconds between reports (default: 2)\n"
+         "  --workload <w>   GET, PUT, or MIXED (default: all three)\n";
 }
 
 }  // namespace
@@ -202,14 +217,23 @@ int main(int argc, char* argv[]) {
   //   --client-ip ip         this client's IP address (required)
   //   --threads n            routing threads per IP (default: 1)
   //   --config path          config file for server start/stop (optional)
-  //   <command>              CLI / START / STOP / STATUS / HELP
+  //   <command>              CLI / START / STOP / STATUS / HELP / BENCH
   //   [file]                 command file when command is CLI
+  //   --keys n               bench: key space size
+  //   --value-size n         bench: value size in bytes
+  //   --duration n           bench: total duration in seconds
+  //   --report n             bench: report period in seconds
+  //   --workload w           bench: GET, PUT, MIXED, or ALL
   string routing_arg;
   string client_ip;
   string config_filename;
   unsigned thread_count = 1;
   string command;
   string cli_file;
+
+  // Bench-specific args
+  annalib::BenchConfig bench_config;
+  string bench_workload;
 
   for (int i = 1; i < argc; i++) {
     string arg = argv[i];
@@ -221,6 +245,20 @@ int main(int argc, char* argv[]) {
       thread_count = std::stoul(argv[++i]);
     } else if (arg == "--config" && i + 1 < argc) {
       config_filename = argv[++i];
+    } else if (arg == "--keys" && i + 1 < argc) {
+      try { bench_config.num_keys = std::stoul(argv[++i]); }
+      catch (...) { std::cerr << "Error: invalid --keys value" << std::endl; return 1; }
+    } else if (arg == "--value-size" && i + 1 < argc) {
+      try { bench_config.value_size = std::stoul(argv[++i]); }
+      catch (...) { std::cerr << "Error: invalid --value-size value" << std::endl; return 1; }
+    } else if (arg == "--duration" && i + 1 < argc) {
+      try { bench_config.duration = std::stoul(argv[++i]); }
+      catch (...) { std::cerr << "Error: invalid --duration value" << std::endl; return 1; }
+    } else if (arg == "--report" && i + 1 < argc) {
+      try { bench_config.report_period = std::stoul(argv[++i]); }
+      catch (...) { std::cerr << "Error: invalid --report value" << std::endl; return 1; }
+    } else if (arg == "--workload" && i + 1 < argc) {
+      bench_workload = argv[++i];
     } else if (command.empty()) {
       command = arg;
     } else if (cli_file.empty()) {
@@ -236,7 +274,8 @@ int main(int argc, char* argv[]) {
   }
 
   // Commands that need a connected client require --routing and --client-ip
-  if (command == "CLI" || command == "GET" || command == "PUT") {
+  if (command == "CLI" || command == "GET" || command == "PUT" ||
+      command == "BENCH") {
     if (routing_arg.empty() || client_ip.empty()) {
       std::cerr << "Error: --routing and --client-ip are required for "
                 << command << std::endl;
@@ -254,7 +293,16 @@ int main(int argc, char* argv[]) {
     split(routing_arg, ',', config.routing_ips);
   }
 
-  if (command == "CLI") {
+  if (command == "BENCH") {
+    try {
+      std::unique_ptr<KvsClient> client = annalib::make_client(config);
+      annalib::bench_suite(client.get(), bench_config,
+                           annalib::parse_workloads(bench_workload));
+    } catch (const std::exception& e) {
+      std::cerr << "Error: " << e.what() << std::endl;
+      return 1;
+    }
+  } else if (command == "CLI") {
     std::unique_ptr<KvsClient> client = annalib::make_client(config);
 
     if (cli_file.empty()) {

@@ -242,3 +242,31 @@ test-cleanup:
 .PHONY: coverage-cleanup
 coverage-cleanup:
 	@rm -f rust_workspace.info server/cpp/build/server.info clients/cpp/build/client.info
+
+.PHONY: bench-build
+bench-build:
+	@echo "Building C++ server (Release)..."
+	@mkdir -p server/cpp/release-build
+ifeq ($(UNAME), Darwin)
+	@cd server/cpp/release-build && cmake "-GUnix Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER="/usr/bin/clang++" -DBUILD_TEST=OFF .. 2>&1 > /dev/null && LD_LIBRARY_PATH="/usr/local/lib" make -s -j8 2>&1 > /dev/null
+else
+	@cd server/cpp/release-build && cmake "-GUnix Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_TEST=OFF .. 2>&1 > /dev/null && make -s -j8 2>&1 > /dev/null
+endif
+	@echo "Building C++ client (Release)..."
+	@mkdir -p clients/cpp/release-build
+ifeq ($(UNAME), Darwin)
+	@cd clients/cpp/release-build && cmake "-GUnix Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER="/usr/bin/clang++" -DBUILD_TEST=OFF .. 2>&1 > /dev/null && LD_LIBRARY_PATH="/usr/local/lib" make -s -j8 2>&1 > /dev/null
+else
+	@cd clients/cpp/release-build && cmake "-GUnix Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_TEST=OFF .. 2>&1 > /dev/null && make -s -j8 2>&1 > /dev/null
+endif
+	@echo "Building Rust client (Release)..."
+	@$(CARGO_ENV) RUSTFLAGS="$(RUST_LINK_ALLOW)" cargo build --release --quiet
+	@echo "Building Go client..."
+	@cd clients/go/annalib && go build ./...
+	@mkdir -p target
+	@cd clients/go/cmd/anna-go && go build -o ../../../../target/anna-go .
+	@echo "All release builds complete"
+
+.PHONY: bench
+bench: bench-build
+	@scripts/bench.sh

@@ -1102,3 +1102,152 @@ TEST(ClientLibTest, TransactionRollbackDiscardsWrites) {
   // get("k") would go to the mock client which has no responses,
   // so we just verify rollback doesn't crash and clears state.
 }
+
+// --- Bench tests ---
+
+TEST(BenchTest, ZeroKeysThrows) {
+  AutoRespondMockKvsClient client;
+  annalib::BenchConfig config;
+  config.num_keys = 0;
+  EXPECT_THROW(annalib::bench(&client, config), std::invalid_argument);
+}
+
+TEST(BenchTest, ZeroDurationThrows) {
+  AutoRespondMockKvsClient client;
+  annalib::BenchConfig config;
+  config.duration = 0;
+  EXPECT_THROW(annalib::bench(&client, config), std::invalid_argument);
+}
+
+TEST(BenchTest, ZeroReportPeriodThrows) {
+  AutoRespondMockKvsClient client;
+  annalib::BenchConfig config;
+  config.report_period = 0;
+  EXPECT_THROW(annalib::bench(&client, config), std::invalid_argument);
+}
+
+TEST(BenchTest, WarmupPopulatesKeys) {
+  AutoRespondMockKvsClient client;
+  annalib::BenchConfig config;
+  config.num_keys = 5;
+  config.value_size = 16;
+  annalib::bench_warmup(&client, config);
+  EXPECT_GE(client.put_count_, 5u);
+}
+
+TEST(BenchTest, GetWorkloadRuns) {
+  AutoRespondMockKvsClient client;
+  annalib::BenchConfig config;
+  config.num_keys = 10;
+  config.value_size = 16;
+  config.duration = 1;
+  config.report_period = 1;
+  config.workload = "GET";
+  annalib::bench_warmup(&client, config);
+  annalib::BenchResult result = annalib::bench(&client, config);
+  EXPECT_EQ(result.workload, "GET");
+  EXPECT_GT(result.total_ops, 0u);
+  EXPECT_GT(result.avg_throughput, 0.0);
+  EXPECT_GT(result.elapsed_seconds, 0.0);
+}
+
+TEST(BenchTest, PutWorkloadRuns) {
+  AutoRespondMockKvsClient client;
+  annalib::BenchConfig config;
+  config.num_keys = 10;
+  config.value_size = 16;
+  config.duration = 1;
+  config.report_period = 1;
+  config.workload = "PUT";
+  annalib::BenchResult result = annalib::bench(&client, config);
+  EXPECT_EQ(result.workload, "PUT");
+  EXPECT_GT(result.total_ops, 0u);
+}
+
+TEST(BenchTest, InvalidWorkloadThrows) {
+  AutoRespondMockKvsClient client;
+  annalib::BenchConfig config;
+  config.num_keys = 10;
+  config.value_size = 16;
+  config.duration = 1;
+  config.report_period = 1;
+  config.workload = "INVALID";
+  EXPECT_THROW(annalib::bench(&client, config), std::invalid_argument);
+}
+
+TEST(BenchTest, SuiteRunsAllWorkloads) {
+  AutoRespondMockKvsClient client;
+  annalib::BenchConfig config;
+  config.num_keys = 5;
+  config.value_size = 16;
+  config.duration = 1;
+  config.report_period = 1;
+  vector<string> workloads = {"GET", "PUT", "MIXED"};
+  auto results = annalib::bench_suite(&client, config, workloads);
+  EXPECT_EQ(results.size(), 3u);
+  EXPECT_EQ(results[0].workload, "GET");
+  EXPECT_EQ(results[1].workload, "PUT");
+  EXPECT_EQ(results[2].workload, "MIXED");
+  for (const auto& r : results) {
+    EXPECT_GT(r.total_ops, 0u);
+  }
+}
+
+TEST(BenchTest, SuiteDefaultsToAllWorkloads) {
+  AutoRespondMockKvsClient client;
+  annalib::BenchConfig config;
+  config.num_keys = 5;
+  config.value_size = 16;
+  config.duration = 1;
+  config.report_period = 1;
+  auto results = annalib::bench_suite(&client, config, {});
+  EXPECT_EQ(results.size(), 3u);
+}
+
+TEST(BenchTest, ParseWorkloadsAll) {
+  auto wl = annalib::parse_workloads("ALL");
+  ASSERT_EQ(wl.size(), 3u);
+  EXPECT_EQ(wl[0], "GET");
+  EXPECT_EQ(wl[1], "PUT");
+  EXPECT_EQ(wl[2], "MIXED");
+}
+
+TEST(BenchTest, ParseWorkloadsEmpty) {
+  auto wl = annalib::parse_workloads("");
+  EXPECT_EQ(wl.size(), 3u);
+}
+
+TEST(BenchTest, ParseWorkloadsGet) {
+  auto wl = annalib::parse_workloads("get");
+  ASSERT_EQ(wl.size(), 1u);
+  EXPECT_EQ(wl[0], "GET");
+}
+
+TEST(BenchTest, ParseWorkloadsPut) {
+  auto wl = annalib::parse_workloads("Put");
+  ASSERT_EQ(wl.size(), 1u);
+  EXPECT_EQ(wl[0], "PUT");
+}
+
+TEST(BenchTest, ParseWorkloadsMixed) {
+  auto wl = annalib::parse_workloads("MIXED");
+  ASSERT_EQ(wl.size(), 1u);
+  EXPECT_EQ(wl[0], "MIXED");
+}
+
+TEST(BenchTest, ParseWorkloadsInvalidThrows) {
+  EXPECT_THROW(annalib::parse_workloads("INVALID"), std::invalid_argument);
+}
+
+TEST(BenchTest, MixedWorkloadRuns) {
+  AutoRespondMockKvsClient client;
+  annalib::BenchConfig config;
+  config.num_keys = 10;
+  config.value_size = 16;
+  config.duration = 1;
+  config.report_period = 1;
+  config.workload = "MIXED";
+  annalib::BenchResult result = annalib::bench(&client, config);
+  EXPECT_EQ(result.workload, "MIXED");
+  EXPECT_GT(result.total_ops, 0u);
+}

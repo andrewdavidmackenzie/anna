@@ -235,6 +235,46 @@ class Transaction {
   std::unordered_map<string, string> read_cache_;
 };
 
+// Configuration for the bench command.
+struct BenchConfig {
+  unsigned num_keys = 1000;       // key space size
+  unsigned value_size = 256;      // value size in bytes
+  unsigned duration = 10;         // benchmark duration in seconds
+  unsigned report_period = 2;     // seconds between throughput reports
+  std::string workload = "GET";   // GET, PUT, or MIXED
+};
+
+// Results from a single benchmark run.
+struct BenchResult {
+  std::string workload;
+  unsigned num_keys;
+  unsigned value_size;
+  double avg_throughput;          // ops/sec averaged over all epochs
+  double avg_latency_us;          // microseconds per operation
+  unsigned total_ops;
+  double elapsed_seconds;
+};
+
+// Parse a workload argument string into a list of workload names.
+// Accepts "ALL", "GET", "PUT", "MIXED" (case-insensitive).
+// Throws std::invalid_argument for unrecognized values.
+std::vector<std::string> parse_workloads(const std::string& workload_arg);
+
+// Run a complete benchmark suite: warmup + specified workloads.
+// `workloads` is a list of workload names (GET, PUT, MIXED).
+// If empty, runs all three.
+std::vector<BenchResult> bench_suite(KvsClientInterface* client,
+                                      const BenchConfig& config,
+                                      const std::vector<std::string>& workloads);
+
+// Populate the KVS with `config.num_keys` keys of `config.value_size`
+// bytes each. Call once before running workloads.
+void bench_warmup(KvsClientInterface* client, const BenchConfig& config);
+
+// Run a single benchmark workload for `config.duration` seconds,
+// printing periodic throughput reports to stdout.
+BenchResult bench(KvsClientInterface* client, const BenchConfig& config);
+
 }  // namespace annalib
 
 #endif  // INCLUDE_CLIENT_LIB_HPP_

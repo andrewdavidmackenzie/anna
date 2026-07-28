@@ -15,7 +15,9 @@
 #include "client_lib.hpp"
 #include "client_utils.hpp"
 
+#include <algorithm>
 #include <chrono>
+#include <iomanip>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -60,15 +62,20 @@ namespace {
 // Throws std::runtime_error if no response is received in time.
 vector<kvs::KeyResponse> receive_with_deadline(KvsClientInterface* client) {
   auto deadline = std::chrono::system_clock::now() + std::chrono::seconds(10);
-  vector<kvs::KeyResponse> responses = client->receive_async();
-  while (responses.empty()) {
-    if (std::chrono::system_clock::now() > deadline) {
+  while (true) {
+    auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+        deadline - std::chrono::system_clock::now());
+    if (remaining.count() <= 0) {
       throw std::runtime_error("Request timed out: no response within 10s");
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    responses = client->receive_async();
+    // Block up to 100ms per poll, then re-check deadline.
+    auto remaining_ms = remaining.count();
+    unsigned poll_ms = (remaining_ms < 100) ? static_cast<unsigned>(remaining_ms) : 100;
+    vector<kvs::KeyResponse> responses = client->receive_blocking(poll_ms);
+    if (!responses.empty()) {
+      return responses;
+    }
   }
-  return responses;
 }
 
 // Check a response for server-side errors (top-level and per-tuple).
@@ -651,6 +658,189 @@ PutResult Transaction::commit() {
 void Transaction::rollback() {
   write_buffer_.clear();
   read_cache_.clear();
+}
+
+// --- Benchmark ---
+
+static string generate_bench_key(unsigned n) {
+  string s = std::to_string(n);
+  if (s.length() >= 8) {
+    return s;
+  }
+  return string(8 - s.length(), '0') + s;
+}
+
+std::vector<std::string> parse_workloads(const std::string& workload_arg) {
+  string wl = workload_arg;
+  std::transform(wl.begin(), wl.end(), wl.begin(), ::toupper);
+  if (wl.empty() || wl == "ALL") {
+    return {"GET", "PUT", "MIXED"};
+  }
+  if (wl == "GET" || wl == "PUT" || wl == "MIXED") {
+    return {wl};
+  }
+  throw std::invalid_argument("Invalid workload: " + wl +
+                              ". Must be GET, PUT, MIXED, or ALL.");
+}
+
+std::vector<BenchResult> bench_suite(KvsClientInterface* client,
+                                      const BenchConfig& config,
+                                      const std::vector<std::string>& workloads) {
+  vector<string> wls = workloads;
+  if (wls.empty()) {
+    wls = {"GET", "PUT", "MIXED"};
+  }
+
+  bench_warmup(client, config);
+
+  vector<BenchResult> results;
+  for (const string& wl : wls) {
+    BenchConfig wl_config = config;
+    wl_config.workload = wl;
+    results.push_back(bench(client, wl_config));
+    std::cout << std::endl;
+  }
+
+  std::cout << "\n=== Benchmark Summary (C++) ===" << std::endl;
+  std::cout << std::left << std::setw(10) << "Workload"
+            << std::right << std::setw(12) << "Ops/sec"
+            << std::setw(14) << "Latency(us)"
+            << std::setw(12) << "Total ops"
+            << std::setw(10) << "Time(s)" << std::endl;
+  std::cout << string(58, '-') << std::endl;
+  for (const auto& r : results) {
+    std::cout << std::left << std::setw(10) << r.workload
+              << std::right << std::setw(12) << static_cast<unsigned>(r.avg_throughput)
+              << std::setw(14) << std::fixed << std::setprecision(1) << r.avg_latency_us
+              << std::setw(12) << r.total_ops
+              << std::setw(10) << std::setprecision(2) << r.elapsed_seconds
+              << std::endl;
+  }
+  return results;
+}
+
+void bench_warmup(KvsClientInterface* client, const BenchConfig& config) {
+  if (config.num_keys == 0) {
+    throw std::invalid_argument("num_keys must be > 0");
+  }
+  string value(config.value_size, 'a');
+
+  std::cout << "Warming up " << config.num_keys << " keys ("
+            << config.value_size << " bytes each)..." << std::endl;
+  auto warmup_start = std::chrono::steady_clock::now();
+  for (unsigned i = 1; i <= config.num_keys; i++) {
+    put(client, generate_bench_key(i), value);
+  }
+  auto warmup_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now() - warmup_start)
+                             .count();
+  std::cout << "Warmup complete in " << warmup_elapsed << " ms" << std::endl;
+}
+
+BenchResult bench(KvsClientInterface* client, const BenchConfig& config) {
+  if (config.num_keys == 0) {
+    throw std::invalid_argument("num_keys must be > 0");
+  }
+  if (config.report_period == 0) {
+    throw std::invalid_argument("report_period must be > 0");
+  }
+  if (config.duration == 0) {
+    throw std::invalid_argument("duration must be > 0");
+  }
+  string value(config.value_size, 'a');
+
+  // Determine workload type.
+  string wl = config.workload;
+  std::transform(wl.begin(), wl.end(), wl.begin(), ::toupper);
+  if (wl != "GET" && wl != "PUT" && wl != "MIXED") {
+    throw std::invalid_argument("Invalid workload: " + wl +
+                                ". Must be GET, PUT, or MIXED.");
+  }
+
+  std::cout << "Running " << wl << " benchmark for " << config.duration
+            << "s (" << config.num_keys << " keys, "
+            << config.value_size << " B values)..." << std::endl;
+
+  unsigned seed = static_cast<unsigned>(
+      std::chrono::steady_clock::now().time_since_epoch().count());
+  size_t total_ops = 0;
+  size_t epoch_ops = 0;
+  double throughput_sum = 0;
+  unsigned epochs = 0;
+
+  auto bench_start = std::chrono::steady_clock::now();
+  auto epoch_start = bench_start;
+
+  while (true) {
+    unsigned k = rand_r(&seed) % config.num_keys + 1;
+    string key = generate_bench_key(k);
+
+    if (wl == "GET") {
+      get(client, key);
+      total_ops += 1;
+      epoch_ops += 1;
+    } else if (wl == "PUT") {
+      put(client, key, value);
+      total_ops += 1;
+      epoch_ops += 1;
+    } else {
+      // MIXED: PUT then GET
+      put(client, key, value);
+      get(client, key);
+      total_ops += 2;
+      epoch_ops += 2;
+    }
+
+    auto now = std::chrono::steady_clock::now();
+    auto epoch_elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                              now - epoch_start)
+                              .count();
+
+    if (epoch_elapsed >= config.report_period) {
+      epochs += 1;
+      double secs = std::chrono::duration<double>(now - epoch_start).count();
+      double throughput = static_cast<double>(epoch_ops) / secs;
+      throughput_sum += throughput;
+      std::cout << "[Epoch " << epochs << "] Throughput: "
+                << static_cast<unsigned>(throughput) << " ops/sec"
+                << std::endl;
+      epoch_ops = 0;
+      epoch_start = now;
+    }
+
+    auto total_elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                              now - bench_start)
+                              .count();
+    if (total_elapsed >= config.duration) {
+      break;
+    }
+  }
+
+  double elapsed = std::chrono::duration<double>(
+                        std::chrono::steady_clock::now() - bench_start)
+                        .count();
+  double avg_throughput = (elapsed > 0) ? static_cast<double>(total_ops) / elapsed
+                                        : 0;
+  double avg_latency_us = (avg_throughput > 0) ? 1000000.0 / avg_throughput : 0;
+
+  std::cout << "\n=== " << wl << " Results ===" << std::endl;
+  std::cout << "Total ops:      " << total_ops << std::endl;
+  std::cout << "Elapsed:        " << std::fixed << std::setprecision(2)
+            << elapsed << " s" << std::endl;
+  std::cout << "Avg throughput: " << static_cast<unsigned>(avg_throughput)
+            << " ops/sec" << std::endl;
+  std::cout << "Avg latency:    " << std::fixed << std::setprecision(1)
+            << avg_latency_us << " us/op" << std::endl;
+
+  BenchResult result;
+  result.workload = wl;
+  result.num_keys = config.num_keys;
+  result.value_size = config.value_size;
+  result.avg_throughput = avg_throughput;
+  result.avg_latency_us = avg_latency_us;
+  result.total_ops = static_cast<unsigned>(total_ops);
+  result.elapsed_seconds = elapsed;
+  return result;
 }
 
 }  // namespace annalib

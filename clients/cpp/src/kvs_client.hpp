@@ -32,6 +32,11 @@ class KvsClientInterface {
                            kvs::LatticeType lattice_type) = 0;
   virtual void get_async(const Key& key) = 0;
   virtual vector<kvs::KeyResponse> receive_async() = 0;
+  // Block until a response arrives or timeout_ms elapses. Returns empty
+  // vector on timeout. Default implementation delegates to receive_async().
+  virtual vector<kvs::KeyResponse> receive_blocking(unsigned timeout_ms) {
+    return receive_async();
+  }
   virtual zmq::context_t* get_context() = 0;
 };
 
@@ -114,9 +119,17 @@ class KvsClient : public KvsClientInterface {
     }
   }
 
-  vector<kvs::KeyResponse> receive_async() {
+  vector<kvs::KeyResponse> receive_blocking(unsigned timeout_ms) override {
+    return receive_impl(std::chrono::milliseconds{timeout_ms});
+  }
+
+  vector<kvs::KeyResponse> receive_async() override {
+    return receive_impl(std::chrono::milliseconds{0});
+  }
+
+  vector<kvs::KeyResponse> receive_impl(std::chrono::milliseconds poll_timeout) {
     vector<kvs::KeyResponse> result;
-    kZmqUtil->poll(&pollitems_, std::chrono::milliseconds{0});
+    kZmqUtil->poll(&pollitems_, poll_timeout);
 
     if (pollitems_[0].revents & ZMQ_POLLIN) {
       string serialized = kZmqUtil->recv_string(&key_address_puller_);

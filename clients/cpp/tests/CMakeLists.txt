@@ -24,9 +24,6 @@ ADD_SUBDIRECTORY(zmq)
 ADD_SUBDIRECTORY(system)
 ADD_SUBDIRECTORY(cli)
 
-# The benchmark is a server-side tool that depends on server libraries
-# (anna-hash-ring, lattice serialization). It should be moved to
-# server/cpp/tests/benchmark/ in a follow-up.
-# ADD_SUBDIRECTORY(benchmark)
+# Benchmarking is now a CLI command (anna-cli bench). See issue #418.
 
 ADD_CUSTOM_TARGET(ctest ${CMAKE_CTEST_COMMAND})

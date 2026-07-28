@@ -5,6 +5,7 @@
 //! description of the command line options.
 
 use std::process::exit;
+use std::time::Duration;
 
 use annalib::{
     client_config::ClientConfig, completer::AnnaCompleter, info, kvs_client::KVSClient, start,
@@ -175,6 +176,15 @@ async fn run() -> Result<String> {
             }
             .into())
         }
+        ("bench", sub_matches) => {
+            let config = get_client_config(&matches);
+            let mut client = KVSClient::new(&config, None).await;
+            {
+                let config = bench_config_from_clap(sub_matches);
+                annalib::bench::run_bench(&mut client, &config).await?;
+            }
+            Ok(String::new())
+        }
         (_, _) => Ok("No command executed".into()),
     }
 }
@@ -275,6 +285,11 @@ async fn execute_command(
                 .map_err(|e| CliError::Other(format!("Invalid priority '{}': {}", split[2], e)))?;
             client.put_priority(split[1], priority, split[3]).await?
         }
+        "BENCH" => {
+            use annalib::bench::run_bench;
+            let config = parse_bench_args(&split)?;
+            run_bench(client, &config).await?;
+        }
         "START" => {
             let components = parse_component_from_split(&split)?;
             println!(
@@ -347,6 +362,7 @@ fn cli_usage() -> String {
 
     usage = format!(
         "{}\n\tdelete {{key}} \t\t\t- delete a key from the KVS\
+        \n\tbench [keys] [value_size] [duration] [workload] - run a benchmark\
         \n\tstart [component] \t\t- start anna processes (component: kvs, monitor, route; omit for all)\
         \n\tstop [component] \t\t- stop running anna processes (component: kvs, monitor, route; omit for all)\
         \n\tstatus [component] \t\t- print the status of anna processes (component: kvs, monitor, route; omit for all)\
@@ -489,6 +505,125 @@ fn get_app() -> Command {
                         .help("Component to check (kvs, monitor, route). Omit to check all"),
                 ),
         )
+        .subcommand(
+            Command::new("bench")
+                .about("Run a benchmark against the KVS")
+                .arg(
+                    Arg::new("keys")
+                        .long("keys")
+                        .num_args(1)
+                        .default_value("1000")
+                        .value_parser(clap::value_parser!(u64).range(1..))
+                        .help("Number of keys to use in the benchmark"),
+                )
+                .arg(
+                    Arg::new("value-size")
+                        .long("value-size")
+                        .num_args(1)
+                        .default_value("256")
+                        .value_parser(clap::value_parser!(usize))
+                        .help("Size of values in bytes"),
+                )
+                .arg(
+                    Arg::new("duration")
+                        .long("duration")
+                        .num_args(1)
+                        .default_value("10")
+                        .value_parser(clap::value_parser!(u64).range(1..))
+                        .help("Duration of each workload in seconds"),
+                )
+                .arg(
+                    Arg::new("report")
+                        .long("report")
+                        .num_args(1)
+                        .default_value("2")
+                        .value_parser(clap::value_parser!(u64).range(1..))
+                        .help("Report interval in seconds"),
+                )
+                .arg(
+                    Arg::new("workload")
+                        .long("workload")
+                        .num_args(1)
+                        .default_value("ALL")
+                        .value_parser(["GET", "PUT", "MIXED", "ALL"])
+                        .help("Workload type: GET, PUT, MIXED, or ALL"),
+                ),
+        )
+}
+
+fn bench_config_from_clap(args: &ArgMatches) -> annalib::bench::BenchConfig {
+    let num_keys = *args.get_one::<u64>("keys").expect("default set");
+    let value_size = *args.get_one::<usize>("value-size").expect("default set");
+    let duration_secs = *args.get_one::<u64>("duration").expect("default set");
+    let report_secs = *args.get_one::<u64>("report").expect("default set");
+    let workload = args
+        .get_one::<String>("workload")
+        .expect("default set")
+        .clone();
+
+    let workloads = match workload.as_str() {
+        "ALL" => vec!["GET".into(), "PUT".into(), "MIXED".into()],
+        other => vec![other.to_string()],
+    };
+
+    annalib::bench::BenchConfig {
+        num_keys,
+        value_size,
+        duration: Duration::from_secs(duration_secs),
+        report_period: Duration::from_secs(report_secs),
+        workloads,
+    }
+}
+
+fn parse_bench_args(split: &[&str]) -> Result<annalib::bench::BenchConfig> {
+    let num_keys: u64 = match split.get(1) {
+        Some(s) => s.parse().map_err(|_| {
+            CliError::Other(format!(
+                "Invalid keys value '{}'. Usage: BENCH [keys] [value_size] [duration] [workload]",
+                s
+            ))
+        })?,
+        None => 1000,
+    };
+    let value_size: usize = match split.get(2) {
+        Some(s) => s.parse().map_err(|_| {
+            CliError::Other(format!(
+                "Invalid value_size '{}'. Usage: BENCH [keys] [value_size] [duration] [workload]",
+                s
+            ))
+        })?,
+        None => 256,
+    };
+    let dur: u64 = match split.get(3) {
+        Some(s) => s.parse().map_err(|_| {
+            CliError::Other(format!(
+                "Invalid duration '{}'. Usage: BENCH [keys] [value_size] [duration] [workload]",
+                s
+            ))
+        })?,
+        None => 10,
+    };
+    let wl_arg = split
+        .get(4)
+        .map(|s| s.to_ascii_uppercase())
+        .unwrap_or_else(|| "ALL".into());
+    let workloads = match wl_arg.as_str() {
+        "ALL" => vec!["GET".into(), "PUT".into(), "MIXED".into()],
+        "GET" | "PUT" | "MIXED" => vec![wl_arg.clone()],
+        _ => {
+            return Err(CliError::Other(format!(
+                "Invalid workload '{}'. Must be GET, PUT, MIXED, or ALL",
+                wl_arg
+            )))
+        }
+    };
+    Ok(annalib::bench::BenchConfig {
+        num_keys,
+        value_size,
+        duration: Duration::from_secs(dur),
+        report_period: Duration::from_secs(2),
+        workloads,
+    })
 }
 
 #[cfg(test)]
@@ -555,5 +690,187 @@ mod test {
             "unexpected error: {}",
             err
         );
+    }
+
+    #[test]
+    fn bench_clap_rejects_zero_keys() {
+        let app = get_app();
+        let result = app.try_get_matches_from(vec![
+            "anna",
+            "--routing",
+            "tcp://127.0.0.1:6450",
+            "--client-ip",
+            "127.0.0.1",
+            "bench",
+            "--keys",
+            "0",
+        ]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn bench_clap_rejects_zero_duration() {
+        let app = get_app();
+        let result = app.try_get_matches_from(vec![
+            "anna",
+            "--routing",
+            "tcp://127.0.0.1:6450",
+            "--client-ip",
+            "127.0.0.1",
+            "bench",
+            "--duration",
+            "0",
+        ]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn bench_clap_rejects_invalid_workload() {
+        let app = get_app();
+        let result = app.try_get_matches_from(vec![
+            "anna",
+            "--routing",
+            "tcp://127.0.0.1:6450",
+            "--client-ip",
+            "127.0.0.1",
+            "bench",
+            "--workload",
+            "INVALID",
+        ]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn bench_clap_accepts_valid_args() {
+        let app = get_app();
+        let matches = app
+            .try_get_matches_from(vec![
+                "anna",
+                "--routing",
+                "tcp://127.0.0.1:6450",
+                "--client-ip",
+                "127.0.0.1",
+                "bench",
+                "--keys",
+                "500",
+                "--value-size",
+                "128",
+                "--duration",
+                "5",
+                "--report",
+                "1",
+                "--workload",
+                "PUT",
+            ])
+            .expect("should parse valid bench args");
+        let (name, sub) = matches.subcommand().expect("should have subcommand");
+        assert_eq!(name, "bench");
+        assert_eq!(*sub.get_one::<u64>("keys").expect("keys"), 500);
+        assert_eq!(
+            *sub.get_one::<usize>("value-size").expect("value-size"),
+            128
+        );
+        assert_eq!(*sub.get_one::<u64>("duration").expect("duration"), 5);
+        assert_eq!(*sub.get_one::<u64>("report").expect("report"), 1);
+        assert_eq!(sub.get_one::<String>("workload").expect("workload"), "PUT");
+    }
+
+    #[test]
+    fn bench_clap_defaults() {
+        let app = get_app();
+        let matches = app
+            .try_get_matches_from(vec![
+                "anna",
+                "--routing",
+                "tcp://127.0.0.1:6450",
+                "--client-ip",
+                "127.0.0.1",
+                "bench",
+            ])
+            .expect("should parse bench with defaults");
+        let (_, sub) = matches.subcommand().expect("should have subcommand");
+        let config = bench_config_from_clap(sub);
+        assert_eq!(config.num_keys, 1000);
+        assert_eq!(config.value_size, 256);
+        assert_eq!(config.duration, Duration::from_secs(10));
+        assert_eq!(config.report_period, Duration::from_secs(2));
+        assert_eq!(config.workloads, vec!["GET", "PUT", "MIXED"]);
+    }
+
+    #[test]
+    fn bench_config_from_clap_custom() {
+        let app = get_app();
+        let matches = app
+            .try_get_matches_from(vec![
+                "anna",
+                "--routing",
+                "tcp://127.0.0.1:6450",
+                "--client-ip",
+                "127.0.0.1",
+                "bench",
+                "--keys",
+                "500",
+                "--value-size",
+                "128",
+                "--duration",
+                "5",
+                "--report",
+                "1",
+                "--workload",
+                "PUT",
+            ])
+            .expect("should parse");
+        let (_, sub) = matches.subcommand().expect("should have subcommand");
+        let config = bench_config_from_clap(sub);
+        assert_eq!(config.num_keys, 500);
+        assert_eq!(config.value_size, 128);
+        assert_eq!(config.duration, Duration::from_secs(5));
+        assert_eq!(config.report_period, Duration::from_secs(1));
+        assert_eq!(config.workloads, vec!["PUT"]);
+    }
+
+    #[test]
+    fn parse_bench_args_defaults() {
+        let split = vec!["BENCH"];
+        let config = parse_bench_args(&split).expect("should parse");
+        assert_eq!(config.num_keys, 1000);
+        assert_eq!(config.value_size, 256);
+        assert_eq!(config.duration, Duration::from_secs(10));
+        assert_eq!(config.workloads, vec!["GET", "PUT", "MIXED"]);
+    }
+
+    #[test]
+    fn parse_bench_args_custom() {
+        let split = vec!["BENCH", "500", "128", "5", "PUT"];
+        let config = parse_bench_args(&split).expect("should parse");
+        assert_eq!(config.num_keys, 500);
+        assert_eq!(config.value_size, 128);
+        assert_eq!(config.duration, Duration::from_secs(5));
+        assert_eq!(config.workloads, vec!["PUT"]);
+    }
+
+    #[test]
+    fn parse_bench_args_invalid_keys() {
+        let split = vec!["BENCH", "nope"];
+        assert!(parse_bench_args(&split).is_err());
+    }
+
+    #[test]
+    fn parse_bench_args_invalid_duration() {
+        let split = vec!["BENCH", "100", "256", "abc"];
+        assert!(parse_bench_args(&split).is_err());
+    }
+
+    #[test]
+    fn parse_bench_args_invalid_workload() {
+        let split = vec!["BENCH", "100", "256", "10", "BOGUS"];
+        assert!(parse_bench_args(&split).is_err());
+    }
+
+    #[test]
+    fn parse_bench_args_all_workloads() {
+        let split = vec!["BENCH", "100", "256", "10", "all"];
+        let config = parse_bench_args(&split).expect("should parse");
+        assert_eq!(config.workloads, vec!["GET", "PUT", "MIXED"]);
     }
 }

@@ -8,6 +8,7 @@ def cli_usage():
     return ("Valid commands are GET, GET_SET, GET_ORDERED_SET, GET_CAUSAL, "
             "GET_SINGLE_CAUSAL, GET_PRIORITY, PUT, PUT_SET, PUT_ORDERED_SET, "
             "PUT_CAUSAL, PUT_SINGLE_CAUSAL, PUT_PRIORITY, DELETE, "
+            "BENCH [keys] [value_size] [duration] [workload], "
             "START, STOP, STATUS, HELP and EXIT")
 
 
@@ -119,6 +120,19 @@ def execute_command(client, config_path, line):
         result = client.put_priority(parts[1], priority, parts[3])
         if not result.get(parts[1], False):
             print("Failure!")
+    elif cmd == "BENCH":
+        from .bench import run_bench
+        try:
+            num_keys = int(parts[1]) if len(parts) > 1 else 1000
+            value_size = int(parts[2]) if len(parts) > 2 else 256
+            duration = int(parts[3]) if len(parts) > 3 else 10
+            wl_arg = parts[4].upper() if len(parts) > 4 else "ALL"
+            workloads = ["GET", "PUT", "MIXED"] if wl_arg == "ALL" else [wl_arg]
+            run_bench(client, num_keys=num_keys, value_size=value_size,
+                      duration=duration, workloads=workloads)
+        except (ValueError, TypeError) as e:
+            print(f"Error: {e}")
+            print("Usage: BENCH [keys] [value_size] [duration] [workload]")
     elif cmd == "START":
         count = start(config_path)
         print(f"{count} anna processes were started")
@@ -162,7 +176,14 @@ def main():
     parser.add_argument("--routing", help="Routing node IP address")
     parser.add_argument("--client-ip", help="Client IP address")
     parser.add_argument("--server-config", help="Path to server config file (for start command)")
-    parser.add_argument("command", choices=["start", "stop", "status", "cli", "help"],
+    parser.add_argument("--keys", type=int, default=1000, help="Bench: key space size")
+    parser.add_argument("--value-size", type=int, default=256, help="Bench: value size in bytes")
+    parser.add_argument("--duration", type=int, default=10, help="Bench: duration in seconds")
+    parser.add_argument("--report", type=int, default=2, help="Bench: report period in seconds")
+    parser.add_argument("--workload", choices=["GET", "PUT", "MIXED", "ALL"],
+                        type=str.upper, default="ALL",
+                        help="Bench: GET, PUT, MIXED, or ALL")
+    parser.add_argument("command", choices=["start", "stop", "status", "cli", "bench", "help"],
                         help="Command to run")
     parser.add_argument("input_file", nargs="?", help="Input file for cli command")
 
@@ -195,6 +216,29 @@ def main():
                     print(f"{name} process is running")
                 else:
                     print(f"Process '{name}' is not running")
+        return
+
+    if args.command == "bench":
+        if not args.routing:
+            parser.error("--routing is required for the bench command")
+        if not args.client_ip:
+            parser.error("--client-ip is required for the bench command")
+        if args.keys <= 0:
+            parser.error("--keys must be > 0")
+        if args.value_size < 0:
+            parser.error("--value-size must be >= 0")
+        if args.duration <= 0:
+            parser.error("--duration must be > 0")
+        if args.report <= 0:
+            parser.error("--report must be > 0")
+        from .client import AnnaTcpClient
+        from .bench import run_bench
+        client = AnnaTcpClient(args.routing, args.client_ip, local=True)
+        wl_arg = (args.workload or "ALL").upper()
+        workloads = ["GET", "PUT", "MIXED"] if wl_arg == "ALL" else [wl_arg]
+        run_bench(client, num_keys=args.keys, value_size=args.value_size,
+                  duration=args.duration, report_period=args.report,
+                  workloads=workloads)
         return
 
     if args.command == "cli":

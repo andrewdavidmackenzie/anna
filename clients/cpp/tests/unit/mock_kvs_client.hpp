@@ -123,4 +123,62 @@ class DelayedMockKvsClient : public KvsClientInterface {
   unsigned rid_;
 };
 
+// A mock that auto-generates success responses for every put/get,
+// suitable for benchmarking where we need an unlimited response stream.
+class AutoRespondMockKvsClient : public KvsClientInterface {
+ public:
+  AutoRespondMockKvsClient() : rid_(0), put_count_(0) {}
+  ~AutoRespondMockKvsClient() {}
+
+  string put_async(const Key& key, const string& payload,
+                   kvs::LatticeType lattice_type) {
+    put_count_++;
+    string rid = get_request_id();
+    // Queue a success response for this request.
+    kvs::KeyResponse resp;
+    resp.set_response_id(rid);
+    auto* tp = resp.add_tuples();
+    tp->set_key(key);
+    tp->set_error(kvs::AnnaError::NO_ERROR);
+    pending_.push_back(resp);
+    return rid;
+  }
+
+  void get_async(const Key& key) {
+    string rid = get_request_id();
+    // Queue a success response with an LWW value.
+    kvs::KeyResponse resp;
+    resp.set_response_id(rid);
+    auto* tp = resp.add_tuples();
+    tp->set_key(key);
+    tp->set_error(kvs::AnnaError::NO_ERROR);
+    tp->set_lattice_type(kvs::LatticeType::LWW);
+    kvs::LWWValue lww;
+    lww.set_timestamp(1);
+    lww.set_value("bench_value");
+    string payload;
+    lww.SerializeToString(&payload);
+    tp->set_payload(payload);
+    pending_.push_back(resp);
+  }
+
+  vector<kvs::KeyResponse> receive_async() {
+    if (pending_.empty()) return {};
+    vector<kvs::KeyResponse> result = {pending_.front()};
+    pending_.erase(pending_.begin());
+    return result;
+  }
+
+  zmq::context_t* get_context() { return nullptr; }
+
+  unsigned put_count_;
+
+ private:
+  string get_request_id() {
+    return std::to_string(++rid_);
+  }
+  unsigned rid_;
+  vector<kvs::KeyResponse> pending_;
+};
+
 #endif  // TESTS_UNIT_MOCK_KVS_CLIENT_HPP_

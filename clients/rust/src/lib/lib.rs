@@ -44,6 +44,10 @@ use std::process::Command;
 use sysinfo::System;
 
 /// Minimal client-side configuration for connecting to an anna cluster.
+/// Benchmark infrastructure for measuring KVS throughput and latency.
+pub mod bench;
+
+/// Minimal client-side configuration for connecting to an anna cluster.
 pub mod client_config;
 /// Tab-completion for the anna CLI.
 pub mod completer;
