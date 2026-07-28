@@ -62,15 +62,19 @@ namespace {
 // Throws std::runtime_error if no response is received in time.
 vector<kvs::KeyResponse> receive_with_deadline(KvsClientInterface* client) {
   auto deadline = std::chrono::system_clock::now() + std::chrono::seconds(10);
-  vector<kvs::KeyResponse> responses = client->receive_async();
-  while (responses.empty()) {
-    if (std::chrono::system_clock::now() > deadline) {
+  while (true) {
+    auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+        deadline - std::chrono::system_clock::now());
+    if (remaining.count() <= 0) {
       throw std::runtime_error("Request timed out: no response within 10s");
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    responses = client->receive_async();
+    // Block up to 100ms per poll, then re-check deadline.
+    unsigned poll_ms = std::min(remaining.count(), (long long)100);
+    vector<kvs::KeyResponse> responses = client->receive_blocking(poll_ms);
+    if (!responses.empty()) {
+      return responses;
+    }
   }
-  return responses;
 }
 
 // Check a response for server-side errors (top-level and per-tuple).
