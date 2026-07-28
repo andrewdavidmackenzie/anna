@@ -69,7 +69,8 @@ vector<kvs::KeyResponse> receive_with_deadline(KvsClientInterface* client) {
       throw std::runtime_error("Request timed out: no response within 10s");
     }
     // Block up to 100ms per poll, then re-check deadline.
-    unsigned poll_ms = std::min(remaining.count(), (long long)100);
+    auto remaining_ms = remaining.count();
+    unsigned poll_ms = (remaining_ms < 100) ? static_cast<unsigned>(remaining_ms) : 100;
     vector<kvs::KeyResponse> responses = client->receive_blocking(poll_ms);
     if (!responses.empty()) {
       return responses;
