@@ -341,6 +341,31 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 			return false, err
 		}
 
+	case "BENCH":
+		numKeys := 1000
+		valSize := 256
+		dur := 10
+		wlArg := "ALL"
+		if len(parts) > 1 {
+			if v, err := strconv.Atoi(parts[1]); err == nil && v > 0 {
+				numKeys = v
+			}
+		}
+		if len(parts) > 2 {
+			if v, err := strconv.Atoi(parts[2]); err == nil && v >= 0 {
+				valSize = v
+			}
+		}
+		if len(parts) > 3 {
+			if v, err := strconv.Atoi(parts[3]); err == nil && v > 0 {
+				dur = v
+			}
+		}
+		if len(parts) > 4 {
+			wlArg = strings.ToUpper(parts[4])
+		}
+		runBench(client, numKeys, valSize, dur, 2, wlArg)
+
 	case "DELETE":
 		if len(parts) != 2 {
 			return false, fmt.Errorf("usage: DELETE <key>")
@@ -397,6 +422,7 @@ func cliUsage() string {
 	get_priority {key} 			- get the priority value with key = {key} in the KVS
 	put_priority {key} {priority} {value} 	- set the priority value with key = {key} in the KVS
 	delete {key} 			- delete a key from the KVS
+	bench [keys] [value_size] [duration] [workload] - run a benchmark
 	start 					- start anna processes
 	stop 					- stop running anna processes
 	status 					- print the status of anna processes

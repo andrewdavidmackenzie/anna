@@ -72,8 +72,9 @@ void print_priority_value(const annalib::PriorityResult& result) {
 string cli_usage() {
   return "Valid commands are GET, GET_SET, GET_ORDERED_SET, GET_CAUSAL, "
          "GET_SINGLE_CAUSAL, GET_PRIORITY, PUT, PUT_SET, PUT_ORDERED_SET, "
-         "PUT_CAUSAL, PUT_SINGLE_CAUSAL, PUT_PRIORITY, DELETE, START, STOP, "
-         "STATUS, HELP and EXIT";
+         "PUT_CAUSAL, PUT_SINGLE_CAUSAL, PUT_PRIORITY, DELETE, "
+         "BENCH [keys] [value_size] [duration] [workload], "
+         "START, STOP, STATUS, HELP and EXIT";
 }
 
 void execute_cli_command(KvsClientInterface* client, const string& config_file,
@@ -143,6 +144,46 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
     }
   } else if (command == "GET_PRIORITY") {
     print_priority_value(annalib::get_priority(client, v[1]));
+  } else if (command == "BENCH") {
+    annalib::BenchConfig bc;
+    if (v.size() > 1) bc.num_keys = std::stoul(v[1]);
+    if (v.size() > 2) bc.value_size = std::stoul(v[2]);
+    if (v.size() > 3) bc.duration = std::stoul(v[3]);
+    if (v.size() > 4) bc.workload = v[4];
+
+    vector<string> workloads;
+    string wl = bc.workload;
+    std::transform(wl.begin(), wl.end(), wl.begin(), ::toupper);
+    if (wl.empty() || wl == "ALL") {
+      workloads = {"GET", "PUT", "MIXED"};
+    } else {
+      workloads = {wl};
+    }
+
+    annalib::bench_warmup(client, bc);
+
+    vector<annalib::BenchResult> results;
+    for (const string& w : workloads) {
+      bc.workload = w;
+      results.push_back(annalib::bench(client, bc));
+      std::cout << std::endl;
+    }
+
+    std::cout << "\n=== Benchmark Summary (C++) ===" << std::endl;
+    std::cout << std::left << std::setw(10) << "Workload"
+              << std::right << std::setw(12) << "Ops/sec"
+              << std::setw(14) << "Latency(us)"
+              << std::setw(12) << "Total ops"
+              << std::setw(10) << "Time(s)" << std::endl;
+    std::cout << string(58, '-') << std::endl;
+    for (const auto& r : results) {
+      std::cout << std::left << std::setw(10) << r.workload
+                << std::right << std::setw(12) << static_cast<unsigned>(r.avg_throughput)
+                << std::setw(14) << std::fixed << std::setprecision(1) << r.avg_latency_us
+                << std::setw(12) << r.total_ops
+                << std::setw(10) << std::setprecision(2) << r.elapsed_seconds
+                << std::endl;
+    }
   } else if (command == "STATUS") {
     for (const string& name : annalib::status()) {
       std::cout << name << " process is running" << std::endl;

@@ -282,6 +282,31 @@ async fn execute_command(
                 .map_err(|e| CliError::Other(format!("Invalid priority '{}': {}", split[2], e)))?;
             client.put_priority(split[1], priority, split[3]).await?
         }
+        "BENCH" => {
+            use annalib::bench::{run_bench, BenchConfig};
+            let num_keys = split.get(1).and_then(|s| s.parse().ok()).unwrap_or(1000u64);
+            let value_size = split
+                .get(2)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(256usize);
+            let dur = split.get(3).and_then(|s| s.parse().ok()).unwrap_or(10u64);
+            let wl_arg = split
+                .get(4)
+                .map(|s| s.to_ascii_uppercase())
+                .unwrap_or_else(|| "ALL".into());
+            let workloads = match wl_arg.as_str() {
+                "ALL" => vec!["GET".into(), "PUT".into(), "MIXED".into()],
+                other => vec![other.to_string()],
+            };
+            let config = BenchConfig {
+                num_keys,
+                value_size,
+                duration: Duration::from_secs(dur),
+                report_period: Duration::from_secs(2),
+                workloads,
+            };
+            run_bench(client, &config).await?;
+        }
         "START" => {
             let components = parse_component_from_split(&split)?;
             println!(
@@ -354,6 +379,7 @@ fn cli_usage() -> String {
 
     usage = format!(
         "{}\n\tdelete {{key}} \t\t\t- delete a key from the KVS\
+        \n\tbench [keys] [value_size] [duration] [workload] - run a benchmark\
         \n\tstart [component] \t\t- start anna processes (component: kvs, monitor, route; omit for all)\
         \n\tstop [component] \t\t- stop running anna processes (component: kvs, monitor, route; omit for all)\
         \n\tstatus [component] \t\t- print the status of anna processes (component: kvs, monitor, route; omit for all)\

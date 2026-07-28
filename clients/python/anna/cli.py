@@ -8,6 +8,7 @@ def cli_usage():
     return ("Valid commands are GET, GET_SET, GET_ORDERED_SET, GET_CAUSAL, "
             "GET_SINGLE_CAUSAL, GET_PRIORITY, PUT, PUT_SET, PUT_ORDERED_SET, "
             "PUT_CAUSAL, PUT_SINGLE_CAUSAL, PUT_PRIORITY, DELETE, "
+            "BENCH [keys] [value_size] [duration] [workload], "
             "START, STOP, STATUS, HELP and EXIT")
 
 
@@ -119,6 +120,15 @@ def execute_command(client, config_path, line):
         result = client.put_priority(parts[1], priority, parts[3])
         if not result.get(parts[1], False):
             print("Failure!")
+    elif cmd == "BENCH":
+        from .bench import run_bench
+        num_keys = int(parts[1]) if len(parts) > 1 else 1000
+        value_size = int(parts[2]) if len(parts) > 2 else 256
+        duration = int(parts[3]) if len(parts) > 3 else 10
+        wl_arg = parts[4].upper() if len(parts) > 4 else "ALL"
+        workloads = ["GET", "PUT", "MIXED"] if wl_arg == "ALL" else [wl_arg]
+        run_bench(client, num_keys=num_keys, value_size=value_size,
+                  duration=duration, workloads=workloads)
     elif cmd == "START":
         count = start(config_path)
         print(f"{count} anna processes were started")
