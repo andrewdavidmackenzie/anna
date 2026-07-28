@@ -1,8 +1,29 @@
 //! Benchmark infrastructure for measuring KVS throughput and latency.
 
 use crate::errors::Result;
-use crate::kvs_client::KVSClient;
 use std::time::{Duration, Instant};
+
+/// Trait abstracting the KVS operations needed for benchmarking.
+/// Implemented by `KVSClient` for production use, and by test mocks.
+pub trait BenchClient {
+    /// Put a key-value pair.
+    fn put_val(
+        &mut self,
+        key: &str,
+        value: &str,
+    ) -> impl std::future::Future<Output = Result<()>> + Send;
+    /// Get a key's value.
+    fn get_val(&mut self, key: &str) -> impl std::future::Future<Output = Result<String>> + Send;
+}
+
+impl BenchClient for crate::kvs_client::KVSClient {
+    async fn put_val(&mut self, key: &str, value: &str) -> Result<()> {
+        self.put(key, value).await
+    }
+    async fn get_val(&mut self, key: &str) -> Result<String> {
+        self.get(key).await
+    }
+}
 
 /// Configuration for a benchmark run.
 pub struct BenchConfig {
@@ -88,7 +109,7 @@ impl SimpleRng {
 
 /// Run the full benchmark: warmup, then each workload, then summary.
 pub async fn run_bench(
-    client: &mut KVSClient,
+    client: &mut (impl BenchClient + Send),
     config: &BenchConfig,
 ) -> Result<Vec<WorkloadResult>> {
     let value: String = "a".repeat(config.value_size);
@@ -105,7 +126,7 @@ pub async fn run_bench(
     println!("Warming up {} keys...", config.num_keys);
     let warmup_start = Instant::now();
     for i in 0..config.num_keys {
-        client.put(&bench_key(i), &value).await?;
+        client.put_val(&bench_key(i), &value).await?;
     }
     println!(
         "Warmup complete: {} keys in {:.2}s",
@@ -150,7 +171,7 @@ pub async fn run_bench(
 }
 
 async fn run_workload(
-    client: &mut KVSClient,
+    client: &mut (impl BenchClient + Send),
     workload: &str,
     num_keys: u64,
     value: &str,
@@ -176,18 +197,18 @@ async fn run_workload(
 
         match workload {
             "GET" => {
-                client.get(&key).await?;
+                client.get_val(&key).await?;
                 total_ops += 1;
                 epoch_ops += 1;
             }
             "PUT" => {
-                client.put(&key, value).await?;
+                client.put_val(&key, value).await?;
                 total_ops += 1;
                 epoch_ops += 1;
             }
             "MIXED" => {
-                client.put(&key, value).await?;
-                client.get(&key).await?;
+                client.put_val(&key, value).await?;
+                client.get_val(&key).await?;
                 total_ops += 2;
                 epoch_ops += 2;
             }
@@ -297,5 +318,82 @@ mod tests {
         assert_eq!(cfg.value_size, 256);
         assert_eq!(cfg.duration, Duration::from_secs(10));
         assert_eq!(cfg.workloads, vec!["GET", "PUT", "MIXED"]);
+    }
+
+    /// Mock client for testing bench functions without a real server.
+    struct MockBenchClient;
+
+    impl BenchClient for MockBenchClient {
+        async fn put_val(&mut self, _key: &str, _value: &str) -> Result<()> {
+            Ok(())
+        }
+        async fn get_val(&mut self, _key: &str) -> Result<String> {
+            Ok("mock_value".to_string())
+        }
+    }
+
+    #[tokio::test]
+    async fn run_bench_get_workload() {
+        let mut client = MockBenchClient;
+        let config = BenchConfig {
+            num_keys: 5,
+            value_size: 16,
+            duration: Duration::from_secs(1),
+            report_period: Duration::from_secs(1),
+            workloads: vec!["GET".into()],
+        };
+        let results = run_bench(&mut client, &config).await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "GET");
+        assert!(results[0].total_ops > 0);
+    }
+
+    #[tokio::test]
+    async fn run_bench_put_workload() {
+        let mut client = MockBenchClient;
+        let config = BenchConfig {
+            num_keys: 5,
+            value_size: 16,
+            duration: Duration::from_secs(1),
+            report_period: Duration::from_secs(1),
+            workloads: vec!["PUT".into()],
+        };
+        let results = run_bench(&mut client, &config).await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "PUT");
+        assert!(results[0].total_ops > 0);
+    }
+
+    #[tokio::test]
+    async fn run_bench_mixed_workload() {
+        let mut client = MockBenchClient;
+        let config = BenchConfig {
+            num_keys: 5,
+            value_size: 16,
+            duration: Duration::from_secs(1),
+            report_period: Duration::from_secs(1),
+            workloads: vec!["MIXED".into()],
+        };
+        let results = run_bench(&mut client, &config).await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "MIXED");
+        assert!(results[0].total_ops > 0);
+    }
+
+    #[tokio::test]
+    async fn run_bench_all_workloads() {
+        let mut client = MockBenchClient;
+        let config = BenchConfig {
+            num_keys: 5,
+            value_size: 16,
+            duration: Duration::from_secs(1),
+            report_period: Duration::from_secs(1),
+            workloads: vec!["GET".into(), "PUT".into(), "MIXED".into()],
+        };
+        let results = run_bench(&mut client, &config).await.unwrap();
+        assert_eq!(results.len(), 3);
+        assert_eq!(results[0].name, "GET");
+        assert_eq!(results[1].name, "PUT");
+        assert_eq!(results[2].name, "MIXED");
     }
 }

@@ -8,6 +8,10 @@ ignore:
   - "**/*.pb.go"
   - "**/*_pb2.py"
   - "**/proto/**"
+  - "scripts/**"
+  - "clients/rust/src/main.rs"
+  - "clients/cpp/src/cli.cpp"
+  - "clients/go/cmd/**/main.go"
 
 comment:
   layout: "header, diff, components"
