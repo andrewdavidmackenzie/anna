@@ -692,6 +692,10 @@ BenchResult bench(KvsClientInterface* client, const BenchConfig& config) {
   // Determine workload type.
   string wl = config.workload;
   std::transform(wl.begin(), wl.end(), wl.begin(), ::toupper);
+  if (wl != "GET" && wl != "PUT" && wl != "MIXED") {
+    throw std::invalid_argument("Invalid workload: " + wl +
+                                ". Must be GET, PUT, or MIXED.");
+  }
 
   std::cout << "Running " << wl << " benchmark for " << config.duration
             << "s (" << config.num_keys << " keys, "

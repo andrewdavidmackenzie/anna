@@ -5,7 +5,7 @@
 //! description of the command line options.
 
 use std::process::exit;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use annalib::{
     client_config::ClientConfig, completer::AnnaCompleter, info, kvs_client::KVSClient, start,
@@ -179,7 +179,7 @@ async fn run() -> Result<String> {
         ("bench", sub_matches) => {
             let config = get_client_config(&matches);
             let mut client = KVSClient::new(&config, None).await;
-            run_bench(&mut client, sub_matches).await?;
+            run_bench_cli(&mut client, sub_matches).await?;
             Ok(String::new())
         }
         (_, _) => Ok("No command executed".into()),
@@ -542,59 +542,9 @@ fn get_app() -> Command {
         )
 }
 
-/// Format a key index as a zero-padded 8-character string.
-fn bench_key(index: u64) -> String {
-    format!("{:08}", index)
-}
+async fn run_bench_cli(client: &mut KVSClient, args: &ArgMatches) -> Result<()> {
+    use annalib::bench::{run_bench, BenchConfig};
 
-/// Simple pseudo-random number generator state.
-/// Uses a linear congruential generator to avoid needing the `rand` crate.
-struct SimpleRng {
-    state: u64,
-}
-
-impl SimpleRng {
-    fn new(seed: u64) -> Self {
-        Self { state: seed }
-    }
-
-    /// Returns a pseudo-random u64.
-    fn next_u64(&mut self) -> u64 {
-        // LCG parameters from Numerical Recipes
-        self.state = self
-            .state
-            .wrapping_mul(6_364_136_223_846_793_005)
-            .wrapping_add(1);
-        self.state
-    }
-
-    /// Returns a value in [0, bound).
-    fn next_bounded(&mut self, bound: u64) -> u64 {
-        self.next_u64() % bound
-    }
-}
-
-/// A single workload result for the summary table.
-struct WorkloadResult {
-    name: &'static str,
-    total_ops: u64,
-    elapsed: Duration,
-}
-
-impl WorkloadResult {
-    fn ops_per_sec(&self) -> f64 {
-        self.total_ops as f64 / self.elapsed.as_secs_f64()
-    }
-
-    fn us_per_op(&self) -> f64 {
-        if self.total_ops == 0 {
-            return 0.0;
-        }
-        self.elapsed.as_micros() as f64 / self.total_ops as f64
-    }
-}
-
-async fn run_bench(client: &mut KVSClient, args: &ArgMatches) -> Result<()> {
     let num_keys = *args.get_one::<u64>("keys").expect("default set");
     let value_size = *args.get_one::<usize>("value-size").expect("default set");
     let duration_secs = *args.get_one::<u64>("duration").expect("default set");
@@ -604,162 +554,21 @@ async fn run_bench(client: &mut KVSClient, args: &ArgMatches) -> Result<()> {
         .expect("default set")
         .clone();
 
-    let value: String = "a".repeat(value_size);
-    let duration = Duration::from_secs(duration_secs);
-    let report_period = Duration::from_secs(report_secs);
+    let workloads = match workload.as_str() {
+        "ALL" => vec!["GET".into(), "PUT".into(), "MIXED".into()],
+        other => vec![other.to_string()],
+    };
 
-    println!(
-        "Benchmark (Rust): keys={}, value_size={}, duration={}s, report={}s, workload={}",
-        num_keys, value_size, duration_secs, report_secs, workload
-    );
-
-    // Warmup: PUT all keys
-    println!("Warming up {} keys...", num_keys);
-    let warmup_start = Instant::now();
-    for i in 0..num_keys {
-        let key = bench_key(i);
-        client.put(&key, &value).await?;
-    }
-    let warmup_elapsed = warmup_start.elapsed();
-    println!(
-        "Warmup complete: {} keys in {:.2}s",
+    let config = BenchConfig {
         num_keys,
-        warmup_elapsed.as_secs_f64()
-    );
-
-    let workloads: Vec<&str> = match workload.as_str() {
-        "ALL" => vec!["GET", "PUT", "MIXED"],
-        other => vec![other],
+        value_size,
+        duration: Duration::from_secs(duration_secs),
+        report_period: Duration::from_secs(report_secs),
+        workloads,
     };
 
-    let mut results: Vec<WorkloadResult> = Vec::new();
-
-    for wl in &workloads {
-        let result = run_workload(client, wl, num_keys, &value, duration, report_period).await?;
-        results.push(result);
-    }
-
-    // Print summary table
-    println!();
-    println!("=== Benchmark Summary (Rust) ===");
-    println!(
-        "{:<10} {:>12} {:>12} {:>12} {:>10}",
-        "Workload", "ops/sec", "us/op", "total_ops", "elapsed"
-    );
-    println!("{}", "-".repeat(60));
-    for r in &results {
-        println!(
-            "{:<10} {:>12.1} {:>12.1} {:>12} {:>9.2}s",
-            r.name,
-            r.ops_per_sec(),
-            r.us_per_op(),
-            r.total_ops,
-            r.elapsed.as_secs_f64()
-        );
-    }
-
+    run_bench(client, &config).await?;
     Ok(())
-}
-
-async fn run_workload(
-    client: &mut KVSClient,
-    workload: &str,
-    num_keys: u64,
-    value: &str,
-    duration: Duration,
-    report_period: Duration,
-) -> Result<WorkloadResult> {
-    println!();
-    println!("--- {} workload ---", workload);
-
-    let seed = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(42);
-    let mut rng = SimpleRng::new(seed);
-
-    let start = Instant::now();
-    let mut total_ops: u64 = 0;
-    let mut epoch_ops: u64 = 0;
-    let mut last_report = start;
-
-    while start.elapsed() < duration {
-        let key_index = rng.next_bounded(num_keys);
-        let key = bench_key(key_index);
-
-        match workload {
-            "GET" => {
-                client.get(&key).await?;
-                total_ops += 1;
-                epoch_ops += 1;
-            }
-            "PUT" => {
-                client.put(&key, value).await?;
-                total_ops += 1;
-                epoch_ops += 1;
-            }
-            "MIXED" => {
-                client.put(&key, value).await?;
-                client.get(&key).await?;
-                total_ops += 2;
-                epoch_ops += 2;
-            }
-            _ => unreachable!("invalid workload validated by clap"),
-        }
-
-        let now = Instant::now();
-        if now.duration_since(last_report) >= report_period {
-            let epoch_elapsed = now.duration_since(last_report).as_secs_f64();
-            let epoch_throughput = epoch_ops as f64 / epoch_elapsed;
-            println!(
-                "  [{:>6.1}s] {:>10.1} ops/sec  ({} ops in {:.2}s)",
-                now.duration_since(start).as_secs_f64(),
-                epoch_throughput,
-                epoch_ops,
-                epoch_elapsed,
-            );
-            epoch_ops = 0;
-            last_report = now;
-        }
-    }
-
-    // Print final partial epoch if any ops remain unreported
-    if epoch_ops > 0 {
-        let now = Instant::now();
-        let epoch_elapsed = now.duration_since(last_report).as_secs_f64();
-        if epoch_elapsed > 0.0 {
-            let epoch_throughput = epoch_ops as f64 / epoch_elapsed;
-            println!(
-                "  [{:>6.1}s] {:>10.1} ops/sec  ({} ops in {:.2}s)",
-                now.duration_since(start).as_secs_f64(),
-                epoch_throughput,
-                epoch_ops,
-                epoch_elapsed,
-            );
-        }
-    }
-
-    let elapsed = start.elapsed();
-    let name = match workload {
-        "GET" => "GET",
-        "PUT" => "PUT",
-        "MIXED" => "MIXED",
-        _ => unreachable!(),
-    };
-
-    println!(
-        "{} complete: {} ops in {:.2}s ({:.1} ops/sec)",
-        name,
-        total_ops,
-        elapsed.as_secs_f64(),
-        total_ops as f64 / elapsed.as_secs_f64()
-    );
-
-    Ok(WorkloadResult {
-        name,
-        total_ops,
-        elapsed,
-    })
 }
 
 #[cfg(test)]
@@ -826,42 +635,6 @@ mod test {
             "unexpected error: {}",
             err
         );
-    }
-
-    #[test]
-    fn bench_key_pads_small_numbers() {
-        assert_eq!(bench_key(1), "00000001");
-        assert_eq!(bench_key(42), "00000042");
-        assert_eq!(bench_key(1000000), "01000000");
-    }
-
-    #[test]
-    fn bench_key_large_numbers() {
-        assert_eq!(bench_key(99999999), "99999999");
-        assert_eq!(bench_key(100000000), "100000000");
-    }
-
-    #[test]
-    fn simple_rng_produces_bounded_values() {
-        let mut rng = SimpleRng::new(12345);
-        for _ in 0..100 {
-            let v = rng.next_bounded(1000);
-            assert!(v < 1000);
-        }
-    }
-
-    #[test]
-    fn simple_rng_different_seeds_differ() {
-        let mut rng1 = SimpleRng::new(1);
-        let mut rng2 = SimpleRng::new(2);
-        let mut differ = false;
-        for _ in 0..10 {
-            if rng1.next_bounded(1000) != rng2.next_bounded(1000) {
-                differ = true;
-                break;
-            }
-        }
-        assert!(differ, "different seeds should produce different sequences");
     }
 
     #[test]

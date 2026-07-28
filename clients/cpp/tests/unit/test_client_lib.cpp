@@ -1154,6 +1154,17 @@ TEST(BenchTest, PutWorkloadRuns) {
   EXPECT_GT(result.total_ops, 0u);
 }
 
+TEST(BenchTest, InvalidWorkloadThrows) {
+  AutoRespondMockKvsClient client;
+  annalib::BenchConfig config;
+  config.num_keys = 10;
+  config.value_size = 16;
+  config.duration = 1;
+  config.report_period = 1;
+  config.workload = "INVALID";
+  EXPECT_THROW(annalib::bench(&client, config), std::invalid_argument);
+}
+
 TEST(BenchTest, MixedWorkloadRuns) {
   AutoRespondMockKvsClient client;
   annalib::BenchConfig config;

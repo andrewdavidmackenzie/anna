@@ -157,99 +157,6 @@ def cli_file(client, config_path, filename):
                 break
 
 
-def run_bench(client, args):
-    import time as time_mod
-    from .lattices import LWWPairLattice
-
-    num_keys = args.keys
-    value_size = args.value_size
-    duration = args.duration
-    report_period = args.report
-    workload_arg = (args.workload or "ALL").upper()
-
-    workloads = ["GET", "PUT", "MIXED"] if workload_arg == "ALL" else [workload_arg]
-    value = "a" * value_size
-
-    def bench_key(n):
-        return str(n).zfill(8)
-
-    results = []
-
-    for wl in workloads:
-        # Warmup
-        print(f"Warming up {num_keys} keys ({value_size} bytes each)...")
-        warmup_start = time_mod.monotonic()
-        for i in range(1, num_keys + 1):
-            ts = time_mod.time_ns()
-            client.put(bench_key(i), LWWPairLattice(ts, value.encode()))
-        warmup_ms = (time_mod.monotonic() - warmup_start) * 1000
-        print(f"Warmup complete in {warmup_ms:.0f} ms")
-
-        print(f"Running {wl} benchmark for {duration}s "
-              f"({num_keys} keys, {value_size} B values)...")
-
-        total_ops = 0
-        epoch_ops = 0
-        throughput_sum = 0.0
-        epochs = 0
-        seed = int(time_mod.monotonic() * 1e9) & 0xFFFFFFFF
-
-        bench_start = time_mod.monotonic()
-        epoch_start = bench_start
-
-        while True:
-            seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF
-            k = (seed % num_keys) + 1
-            key = bench_key(k)
-
-            if wl == "GET":
-                client.get(key)
-                total_ops += 1
-                epoch_ops += 1
-            elif wl == "PUT":
-                ts = time_mod.time_ns()
-                client.put(key, LWWPairLattice(ts, value.encode()))
-                total_ops += 1
-                epoch_ops += 1
-            else:  # MIXED
-                ts = time_mod.time_ns()
-                client.put(key, LWWPairLattice(ts, value.encode()))
-                client.get(key)
-                total_ops += 2
-                epoch_ops += 2
-
-            now = time_mod.monotonic()
-            if now - epoch_start >= report_period:
-                epochs += 1
-                secs = now - epoch_start
-                throughput = epoch_ops / secs
-                throughput_sum += throughput
-                print(f"[Epoch {epochs}] Throughput: {int(throughput)} ops/sec")
-                epoch_ops = 0
-                epoch_start = now
-
-            if now - bench_start >= duration:
-                break
-
-        elapsed = time_mod.monotonic() - bench_start
-        avg_tp = total_ops / elapsed if elapsed > 0 else 0
-        avg_lat = 1_000_000.0 / avg_tp if avg_tp > 0 else 0
-
-        print(f"\n=== {wl} Results ===")
-        print(f"Total ops:      {total_ops}")
-        print(f"Elapsed:        {elapsed:.2f} s")
-        print(f"Avg throughput: {int(avg_tp)} ops/sec")
-        print(f"Avg latency:    {avg_lat:.1f} us/op")
-        print()
-        results.append((wl, avg_tp, avg_lat, total_ops, elapsed))
-
-    print("\n=== Benchmark Summary (Python) ===")
-    print(f"{'Workload':<10} {'Ops/sec':>12} {'Latency(us)':>14} {'Total ops':>12} {'Time(s)':>10}")
-    print("-" * 58)
-    for wl, tp, lat, ops, secs in results:
-        print(f"{wl:<10} {int(tp):>12} {lat:>14.1f} {ops:>12} {secs:>10.2f}")
-
-
 def main():
     parser = argparse.ArgumentParser(prog="anna-py", description="Anna KVS Python client")
     parser.add_argument("--routing", help="Routing node IP address")
@@ -311,8 +218,13 @@ def main():
         if args.report <= 0:
             parser.error("--report must be > 0")
         from .client import AnnaTcpClient
+        from .bench import run_bench
         client = AnnaTcpClient(args.routing, args.client_ip, local=True)
-        run_bench(client, args)
+        wl_arg = (args.workload or "ALL").upper()
+        workloads = ["GET", "PUT", "MIXED"] if wl_arg == "ALL" else [wl_arg]
+        run_bench(client, num_keys=args.keys, value_size=args.value_size,
+                  duration=args.duration, report_period=args.report,
+                  workloads=workloads)
         return
 
     if args.command == "cli":
