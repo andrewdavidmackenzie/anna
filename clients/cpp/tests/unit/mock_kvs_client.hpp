@@ -127,11 +127,12 @@ class DelayedMockKvsClient : public KvsClientInterface {
 // suitable for benchmarking where we need an unlimited response stream.
 class AutoRespondMockKvsClient : public KvsClientInterface {
  public:
-  AutoRespondMockKvsClient() : rid_(0) {}
+  AutoRespondMockKvsClient() : rid_(0), put_count_(0) {}
   ~AutoRespondMockKvsClient() {}
 
   string put_async(const Key& key, const string& payload,
                    kvs::LatticeType lattice_type) {
+    put_count_++;
     string rid = get_request_id();
     // Queue a success response for this request.
     kvs::KeyResponse resp;
@@ -169,6 +170,8 @@ class AutoRespondMockKvsClient : public KvsClientInterface {
   }
 
   zmq::context_t* get_context() { return nullptr; }
+
+  unsigned put_count_;
 
  private:
   string get_request_id() {

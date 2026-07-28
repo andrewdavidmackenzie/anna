@@ -665,6 +665,24 @@ static string generate_bench_key(unsigned n) {
   return string(8 - s.length(), '0') + s;
 }
 
+void bench_warmup(KvsClientInterface* client, const BenchConfig& config) {
+  if (config.num_keys == 0) {
+    throw std::invalid_argument("num_keys must be > 0");
+  }
+  string value(config.value_size, 'a');
+
+  std::cout << "Warming up " << config.num_keys << " keys ("
+            << config.value_size << " bytes each)..." << std::endl;
+  auto warmup_start = std::chrono::steady_clock::now();
+  for (unsigned i = 1; i <= config.num_keys; i++) {
+    put(client, generate_bench_key(i), value);
+  }
+  auto warmup_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now() - warmup_start)
+                             .count();
+  std::cout << "Warmup complete in " << warmup_elapsed << " ms" << std::endl;
+}
+
 BenchResult bench(KvsClientInterface* client, const BenchConfig& config) {
   if (config.num_keys == 0) {
     throw std::invalid_argument("num_keys must be > 0");
@@ -676,18 +694,6 @@ BenchResult bench(KvsClientInterface* client, const BenchConfig& config) {
     throw std::invalid_argument("duration must be > 0");
   }
   string value(config.value_size, 'a');
-
-  // Warm up: populate keys.
-  std::cout << "Warming up " << config.num_keys << " keys ("
-            << config.value_size << " bytes each)..." << std::endl;
-  auto warmup_start = std::chrono::steady_clock::now();
-  for (unsigned i = 1; i <= config.num_keys; i++) {
-    put(client, generate_bench_key(i), value);
-  }
-  auto warmup_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                             std::chrono::steady_clock::now() - warmup_start)
-                             .count();
-  std::cout << "Warmup complete in " << warmup_elapsed << " ms" << std::endl;
 
   // Determine workload type.
   string wl = config.workload;

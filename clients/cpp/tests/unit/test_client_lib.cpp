@@ -1126,6 +1126,15 @@ TEST(BenchTest, ZeroReportPeriodThrows) {
   EXPECT_THROW(annalib::bench(&client, config), std::invalid_argument);
 }
 
+TEST(BenchTest, WarmupPopulatesKeys) {
+  AutoRespondMockKvsClient client;
+  annalib::BenchConfig config;
+  config.num_keys = 5;
+  config.value_size = 16;
+  annalib::bench_warmup(&client, config);
+  EXPECT_GE(client.put_count_, 5u);
+}
+
 TEST(BenchTest, GetWorkloadRuns) {
   AutoRespondMockKvsClient client;
   annalib::BenchConfig config;
@@ -1134,6 +1143,7 @@ TEST(BenchTest, GetWorkloadRuns) {
   config.duration = 1;
   config.report_period = 1;
   config.workload = "GET";
+  annalib::bench_warmup(&client, config);
   annalib::BenchResult result = annalib::bench(&client, config);
   EXPECT_EQ(result.workload, "GET");
   EXPECT_GT(result.total_ops, 0u);

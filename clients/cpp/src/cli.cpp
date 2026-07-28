@@ -298,6 +298,14 @@ int main(int argc, char* argv[]) {
       workloads = {wl};
     }
 
+    // Warmup once, shared across all workloads.
+    try {
+      annalib::bench_warmup(client.get(), bench_config);
+    } catch (const std::exception& e) {
+      std::cerr << "Error during warmup: " << e.what() << std::endl;
+      return 1;
+    }
+
     vector<annalib::BenchResult> results;
     for (const string& wl : workloads) {
       bench_config.workload = wl;

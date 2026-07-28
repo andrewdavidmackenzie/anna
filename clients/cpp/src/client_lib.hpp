@@ -255,8 +255,11 @@ struct BenchResult {
   double elapsed_seconds;
 };
 
-// Run a benchmark against the KVS. Warms up `config.num_keys` keys,
-// then runs the specified workload for `config.duration` seconds,
+// Populate the KVS with `config.num_keys` keys of `config.value_size`
+// bytes each. Call once before running workloads.
+void bench_warmup(KvsClientInterface* client, const BenchConfig& config);
+
+// Run a single benchmark workload for `config.duration` seconds,
 // printing periodic throughput reports to stdout.
 BenchResult bench(KvsClientInterface* client, const BenchConfig& config);
 

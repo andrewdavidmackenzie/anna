@@ -447,28 +447,28 @@ func runBench(client *annalib.KVSClient, numKeys, valueSize, duration, reportPer
 	}
 
 	value := strings.Repeat("a", valueSize)
+	// Warmup once, shared across all workloads.
+	fmt.Printf("Warming up %d keys (%d bytes each)...\n", numKeys, valueSize)
+	warmupStart := time.Now()
+	warmupErrors := 0
+	for i := 1; i <= numKeys; i++ {
+		if err := client.Put(benchKey(i), value); err != nil {
+			warmupErrors++
+		}
+	}
+	fmt.Printf("Warmup complete in %d ms", time.Since(warmupStart).Milliseconds())
+	if warmupErrors > 0 {
+		fmt.Printf(" (%d errors)", warmupErrors)
+		if warmupErrors == numKeys {
+			fmt.Println("\nAll warmup PUTs failed, aborting benchmark")
+			return
+		}
+	}
+	fmt.Println()
+
 	var results []benchResult
 
 	for _, wl := range workloads {
-		// Warmup
-		fmt.Printf("Warming up %d keys (%d bytes each)...\n", numKeys, valueSize)
-		warmupStart := time.Now()
-		warmupErrors := 0
-		for i := 1; i <= numKeys; i++ {
-			if err := client.Put(benchKey(i), value); err != nil {
-				warmupErrors++
-			}
-		}
-		fmt.Printf("Warmup complete in %d ms", time.Since(warmupStart).Milliseconds())
-		if warmupErrors > 0 {
-			fmt.Printf(" (%d errors)", warmupErrors)
-			if warmupErrors == numKeys {
-				fmt.Println("\nAll warmup PUTs failed, aborting benchmark")
-				return
-			}
-		}
-		fmt.Println()
-
 		fmt.Printf("Running %s benchmark for %ds (%d keys, %d B values)...\n",
 			wl, duration, numKeys, valueSize)
 

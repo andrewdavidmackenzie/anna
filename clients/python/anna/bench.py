@@ -37,19 +37,21 @@ def run_bench(client, num_keys=1000, value_size=256, duration=10,
     value = "a" * value_size
     results = []
 
+    # Validate all workloads upfront.
     for wl in workloads:
         if wl not in ("GET", "PUT", "MIXED"):
             raise ValueError(f"Invalid workload: {wl}. Must be GET, PUT, or MIXED.")
 
-        # Warmup
-        print(f"Warming up {num_keys} keys ({value_size} bytes each)...")
-        warmup_start = time_mod.monotonic()
-        for i in range(1, num_keys + 1):
-            ts = time_mod.time_ns()
-            client.put(bench_key(i), LWWPairLattice(ts, value.encode()))
-        warmup_ms = (time_mod.monotonic() - warmup_start) * 1000
-        print(f"Warmup complete in {warmup_ms:.0f} ms")
+    # Warmup once, shared across all workloads.
+    print(f"Warming up {num_keys} keys ({value_size} bytes each)...")
+    warmup_start = time_mod.monotonic()
+    for i in range(1, num_keys + 1):
+        ts = time_mod.time_ns()
+        client.put(bench_key(i), LWWPairLattice(ts, value.encode()))
+    warmup_ms = (time_mod.monotonic() - warmup_start) * 1000
+    print(f"Warmup complete in {warmup_ms:.0f} ms")
 
+    for wl in workloads:
         print(f"Running {wl} benchmark for {duration}s "
               f"({num_keys} keys, {value_size} B values)...")
 
