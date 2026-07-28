@@ -113,17 +113,33 @@ ROUTE_PID=$!
 sleep 1
 "$SERVER_DIR/anna-kvs" --config "$BENCH_CONFIG" > "$LOG_DIR/kvs.log" 2>&1 &
 KVS_PID=$!
-sleep 3
 
-# Verify cluster is running
+# Verify processes are alive
 for pid_var in MONITOR_PID ROUTE_PID KVS_PID; do
   pid="${!pid_var}"
+  sleep 0.5
   if ! kill -0 "$pid" 2>/dev/null; then
     echo "Error: process $pid_var (PID $pid) is not running. Check $LOG_DIR/"
     cat "$LOG_DIR"/*.log
     exit 1
   fi
 done
+
+# Wait for routing tier to accept connections (port 6450)
+echo "Waiting for cluster to be ready..."
+TIMEOUT=30
+ELAPSED=0
+while ! (echo > /dev/tcp/127.0.0.1/6450) 2>/dev/null; do
+  sleep 1
+  ELAPSED=$((ELAPSED + 1))
+  if [[ $ELAPSED -ge $TIMEOUT ]]; then
+    echo "Error: routing tier not ready after ${TIMEOUT}s. Check $LOG_DIR/"
+    cat "$LOG_DIR"/*.log
+    exit 1
+  fi
+done
+# Allow hash ring to stabilize after routing is reachable
+sleep 2
 echo "Cluster ready"
 echo ""
 echo "Benchmark parameters: keys=$KEYS, value_size=$VALUE_SIZE, duration=${DURATION}s"

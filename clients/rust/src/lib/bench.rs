@@ -112,6 +112,11 @@ pub async fn run_bench(
     client: &mut (impl BenchClient + Send),
     config: &BenchConfig,
 ) -> Result<Vec<WorkloadResult>> {
+    if config.num_keys == 0 {
+        return Err(crate::errors::Error::Process(
+            "num_keys must be > 0".to_string(),
+        ));
+    }
     let value: String = "a".repeat(config.value_size);
 
     println!(
@@ -403,5 +408,18 @@ mod tests {
         assert_eq!(results[0].name, "GET");
         assert_eq!(results[1].name, "PUT");
         assert_eq!(results[2].name, "MIXED");
+    }
+
+    #[tokio::test]
+    async fn run_bench_zero_keys_fails() {
+        let mut client = MockBenchClient;
+        let config = BenchConfig {
+            num_keys: 0,
+            value_size: 16,
+            duration: Duration::from_secs(1),
+            report_period: Duration::from_secs(1),
+            workloads: vec!["GET".into()],
+        };
+        assert!(run_bench(&mut client, &config).await.is_err());
     }
 }
