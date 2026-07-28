@@ -149,41 +149,15 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
     if (v.size() > 1) bc.num_keys = std::stoul(v[1]);
     if (v.size() > 2) bc.value_size = std::stoul(v[2]);
     if (v.size() > 3) bc.duration = std::stoul(v[3]);
-    if (v.size() > 4) bc.workload = v[4];
-
+    string wl_arg = (v.size() > 4) ? v[4] : "ALL";
+    std::transform(wl_arg.begin(), wl_arg.end(), wl_arg.begin(), ::toupper);
     vector<string> workloads;
-    string wl = bc.workload;
-    std::transform(wl.begin(), wl.end(), wl.begin(), ::toupper);
-    if (wl.empty() || wl == "ALL") {
+    if (wl_arg == "ALL") {
       workloads = {"GET", "PUT", "MIXED"};
     } else {
-      workloads = {wl};
+      workloads = {wl_arg};
     }
-
-    annalib::bench_warmup(client, bc);
-
-    vector<annalib::BenchResult> results;
-    for (const string& w : workloads) {
-      bc.workload = w;
-      results.push_back(annalib::bench(client, bc));
-      std::cout << std::endl;
-    }
-
-    std::cout << "\n=== Benchmark Summary (C++) ===" << std::endl;
-    std::cout << std::left << std::setw(10) << "Workload"
-              << std::right << std::setw(12) << "Ops/sec"
-              << std::setw(14) << "Latency(us)"
-              << std::setw(12) << "Total ops"
-              << std::setw(10) << "Time(s)" << std::endl;
-    std::cout << string(58, '-') << std::endl;
-    for (const auto& r : results) {
-      std::cout << std::left << std::setw(10) << r.workload
-                << std::right << std::setw(12) << static_cast<unsigned>(r.avg_throughput)
-                << std::setw(14) << std::fixed << std::setprecision(1) << r.avg_latency_us
-                << std::setw(12) << r.total_ops
-                << std::setw(10) << std::setprecision(2) << r.elapsed_seconds
-                << std::endl;
-    }
+    annalib::bench_suite(client, bc, workloads);
   } else if (command == "STATUS") {
     for (const string& name : annalib::status()) {
       std::cout << name << " process is running" << std::endl;
@@ -329,7 +303,6 @@ int main(int argc, char* argv[]) {
   if (command == "BENCH") {
     std::unique_ptr<KvsClient> client = annalib::make_client(config);
 
-    // Determine which workloads to run
     vector<string> workloads;
     if (bench_workload.empty() || bench_workload == "ALL") {
       workloads = {"GET", "PUT", "MIXED"};
@@ -339,41 +312,11 @@ int main(int argc, char* argv[]) {
       workloads = {wl};
     }
 
-    // Warmup once, shared across all workloads.
     try {
-      annalib::bench_warmup(client.get(), bench_config);
+      annalib::bench_suite(client.get(), bench_config, workloads);
     } catch (const std::exception& e) {
-      std::cerr << "Error during warmup: " << e.what() << std::endl;
+      std::cerr << "Error: " << e.what() << std::endl;
       return 1;
-    }
-
-    vector<annalib::BenchResult> results;
-    for (const string& wl : workloads) {
-      bench_config.workload = wl;
-      try {
-        results.push_back(annalib::bench(client.get(), bench_config));
-      } catch (const std::exception& e) {
-        std::cerr << "Error running " << wl << " workload: " << e.what()
-                  << std::endl;
-      }
-      std::cout << std::endl;
-    }
-
-    // Print summary table
-    std::cout << "\n=== Benchmark Summary (C++) ===" << std::endl;
-    std::cout << std::left << std::setw(10) << "Workload"
-              << std::right << std::setw(12) << "Ops/sec"
-              << std::setw(14) << "Latency(us)"
-              << std::setw(12) << "Total ops"
-              << std::setw(10) << "Time(s)" << std::endl;
-    std::cout << string(58, '-') << std::endl;
-    for (const auto& r : results) {
-      std::cout << std::left << std::setw(10) << r.workload
-                << std::right << std::setw(12) << static_cast<unsigned>(r.avg_throughput)
-                << std::setw(14) << std::fixed << std::setprecision(1) << r.avg_latency_us
-                << std::setw(12) << r.total_ops
-                << std::setw(10) << std::setprecision(2) << r.elapsed_seconds
-                << std::endl;
     }
   } else if (command == "CLI") {
     std::unique_ptr<KvsClient> client = annalib::make_client(config);

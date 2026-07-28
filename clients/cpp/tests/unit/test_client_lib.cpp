@@ -1175,6 +1175,35 @@ TEST(BenchTest, InvalidWorkloadThrows) {
   EXPECT_THROW(annalib::bench(&client, config), std::invalid_argument);
 }
 
+TEST(BenchTest, SuiteRunsAllWorkloads) {
+  AutoRespondMockKvsClient client;
+  annalib::BenchConfig config;
+  config.num_keys = 5;
+  config.value_size = 16;
+  config.duration = 1;
+  config.report_period = 1;
+  vector<string> workloads = {"GET", "PUT", "MIXED"};
+  auto results = annalib::bench_suite(&client, config, workloads);
+  EXPECT_EQ(results.size(), 3u);
+  EXPECT_EQ(results[0].workload, "GET");
+  EXPECT_EQ(results[1].workload, "PUT");
+  EXPECT_EQ(results[2].workload, "MIXED");
+  for (const auto& r : results) {
+    EXPECT_GT(r.total_ops, 0u);
+  }
+}
+
+TEST(BenchTest, SuiteDefaultsToAllWorkloads) {
+  AutoRespondMockKvsClient client;
+  annalib::BenchConfig config;
+  config.num_keys = 5;
+  config.value_size = 16;
+  config.duration = 1;
+  config.report_period = 1;
+  auto results = annalib::bench_suite(&client, config, {});
+  EXPECT_EQ(results.size(), 3u);
+}
+
 TEST(BenchTest, MixedWorkloadRuns) {
   AutoRespondMockKvsClient client;
   annalib::BenchConfig config;

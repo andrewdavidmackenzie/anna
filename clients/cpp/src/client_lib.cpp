@@ -665,6 +665,42 @@ static string generate_bench_key(unsigned n) {
   return string(8 - s.length(), '0') + s;
 }
 
+std::vector<BenchResult> bench_suite(KvsClientInterface* client,
+                                      const BenchConfig& config,
+                                      const std::vector<std::string>& workloads) {
+  vector<string> wls = workloads;
+  if (wls.empty()) {
+    wls = {"GET", "PUT", "MIXED"};
+  }
+
+  bench_warmup(client, config);
+
+  vector<BenchResult> results;
+  for (const string& wl : wls) {
+    BenchConfig wl_config = config;
+    wl_config.workload = wl;
+    results.push_back(bench(client, wl_config));
+    std::cout << std::endl;
+  }
+
+  std::cout << "\n=== Benchmark Summary (C++) ===" << std::endl;
+  std::cout << std::left << std::setw(10) << "Workload"
+            << std::right << std::setw(12) << "Ops/sec"
+            << std::setw(14) << "Latency(us)"
+            << std::setw(12) << "Total ops"
+            << std::setw(10) << "Time(s)" << std::endl;
+  std::cout << string(58, '-') << std::endl;
+  for (const auto& r : results) {
+    std::cout << std::left << std::setw(10) << r.workload
+              << std::right << std::setw(12) << static_cast<unsigned>(r.avg_throughput)
+              << std::setw(14) << std::fixed << std::setprecision(1) << r.avg_latency_us
+              << std::setw(12) << r.total_ops
+              << std::setw(10) << std::setprecision(2) << r.elapsed_seconds
+              << std::endl;
+  }
+  return results;
+}
+
 void bench_warmup(KvsClientInterface* client, const BenchConfig& config) {
   if (config.num_keys == 0) {
     throw std::invalid_argument("num_keys must be > 0");

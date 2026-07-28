@@ -255,6 +255,13 @@ struct BenchResult {
   double elapsed_seconds;
 };
 
+// Run a complete benchmark suite: warmup + specified workloads.
+// `workloads` is a list of workload names (GET, PUT, MIXED).
+// If empty, runs all three.
+std::vector<BenchResult> bench_suite(KvsClientInterface* client,
+                                      const BenchConfig& config,
+                                      const std::vector<std::string>& workloads);
+
 // Populate the KVS with `config.num_keys` keys of `config.value_size`
 // bytes each. Call once before running workloads.
 void bench_warmup(KvsClientInterface* client, const BenchConfig& config);
