@@ -665,6 +665,19 @@ static string generate_bench_key(unsigned n) {
   return string(8 - s.length(), '0') + s;
 }
 
+std::vector<std::string> parse_workloads(const std::string& workload_arg) {
+  string wl = workload_arg;
+  std::transform(wl.begin(), wl.end(), wl.begin(), ::toupper);
+  if (wl.empty() || wl == "ALL") {
+    return {"GET", "PUT", "MIXED"};
+  }
+  if (wl == "GET" || wl == "PUT" || wl == "MIXED") {
+    return {wl};
+  }
+  throw std::invalid_argument("Invalid workload: " + wl +
+                              ". Must be GET, PUT, MIXED, or ALL.");
+}
+
 std::vector<BenchResult> bench_suite(KvsClientInterface* client,
                                       const BenchConfig& config,
                                       const std::vector<std::string>& workloads) {

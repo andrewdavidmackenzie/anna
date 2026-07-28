@@ -150,14 +150,7 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
     if (v.size() > 2) bc.value_size = std::stoul(v[2]);
     if (v.size() > 3) bc.duration = std::stoul(v[3]);
     string wl_arg = (v.size() > 4) ? v[4] : "ALL";
-    std::transform(wl_arg.begin(), wl_arg.end(), wl_arg.begin(), ::toupper);
-    vector<string> workloads;
-    if (wl_arg == "ALL") {
-      workloads = {"GET", "PUT", "MIXED"};
-    } else {
-      workloads = {wl_arg};
-    }
-    annalib::bench_suite(client, bc, workloads);
+    annalib::bench_suite(client, bc, annalib::parse_workloads(wl_arg));
   } else if (command == "STATUS") {
     for (const string& name : annalib::status()) {
       std::cout << name << " process is running" << std::endl;
@@ -301,19 +294,10 @@ int main(int argc, char* argv[]) {
   }
 
   if (command == "BENCH") {
-    std::unique_ptr<KvsClient> client = annalib::make_client(config);
-
-    vector<string> workloads;
-    if (bench_workload.empty() || bench_workload == "ALL") {
-      workloads = {"GET", "PUT", "MIXED"};
-    } else {
-      string wl = bench_workload;
-      std::transform(wl.begin(), wl.end(), wl.begin(), ::toupper);
-      workloads = {wl};
-    }
-
     try {
-      annalib::bench_suite(client.get(), bench_config, workloads);
+      std::unique_ptr<KvsClient> client = annalib::make_client(config);
+      annalib::bench_suite(client.get(), bench_config,
+                           annalib::parse_workloads(bench_workload));
     } catch (const std::exception& e) {
       std::cerr << "Error: " << e.what() << std::endl;
       return 1;

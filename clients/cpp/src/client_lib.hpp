@@ -255,6 +255,11 @@ struct BenchResult {
   double elapsed_seconds;
 };
 
+// Parse a workload argument string into a list of workload names.
+// Accepts "ALL", "GET", "PUT", "MIXED" (case-insensitive).
+// Throws std::invalid_argument for unrecognized values.
+std::vector<std::string> parse_workloads(const std::string& workload_arg);
+
 // Run a complete benchmark suite: warmup + specified workloads.
 // `workloads` is a list of workload names (GET, PUT, MIXED).
 // If empty, runs all three.
