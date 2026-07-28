@@ -224,6 +224,22 @@ TEST_F(CliInvocationTest, CliWithThreadsArg) {
   EXPECT_EQ(r.exit_code, 0);
 }
 
+TEST_F(CliInvocationTest, BenchRequiresRouting) {
+  auto r = run_command(cli_binary + " bench");
+  EXPECT_NE(r.exit_code, 0);
+}
+
+TEST_F(CliInvocationTest, BenchInvalidKeysValue) {
+  auto r = run_command(cli_binary + " --routing 127.0.0.1 --client-ip 127.0.0.1 --keys abc bench");
+  EXPECT_NE(r.exit_code, 0);
+}
+
+TEST_F(CliInvocationTest, BenchHelpIncludesBenchCommand) {
+  auto r = run_command(cli_binary + " help");
+  EXPECT_EQ(r.exit_code, 0);
+  EXPECT_NE(r.stdout_str.find("bench"), std::string::npos);
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
