@@ -179,7 +179,10 @@ async fn run() -> Result<String> {
         ("bench", sub_matches) => {
             let config = get_client_config(&matches);
             let mut client = KVSClient::new(&config, None).await;
-            run_bench_cli(&mut client, sub_matches).await?;
+            {
+                let config = bench_config_from_clap(sub_matches);
+                annalib::bench::run_bench(&mut client, &config).await?;
+            }
             Ok(String::new())
         }
         (_, _) => Ok("No command executed".into()),
@@ -548,9 +551,7 @@ fn get_app() -> Command {
         )
 }
 
-async fn run_bench_cli(client: &mut KVSClient, args: &ArgMatches) -> Result<()> {
-    use annalib::bench::{run_bench, BenchConfig};
-
+fn bench_config_from_clap(args: &ArgMatches) -> annalib::bench::BenchConfig {
     let num_keys = *args.get_one::<u64>("keys").expect("default set");
     let value_size = *args.get_one::<usize>("value-size").expect("default set");
     let duration_secs = *args.get_one::<u64>("duration").expect("default set");
@@ -565,16 +566,13 @@ async fn run_bench_cli(client: &mut KVSClient, args: &ArgMatches) -> Result<()> 
         other => vec![other.to_string()],
     };
 
-    let config = BenchConfig {
+    annalib::bench::BenchConfig {
         num_keys,
         value_size,
         duration: Duration::from_secs(duration_secs),
         report_period: Duration::from_secs(report_secs),
         workloads,
-    };
-
-    run_bench(client, &config).await?;
-    Ok(())
+    }
 }
 
 fn parse_bench_args(split: &[&str]) -> Result<annalib::bench::BenchConfig> {
@@ -791,14 +789,44 @@ mod test {
             ])
             .expect("should parse bench with defaults");
         let (_, sub) = matches.subcommand().expect("should have subcommand");
-        assert_eq!(*sub.get_one::<u64>("keys").expect("keys"), 1000);
-        assert_eq!(
-            *sub.get_one::<usize>("value-size").expect("value-size"),
-            256
-        );
-        assert_eq!(*sub.get_one::<u64>("duration").expect("duration"), 10);
-        assert_eq!(*sub.get_one::<u64>("report").expect("report"), 2);
-        assert_eq!(sub.get_one::<String>("workload").expect("workload"), "ALL");
+        let config = bench_config_from_clap(sub);
+        assert_eq!(config.num_keys, 1000);
+        assert_eq!(config.value_size, 256);
+        assert_eq!(config.duration, Duration::from_secs(10));
+        assert_eq!(config.report_period, Duration::from_secs(2));
+        assert_eq!(config.workloads, vec!["GET", "PUT", "MIXED"]);
+    }
+
+    #[test]
+    fn bench_config_from_clap_custom() {
+        let app = get_app();
+        let matches = app
+            .try_get_matches_from(vec![
+                "anna",
+                "--routing",
+                "tcp://127.0.0.1:6450",
+                "--client-ip",
+                "127.0.0.1",
+                "bench",
+                "--keys",
+                "500",
+                "--value-size",
+                "128",
+                "--duration",
+                "5",
+                "--report",
+                "1",
+                "--workload",
+                "PUT",
+            ])
+            .expect("should parse");
+        let (_, sub) = matches.subcommand().expect("should have subcommand");
+        let config = bench_config_from_clap(sub);
+        assert_eq!(config.num_keys, 500);
+        assert_eq!(config.value_size, 128);
+        assert_eq!(config.duration, Duration::from_secs(5));
+        assert_eq!(config.report_period, Duration::from_secs(1));
+        assert_eq!(config.workloads, vec!["PUT"]);
     }
 
     #[test]
