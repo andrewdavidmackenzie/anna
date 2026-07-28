@@ -283,43 +283,8 @@ async fn execute_command(
             client.put_priority(split[1], priority, split[3]).await?
         }
         "BENCH" => {
-            use annalib::bench::{run_bench, BenchConfig};
-            let num_keys: u64 = match split.get(1) {
-                Some(s) => s.parse().map_err(|_| CliError::Other(
-                    format!("Invalid keys value '{}'. Usage: BENCH [keys] [value_size] [duration] [workload]", s)))?,
-                None => 1000,
-            };
-            let value_size: usize = match split.get(2) {
-                Some(s) => s.parse().map_err(|_| CliError::Other(
-                    format!("Invalid value_size '{}'. Usage: BENCH [keys] [value_size] [duration] [workload]", s)))?,
-                None => 256,
-            };
-            let dur: u64 = match split.get(3) {
-                Some(s) => s.parse().map_err(|_| CliError::Other(
-                    format!("Invalid duration '{}'. Usage: BENCH [keys] [value_size] [duration] [workload]", s)))?,
-                None => 10,
-            };
-            let wl_arg = split
-                .get(4)
-                .map(|s| s.to_ascii_uppercase())
-                .unwrap_or_else(|| "ALL".into());
-            let workloads = match wl_arg.as_str() {
-                "ALL" => vec!["GET".into(), "PUT".into(), "MIXED".into()],
-                "GET" | "PUT" | "MIXED" => vec![wl_arg.clone()],
-                _ => {
-                    return Err(CliError::Other(format!(
-                        "Invalid workload '{}'. Must be GET, PUT, MIXED, or ALL",
-                        wl_arg
-                    )))
-                }
-            };
-            let config = BenchConfig {
-                num_keys,
-                value_size,
-                duration: Duration::from_secs(dur),
-                report_period: Duration::from_secs(2),
-                workloads,
-            };
+            use annalib::bench::run_bench;
+            let config = parse_bench_args(&split)?;
             run_bench(client, &config).await?;
         }
         "START" => {
@@ -612,6 +577,57 @@ async fn run_bench_cli(client: &mut KVSClient, args: &ArgMatches) -> Result<()> 
     Ok(())
 }
 
+fn parse_bench_args(split: &[&str]) -> Result<annalib::bench::BenchConfig> {
+    let num_keys: u64 = match split.get(1) {
+        Some(s) => s.parse().map_err(|_| {
+            CliError::Other(format!(
+                "Invalid keys value '{}'. Usage: BENCH [keys] [value_size] [duration] [workload]",
+                s
+            ))
+        })?,
+        None => 1000,
+    };
+    let value_size: usize = match split.get(2) {
+        Some(s) => s.parse().map_err(|_| {
+            CliError::Other(format!(
+                "Invalid value_size '{}'. Usage: BENCH [keys] [value_size] [duration] [workload]",
+                s
+            ))
+        })?,
+        None => 256,
+    };
+    let dur: u64 = match split.get(3) {
+        Some(s) => s.parse().map_err(|_| {
+            CliError::Other(format!(
+                "Invalid duration '{}'. Usage: BENCH [keys] [value_size] [duration] [workload]",
+                s
+            ))
+        })?,
+        None => 10,
+    };
+    let wl_arg = split
+        .get(4)
+        .map(|s| s.to_ascii_uppercase())
+        .unwrap_or_else(|| "ALL".into());
+    let workloads = match wl_arg.as_str() {
+        "ALL" => vec!["GET".into(), "PUT".into(), "MIXED".into()],
+        "GET" | "PUT" | "MIXED" => vec![wl_arg.clone()],
+        _ => {
+            return Err(CliError::Other(format!(
+                "Invalid workload '{}'. Must be GET, PUT, MIXED, or ALL",
+                wl_arg
+            )))
+        }
+    };
+    Ok(annalib::bench::BenchConfig {
+        num_keys,
+        value_size,
+        duration: Duration::from_secs(dur),
+        report_period: Duration::from_secs(2),
+        workloads,
+    })
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -724,5 +740,50 @@ mod test {
             "INVALID",
         ]);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_bench_args_defaults() {
+        let split = vec!["BENCH"];
+        let config = parse_bench_args(&split).expect("should parse");
+        assert_eq!(config.num_keys, 1000);
+        assert_eq!(config.value_size, 256);
+        assert_eq!(config.duration, Duration::from_secs(10));
+        assert_eq!(config.workloads, vec!["GET", "PUT", "MIXED"]);
+    }
+
+    #[test]
+    fn parse_bench_args_custom() {
+        let split = vec!["BENCH", "500", "128", "5", "PUT"];
+        let config = parse_bench_args(&split).expect("should parse");
+        assert_eq!(config.num_keys, 500);
+        assert_eq!(config.value_size, 128);
+        assert_eq!(config.duration, Duration::from_secs(5));
+        assert_eq!(config.workloads, vec!["PUT"]);
+    }
+
+    #[test]
+    fn parse_bench_args_invalid_keys() {
+        let split = vec!["BENCH", "nope"];
+        assert!(parse_bench_args(&split).is_err());
+    }
+
+    #[test]
+    fn parse_bench_args_invalid_duration() {
+        let split = vec!["BENCH", "100", "256", "abc"];
+        assert!(parse_bench_args(&split).is_err());
+    }
+
+    #[test]
+    fn parse_bench_args_invalid_workload() {
+        let split = vec!["BENCH", "100", "256", "10", "BOGUS"];
+        assert!(parse_bench_args(&split).is_err());
+    }
+
+    #[test]
+    fn parse_bench_args_all_workloads() {
+        let split = vec!["BENCH", "100", "256", "10", "all"];
+        let config = parse_bench_args(&split).expect("should parse");
+        assert_eq!(config.workloads, vec!["GET", "PUT", "MIXED"]);
     }
 }
