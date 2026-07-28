@@ -43,6 +43,40 @@ class TestRunBenchValidation:
             run_bench(None, workloads=["INVALID"])
 
 
+class TestInteractiveBench:
+    """Test the interactive BENCH command in cli.py."""
+
+    def test_bench_runs_via_execute_command(self):
+        from anna.cli import execute_command
+        client = MockBenchClient()
+        # BENCH with small duration so test completes quickly
+        result = execute_command(client, None, "BENCH 5 16 1 GET")
+        assert result is True  # should not exit
+
+    def test_bench_invalid_keys_prints_error(self, capsys):
+        from anna.cli import execute_command
+        client = MockBenchClient()
+        result = execute_command(client, None, "BENCH nope")
+        assert result is True
+        captured = capsys.readouterr()
+        assert "Error" in captured.out or "Usage" in captured.out
+
+    def test_bench_invalid_workload_prints_error(self, capsys):
+        from anna.cli import execute_command
+        client = MockBenchClient()
+        result = execute_command(client, None, "BENCH 5 16 1 INVALID")
+        assert result is True
+        captured = capsys.readouterr()
+        assert "Error" in captured.out or "Usage" in captured.out
+
+    def test_bench_defaults(self):
+        from anna.cli import execute_command
+        client = MockBenchClient()
+        # Just "BENCH" with no args should use defaults and run all workloads
+        result = execute_command(client, None, "BENCH 5 16 1")
+        assert result is True
+
+
 class TestRunBenchWithMock:
     def test_get_workload(self):
         client = MockBenchClient()
