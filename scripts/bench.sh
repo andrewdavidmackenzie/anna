@@ -14,9 +14,13 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BENCH_DATA="/tmp/anna_bench_data"
-BENCH_CONFIG="/tmp/anna_bench_config.yml"
-LOG_DIR="/tmp/anna_bench_logs"
+BENCH_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/anna_bench.XXXXXX")"
+BENCH_DATA="${BENCH_ROOT}/data"
+BENCH_CONFIG="${BENCH_ROOT}/config.yml"
+LOG_DIR="${BENCH_ROOT}/logs"
+MONITOR_PID=""
+ROUTE_PID=""
+KVS_PID=""
 
 # Default benchmark parameters
 KEYS=1000
@@ -51,20 +55,15 @@ done
 cleanup() {
   echo ""
   echo "Stopping cluster..."
-  pkill -f "anna-monitor.*bench_config" 2>/dev/null || true
-  pkill -f "anna-route.*bench_config" 2>/dev/null || true
-  pkill -f "anna-kvs.*bench_config" 2>/dev/null || true
-  sleep 1
-  rm -rf "$BENCH_DATA" "$BENCH_CONFIG" "$LOG_DIR"
+  for pid in "$KVS_PID" "$ROUTE_PID" "$MONITOR_PID"; do
+    [[ -z "$pid" ]] && continue
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  done
+  rm -rf "$BENCH_ROOT"
 }
 
 trap cleanup EXIT
-
-# Kill any existing anna processes to avoid port conflicts
-pkill -f "anna-monitor" 2>/dev/null || true
-pkill -f "anna-route" 2>/dev/null || true
-pkill -f "anna-kvs" 2>/dev/null || true
-sleep 1
 
 # Create config
 mkdir -p "$BENCH_DATA" "$LOG_DIR"
@@ -107,16 +106,20 @@ EOF
 # Start cluster
 echo "Starting anna cluster..."
 "$SERVER_DIR/anna-monitor" --config "$BENCH_CONFIG" > "$LOG_DIR/monitor.log" 2>&1 &
+MONITOR_PID=$!
 sleep 1
 "$SERVER_DIR/anna-route" --config "$BENCH_CONFIG" > "$LOG_DIR/route.log" 2>&1 &
+ROUTE_PID=$!
 sleep 1
 "$SERVER_DIR/anna-kvs" --config "$BENCH_CONFIG" > "$LOG_DIR/kvs.log" 2>&1 &
+KVS_PID=$!
 sleep 3
 
 # Verify cluster is running
-for proc in anna-monitor anna-route anna-kvs; do
-  if ! pgrep -f "${proc}.*bench_config" > /dev/null; then
-    echo "Error: $proc failed to start. Check $LOG_DIR/"
+for pid_var in MONITOR_PID ROUTE_PID KVS_PID; do
+  pid="${!pid_var}"
+  if ! kill -0 "$pid" 2>/dev/null; then
+    echo "Error: process $pid_var (PID $pid) is not running. Check $LOG_DIR/"
     cat "$LOG_DIR"/*.log
     exit 1
   fi

@@ -342,7 +342,9 @@ mod tests {
             report_period: Duration::from_secs(1),
             workloads: vec!["GET".into()],
         };
-        let results = run_bench(&mut client, &config).await.unwrap();
+        let results = run_bench(&mut client, &config)
+            .await
+            .expect("bench should succeed");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name, "GET");
         assert!(results[0].total_ops > 0);
@@ -358,7 +360,9 @@ mod tests {
             report_period: Duration::from_secs(1),
             workloads: vec!["PUT".into()],
         };
-        let results = run_bench(&mut client, &config).await.unwrap();
+        let results = run_bench(&mut client, &config)
+            .await
+            .expect("bench should succeed");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name, "PUT");
         assert!(results[0].total_ops > 0);
@@ -374,7 +378,9 @@ mod tests {
             report_period: Duration::from_secs(1),
             workloads: vec!["MIXED".into()],
         };
-        let results = run_bench(&mut client, &config).await.unwrap();
+        let results = run_bench(&mut client, &config)
+            .await
+            .expect("bench should succeed");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name, "MIXED");
         assert!(results[0].total_ops > 0);
@@ -390,7 +396,9 @@ mod tests {
             report_period: Duration::from_secs(1),
             workloads: vec!["GET".into(), "PUT".into(), "MIXED".into()],
         };
-        let results = run_bench(&mut client, &config).await.unwrap();
+        let results = run_bench(&mut client, &config)
+            .await
+            .expect("bench should succeed");
         assert_eq!(results.len(), 3);
         assert_eq!(results[0].name, "GET");
         assert_eq!(results[1].name, "PUT");

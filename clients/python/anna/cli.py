@@ -122,13 +122,17 @@ def execute_command(client, config_path, line):
             print("Failure!")
     elif cmd == "BENCH":
         from .bench import run_bench
-        num_keys = int(parts[1]) if len(parts) > 1 else 1000
-        value_size = int(parts[2]) if len(parts) > 2 else 256
-        duration = int(parts[3]) if len(parts) > 3 else 10
-        wl_arg = parts[4].upper() if len(parts) > 4 else "ALL"
-        workloads = ["GET", "PUT", "MIXED"] if wl_arg == "ALL" else [wl_arg]
-        run_bench(client, num_keys=num_keys, value_size=value_size,
-                  duration=duration, workloads=workloads)
+        try:
+            num_keys = int(parts[1]) if len(parts) > 1 else 1000
+            value_size = int(parts[2]) if len(parts) > 2 else 256
+            duration = int(parts[3]) if len(parts) > 3 else 10
+            wl_arg = parts[4].upper() if len(parts) > 4 else "ALL"
+            workloads = ["GET", "PUT", "MIXED"] if wl_arg == "ALL" else [wl_arg]
+            run_bench(client, num_keys=num_keys, value_size=value_size,
+                      duration=duration, workloads=workloads)
+        except (ValueError, TypeError) as e:
+            print(f"Error: {e}")
+            print("Usage: BENCH [keys] [value_size] [duration] [workload]")
     elif cmd == "START":
         count = start(config_path)
         print(f"{count} anna processes were started")

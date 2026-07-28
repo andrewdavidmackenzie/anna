@@ -284,19 +284,34 @@ async fn execute_command(
         }
         "BENCH" => {
             use annalib::bench::{run_bench, BenchConfig};
-            let num_keys = split.get(1).and_then(|s| s.parse().ok()).unwrap_or(1000u64);
-            let value_size = split
-                .get(2)
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(256usize);
-            let dur = split.get(3).and_then(|s| s.parse().ok()).unwrap_or(10u64);
+            let num_keys: u64 = match split.get(1) {
+                Some(s) => s.parse().map_err(|_| CliError::Other(
+                    format!("Invalid keys value '{}'. Usage: BENCH [keys] [value_size] [duration] [workload]", s)))?,
+                None => 1000,
+            };
+            let value_size: usize = match split.get(2) {
+                Some(s) => s.parse().map_err(|_| CliError::Other(
+                    format!("Invalid value_size '{}'. Usage: BENCH [keys] [value_size] [duration] [workload]", s)))?,
+                None => 256,
+            };
+            let dur: u64 = match split.get(3) {
+                Some(s) => s.parse().map_err(|_| CliError::Other(
+                    format!("Invalid duration '{}'. Usage: BENCH [keys] [value_size] [duration] [workload]", s)))?,
+                None => 10,
+            };
             let wl_arg = split
                 .get(4)
                 .map(|s| s.to_ascii_uppercase())
                 .unwrap_or_else(|| "ALL".into());
             let workloads = match wl_arg.as_str() {
                 "ALL" => vec!["GET".into(), "PUT".into(), "MIXED".into()],
-                other => vec![other.to_string()],
+                "GET" | "PUT" | "MIXED" => vec![wl_arg.clone()],
+                _ => {
+                    return Err(CliError::Other(format!(
+                        "Invalid workload '{}'. Must be GET, PUT, MIXED, or ALL",
+                        wl_arg
+                    )))
+                }
             };
             let config = BenchConfig {
                 num_keys,
