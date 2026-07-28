@@ -743,6 +743,65 @@ mod test {
     }
 
     #[test]
+    fn bench_clap_accepts_valid_args() {
+        let app = get_app();
+        let matches = app
+            .try_get_matches_from(vec![
+                "anna",
+                "--routing",
+                "tcp://127.0.0.1:6450",
+                "--client-ip",
+                "127.0.0.1",
+                "bench",
+                "--keys",
+                "500",
+                "--value-size",
+                "128",
+                "--duration",
+                "5",
+                "--report",
+                "1",
+                "--workload",
+                "PUT",
+            ])
+            .expect("should parse valid bench args");
+        let (name, sub) = matches.subcommand().expect("should have subcommand");
+        assert_eq!(name, "bench");
+        assert_eq!(*sub.get_one::<u64>("keys").expect("keys"), 500);
+        assert_eq!(
+            *sub.get_one::<usize>("value-size").expect("value-size"),
+            128
+        );
+        assert_eq!(*sub.get_one::<u64>("duration").expect("duration"), 5);
+        assert_eq!(*sub.get_one::<u64>("report").expect("report"), 1);
+        assert_eq!(sub.get_one::<String>("workload").expect("workload"), "PUT");
+    }
+
+    #[test]
+    fn bench_clap_defaults() {
+        let app = get_app();
+        let matches = app
+            .try_get_matches_from(vec![
+                "anna",
+                "--routing",
+                "tcp://127.0.0.1:6450",
+                "--client-ip",
+                "127.0.0.1",
+                "bench",
+            ])
+            .expect("should parse bench with defaults");
+        let (_, sub) = matches.subcommand().expect("should have subcommand");
+        assert_eq!(*sub.get_one::<u64>("keys").expect("keys"), 1000);
+        assert_eq!(
+            *sub.get_one::<usize>("value-size").expect("value-size"),
+            256
+        );
+        assert_eq!(*sub.get_one::<u64>("duration").expect("duration"), 10);
+        assert_eq!(*sub.get_one::<u64>("report").expect("report"), 2);
+        assert_eq!(sub.get_one::<String>("workload").expect("workload"), "ALL");
+    }
+
+    #[test]
     fn parse_bench_args_defaults() {
         let split = vec!["BENCH"];
         let config = parse_bench_args(&split).expect("should parse");

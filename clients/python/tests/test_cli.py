@@ -3,6 +3,8 @@ import sys
 import os
 import tempfile
 
+import pytest
+
 def run_cli(*args):
     result = subprocess.run(
         [sys.executable, "-m", "anna"] + list(args),
@@ -758,15 +760,63 @@ class TestBenchValidation:
         assert "invalid choice" in r.stderr.lower()
 
     def test_bench_valid_workload_choices(self):
-        # Verify each valid workload is accepted at the argument parsing level.
-        # We only need to confirm argparse accepts the value, not that the
-        # bench actually runs (which would require a server).
         import argparse
-        from anna.cli import main
         for wl in ["GET", "PUT", "MIXED", "ALL", "get", "put", "mixed", "all"]:
-            # Construct the parser and parse -- should not raise
             parser = argparse.ArgumentParser()
             parser.add_argument("--workload", choices=["GET", "PUT", "MIXED", "ALL"],
                                 type=str.upper)
             args = parser.parse_args(["--workload", wl])
             assert args.workload in ("GET", "PUT", "MIXED", "ALL")
+
+    def test_bench_main_validation_zero_keys(self):
+        """Test main() bench validation directly for coverage."""
+        from unittest.mock import patch
+        from anna.cli import main
+        with patch("sys.argv", ["anna", "--routing", "127.0.0.1",
+                                "--client-ip", "127.0.0.1",
+                                "--keys", "0", "bench"]):
+            with pytest.raises(SystemExit):
+                main()
+
+    def test_bench_main_validation_zero_duration(self):
+        from unittest.mock import patch
+        from anna.cli import main
+        with patch("sys.argv", ["anna", "--routing", "127.0.0.1",
+                                "--client-ip", "127.0.0.1",
+                                "--duration", "0", "bench"]):
+            with pytest.raises(SystemExit):
+                main()
+
+    def test_bench_main_validation_zero_report(self):
+        from unittest.mock import patch
+        from anna.cli import main
+        with patch("sys.argv", ["anna", "--routing", "127.0.0.1",
+                                "--client-ip", "127.0.0.1",
+                                "--report", "0", "bench"]):
+            with pytest.raises(SystemExit):
+                main()
+
+    def test_bench_main_validation_negative_value_size(self):
+        from unittest.mock import patch
+        from anna.cli import main
+        with patch("sys.argv", ["anna", "--routing", "127.0.0.1",
+                                "--client-ip", "127.0.0.1",
+                                "--value-size", "-1", "bench"]):
+            with pytest.raises(SystemExit):
+                main()
+
+    def test_bench_main_runs_with_mock(self):
+        """Test the full main() bench path with a mocked client."""
+        from unittest.mock import patch, MagicMock
+        from anna.cli import main
+        from anna.lattices import LWWPairLattice
+        mock_client = MagicMock()
+        mock_client.put.return_value = {"k": True}
+        mock_client.get.return_value = {"k": LWWPairLattice(1, b"v")}
+        with patch("sys.argv", ["anna", "--routing", "127.0.0.1",
+                                "--client-ip", "127.0.0.1",
+                                "--keys", "5", "--value-size", "16",
+                                "--duration", "1", "--workload", "GET",
+                                "bench"]), \
+             patch("anna.client.AnnaTcpClient", return_value=mock_client):
+            main()
