@@ -202,6 +202,15 @@ func formatStatus(statuses []annalib.ProcessStatus) string {
 	return sb.String()
 }
 
+// isTypeName returns true if name is a known lattice type name.
+func isTypeName(name string) bool {
+	switch strings.ToLower(name) {
+	case "lww", "set", "ordered_set", "priority", "causal", "single_causal":
+		return true
+	}
+	return false
+}
+
 func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exit bool, err error) {
 	parts := strings.Fields(strings.TrimSpace(line))
 	if len(parts) == 0 {
@@ -210,135 +219,151 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 
 	cmd := strings.ToUpper(parts[0])
 	switch cmd {
-	case "GET":
+	// Unified GET: all GET variants use the same auto-detect logic.
+	case "GET", "GET_SET", "GET_ORDERED_SET", "GET_CAUSAL",
+		"GET_SINGLE_CAUSAL", "GET_PRIORITY":
 		if len(parts) != 2 {
 			return false, fmt.Errorf("usage: GET <key>")
 		}
-		val, err := client.Get(parts[1])
-		if err != nil {
-			return false, err
-		}
-		fmt.Println(val)
-
-	case "PUT":
-		if len(parts) != 3 {
-			return false, fmt.Errorf("usage: PUT <key> <value>")
-		}
-		if err := client.Put(parts[1], parts[2]); err != nil {
-			return false, err
-		}
-
-	case "GET_SET":
-		if len(parts) != 2 {
-			return false, fmt.Errorf("usage: GET_SET <key>")
-		}
-		values, err := client.GetSet(parts[1])
-		if err != nil {
-			return false, err
-		}
-		fmt.Printf("{ %s }\n", strings.Join(values, " "))
-
-	case "PUT_SET":
-		if len(parts) < 3 {
-			return false, fmt.Errorf("usage: PUT_SET <key> <value1> [value2 ...]")
-		}
-		if err := client.PutSet(parts[1], parts[2:]); err != nil {
-			return false, err
-		}
-
-	case "GET_CAUSAL":
-		if len(parts) != 2 {
-			return false, fmt.Errorf("usage: GET_CAUSAL <key>")
-		}
-		cv, err := client.GetCausal(parts[1])
-		if err != nil {
-			return false, err
-		}
-		vcKeys := sortedKeys(cv.VectorClock)
-		for _, k := range vcKeys {
-			fmt.Printf("{%s : %d}\n", k, cv.VectorClock[k])
-		}
-		depKeys := sortedStringKeys(cv.Dependencies)
-		for _, depKey := range depKeys {
-			vc := cv.Dependencies[depKey]
-			var vcParts []string
-			for _, k := range sortedKeys(vc) {
-				vcParts = append(vcParts, fmt.Sprintf("{%s : %d}", k, vc[k]))
+		// For legacy GET_* commands, use the type-specific method for
+		// correct deserialization.
+		switch cmd {
+		case "GET_SET":
+			values, err := client.GetSet(parts[1])
+			if err != nil {
+				return false, err
 			}
-			fmt.Printf("%s : %s\n", depKey, strings.Join(vcParts, " "))
-		}
-		fmt.Println(cv.Value)
-
-	case "PUT_CAUSAL":
-		if len(parts) != 3 {
-			return false, fmt.Errorf("usage: PUT_CAUSAL <key> <value>")
-		}
-		if err := client.PutCausal(parts[1], parts[2]); err != nil {
-			return false, err
-		}
-
-	case "GET_ORDERED_SET":
-		if len(parts) != 2 {
-			return false, fmt.Errorf("usage: GET_ORDERED_SET <key>")
-		}
-		values, err := client.GetOrderedSet(parts[1])
-		if err != nil {
-			return false, err
-		}
-		fmt.Printf("[ %s ]\n", strings.Join(values, " "))
-
-	case "PUT_ORDERED_SET":
-		if len(parts) < 3 {
-			return false, fmt.Errorf("usage: PUT_ORDERED_SET <key> <value1> [value2 ...]")
-		}
-		if err := client.PutOrderedSet(parts[1], parts[2:]); err != nil {
-			return false, err
-		}
-
-	case "GET_SINGLE_CAUSAL":
-		if len(parts) != 2 {
-			return false, fmt.Errorf("usage: GET_SINGLE_CAUSAL <key>")
-		}
-		scv, err := client.GetSingleCausal(parts[1])
-		if err != nil {
-			return false, err
-		}
-		vcKeys := sortedKeys(scv.VectorClock)
-		for _, k := range vcKeys {
-			fmt.Printf("{%s : %d}\n", k, scv.VectorClock[k])
-		}
-		for _, v := range scv.Values {
-			fmt.Println(v)
-		}
-
-	case "PUT_SINGLE_CAUSAL":
-		if len(parts) != 3 {
-			return false, fmt.Errorf("usage: PUT_SINGLE_CAUSAL <key> <value>")
-		}
-		if err := client.PutSingleCausal(parts[1], parts[2]); err != nil {
-			return false, err
+			fmt.Printf("{ %s }\n", strings.Join(values, " "))
+		case "GET_ORDERED_SET":
+			values, err := client.GetOrderedSet(parts[1])
+			if err != nil {
+				return false, err
+			}
+			fmt.Printf("[ %s ]\n", strings.Join(values, " "))
+		case "GET_CAUSAL":
+			cv, err := client.GetCausal(parts[1])
+			if err != nil {
+				return false, err
+			}
+			vcKeys := sortedKeys(cv.VectorClock)
+			for _, k := range vcKeys {
+				fmt.Printf("{%s : %d}\n", k, cv.VectorClock[k])
+			}
+			depKeys := sortedStringKeys(cv.Dependencies)
+			for _, depKey := range depKeys {
+				vc := cv.Dependencies[depKey]
+				var vcParts []string
+				for _, k := range sortedKeys(vc) {
+					vcParts = append(vcParts, fmt.Sprintf("{%s : %d}", k, vc[k]))
+				}
+				fmt.Printf("%s : %s\n", depKey, strings.Join(vcParts, " "))
+			}
+			fmt.Println(cv.Value)
+		case "GET_SINGLE_CAUSAL":
+			scv, err := client.GetSingleCausal(parts[1])
+			if err != nil {
+				return false, err
+			}
+			vcKeys := sortedKeys(scv.VectorClock)
+			for _, k := range vcKeys {
+				fmt.Printf("{%s : %d}\n", k, scv.VectorClock[k])
+			}
+			for _, v := range scv.Values {
+				fmt.Println(v)
+			}
+		case "GET_PRIORITY":
+			priority, value, err := client.GetPriority(parts[1])
+			if err != nil {
+				return false, err
+			}
+			fmt.Printf("priority: %g\n%s\n", priority, value)
+		default: // "GET"
+			val, err := client.Get(parts[1])
+			if err != nil {
+				return false, err
+			}
+			fmt.Println(val)
 		}
 
-	case "GET_PRIORITY":
-		if len(parts) != 2 {
-			return false, fmt.Errorf("usage: GET_PRIORITY <key>")
-		}
-		priority, value, err := client.GetPriority(parts[1])
-		if err != nil {
-			return false, err
-		}
-		fmt.Printf("priority: %g\n%s\n", priority, value)
+	// Unified PUT: optional type prefix.
+	case "PUT", "PUT_SET", "PUT_ORDERED_SET", "PUT_CAUSAL",
+		"PUT_SINGLE_CAUSAL", "PUT_PRIORITY":
+		// Determine type name and adjust argument positions.
+		typeName := ""
+		keyIdx := 1
+		valStart := 2
 
-	case "PUT_PRIORITY":
-		if len(parts) != 4 {
-			return false, fmt.Errorf("usage: PUT_PRIORITY <key> <priority> <value>")
+		switch {
+		case cmd == "PUT" && len(parts) >= 3 && isTypeName(parts[1]):
+			typeName = strings.ToLower(parts[1])
+			keyIdx = 2
+			valStart = 3
+		case cmd == "PUT":
+			typeName = "lww"
+		case cmd == "PUT_SET":
+			typeName = "set"
+		case cmd == "PUT_ORDERED_SET":
+			typeName = "ordered_set"
+		case cmd == "PUT_CAUSAL":
+			typeName = "causal"
+		case cmd == "PUT_SINGLE_CAUSAL":
+			typeName = "single_causal"
+		case cmd == "PUT_PRIORITY":
+			typeName = "priority"
 		}
-		var priority float64
-		if _, err := fmt.Sscanf(parts[2], "%f", &priority); err != nil {
-			return false, fmt.Errorf("invalid priority value: %s", parts[2])
+
+		if keyIdx >= len(parts) || valStart > len(parts) {
+			return false, fmt.Errorf("usage: PUT [type] <key> <value(s)>")
 		}
-		if err := client.PutPriority(parts[1], priority, parts[3]); err != nil {
-			return false, err
+		key := parts[keyIdx]
+
+		switch typeName {
+		case "lww":
+			if valStart >= len(parts) {
+				return false, fmt.Errorf("usage: PUT <key> <value>")
+			}
+			if err := client.Put(key, parts[valStart]); err != nil {
+				return false, err
+			}
+		case "set":
+			if valStart >= len(parts) {
+				return false, fmt.Errorf("usage: PUT set <key> <value1> [value2 ...]")
+			}
+			if err := client.PutSet(key, parts[valStart:]); err != nil {
+				return false, err
+			}
+		case "ordered_set":
+			if valStart >= len(parts) {
+				return false, fmt.Errorf("usage: PUT ordered_set <key> <value1> [value2 ...]")
+			}
+			if err := client.PutOrderedSet(key, parts[valStart:]); err != nil {
+				return false, err
+			}
+		case "priority":
+			if valStart+1 >= len(parts) {
+				return false, fmt.Errorf("usage: PUT priority <key> <priority> <value>")
+			}
+			var priority float64
+			if _, err := fmt.Sscanf(parts[valStart], "%f", &priority); err != nil {
+				return false, fmt.Errorf("invalid priority value: %s", parts[valStart])
+			}
+			if err := client.PutPriority(key, priority, parts[valStart+1]); err != nil {
+				return false, err
+			}
+		case "causal":
+			if valStart >= len(parts) {
+				return false, fmt.Errorf("usage: PUT causal <key> <value>")
+			}
+			if err := client.PutCausal(key, parts[valStart]); err != nil {
+				return false, err
+			}
+		case "single_causal":
+			if valStart >= len(parts) {
+				return false, fmt.Errorf("usage: PUT single_causal <key> <value>")
+			}
+			if err := client.PutSingleCausal(key, parts[valStart]); err != nil {
+				return false, err
+			}
 		}
 
 	case "BENCH":
@@ -409,25 +434,20 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 
 func cliUsage() string {
 	return `Valid commands are:
-	get {key} 				- get the value of entry with key = {key} from the KVS
-	put {key} {value} 			- set entry with key = {key} in the KVS to have value = {value}
-	get_set {key} 				- get the value of the set with key = {key} in the KVS
-	put_set {key} {set} 			- set the value of the set with key = {key} in the KVS
-	get_causal {key} 			- causal get of value with key = {key} in the KVS
-	put_causal {key} {value} 		- causal set of value with key = {key} in the KVS
-	get_ordered_set {key} 			- get the ordered set with key = {key} in the KVS
-	put_ordered_set {key} {val1} [...] 	- set the ordered set with key = {key} in the KVS
-	get_single_causal {key} 		- single-key causal get with key = {key} in the KVS
-	put_single_causal {key} {value} 	- single-key causal set with key = {key} in the KVS
-	get_priority {key} 			- get the priority value with key = {key} in the KVS
-	put_priority {key} {priority} {value} 	- set the priority value with key = {key} in the KVS
-	delete {key} 			- delete a key from the KVS
+	get {key}                         - get the value of any key (auto-detects type)
+	put {key} {value}                 - store a value (LWW, default)
+	put set {key} {vals...}           - store a set (union merge)
+	put ordered_set {key} {vals...}   - store an ordered set
+	put priority {key} {pri} {val}    - store with priority (lowest wins)
+	put causal {key} {value}          - store with multi-key causal consistency
+	put single_causal {key} {value}   - store with single-key causal consistency
+	delete {key}                      - delete a key from the KVS
 	bench [keys] [value_size] [duration] [workload] - run a benchmark
-	start 					- start anna processes
-	stop 					- stop running anna processes
-	status 					- print the status of anna processes
-	help 					- print this usage message
-	exit 					- exit the CLI (does not stop any anna processes)
+	start                             - start anna processes
+	stop                              - stop running anna processes
+	status                            - print the status of anna processes
+	help                              - print this usage message
+	exit                              - exit the CLI (does not stop any anna processes)
 `
 }
 
