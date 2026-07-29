@@ -1010,12 +1010,42 @@ impl KVSClient {
             .await
             .ok_or_else(|| Error::Kvs("GET_VALUE: request failed or timed out".into()))?;
 
-        let tuple = Self::validate_response(&response, "GET_VALUE")?;
+        let tuple = match Self::validate_response(&response, "GET_VALUE") {
+            Ok(t) => t,
+            Err(e) => {
+                // For LWW keys, honour the read-your-writes cache on KEY_DNE.
+                if e.to_string().contains("KEY_DNE") {
+                    if let Some((_ts, cached_val)) = self.lww_read_cache.get(&key_str) {
+                        if !cached_val.is_empty() {
+                            return Ok(crate::value::Value::Lww(
+                                String::from_utf8_lossy(cached_val).to_string(),
+                            ));
+                        }
+                    }
+                }
+                return Err(e);
+            }
+        };
 
         match tuple.lattice_type {
             x if x == LatticeType::Lww as i32 => {
                 let lww = LwwValue::decode(tuple.payload.as_slice())
                     .map_err(|e| Error::Kvs(format!("GET_VALUE: failed to decode LWW: {}", e)))?;
+
+                // Monotonic read enforcement (same logic as get_bytes).
+                if let Some((cached_ts, cached_val)) = self.lww_read_cache.get(&key_str) {
+                    if lww.timestamp < *cached_ts {
+                        return Ok(crate::value::Value::Lww(
+                            String::from_utf8_lossy(cached_val).to_string(),
+                        ));
+                    }
+                }
+                if lww.timestamp > self.last_seen_ts {
+                    self.last_seen_ts = lww.timestamp;
+                }
+                self.lww_read_cache
+                    .insert(key_str, (lww.timestamp, lww.value.clone()));
+
                 Ok(crate::value::Value::Lww(
                     String::from_utf8_lossy(&lww.value).to_string(),
                 ))
@@ -1072,15 +1102,15 @@ impl KVSClient {
                     .iter()
                     .map(|kv| (kv.key.clone(), kv.vector_clock.clone()))
                     .collect();
-                let value = mkc
+                let values: Vec<String> = mkc
                     .values
-                    .first()
+                    .iter()
                     .map(|v| String::from_utf8_lossy(v).to_string())
-                    .unwrap_or_default();
+                    .collect();
                 Ok(crate::value::Value::MultiCausal {
                     vector_clock: mkc.vector_clock,
                     dependencies: deps,
-                    value,
+                    values,
                 })
             }
             other => Err(Error::Kvs(format!(
@@ -1102,11 +1132,13 @@ impl KVSClient {
     ) -> Result<()> {
         debug!("PUT_VALUE: {} <- {:?}", key, value.type_name());
         let lattice_type = value.lattice_type() as i32;
+        let mut lww_ts: Option<u64> = None;
 
         let payload = match value {
             crate::value::Value::Lww(s) => {
                 let ts = std::cmp::max(Self::generate_timestamp(), self.last_seen_ts + 1);
                 self.last_seen_ts = ts;
+                lww_ts = Some(ts);
                 let lww = LwwValue {
                     timestamp: ts,
                     value: s.as_bytes().to_vec(),
@@ -1145,7 +1177,7 @@ impl KVSClient {
             crate::value::Value::MultiCausal {
                 vector_clock,
                 dependencies,
-                value,
+                values,
             } => {
                 let deps: Vec<crate::proto::shared::KeyVersion> = dependencies
                     .iter()
@@ -1157,7 +1189,7 @@ impl KVSClient {
                 let mkc = MultiKeyCausalValue {
                     vector_clock: vector_clock.clone(),
                     dependencies: deps,
-                    values: vec![value.as_bytes().to_vec()],
+                    values: values.iter().map(|v| v.as_bytes().to_vec()).collect(),
                 };
                 mkc.encode_to_vec()
             }
@@ -1174,6 +1206,12 @@ impl KVSClient {
             .ok_or_else(|| Error::Kvs("PUT_VALUE: request failed or timed out".into()))?;
 
         Self::validate_response(&response, "PUT_VALUE")?;
+
+        // Cache LWW writes for read-your-writes consistency.
+        if let (crate::value::Value::Lww(s), Some(ts)) = (value, lww_ts) {
+            self.lww_read_cache
+                .insert(key.as_ref().to_string(), (ts, s.as_bytes().to_vec()));
+        }
         Ok(())
     }
 

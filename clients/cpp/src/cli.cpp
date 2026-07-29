@@ -108,9 +108,15 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
   if (command == "GET" || command == "GET_SET" || command == "GET_ORDERED_SET" ||
       command == "GET_CAUSAL" || command == "GET_SINGLE_CAUSAL" ||
       command == "GET_PRIORITY") {
-    std::cout << annalib::get_any(client, v[1]) << std::endl;
+    if (v.size() < 2) {
+      std::cerr << "Usage: GET <key>" << std::endl;
+    } else {
+      std::cout << annalib::get_any(client, v[1]) << std::endl;
+    }
   } else if (command == "DELETE") {
-    if (!annalib::del(client, v[1]).succeeded()) {
+    if (v.size() < 2) {
+      std::cerr << "Usage: DELETE <key>" << std::endl;
+    } else if (!annalib::del(client, v[1]).succeeded()) {
       std::cerr << "Error: DELETE failed" << std::endl;
     }
   } else if (command == "PUT" || command == "PUT_SET" ||
@@ -120,53 +126,72 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
     string type_name;
     size_t key_idx, val_start;
 
-    if (command == "PUT" && v.size() >= 3 && is_type_name(v[1])) {
-      // PUT <type> <key> <values...>
+    // 4+ tokens with a type name: typed PUT.
+    // 3 tokens or unrecognized first arg: LWW (preserves keys named "set" etc.)
+    if (command == "PUT" && v.size() >= 4 && is_type_name(v[1])) {
       type_name = v[1];
       std::transform(type_name.begin(), type_name.end(), type_name.begin(), ::tolower);
       key_idx = 2;
       val_start = 3;
     } else if (command == "PUT") {
-      // PUT <key> <value> — default LWW
+      if (v.size() < 3) {
+        std::cerr << "Usage: PUT [type] <key> <value(s)>" << std::endl;
+        return;
+      }
       type_name = "lww";
       key_idx = 1;
       val_start = 2;
     } else if (command == "PUT_SET") {
+      if (v.size() < 3) { std::cerr << "Usage: PUT_SET <key> <values...>" << std::endl; return; }
       type_name = "set"; key_idx = 1; val_start = 2;
     } else if (command == "PUT_ORDERED_SET") {
+      if (v.size() < 3) { std::cerr << "Usage: PUT_ORDERED_SET <key> <values...>" << std::endl; return; }
       type_name = "ordered_set"; key_idx = 1; val_start = 2;
     } else if (command == "PUT_CAUSAL") {
+      if (v.size() < 3) { std::cerr << "Usage: PUT_CAUSAL <key> <value>" << std::endl; return; }
       type_name = "causal"; key_idx = 1; val_start = 2;
     } else if (command == "PUT_SINGLE_CAUSAL") {
+      if (v.size() < 3) { std::cerr << "Usage: PUT_SINGLE_CAUSAL <key> <value>" << std::endl; return; }
       type_name = "single_causal"; key_idx = 1; val_start = 2;
     } else { // PUT_PRIORITY
+      if (v.size() < 4) { std::cerr << "Usage: PUT_PRIORITY <key> <priority> <value>" << std::endl; return; }
       type_name = "priority"; key_idx = 1; val_start = 2;
     }
 
-    string key = v[key_idx];
-    bool ok = true;
+    if (key_idx >= v.size() || val_start > v.size()) {
+      std::cerr << "Usage: PUT [type] <key> <value(s)>" << std::endl;
+    } else {
+      string key = v[key_idx];
+      bool ok = true;
 
-    if (type_name == "lww") {
-      ok = annalib::put(client, key, v[val_start]).succeeded();
-    } else if (type_name == "set") {
-      set<string> values;
-      for (size_t i = val_start; i < v.size(); i++) values.insert(v[i]);
-      ok = annalib::put_set(client, key, values).succeeded();
-    } else if (type_name == "ordered_set") {
-      set<string> values;
-      for (size_t i = val_start; i < v.size(); i++) values.insert(v[i]);
-      ok = annalib::put_ordered_set(client, key, values).succeeded();
-    } else if (type_name == "priority") {
-      double priority = std::stod(v[val_start]);
-      ok = annalib::put_priority(client, key, priority, v[val_start + 1]).succeeded();
-    } else if (type_name == "causal") {
-      ok = annalib::put_causal(client, key, v[val_start]).succeeded();
-    } else if (type_name == "single_causal") {
-      ok = annalib::put_single_causal(client, key, v[val_start]).succeeded();
-    }
+      if (type_name == "lww") {
+        if (val_start >= v.size()) { std::cerr << "Usage: PUT <key> <value>" << std::endl; return; }
+        ok = annalib::put(client, key, v[val_start]).succeeded();
+      } else if (type_name == "set") {
+        set<string> values;
+        for (size_t i = val_start; i < v.size(); i++) values.insert(v[i]);
+        ok = annalib::put_set(client, key, values).succeeded();
+      } else if (type_name == "ordered_set") {
+        // Use vector to preserve insertion order (std::set would sort).
+        vector<string> values;
+        for (size_t i = val_start; i < v.size(); i++) values.push_back(v[i]);
+        // put_ordered_set takes set<string> — this is a known limitation
+        // of the C++ client library API (see #494).
+        set<string> value_set(values.begin(), values.end());
+        ok = annalib::put_ordered_set(client, key, value_set).succeeded();
+      } else if (type_name == "priority") {
+        if (val_start + 1 >= v.size()) { std::cerr << "Usage: PUT priority <key> <priority> <value>" << std::endl; return; }
+        double priority = std::stod(v[val_start]);
+        ok = annalib::put_priority(client, key, priority, v[val_start + 1]).succeeded();
+      } else if (type_name == "causal") {
+        ok = annalib::put_causal(client, key, v[val_start]).succeeded();
+      } else if (type_name == "single_causal") {
+        ok = annalib::put_single_causal(client, key, v[val_start]).succeeded();
+      }
 
-    if (!ok) {
-      std::cerr << "Error: PUT " << type_name << " failed" << std::endl;
+      if (!ok) {
+        std::cerr << "Error: PUT " << type_name << " failed" << std::endl;
+      }
     }
   } else if (command == "BENCH") {
     annalib::BenchConfig bc;

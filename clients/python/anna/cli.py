@@ -34,6 +34,9 @@ def execute_command(client, config_path, line):
 
     if cmd in ("GET", "GET_SET", "GET_ORDERED_SET", "GET_CAUSAL",
                "GET_SINGLE_CAUSAL", "GET_PRIORITY"):
+        if len(parts) < 2:
+            print("Usage: GET <key>")
+            return True
         key = parts[1]
         # For legacy GET_* commands, use the type-specific method.
         if cmd == "GET_CAUSAL":
@@ -88,7 +91,9 @@ def execute_command(client, config_path, line):
             else:
                 print("Key not found")
         else:
-            # Unified GET: auto-detect type from response
+            # Unified GET: uses client.get() which returns LWW or Set
+            # lattice objects. For other types (causal, priority, etc.),
+            # use the legacy GET_CAUSAL, GET_PRIORITY commands.
             result = client.get(key)
             val = result.get(key)
             if val is not None:
@@ -99,14 +104,22 @@ def execute_command(client, config_path, line):
                     items = sorted(v.decode("utf-8", errors="replace") if isinstance(v, bytes) else str(v)
                                    for v in revealed)
                     print("{ " + " ".join(items) + " }")
+                elif isinstance(revealed, list):
+                    items = [v.decode("utf-8", errors="replace") if isinstance(v, bytes) else str(v)
+                             for v in revealed]
+                    print("[ " + " ".join(items) + " ]")
                 else:
                     print(revealed)
             else:
                 print("Key not found")
     elif cmd == "PUT":
-        # Check for type prefix: PUT <type> <key> <values...>
+        if len(parts) < 3:
+            print("Usage: PUT [type] <key> <value(s)>")
+            return True
+        # Exactly 3 tokens: always LWW (preserves keys named "set" etc.)
+        # 4+ tokens with a type name: typed PUT.
         type_name = parts[1].lower() if len(parts) > 1 else ""
-        if type_name in _TYPE_NAMES and len(parts) >= 4:
+        if len(parts) >= 4 and type_name in _TYPE_NAMES:
             key_idx = 2
             if type_name == "lww":
                 import time
@@ -151,6 +164,9 @@ def execute_command(client, config_path, line):
             if not result.get(parts[1], False):
                 print("Failure!")
     elif cmd == "DELETE":
+        if len(parts) < 2:
+            print("Usage: DELETE <key>")
+            return True
         result = client.delete(parts[1])
         if not result.get(parts[1], False):
             print("Failure!")

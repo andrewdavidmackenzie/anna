@@ -18,7 +18,7 @@ mocks.
 | PUT ordered_set {key} ...  | Store an ordered set                                         | Yes           |
 | PUT priority {key} {p} {v} | Store with priority (lowest wins)                            | Yes           |
 | PUT causal {key} {value}   | Store with multi-key causal consistency                      | Yes           |
-| PUT single_causal {key} .. | Store with single-key causal consistency                     | Yes           |
+| PUT single_causal {key} {value} | Store with single-key causal consistency               | Yes           |
 | DELETE {key}               | Remove a key (PUT with empty value and dominating timestamp) | Yes           |
 | Address cache invalidation | Server signals client to refresh address cache               | Yes           |
 | Multi-key GET              | Retrieve multiple keys in one request                        | Yes           |

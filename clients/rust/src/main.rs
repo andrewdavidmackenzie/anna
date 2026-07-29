@@ -221,7 +221,12 @@ fn parse_put_args(split: &[&str]) -> Result<(String, annalib::value::Value)> {
         ));
     }
 
-    // Check if the first arg after PUT is a type name.
+    // Exactly 3 tokens: always LWW (preserves keys named "set", "priority", etc.)
+    if split.len() == 3 {
+        return Ok((split[1].to_string(), Value::Lww(split[2].into())));
+    }
+
+    // 4+ tokens: check if the first arg after PUT is a type name.
     if let Some(lt) = parse_type_name(split[1]) {
         use annalib::proto::kvs::LatticeType;
         if split.len() < 4 {
@@ -252,6 +257,8 @@ fn parse_put_args(split: &[&str]) -> Result<(String, annalib::value::Value)> {
                 }
             }
             LatticeType::SingleCausal => {
+                // Placeholder vector clock for CLI testing. A production
+                // client would derive this from its causal context.
                 let mut vc = std::collections::HashMap::new();
                 vc.insert("test".to_string(), 1u32);
                 Value::SingleCausal {
@@ -260,6 +267,9 @@ fn parse_put_args(split: &[&str]) -> Result<(String, annalib::value::Value)> {
                 }
             }
             LatticeType::MultiCausal => {
+                // Placeholder vector clock and dependency for CLI testing.
+                // A production client would derive these from its causal
+                // context and tracked cross-key dependencies.
                 let mut vc = std::collections::HashMap::new();
                 vc.insert("test".to_string(), 1u32);
                 let mut dep_vc = std::collections::HashMap::new();
@@ -267,15 +277,17 @@ fn parse_put_args(split: &[&str]) -> Result<(String, annalib::value::Value)> {
                 Value::MultiCausal {
                     vector_clock: vc,
                     dependencies: vec![("dep1".into(), dep_vc)],
-                    value: split[3].into(),
+                    values: vec![split[3].into()],
                 }
             }
             _ => return Err(CliError::Other(format!("Unsupported type: {}", split[1]))),
         };
         Ok((key, value))
     } else {
-        // No type prefix — default to LWW.
-        Ok((split[1].to_string(), Value::Lww(split[2].into())))
+        Err(CliError::Other(format!(
+            "Unknown type '{}'. Valid types: lww, set, ordered_set, priority, causal, single_causal",
+            split[1]
+        )))
     }
 }
 

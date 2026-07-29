@@ -56,8 +56,8 @@ pub enum Value {
         vector_clock: HashMap<String, u32>,
         /// Dependencies on other keys and their vector clocks.
         dependencies: Vec<(String, HashMap<String, u32>)>,
-        /// The value.
-        value: String,
+        /// The values (may contain concurrent versions).
+        values: Vec<String>,
     },
 }
 
@@ -141,7 +141,7 @@ impl fmt::Display for Value {
             Value::MultiCausal {
                 vector_clock,
                 dependencies,
-                value,
+                values,
             } => {
                 write!(f, "{}", format_vector_clock(vector_clock))?;
                 let mut sorted_deps = dependencies.clone();
@@ -155,7 +155,10 @@ impl fmt::Display for Value {
                         .collect();
                     write!(f, "\n{} : {}", dep_key, vc_str.join(" "))?;
                 }
-                write!(f, "\n{}", value)
+                for v in values {
+                    write!(f, "\n{}", v)?;
+                }
+                Ok(())
             }
         }
     }
@@ -217,7 +220,7 @@ mod tests {
         let v = Value::MultiCausal {
             vector_clock: vc,
             dependencies: vec![("dep1".into(), dep_vc)],
-            value: "hello".into(),
+            values: vec!["hello".into()],
         };
         assert_eq!(v.to_string(), "{test : 1}\ndep1 : {test1 : 1}\nhello");
         assert_eq!(v.type_name(), "causal");

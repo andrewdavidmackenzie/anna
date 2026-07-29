@@ -105,12 +105,9 @@ See [autoscaling.md](autoscaling.md) for the full operator's guide.
 
 | Feature                    | Tested |
 |----------------------------|--------|
-| GET / PUT / DELETE (LWW)   | Yes    |
-| GET_SET / PUT_SET           | Yes    |
-| GET_ORDERED_SET / PUT_ORDERED_SET | Yes |
-| GET_CAUSAL / PUT_CAUSAL    | Yes    |
-| GET_SINGLE_CAUSAL / PUT_SINGLE_CAUSAL | Yes |
-| GET_PRIORITY / PUT_PRIORITY | Yes   |
+| Unified GET (legacy dispatch by type) | Yes |
+| Unified PUT (type prefix)  | Yes    |
+| DELETE                     | Yes    |
 | GET_BYTES (raw LWW value)  | Yes    |
 | Multi-key GET (GetMulti)   | Yes    |
 | Address cache invalidation | Yes    |
@@ -130,11 +127,9 @@ See [autoscaling.md](autoscaling.md) for the full operator's guide.
 
 | Feature                    | Tested |
 |----------------------------|--------|
-| GET / PUT / DELETE (LWW)   | Yes    |
-| GET_SET / PUT_SET           | Yes    |
-| GET_ORDERED_SET / PUT_ORDERED_SET | Yes |
-| GET_SINGLE_CAUSAL / PUT_SINGLE_CAUSAL | Yes |
-| GET_PRIORITY / PUT_PRIORITY | Yes   |
+| Unified GET (LWW/Set auto-detect, legacy dispatch for others) | Yes |
+| Unified PUT (type prefix)  | Yes    |
+| DELETE                     | Yes    |
 | GET_BYTES (raw LWW value)  | Yes    |
 | Multi-key GET (get_multi)  | Yes    |
 | Address cache invalidation | Yes    |

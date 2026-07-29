@@ -294,7 +294,9 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 		valStart := 2
 
 		switch {
-		case cmd == "PUT" && len(parts) >= 3 && isTypeName(parts[1]):
+		// 4+ tokens with a type name: typed PUT.
+		// 3 tokens or unrecognized first arg: LWW (preserves keys named "set" etc.)
+		case cmd == "PUT" && len(parts) >= 4 && isTypeName(parts[1]):
 			typeName = strings.ToLower(parts[1])
 			keyIdx = 2
 			valStart = 3
@@ -319,7 +321,7 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 
 		switch typeName {
 		case "lww":
-			if valStart >= len(parts) {
+			if len(parts) != valStart+1 {
 				return false, fmt.Errorf("usage: PUT <key> <value>")
 			}
 			if err := client.Put(key, parts[valStart]); err != nil {
@@ -340,7 +342,7 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 				return false, err
 			}
 		case "priority":
-			if valStart+1 >= len(parts) {
+			if len(parts) != valStart+2 {
 				return false, fmt.Errorf("usage: PUT priority <key> <priority> <value>")
 			}
 			var priority float64
@@ -351,14 +353,14 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 				return false, err
 			}
 		case "causal":
-			if valStart >= len(parts) {
+			if len(parts) != valStart+1 {
 				return false, fmt.Errorf("usage: PUT causal <key> <value>")
 			}
 			if err := client.PutCausal(key, parts[valStart]); err != nil {
 				return false, err
 			}
 		case "single_causal":
-			if valStart >= len(parts) {
+			if len(parts) != valStart+1 {
 				return false, fmt.Errorf("usage: PUT single_causal <key> <value>")
 			}
 			if err := client.PutSingleCausal(key, parts[valStart]); err != nil {
