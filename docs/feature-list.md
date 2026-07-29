@@ -219,9 +219,10 @@ external autoscaler:
 
 `anna-monitor` contains a built-in policy engine (`storage_policy.cpp`,
 `slo_policy.cpp`, `movement_policy.cpp`) that implements reference decision
-logic, but it depends on an external system (`tcp://<scaling_alert_ip>:7001`)
-that is not part of the project. Operators can use the client library helpers
-to implement their own scaling logic.
+logic, but it depends on an external system
+(`tcp://<scaling_alert_ip>:<ports.scaling_alert>`, default port `7001`,
+subject to `ports.base_offset`) that is not part of the project. Operators
+can use the client library helpers to implement their own scaling logic.
 
 ## Summary
 

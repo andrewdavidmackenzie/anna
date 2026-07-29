@@ -111,8 +111,10 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
   membership.ParseFromString(serialized_addresses);
 
   // Request the restart count from the external management system.
-  // When scaling_alert_ip is "NULL" (standalone mode), skip the request
-  // and use count 0.
+  // The scaling_alert_ip serves as the address for all external
+  // management services (restart counts on port 7000, scaling alerts
+  // on port 7001, func-node lists on port 7002). When set to "NULL"
+  // (standalone mode), skip the request and use count 0.
   string count_str;
 
   if (scaling_alert_ip != "NULL") {
