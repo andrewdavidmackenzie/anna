@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2e32a1f4.js";
+            window.path_to_searchindex_js = "../searchindex-40f4e44b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-65030116.js"></script>
@@ -231,8 +231,8 @@ mocks.</p>
 <tbody>
 <tr><td>YAML config file</td><td>All settings in a single YAML file</td><td>Yes</td></tr>
 <tr><td>Thread counts</td><td><code>threads.memory</code>, <code>threads.disk</code>, <code>threads.routing</code></td><td>Yes</td></tr>
-<tr><td>Standalone mode</td><td><code>mgmt_ip: "NULL"</code> for local/non-k8s deployment</td><td>Yes</td></tr>
-<tr><td>Cluster topology</td><td>seed_ip, mgmt_ip, monitoring/routing IPs</td><td>Yes</td></tr>
+<tr><td>Standalone mode</td><td><code>scaling_alert_ip: "NULL"</code> for local/standalone deployment</td><td>Yes</td></tr>
+<tr><td>Cluster topology</td><td>seed_ip, scaling_alert_ip, monitoring/routing IPs</td><td>Yes</td></tr>
 <tr><td>ZeroMQ PUSH/PULL</td><td>Async messaging between all components</td><td>Yes</td></tr>
 <tr><td>Protocol Buffers</td><td>Structured message serialization</td><td>Yes</td></tr>
 <tr><td>Socket cache</td><td>Lazy-created, cached ZMQ push sockets</td><td>Yes</td></tr>
@@ -453,9 +453,10 @@ external autoscaler:</p>
 </ul>
 <p><code>anna-monitor</code> contains a built-in policy engine (<code>storage_policy.cpp</code>,
 <code>slo_policy.cpp</code>, <code>movement_policy.cpp</code>) that implements reference decision
-logic, but it depends on a management node (<code>tcp://&lt;mgmt_ip&gt;:7001</code>) that
-is not part of the project. Operators can use the client library helpers
-to implement their own scaling logic.</p>
+logic, but it depends on an external system
+(<code>tcp://&lt;scaling_alert_ip&gt;:&lt;ports.scaling_alert&gt;</code>, default port <code>7001</code>,
+subject to <code>ports.base_offset</code>) that is not part of the project. Operators
+can use the client library helpers to implement their own scaling logic.</p>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <div class="table-wrapper">
 <table>

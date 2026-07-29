@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2e32a1f4.js";
+            window.path_to_searchindex_js = "../searchindex-40f4e44b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-65030116.js"></script>
@@ -223,9 +223,10 @@ difference is the serialization layer (memory buffer vs. disk volume).</p>
 <li>Triggers <strong>cross-tier data movement</strong> (promote hot data to memory, demote cold to disk)</li>
 </ul>
 <h3 id="cluster-management"><a class="header" href="#cluster-management">Cluster Management</a></h3>
-<p>In a cloud deployment, Anna uses Kubernetes for allocating and deallocating nodes.
-The cluster management pod receives REST requests from the policy engine and
-executes node additions/removals.</p>
+<p>In a cloud deployment, an external orchestration system handles allocating and
+deallocating nodes. The monitor’s policy engine emits scaling alerts (protobuf
+<code>ScalingAlert</code> messages via ZMQ PUSH) that the operator’s tooling consumes to
+provision or decommission infrastructure.</p>
 <h2 id="actor-model-and-event-loop"><a class="header" href="#actor-model-and-event-loop">Actor Model and Event Loop</a></h2>
 <p>Each Anna worker thread implements a <strong>coordination-free actor</strong>:</p>
 <ol>

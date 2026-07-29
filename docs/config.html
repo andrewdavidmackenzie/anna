@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2e32a1f4.js";
+            window.path_to_searchindex_js = "../searchindex-40f4e44b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-65030116.js"></script>
@@ -199,7 +199,7 @@ the compiled-in default is used, preserving backward-compatible behavior.</p>
 </thead>
 <tbody>
 <tr><td><code>monitoring.ip</code></td><td>Yes</td><td>—</td><td>IP address of the monitoring node</td></tr>
-<tr><td><code>monitoring.mgmt_ip</code></td><td>Yes</td><td>—</td><td>IP address of the management node</td></tr>
+<tr><td><code>monitoring.scaling_alert_ip</code></td><td>Yes</td><td>—</td><td>IP address of the scaling alert endpoint</td></tr>
 </tbody>
 </table>
 </div>
@@ -225,7 +225,7 @@ the compiled-in default is used, preserving backward-compatible behavior.</p>
 <tr><td><code>server.public_ip</code></td><td>Yes</td><td>—</td><td>Public IP of this KVS node</td></tr>
 <tr><td><code>server.private_ip</code></td><td>Yes</td><td>—</td><td>Private IP of this KVS node</td></tr>
 <tr><td><code>server.seed_ip</code></td><td>Yes</td><td>—</td><td>IP of the seed node to join</td></tr>
-<tr><td><code>server.mgmt_ip</code></td><td>Yes</td><td>—</td><td>Management node IP (or “NULL”)</td></tr>
+<tr><td><code>server.scaling_alert_ip</code></td><td>Yes</td><td>—</td><td>Scaling alert endpoint IP (or “NULL” for standalone)</td></tr>
 <tr><td><code>server.routing</code></td><td>Yes</td><td>—</td><td>List of routing node IPs</td></tr>
 <tr><td><code>server.monitoring</code></td><td>Yes</td><td>—</td><td>List of monitoring node IPs</td></tr>
 </tbody>
@@ -239,7 +239,7 @@ the compiled-in default is used, preserving backward-compatible behavior.</p>
 </thead>
 <tbody>
 <tr><td><code>ports.base_offset</code></td><td><code>kBaseOffset</code></td><td><code>0</code></td><td>Offset added to all port numbers</td></tr>
-<tr><td><code>ports.management</code></td><td><code>kManagementNodePort</code></td><td><code>7001</code></td><td>Management node port for scaling commands</td></tr>
+<tr><td><code>ports.scaling_alert</code></td><td><code>kScalingAlertPort</code></td><td><code>7001</code></td><td>Port on which the external system receives scaling alerts</td></tr>
 </tbody>
 </table>
 </div>
@@ -392,7 +392,7 @@ the compiled-in default is used, preserving backward-compatible behavior.</p>
 </div>
 <h2 id="example-configuration"><a class="header" href="#example-configuration">Example Configuration</a></h2>
 <pre><code class="language-yaml">monitoring:
-  mgmt_ip: 127.0.0.1
+  scaling_alert_ip: 127.0.0.1
   ip: 127.0.0.1
 routing:
   monitoring:
@@ -406,7 +406,7 @@ server:
   seed_ip: 127.0.0.1
   public_ip: 127.0.0.1
   private_ip: 127.0.0.1
-  mgmt_ip: "NULL"
+  scaling_alert_ip: "NULL"
 policy:
   elasticity: false
   selective-rep: false
@@ -441,7 +441,7 @@ hashing:
   virtual_nodes_per_thread: 3000
 ports:
   base_offset: 0
-  management: 7001
+  scaling_alert: 7001
 timings:
   server_report_period: 15
   key_monitoring_period: 60

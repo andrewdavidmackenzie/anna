@@ -69,7 +69,7 @@ trap cleanup EXIT
 mkdir -p "$BENCH_DATA" "$LOG_DIR"
 cat > "$BENCH_CONFIG" << EOF
 monitoring:
-  mgmt_ip: 127.0.0.1
+  scaling_alert_ip: 127.0.0.1
   ip: 127.0.0.1
 routing:
   monitoring:
@@ -83,7 +83,7 @@ server:
   seed_ip: 127.0.0.1
   public_ip: 127.0.0.1
   private_ip: 127.0.0.1
-  mgmt_ip: "NULL"
+  scaling_alert_ip: "NULL"
 disk: ${BENCH_DATA}
 capacities:
   memory-cap: 1

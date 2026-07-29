@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2e32a1f4.js";
+            window.path_to_searchindex_js = "../searchindex-40f4e44b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-65030116.js"></script>
@@ -220,7 +220,7 @@ exceeds H standard deviations above the mean</li>
 <h3 id="3-vertical-tiering"><a class="header" href="#3-vertical-tiering">3. Vertical Tiering</a></h3>
 <p>Anna supports multiple storage tiers with different cost-performance profiles:</p>
 <ul>
-<li><strong>Memory tier</strong>: Fast RAM-based storage (e.g., AWS EC2 instances)</li>
+<li><strong>Memory tier</strong>: Fast RAM-based storage (e.g., cloud VM instances)</li>
 <li><strong>Disk tier</strong>: Cheaper flash-based storage (e.g., disk volumes)</li>
 <li>Hot data is <strong>promoted</strong> from disk to memory when access frequency
 exceeds a threshold</li>
@@ -373,20 +373,22 @@ while True:
 
     time.sleep(CHECK_INTERVAL)
 </code></pre>
-<h3 id="management-node-protocol"><a class="header" href="#management-node-protocol">Management Node Protocol</a></h3>
-<p>The built-in policy engine communicates with an external management node
-via ZMQ PUSH on port 7001:</p>
+<h3 id="scaling-alert-protocol"><a class="header" href="#scaling-alert-protocol">Scaling Alert Protocol</a></h3>
+<p>The built-in policy engine communicates scaling recommendations to an
+external system via ZMQ PUSH on the <code>scaling_alert</code> port (default 7001).
+Messages are serialized <code>ScalingAlert</code> protobuf messages (defined in
+<code>server/protobuf/metadata.proto</code>):</p>
 <ul>
-<li><strong>Add nodes</strong>: sends <code>"add:&lt;count&gt;:&lt;tier&gt;"</code> (e.g., <code>"add:2:memory"</code>)</li>
-<li><strong>Remove nodes</strong>: sends self-depart signal directly to the KVS node
-(no management node involvement)</li>
+<li><strong>Scale up</strong>: <code>action=ADD</code>, <code>tier=MEMORY|DISK</code>, <code>count=N</code></li>
+<li><strong>Scale down</strong>: <code>action=REMOVE</code>, <code>tier=MEMORY|DISK</code>, <code>count=1</code>,
+<code>departed_node_ip=&lt;ip&gt;</code> (sent after a node has finished departing)</li>
 </ul>
-<p>The management node is not part of Anna — it’s the operator’s responsibility
-to implement infrastructure provisioning in response to these messages.</p>
+<p>The external system is not part of Anna — it’s the operator’s responsibility
+to implement infrastructure provisioning in response to these alerts.</p>
 <h2 id="performance-results"><a class="header" href="#performance-results">Performance Results</a></h2>
 <p>From the <a href="http://www.vikrams.io/papers/anna-vldb19.pdf">VLDB 2019 paper</a> evaluation:</p>
 <ul>
-<li>Anna outperforms AWS ElastiCache and Masstree by up to 10x in
+<li>Anna outperforms ElastiCache and Masstree by up to 10x in
 cost-effectiveness under various contention levels</li>
 <li>Anna outperforms DynamoDB by 36x at low cost and up to 355x at higher costs</li>
 <li>Anna meets latency SLOs 97% of the time during dynamic workload changes</li>
