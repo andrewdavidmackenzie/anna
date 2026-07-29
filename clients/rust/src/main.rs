@@ -207,6 +207,90 @@ fn format_status(status: Vec<(String, Vec<i32>)>) -> String {
     status_string
 }
 
+/// Build a [`Value`](annalib::value::Value) from CLI arguments for a PUT command.
+///
+/// The first argument after PUT may be a lattice type name (e.g., `set`,
+/// `priority`, `causal`). If not recognized as a type, it is treated as
+/// the key and LWW is assumed.
+fn parse_put_args(split: &[&str]) -> Result<(String, annalib::value::Value)> {
+    use annalib::value::{parse_type_name, Value};
+
+    if split.len() < 3 {
+        return Err(CliError::Other(
+            "PUT requires at least a key and value".into(),
+        ));
+    }
+
+    // Exactly 3 tokens: always LWW (preserves keys named "set", "priority", etc.)
+    if split.len() == 3 {
+        return Ok((split[1].to_string(), Value::Lww(split[2].into())));
+    }
+
+    // 4+ tokens: check if the first arg after PUT is a type name.
+    if let Some(lt) = parse_type_name(split[1]) {
+        use annalib::proto::kvs::LatticeType;
+        if split.len() < 4 {
+            return Err(CliError::Other(format!(
+                "PUT {} requires a key and value(s)",
+                split[1]
+            )));
+        }
+        let key = split[2].to_string();
+        let value = match lt {
+            LatticeType::Lww => Value::Lww(split[3].into()),
+            LatticeType::Set => Value::Set(split[3..].iter().map(|s| s.to_string()).collect()),
+            LatticeType::OrderedSet => {
+                Value::OrderedSet(split[3..].iter().map(|s| s.to_string()).collect())
+            }
+            LatticeType::Priority => {
+                if split.len() < 5 {
+                    return Err(CliError::Other(
+                        "PUT priority requires key, priority, and value".into(),
+                    ));
+                }
+                let priority = split[3].parse::<f64>().map_err(|e| {
+                    CliError::Other(format!("Invalid priority '{}': {}", split[3], e))
+                })?;
+                Value::Priority {
+                    priority,
+                    value: split[4].into(),
+                }
+            }
+            LatticeType::SingleCausal => {
+                // Placeholder vector clock for CLI testing. A production
+                // client would derive this from its causal context.
+                let mut vc = std::collections::HashMap::new();
+                vc.insert("test".to_string(), 1u32);
+                Value::SingleCausal {
+                    vector_clock: vc,
+                    values: vec![split[3].into()],
+                }
+            }
+            LatticeType::MultiCausal => {
+                // Placeholder vector clock and dependency for CLI testing.
+                // A production client would derive these from its causal
+                // context and tracked cross-key dependencies.
+                let mut vc = std::collections::HashMap::new();
+                vc.insert("test".to_string(), 1u32);
+                let mut dep_vc = std::collections::HashMap::new();
+                dep_vc.insert("test1".to_string(), 1u32);
+                Value::MultiCausal {
+                    vector_clock: vc,
+                    dependencies: vec![("dep1".into(), dep_vc)],
+                    values: vec![split[3].into()],
+                }
+            }
+            _ => return Err(CliError::Other(format!("Unsupported type: {}", split[1]))),
+        };
+        Ok((key, value))
+    } else {
+        Err(CliError::Other(format!(
+            "Unknown type '{}'. Valid types: lww, set, ordered_set, priority, causal, single_causal",
+            split[1]
+        )))
+    }
+}
+
 /// Returns `true` if the user requested exit.
 async fn execute_command(
     client: &mut KVSClient,
@@ -216,74 +300,62 @@ async fn execute_command(
     let split = line.trim().split(' ').collect::<Vec<&str>>();
 
     match split[0].to_ascii_uppercase().as_str() {
-        "GET" if split.len() == 2 => println!("{}", client.get(split[1]).await?),
-        "DELETE" if split.len() == 2 => client.delete(split[1]).await?,
-        "PUT" if split.len() == 3 => client.put(split[1], split[2]).await?,
-        #[cfg(feature = "causal")]
-        "GET_CAUSAL" if split.len() == 2 => {
-            let (vc, deps, value) = client.get_causal(split[1]).await?;
-            let mut sorted_vc: Vec<_> = vc.iter().collect();
-            sorted_vc.sort_by_key(|(k, _)| k.to_string());
-            for (k, v) in &sorted_vc {
-                println!("{{{} : {}}}", k, v);
-            }
-            let mut sorted_deps = deps.clone();
-            sorted_deps.sort_by(|(a, _), (b, _)| a.cmp(b));
-            for (dep_key, dep_vc) in &sorted_deps {
-                let mut sorted_dep_vc: Vec<_> = dep_vc.iter().collect();
-                sorted_dep_vc.sort_by_key(|(k, _)| k.to_string());
-                let vc_str: Vec<String> = sorted_dep_vc
-                    .iter()
-                    .map(|(k, v)| format!("{{{} : {}}}", k, v))
-                    .collect();
-                println!("{} : {}", dep_key, vc_str.join(" "));
-            }
+        "GET" if split.len() == 2 => {
+            let value = client.get_value(split[1]).await?;
             println!("{}", value);
         }
-        #[cfg(feature = "causal")]
-        "PUT_CAUSAL" if split.len() == 3 => client.put_causal(split[1], split[2]).await?,
-        #[cfg(feature = "set")]
+        "PUT" if split.len() >= 3 => {
+            let (key, value) = parse_put_args(&split)?;
+            client.put_value(&key, &value).await?;
+        }
+        "DELETE" if split.len() == 2 => client.delete(split[1]).await?,
+        // Legacy aliases — map old commands to the unified GET/PUT.
         "GET_SET" if split.len() == 2 => {
-            let values = client.get_set(split[1]).await?;
-            println!("{{ {} }}", values.join(" "));
+            let value = client.get_value(split[1]).await?;
+            println!("{}", value);
         }
-        #[cfg(feature = "set")]
-        "PUT_SET" if split.len() >= 3 => client.put_set(split[1], &split[2..]).await?,
-        #[cfg(feature = "set")]
         "GET_ORDERED_SET" if split.len() == 2 => {
-            let values = client.get_ordered_set(split[1]).await?;
-            println!("[ {} ]", values.join(" "));
+            let value = client.get_value(split[1]).await?;
+            println!("{}", value);
         }
-        #[cfg(feature = "set")]
-        "PUT_ORDERED_SET" if split.len() >= 3 => {
-            client.put_ordered_set(split[1], &split[2..]).await?
+        "GET_CAUSAL" if split.len() == 2 => {
+            let value = client.get_value(split[1]).await?;
+            println!("{}", value);
         }
-        #[cfg(feature = "causal")]
         "GET_SINGLE_CAUSAL" if split.len() == 2 => {
-            let (vc, values) = client.get_single_causal(split[1]).await?;
-            let mut sorted_vc: Vec<_> = vc.iter().collect();
-            sorted_vc.sort_by_key(|(k, _)| k.to_string());
-            for (k, v) in &sorted_vc {
-                println!("{{{} : {}}}", k, v);
-            }
-            for v in &values {
-                println!("{}", v);
-            }
-        }
-        #[cfg(feature = "causal")]
-        "PUT_SINGLE_CAUSAL" if split.len() == 3 => {
-            client.put_single_causal(split[1], split[2]).await?
+            let value = client.get_value(split[1]).await?;
+            println!("{}", value);
         }
         "GET_PRIORITY" if split.len() == 2 => {
-            let (priority, value) = client.get_priority(split[1]).await?;
-            println!("priority: {}", priority);
+            let value = client.get_value(split[1]).await?;
             println!("{}", value);
         }
+        "PUT_SET" if split.len() >= 3 => {
+            let mut args = vec!["PUT", "set"];
+            args.extend_from_slice(&split[1..]);
+            let (key, value) = parse_put_args(&args)?;
+            client.put_value(&key, &value).await?;
+        }
+        "PUT_ORDERED_SET" if split.len() >= 3 => {
+            let mut args = vec!["PUT", "ordered_set"];
+            args.extend_from_slice(&split[1..]);
+            let (key, value) = parse_put_args(&args)?;
+            client.put_value(&key, &value).await?;
+        }
+        "PUT_CAUSAL" if split.len() == 3 => {
+            let args = vec!["PUT", "causal", split[1], split[2]];
+            let (key, value) = parse_put_args(&args)?;
+            client.put_value(&key, &value).await?;
+        }
+        "PUT_SINGLE_CAUSAL" if split.len() == 3 => {
+            let args = vec!["PUT", "single_causal", split[1], split[2]];
+            let (key, value) = parse_put_args(&args)?;
+            client.put_value(&key, &value).await?;
+        }
         "PUT_PRIORITY" if split.len() == 4 => {
-            let priority = split[2]
-                .parse::<f64>()
-                .map_err(|e| CliError::Other(format!("Invalid priority '{}': {}", split[2], e)))?;
-            client.put_priority(split[1], priority, split[3]).await?
+            let args = vec!["PUT", "priority", split[1], split[2], split[3]];
+            let (key, value) = parse_put_args(&args)?;
+            client.put_value(&key, &value).await?;
         }
         "BENCH" => {
             use annalib::bench::run_bench;
@@ -320,58 +392,22 @@ async fn execute_command(
 }
 
 fn cli_usage() -> String {
-    let mut usage = "Valid commands are:\
-    \n\tget {{key}} \t\t\t- get the value of entry with key = {{key}} from the KVS\
-    \n\tput {{key}} {{value}} \t\t- set entry with key = {{key}} in the KVS to have value = {{value}}"
-        .into();
-
-    #[cfg(feature = "causal")]
-    {
-        usage = format!(
-            "{}\n\tget_causal {{key}} \t\t- causal 'get' of value with key = {{key}} in the KVS\
-            \n\tput_causal {{key}} {{value}} \t- causal set of value with key = {{key}} in the KVS",
-            usage
-        );
-    }
-
-    #[cfg(feature = "causal")]
-    {
-        usage = format!(
-            "{}\n\tget_single_causal {{key}} \t- single-key causal 'get' of value with key = {{key}} in the KVS\
-            \n\tput_single_causal {{key}} {{value}} \t- single-key causal set of value with key = {{key}} in the KVS",
-            usage
-        );
-    }
-
-    #[cfg(feature = "set")]
-    {
-        usage = format!(
-            "{}\n\tget_set {{key}} \t\t\t- get the value of the set with key = {{key}} in the KVS\
-        \n\tput_set {{key}} {{set}} \t\t- set the value of the set with key = {{key}} in the KVS\
-        \n\tget_ordered_set {{key}} \t\t- get the ordered set with key = {{key}} in the KVS\
-        \n\tput_ordered_set {{key}} {{set}} \t- set the ordered set with key = {{key}} in the KVS",
-            usage
-        );
-    }
-
-    usage = format!(
-        "{}\n\tget_priority {{key}} \t\t- get the priority value with key = {{key}} in the KVS\
-        \n\tput_priority {{key}} {{priority}} {{value}} - set value with priority for key = {{key}} in the KVS",
-        usage
-    );
-
-    usage = format!(
-        "{}\n\tdelete {{key}} \t\t\t- delete a key from the KVS\
-        \n\tbench [keys] [value_size] [duration] [workload] - run a benchmark\
-        \n\tstart [component] \t\t- start anna processes (component: kvs, monitor, route; omit for all)\
-        \n\tstop [component] \t\t- stop running anna processes (component: kvs, monitor, route; omit for all)\
-        \n\tstatus [component] \t\t- print the status of anna processes (component: kvs, monitor, route; omit for all)\
-        \n\thelp \t\t\t\t- print this usage message\
-        \n\texit \t\t\t\t- exit the CLI (does not stop any anna processes)",
-        usage
-    );
-
-    usage
+    "Valid commands are:\
+    \n\tget {key} \t\t\t- get the value of any key (auto-detects type)\
+    \n\tput {key} {value} \t\t- store a value (LWW, default)\
+    \n\tput set {key} {vals...} \t\t- store a set (union merge)\
+    \n\tput ordered_set {key} {vals...} \t- store an ordered set\
+    \n\tput priority {key} {pri} {val} \t- store with priority (lowest wins)\
+    \n\tput causal {key} {value} \t- store with multi-key causal consistency\
+    \n\tput single_causal {key} {value} \t- store with single-key causal consistency\
+    \n\tdelete {key} \t\t\t- delete a key from the KVS\
+    \n\tbench [keys] [value_size] [duration] [workload] - run a benchmark\
+    \n\tstart [component] \t\t- start anna processes (component: kvs, monitor, route; omit for all)\
+    \n\tstop [component] \t\t- stop running anna processes\
+    \n\tstatus [component] \t\t- print the status of anna processes\
+    \n\thelp \t\t\t\t- print this usage message\
+    \n\texit \t\t\t\t- exit the CLI (does not stop any anna processes)"
+        .to_string()
 }
 
 async fn cli_loop_interactive(

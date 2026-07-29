@@ -136,6 +136,11 @@ PriorityResult get_priority(KvsClientInterface* client, const string& key);
 // Rust client where get() performs a UTF-8 conversion.
 string get_bytes(KvsClientInterface* client, const string& key);
 
+// Issue a blocking GET for `key`, auto-detecting the lattice type from
+// the server response. Returns a human-readable string suitable for
+// CLI display, formatted according to the lattice type.
+string get_any(KvsClientInterface* client, const string& key);
+
 // Retrieve server thread statistics for a specific node and thread.
 // Reads the metadata key
 //   ANNA_METADATA|stats|<public_ip>|<private_ip>|<tid>|<tier>

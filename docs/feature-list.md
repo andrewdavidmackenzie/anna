@@ -12,21 +12,19 @@ mocks.
 
 | Feature                    | Description                                                  | System Tested |
 |----------------------------|--------------------------------------------------------------|---------------|
-| GET                        | Retrieve a value by key                                      | Yes           |
-| PUT                        | Store a value by key (lattice merge)                         | Yes           |
-| DELETE                     | Remove a key (PUT with empty value and dominating timestamp) | Yes           |
-| GET_SET                    | Retrieve a set-valued key                                    | Yes           |
-| PUT_SET                    | Add values to a set (union semantics)                        | Yes           |
-| GET_CAUSAL                 | Retrieve with causal metadata (vector clock, dependencies)   | Yes           |
-| PUT_CAUSAL                 | Store with causal metadata                                   | Yes           |
-| GET_ORDERED_SET            | Retrieve an ordered set-valued key                           | Yes           |
-| PUT_ORDERED_SET            | Add values to an ordered set                                 | Yes           |
-| GET_SINGLE_CAUSAL          | Retrieve with single-key causal metadata                     | Yes           |
-| PUT_SINGLE_CAUSAL          | Store with single-key causal metadata                        | Yes           |
-| GET_PRIORITY               | Retrieve a priority-valued key                               | Yes           |
-| PUT_PRIORITY               | Store a priority-value pair (lowest priority wins)           | Yes           |
+| GET {key}                  | Retrieve any key (auto-detects lattice type)                 | Yes           |
+| PUT {key} {value}          | Store a scalar value (LWW, default)                          | Yes           |
+| PUT set {key} {vals...}    | Store a set (union merge)                                    | Yes           |
+| PUT ordered_set {key} ...  | Store an ordered set                                         | Yes           |
+| PUT priority {key} {p} {v} | Store with priority (lowest wins)                            | Yes           |
+| PUT causal {key} {value}   | Store with multi-key causal consistency                      | Yes           |
+| PUT single_causal {key} {value} | Store with single-key causal consistency               | Yes           |
+| DELETE {key}               | Remove a key (PUT with empty value and dominating timestamp) | Yes           |
 | Address cache invalidation | Server signals client to refresh address cache               | Yes           |
 | Multi-key GET              | Retrieve multiple keys in one request                        | Yes           |
+
+Legacy commands (`GET_SET`, `PUT_SET`, `GET_CAUSAL`, `PUT_CAUSAL`, etc.) are
+still supported as aliases for backward compatibility.
 
 ## Lattice Types
 

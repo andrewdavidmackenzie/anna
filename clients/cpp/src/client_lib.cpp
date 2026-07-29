@@ -19,6 +19,7 @@
 #include <chrono>
 #include <iomanip>
 #include <csignal>
+#include <sstream>
 #include <cstdio>
 #include <cstdlib>
 #include <stdexcept>
@@ -195,6 +196,85 @@ string get(KvsClientInterface* client, const string& key) {
   auto responses = receive_with_deadline(client);
   check_response_error(responses[0]);
   return decode_lww_value(key, responses[0].tuples(0).payload());
+}
+
+string get_any(KvsClientInterface* client, const string& key) {
+  client->get_async(key);
+  auto responses = receive_with_deadline(client);
+  check_response_error(responses[0]);
+
+  auto lt = responses[0].tuples(0).lattice_type();
+  const string& payload = responses[0].tuples(0).payload();
+  std::ostringstream out;
+
+  switch (lt) {
+    case kvs::LatticeType::LWW: {
+      out << decode_lww_value(key, payload);
+      break;
+    }
+    case kvs::LatticeType::SET: {
+      kvs::SetValue sv;
+      sv.ParseFromString(payload);
+      out << "{ ";
+      // Sort for deterministic output.
+      set<string> sorted(sv.values().begin(), sv.values().end());
+      for (const auto& v : sorted) {
+        out << v << " ";
+      }
+      out << "}";
+      break;
+    }
+    case kvs::LatticeType::ORDERED_SET: {
+      kvs::SetValue sv;
+      sv.ParseFromString(payload);
+      out << "[ ";
+      for (const auto& v : sv.values()) {
+        out << v << " ";
+      }
+      out << "]";
+      break;
+    }
+    case kvs::LatticeType::PRIORITY: {
+      kvs::PriorityValue pv;
+      pv.ParseFromString(payload);
+      out << "priority: " << pv.priority() << std::endl;
+      out << pv.value();
+      break;
+    }
+    case kvs::LatticeType::SINGLE_CAUSAL: {
+      kvs::SingleKeyCausalValue skc;
+      skc.ParseFromString(payload);
+      for (const auto& pair : skc.vector_clock()) {
+        out << "{" << pair.first << " : " << pair.second << "}" << std::endl;
+      }
+      for (const auto& v : skc.values()) {
+        out << v;
+        if (&v != &skc.values(skc.values_size() - 1)) out << std::endl;
+      }
+      break;
+    }
+    case kvs::LatticeType::MULTI_CAUSAL: {
+      kvs::MultiKeyCausalValue mkc;
+      mkc.ParseFromString(payload);
+      for (const auto& pair : mkc.vector_clock()) {
+        out << "{" << pair.first << " : " << pair.second << "}" << std::endl;
+      }
+      for (const auto& dep : mkc.dependencies()) {
+        out << dep.key() << " : ";
+        for (const auto& vc_pair : dep.vector_clock()) {
+          out << "{" << vc_pair.first << " : " << vc_pair.second << "}";
+        }
+        out << std::endl;
+      }
+      if (mkc.values_size() > 0) out << mkc.values(0);
+      break;
+    }
+    default:
+      out << "(unknown lattice type " << lt << ")";
+      break;
+  }
+
+  return out.str();
 }
 
 CausalValue get_causal(KvsClientInterface* client, const string& key) {

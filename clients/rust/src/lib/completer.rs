@@ -9,28 +9,14 @@ use rustyline::{Context, Helper};
 
 /// Commands available in the anna interactive CLI.
 pub const ANNA_COMMANDS: &[&str] = &[
-    "GET",
-    "PUT",
-    "GET_SET",
-    "PUT_SET",
-    "GET_ORDERED_SET",
-    "PUT_ORDERED_SET",
-    "GET_CAUSAL",
-    "PUT_CAUSAL",
-    "GET_SINGLE_CAUSAL",
-    "PUT_SINGLE_CAUSAL",
-    "GET_PRIORITY",
-    "PUT_PRIORITY",
-    "START",
-    "STOP",
-    "STATUS",
-    "HELP",
-    "DELETE",
-    "EXIT",
+    "GET", "PUT", "DELETE", "BENCH", "START", "STOP", "STATUS", "HELP", "EXIT",
 ];
 
 /// Commands that accept an optional component name argument.
 const COMPONENT_COMMANDS: &[&str] = &["START", "STOP", "STATUS"];
+
+/// Commands that accept an optional lattice type name as first argument.
+const TYPE_COMMANDS: &[&str] = &["PUT"];
 
 /// Provides tab-completion for anna CLI commands.
 pub struct AnnaCompleter;
@@ -47,7 +33,7 @@ impl Completer for AnnaCompleter {
         let text = &line[..pos];
         let upper = text.to_ascii_uppercase();
 
-        // If there is a space, we may be completing a component argument
+        // If there is a space, we may be completing a component or type argument
         if let Some(space_pos) = upper.find(' ') {
             let cmd = upper[..space_pos].trim();
             if COMPONENT_COMMANDS.contains(&cmd) {
@@ -62,6 +48,25 @@ impl Completer for AnnaCompleter {
                     })
                     .collect();
                 return Ok((arg_start, matches));
+            }
+            // Complete lattice type names after PUT (only for the first arg)
+            if TYPE_COMMANDS.contains(&cmd) {
+                let rest = &text[space_pos + 1..];
+                if !rest.contains(' ') {
+                    let arg_start = space_pos + 1;
+                    let arg_prefix = rest.to_ascii_lowercase();
+                    let matches: Vec<Pair> = crate::value::TYPE_NAMES
+                        .iter()
+                        .filter(|name| name.starts_with(arg_prefix.as_str()))
+                        .map(|name| Pair {
+                            display: name.to_string(),
+                            replacement: name.to_string(),
+                        })
+                        .collect();
+                    if !matches.is_empty() {
+                        return Ok((arg_start, matches));
+                    }
+                }
             }
             return Ok((pos, vec![]));
         }
@@ -106,15 +111,12 @@ mod tests {
     fn completes_get() {
         let results = complete("GE");
         assert!(results.contains(&"GET".to_string()));
-        assert!(results.contains(&"GET_SET".to_string()));
-        assert!(results.contains(&"GET_CAUSAL".to_string()));
     }
 
     #[test]
     fn completes_put() {
         let results = complete("PU");
         assert!(results.contains(&"PUT".to_string()));
-        assert!(results.contains(&"PUT_SET".to_string()));
     }
 
     #[test]
@@ -175,5 +177,28 @@ mod tests {
         let results = complete("START M");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0], "monitor");
+    }
+
+    #[test]
+    fn put_completes_type_names() {
+        let results = complete("PUT ");
+        assert!(results.contains(&"set".to_string()));
+        assert!(results.contains(&"priority".to_string()));
+        assert!(results.contains(&"causal".to_string()));
+        assert!(results.contains(&"lww".to_string()));
+    }
+
+    #[test]
+    fn put_filters_type_prefix() {
+        let results = complete("PUT s");
+        assert!(results.contains(&"set".to_string()));
+        assert!(results.contains(&"single_causal".to_string()));
+        assert!(!results.contains(&"lww".to_string()));
+    }
+
+    #[test]
+    fn put_no_type_completion_after_second_space() {
+        let results = complete("PUT set ");
+        assert!(results.is_empty());
     }
 }
