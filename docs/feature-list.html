@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-40f4e44b.js";
+            window.path_to_searchindex_js = "../searchindex-4ec9dff1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-65030116.js"></script>
@@ -188,24 +188,21 @@ mocks.</p>
 <tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
 </thead>
 <tbody>
-<tr><td>GET</td><td>Retrieve a value by key</td><td>Yes</td></tr>
-<tr><td>PUT</td><td>Store a value by key (lattice merge)</td><td>Yes</td></tr>
-<tr><td>DELETE</td><td>Remove a key (PUT with empty value and dominating timestamp)</td><td>Yes</td></tr>
-<tr><td>GET_SET</td><td>Retrieve a set-valued key</td><td>Yes</td></tr>
-<tr><td>PUT_SET</td><td>Add values to a set (union semantics)</td><td>Yes</td></tr>
-<tr><td>GET_CAUSAL</td><td>Retrieve with causal metadata (vector clock, dependencies)</td><td>Yes</td></tr>
-<tr><td>PUT_CAUSAL</td><td>Store with causal metadata</td><td>Yes</td></tr>
-<tr><td>GET_ORDERED_SET</td><td>Retrieve an ordered set-valued key</td><td>Yes</td></tr>
-<tr><td>PUT_ORDERED_SET</td><td>Add values to an ordered set</td><td>Yes</td></tr>
-<tr><td>GET_SINGLE_CAUSAL</td><td>Retrieve with single-key causal metadata</td><td>Yes</td></tr>
-<tr><td>PUT_SINGLE_CAUSAL</td><td>Store with single-key causal metadata</td><td>Yes</td></tr>
-<tr><td>GET_PRIORITY</td><td>Retrieve a priority-valued key</td><td>Yes</td></tr>
-<tr><td>PUT_PRIORITY</td><td>Store a priority-value pair (lowest priority wins)</td><td>Yes</td></tr>
+<tr><td>GET {key}</td><td>Retrieve any key (auto-detects lattice type)</td><td>Yes</td></tr>
+<tr><td>PUT {key} {value}</td><td>Store a scalar value (LWW, default)</td><td>Yes</td></tr>
+<tr><td>PUT set {key} {vals…}</td><td>Store a set (union merge)</td><td>Yes</td></tr>
+<tr><td>PUT ordered_set {key} …</td><td>Store an ordered set</td><td>Yes</td></tr>
+<tr><td>PUT priority {key} {p} {v}</td><td>Store with priority (lowest wins)</td><td>Yes</td></tr>
+<tr><td>PUT causal {key} {value}</td><td>Store with multi-key causal consistency</td><td>Yes</td></tr>
+<tr><td>PUT single_causal {key} {value}</td><td>Store with single-key causal consistency</td><td>Yes</td></tr>
+<tr><td>DELETE {key}</td><td>Remove a key (PUT with empty value and dominating timestamp)</td><td>Yes</td></tr>
 <tr><td>Address cache invalidation</td><td>Server signals client to refresh address cache</td><td>Yes</td></tr>
 <tr><td>Multi-key GET</td><td>Retrieve multiple keys in one request</td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
+<p>Legacy commands (<code>GET_SET</code>, <code>PUT_SET</code>, <code>GET_CAUSAL</code>, <code>PUT_CAUSAL</code>, etc.) are
+still supported as aliases for backward compatibility.</p>
 <h2 id="lattice-types"><a class="header" href="#lattice-types">Lattice Types</a></h2>
 <div class="table-wrapper">
 <table>

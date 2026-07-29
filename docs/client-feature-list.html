@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-40f4e44b.js";
+            window.path_to_searchindex_js = "../searchindex-4ec9dff1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-65030116.js"></script>
@@ -246,12 +246,10 @@ managing replication factors, enabling operator-driven autoscaling.</p>
 <tr><th>Feature</th><th>Tested</th></tr>
 </thead>
 <tbody>
-<tr><td>GET / PUT / DELETE (LWW)</td><td>Yes</td></tr>
-<tr><td>GET_SET / PUT_SET</td><td>Yes</td></tr>
-<tr><td>GET_ORDERED_SET / PUT_ORDERED_SET</td><td>Yes</td></tr>
-<tr><td>GET_CAUSAL / PUT_CAUSAL</td><td>Yes</td></tr>
-<tr><td>GET_SINGLE_CAUSAL / PUT_SINGLE_CAUSAL</td><td>Yes</td></tr>
-<tr><td>GET_PRIORITY / PUT_PRIORITY</td><td>Yes</td></tr>
+<tr><td>Unified GET (auto-detect type)</td><td>Yes</td></tr>
+<tr><td>Unified PUT (type prefix)</td><td>Yes</td></tr>
+<tr><td>DELETE</td><td>Yes</td></tr>
+<tr><td>Value enum (get_value/put_value)</td><td>Yes</td></tr>
 <tr><td>GET_BYTES (raw LWW value)</td><td>Yes</td></tr>
 <tr><td>Multi-key GET (get_multi)</td><td>Yes</td></tr>
 <tr><td>Address cache invalidation</td><td>Yes</td></tr>
@@ -277,12 +275,9 @@ managing replication factors, enabling operator-driven autoscaling.</p>
 <tr><th>Feature</th><th>Tested</th></tr>
 </thead>
 <tbody>
-<tr><td>GET / PUT / DELETE (LWW)</td><td>Yes</td></tr>
-<tr><td>GET_SET / PUT_SET</td><td>Yes</td></tr>
-<tr><td>GET_ORDERED_SET / PUT_ORDERED_SET</td><td>Yes</td></tr>
-<tr><td>GET_CAUSAL / PUT_CAUSAL</td><td>Yes</td></tr>
-<tr><td>GET_SINGLE_CAUSAL / PUT_SINGLE_CAUSAL</td><td>Yes</td></tr>
-<tr><td>GET_PRIORITY / PUT_PRIORITY</td><td>Yes</td></tr>
+<tr><td>Unified GET (get_any, auto-detect type)</td><td>Yes</td></tr>
+<tr><td>Unified PUT (type prefix)</td><td>Yes</td></tr>
+<tr><td>DELETE</td><td>Yes</td></tr>
 <tr><td>GET_BYTES (raw LWW value)</td><td>Yes</td></tr>
 <tr><td>Multi-key GET (get_multi)</td><td>Yes</td></tr>
 <tr><td>Address cache invalidation</td><td>Yes</td></tr>
@@ -305,12 +300,9 @@ managing replication factors, enabling operator-driven autoscaling.</p>
 <tr><th>Feature</th><th>Tested</th></tr>
 </thead>
 <tbody>
-<tr><td>GET / PUT / DELETE (LWW)</td><td>Yes</td></tr>
-<tr><td>GET_SET / PUT_SET</td><td>Yes</td></tr>
-<tr><td>GET_ORDERED_SET / PUT_ORDERED_SET</td><td>Yes</td></tr>
-<tr><td>GET_CAUSAL / PUT_CAUSAL</td><td>Yes</td></tr>
-<tr><td>GET_SINGLE_CAUSAL / PUT_SINGLE_CAUSAL</td><td>Yes</td></tr>
-<tr><td>GET_PRIORITY / PUT_PRIORITY</td><td>Yes</td></tr>
+<tr><td>Unified GET (legacy dispatch by type)</td><td>Yes</td></tr>
+<tr><td>Unified PUT (type prefix)</td><td>Yes</td></tr>
+<tr><td>DELETE</td><td>Yes</td></tr>
 <tr><td>GET_BYTES (raw LWW value)</td><td>Yes</td></tr>
 <tr><td>Multi-key GET (GetMulti)</td><td>Yes</td></tr>
 <tr><td>Address cache invalidation</td><td>Yes</td></tr>
@@ -335,11 +327,9 @@ managing replication factors, enabling operator-driven autoscaling.</p>
 <tr><th>Feature</th><th>Tested</th></tr>
 </thead>
 <tbody>
-<tr><td>GET / PUT / DELETE (LWW)</td><td>Yes</td></tr>
-<tr><td>GET_SET / PUT_SET</td><td>Yes</td></tr>
-<tr><td>GET_ORDERED_SET / PUT_ORDERED_SET</td><td>Yes</td></tr>
-<tr><td>GET_SINGLE_CAUSAL / PUT_SINGLE_CAUSAL</td><td>Yes</td></tr>
-<tr><td>GET_PRIORITY / PUT_PRIORITY</td><td>Yes</td></tr>
+<tr><td>Unified GET (LWW/Set auto-detect, legacy dispatch for others)</td><td>Yes</td></tr>
+<tr><td>Unified PUT (type prefix)</td><td>Yes</td></tr>
+<tr><td>DELETE</td><td>Yes</td></tr>
 <tr><td>GET_BYTES (raw LWW value)</td><td>Yes</td></tr>
 <tr><td>Multi-key GET (get_multi)</td><td>Yes</td></tr>
 <tr><td>Address cache invalidation</td><td>Yes</td></tr>
