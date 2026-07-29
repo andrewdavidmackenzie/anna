@@ -30,7 +30,7 @@ protected:
   }
 };
 
-// When disk-tier required nodes exceeds current count, add_node is triggered.
+// When disk-tier required nodes exceeds current count, a scale-up alert is emitted.
 TEST_F(StoragePolicyTest, DiskTierScaleOutTriggered) {
   GlobalRingMap global_hash_rings;
   TimePoint grace_start = std::chrono::system_clock::now() -
@@ -42,7 +42,7 @@ TEST_F(StoragePolicyTest, DiskTierScaleOutTriggered) {
   unsigned new_memory_count = 0;
   unsigned new_disk_count = 0;
   bool removing_disk_node = false;
-  Address management_ip = "127.0.0.1";
+  Address scaling_alert_ip = "127.0.0.1";
   MonitoringThread mt("127.0.0.1");
   map<Address, unsigned> departing_node_map;
   zmq::context_t context;
@@ -50,10 +50,10 @@ TEST_F(StoragePolicyTest, DiskTierScaleOutTriggered) {
 
   storage_policy(log_, global_hash_rings, grace_start, ss,
                  memory_node_count, disk_node_count, new_memory_count,
-                 new_disk_count, removing_disk_node, management_ip, mt,
+                 new_disk_count, removing_disk_node, scaling_alert_ip, mt,
                  departing_node_map, pushers);
 
-  // new_disk_count should be set by add_node.
+  // new_disk_count should be set by emit_scale_up_alert.
   EXPECT_GT(new_disk_count, 0u);
 }
 
@@ -73,7 +73,7 @@ TEST_F(StoragePolicyTest, DiskTierScaleInTriggered) {
   unsigned new_memory_count = 0;
   unsigned new_disk_count = 0;
   bool removing_disk_node = false;
-  Address management_ip = "127.0.0.1";
+  Address scaling_alert_ip = "127.0.0.1";
   MonitoringThread mt("127.0.0.1");
   map<Address, unsigned> departing_node_map;
   zmq::context_t context;
@@ -81,7 +81,7 @@ TEST_F(StoragePolicyTest, DiskTierScaleInTriggered) {
 
   storage_policy(log_, global_hash_rings, grace_start, ss,
                  memory_node_count, disk_node_count, new_memory_count,
-                 new_disk_count, removing_disk_node, management_ip, mt,
+                 new_disk_count, removing_disk_node, scaling_alert_ip, mt,
                  departing_node_map, pushers);
 
   EXPECT_TRUE(removing_disk_node);

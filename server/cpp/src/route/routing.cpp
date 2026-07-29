@@ -153,8 +153,8 @@ int main(int argc, char *argv[]) {
     YAML::Node ports = conf["ports"];
     if (ports["base_offset"])
       kBaseOffset = ports["base_offset"].as<unsigned>();
-    if (ports["management"])
-      kManagementNodePort = ports["management"].as<unsigned>();
+    if (ports["scaling_alert"])
+      kScalingAlertPort = ports["scaling_alert"].as<unsigned>();
   }
 
   if (conf["hashing"]) {

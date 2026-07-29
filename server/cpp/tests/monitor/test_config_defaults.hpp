@@ -120,8 +120,8 @@ TEST(ConfigDefaults, GarbageCollectThresholdDefault) {
 
 // --- threads.hpp defaults ---
 
-TEST(ConfigDefaults, ManagementNodePortDefault) {
-  EXPECT_EQ(kManagementNodePort, 7001u);
+TEST(ConfigDefaults, ScalingAlertPortDefault) {
+  EXPECT_EQ(kScalingAlertPort, 7001u);
 }
 
 TEST(ConfigDefaults, BaseOffsetDefault) {

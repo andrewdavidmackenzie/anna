@@ -14,14 +14,23 @@
 
 #include "monitor/monitoring_utils.hpp"
 
-void add_node(logger log, string tier, unsigned number, unsigned &adding,
-              SocketCache &pushers, const Address &management_ip) {
-  log->info("Adding {} node(s) in tier {}.", std::to_string(number), tier);
+void emit_scale_up_alert(logger log, string tier, unsigned number,
+                         unsigned &adding, SocketCache &pushers,
+                         const Address &scaling_alert_ip) {
+  log->info("Emitting scale-up alert: {} node(s) in tier {}.",
+            std::to_string(number), tier);
 
-  string mgmt_addr = "tcp://" + management_ip + ":" + std::to_string(kManagementNodePort + kBaseOffset);
-  string message = "add:" + std::to_string(number) + ":" + tier;
+  ScalingAlert alert;
+  alert.set_action(ScalingAlert::ADD);
+  alert.set_tier(tier == "memory" ? Tier::MEMORY : Tier::DISK);
+  alert.set_count(number);
 
-  kZmqUtil->send_string(message, &pushers[mgmt_addr]);
+  string alert_addr = "tcp://" + scaling_alert_ip + ":" +
+                      std::to_string(kScalingAlertPort + kBaseOffset);
+  string serialized;
+  alert.SerializeToString(&serialized);
+
+  kZmqUtil->send_string(serialized, &pushers[alert_addr]);
   adding = number;
 }
 

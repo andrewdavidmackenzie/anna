@@ -52,6 +52,8 @@ logger log_ = spdlog::stdout_color_mt("monitor_test_log");
 
 #include "test_compute_summary_stats.hpp"
 #include "test_storage_policy.hpp"
+#include "test_slo_policy.hpp"
+#include "test_movement_policy.hpp"
 #include "test_depart_done_handler.hpp"
 #include "test_membership_handler.hpp"
 

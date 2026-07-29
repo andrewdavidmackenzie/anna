@@ -66,7 +66,8 @@ message ClusterMembership {
   // The representation the servers comprising an individual tier.
   message TierMembership {
     // The IP addresses for an individual server -- the private/public IP
-    // distinction is specific to EC2-based deployments.
+    // distinction is relevant for cloud deployments with separate
+    // internal and external network interfaces.
     message Server {
       // The public IP address for a server.
       string public_ip = 1;
@@ -142,4 +143,32 @@ message ClusterTopology {
 
   // Number of disk-tier threads per KVS node.
   uint32 disk_thread_count = 3;
+}
+
+// A scaling recommendation emitted by the monitor's policy engine.
+// An external system (operator tooling, orchestrator, etc.) consumes
+// these alerts and provisions or decommissions infrastructure.
+message ScalingAlert {
+  // The type of scaling action being recommended.
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+
+    // Add nodes to a tier.
+    ADD = 1;
+
+    // A node has departed and its infrastructure can be reclaimed.
+    REMOVE = 2;
+  }
+
+  // The recommended action.
+  Action action = 1;
+
+  // The storage tier this alert applies to (MEMORY or DISK).
+  Tier tier = 2;
+
+  // For ADD: the number of nodes to add. For REMOVE: 1.
+  uint32 count = 3;
+
+  // For REMOVE: the private IP of the departed node. Empty for ADD.
+  string departed_node_ip = 4;
 }

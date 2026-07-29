@@ -45,8 +45,8 @@ mocks.
 |-------------------|-------------------------------------------------------|---------------|
 | YAML config file  | All settings in a single YAML file                    | Yes           |
 | Thread counts     | `threads.memory`, `threads.disk`, `threads.routing`    | Yes           |
-| Standalone mode   | `mgmt_ip: "NULL"` for local/non-k8s deployment       | Yes           |
-| Cluster topology  | seed_ip, mgmt_ip, monitoring/routing IPs              | Yes           |
+| Standalone mode   | `scaling_alert_ip: "NULL"` for local/standalone deployment | Yes           |
+| Cluster topology  | seed_ip, scaling_alert_ip, monitoring/routing IPs     | Yes           |
 | ZeroMQ PUSH/PULL  | Async messaging between all components                | Yes           |
 | Protocol Buffers  | Structured message serialization                      | Yes           |
 | Socket cache      | Lazy-created, cached ZMQ push sockets                 | Yes           |
@@ -219,9 +219,10 @@ external autoscaler:
 
 `anna-monitor` contains a built-in policy engine (`storage_policy.cpp`,
 `slo_policy.cpp`, `movement_policy.cpp`) that implements reference decision
-logic, but it depends on a management node (`tcp://<mgmt_ip>:7001`) that
-is not part of the project. Operators can use the client library helpers
-to implement their own scaling logic.
+logic, but it depends on an external system
+(`tcp://<scaling_alert_ip>:<ports.scaling_alert>`, default port `7001`,
+subject to `ports.base_offset`) that is not part of the project. Operators
+can use the client library helpers to implement their own scaling logic.
 
 ## Summary
 

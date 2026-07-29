@@ -31,5 +31,6 @@ RUN git fetch origin && git checkout -b $build_branch origin/$source_branch
 RUN bash scripts/build.sh -j4 -bRelease
 WORKDIR /
 
-COPY start-anna.sh /
-CMD bash start-anna.sh $SERVER_TYPE
+# The operator must provide their own entrypoint script or use the compiled
+# binaries directly (e.g. anna-kvs, anna-route, anna-monitor).
+# See docs/autoscaling.md for how to configure and run each component.

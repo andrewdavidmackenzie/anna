@@ -60,8 +60,8 @@ int main(int argc, char *argv[]) {
     YAML::Node ports = conf["ports"];
     if (ports["base_offset"])
       kBaseOffset = ports["base_offset"].as<unsigned>();
-    if (ports["management"])
-      kManagementNodePort = ports["management"].as<unsigned>();
+    if (ports["scaling_alert"])
+      kScalingAlertPort = ports["scaling_alert"].as<unsigned>();
   }
 
   unsigned monitoringResponseTimeout = 10000;
@@ -77,7 +77,7 @@ int main(int argc, char *argv[]) {
 
   YAML::Node monitoring = conf["monitoring"];
   Address ip = monitoring["ip"].as<Address>();
-  Address management_ip = monitoring["mgmt_ip"].as<Address>();
+  Address scaling_alert_ip = monitoring["scaling_alert_ip"].as<Address>();
 
   YAML::Node policy = conf["policy"];
   kEnableElasticity = policy["elasticity"].as<bool>();
@@ -315,7 +315,7 @@ int main(int argc, char *argv[]) {
 
     if (pollitems[1].revents & ZMQ_POLLIN) {
       string serialized = kZmqUtil->recv_string(&depart_done_puller);
-      depart_done_handler(log, serialized, departing_node_map, management_ip,
+      depart_done_handler(log, serialized, departing_node_map, scaling_alert_ip,
                           removing_memory_node, removing_disk_node, pushers,
                           grace_start);
     }
@@ -433,18 +433,18 @@ int main(int argc, char *argv[]) {
 
       storage_policy(log, global_hash_rings, grace_start, ss, memory_node_count,
                      disk_node_count, new_memory_count, new_disk_count,
-                     removing_disk_node, management_ip, mt, departing_node_map,
-                     pushers);
+                     removing_disk_node, scaling_alert_ip, mt,
+                     departing_node_map, pushers);
 
       movement_policy(log, global_hash_rings, local_hash_rings, grace_start, ss,
                       memory_node_count, disk_node_count, new_memory_count,
-                      new_disk_count, management_ip, key_replication_map,
+                      new_disk_count, scaling_alert_ip, key_replication_map,
                       key_access_summary, key_size, mt, pushers,
                       response_puller, routing_ips, rid);
 
       slo_policy(log, global_hash_rings, local_hash_rings, grace_start, ss,
                  memory_node_count, new_memory_count, removing_memory_node,
-                 management_ip, key_replication_map, key_access_summary, mt,
+                 scaling_alert_ip, key_replication_map, key_access_summary, mt,
                  departing_node_map, pushers, response_puller, routing_ips, rid,
                  latency_miss_ratio_map);
 

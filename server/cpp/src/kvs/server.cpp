@@ -44,7 +44,7 @@ HashRingUtilInterface *kHashRingUtil = &hash_ring_util;
 
 void run(unsigned thread_id, string disk_root, Address public_ip, Address private_ip,
          Address seed_ip, vector<Address> routing_ips,
-         vector<Address> monitoring_ips, Address management_ip) {
+         vector<Address> monitoring_ips, Address scaling_alert_ip) {
   string log_name = "server_log_" + std::to_string(thread_id);
   auto log = spdlog::stdout_color_mt(log_name);
   log->flush_on(spdlog::level::info);
@@ -110,15 +110,16 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
   ClusterMembership membership;
   membership.ParseFromString(serialized_addresses);
 
-  // get join number from management node if we are running in Kubernetes
+  // Request the restart count from the external management system.
+  // The scaling_alert_ip serves as the address for all external
+  // management services (restart counts on port 7000, scaling alerts
+  // on port 7001, func-node lists on port 7002). When set to "NULL"
+  // (standalone mode), skip the request and use count 0.
   string count_str;
 
-  // if we are running the system outside of Kubernetes, we need to set the
-  // management address to NULL in the conf file, otherwise we will hang
-  // forever waiting to hear back about a restart count
-  if (management_ip != "NULL") {
+  if (scaling_alert_ip != "NULL") {
     zmq::socket_t join_count_requester(context, ZMQ_REQ);
-    join_count_requester.connect(get_join_count_req_address(management_ip));
+    join_count_requester.connect(get_join_count_req_address(scaling_alert_ip));
     kZmqUtil->send_string("restart:" + private_ip, &join_count_requester);
     count_str = kZmqUtil->recv_string(&join_count_requester);
   } else {
@@ -731,14 +732,13 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
 
       report_start = std::chrono::system_clock::now();
 
-      // Get the most recent list of cache IPs from the management node.
-      // Only used when a management_ip is set (Kubernetes mode).
-      // In standalone mode, caches register directly via the cache
-      // registration port.
-      if (management_ip != "NULL") {
+      // Get the most recent list of cache IPs from the external management
+      // system. In standalone mode (scaling_alert_ip == "NULL"), caches
+      // register directly via the cache registration port.
+      if (scaling_alert_ip != "NULL") {
         kZmqUtil->send_string(
             wt.management_node_response_connect_address(),
-            &pushers[get_func_nodes_req_address(management_ip)]);
+            &pushers[get_func_nodes_req_address(scaling_alert_ip)]);
       }
 
       // reset stats tracked in memory
@@ -837,8 +837,8 @@ int main(int argc, char *argv[]) {
     YAML::Node ports = conf["ports"];
     if (ports["base_offset"])
       kBaseOffset = ports["base_offset"].as<unsigned>();
-    if (ports["management"])
-      kManagementNodePort = ports["management"].as<unsigned>();
+    if (ports["scaling_alert"])
+      kScalingAlertPort = ports["scaling_alert"].as<unsigned>();
   }
 
   if (conf["timings"]) {
@@ -920,7 +920,7 @@ int main(int argc, char *argv[]) {
   vector<Address> monitoring_ips;
 
   Address seed_ip = server["seed_ip"].as<string>();
-  Address mgmt_ip = server["mgmt_ip"].as<string>();
+  Address scaling_alert_ip = server["scaling_alert_ip"].as<string>();
   YAML::Node monitoring = server["monitoring"];
   YAML::Node routing = server["routing"];
 
@@ -946,12 +946,13 @@ int main(int argc, char *argv[]) {
   // start the initial threads based on kThreadNum
   vector<std::thread> worker_threads;
   for (unsigned thread_id = 1; thread_id < kThreadNum; thread_id++) {
-    worker_threads.push_back(std::thread(run, thread_id, disk_root, public_ip, private_ip,
-                                         seed_ip, routing_ips, monitoring_ips,
-                                         mgmt_ip));
+    worker_threads.push_back(std::thread(run, thread_id, disk_root, public_ip,
+                                         private_ip, seed_ip, routing_ips,
+                                         monitoring_ips, scaling_alert_ip));
   }
 
-  run(0, disk_root, public_ip, private_ip, seed_ip, routing_ips, monitoring_ips, mgmt_ip);
+  run(0, disk_root, public_ip, private_ip, seed_ip, routing_ips, monitoring_ips,
+      scaling_alert_ip);
 
   // join on all worker threads to make sure they finish before exiting
   for (auto& t : worker_threads) {

@@ -139,7 +139,7 @@ impl LatencyReporter {
 - Move: `conf/anna-local.yml` → `server/conf/anna-local.yml`
 - Move: `conf/anna-base.yml` → `server/conf/anna-base.yml`
 - Delete: `conf/` directory
-- Modify: `dockerfiles/start-anna.sh` — update path if needed
+- (Removed: `dockerfiles/start-anna.sh` — deleted as part of decoupling from AWS/k8s)
 
 ---
 

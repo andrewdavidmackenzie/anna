@@ -22,7 +22,7 @@ TEST(DepartDoneHandler, DiskTierDepartClearsFlag) {
   departing_node_map["127.0.0.2"] = 1;  // 1 thread remaining
   bool removing_memory_node = false;
   bool removing_disk_node = true;
-  Address management_ip = "127.0.0.1";
+  Address scaling_alert_ip = "127.0.0.1";
   zmq::context_t context;
   SocketCache pushers(&context, ZMQ_PUSH);
   TimePoint grace_start = std::chrono::system_clock::now();
@@ -30,10 +30,41 @@ TEST(DepartDoneHandler, DiskTierDepartClearsFlag) {
   // Format: public_ip_private_ip_tier_id  (tier_id 2 = DISK)
   string serialized = "127.0.0.2_127.0.0.2_2";
 
-  depart_done_handler(log_, serialized, departing_node_map, management_ip,
+  depart_done_handler(log_, serialized, departing_node_map, scaling_alert_ip,
                       removing_memory_node, removing_disk_node, pushers,
                       grace_start);
 
   EXPECT_FALSE(removing_disk_node);
   EXPECT_EQ(departing_node_map.count("127.0.0.2"), 0u);
+}
+
+// Test that depart_done_handler handles memory-tier node departure.
+TEST(DepartDoneHandler, MemoryTierDepartClearsFlag) {
+  map<Address, unsigned> departing_node_map;
+  departing_node_map["127.0.0.3"] = 1;  // 1 thread remaining
+  bool removing_memory_node = true;
+  bool removing_disk_node = false;
+  Address scaling_alert_ip = "127.0.0.1";
+  zmq::context_t context;
+  SocketCache pushers(&context, ZMQ_PUSH);
+  TimePoint grace_start = std::chrono::system_clock::now();
+
+  // Format: public_ip_private_ip_tier_id  (tier_id 1 = MEMORY)
+  string serialized = "127.0.0.3_127.0.0.3_1";
+
+  depart_done_handler(log_, serialized, departing_node_map, scaling_alert_ip,
+                      removing_memory_node, removing_disk_node, pushers,
+                      grace_start);
+
+  EXPECT_FALSE(removing_memory_node);
+  EXPECT_EQ(departing_node_map.count("127.0.0.3"), 0u);
+
+  // Verify the ScalingAlert protobuf was sent via the mock
+  ASSERT_FALSE(mock_zmq_util.sent_messages.empty());
+  ScalingAlert alert;
+  alert.ParseFromString(mock_zmq_util.sent_messages.back());
+  EXPECT_EQ(alert.action(), ScalingAlert::REMOVE);
+  EXPECT_EQ(alert.tier(), Tier::MEMORY);
+  EXPECT_EQ(alert.count(), 1u);
+  EXPECT_EQ(alert.departed_node_ip(), "127.0.0.3");
 }

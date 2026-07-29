@@ -16,7 +16,8 @@
 
 void depart_done_handler(logger log, string &serialized,
                          map<Address, unsigned> &departing_node_map,
-                         Address management_ip, bool &removing_memory_node,
+                         Address scaling_alert_ip,
+                         bool &removing_memory_node,
                          bool &removing_disk_node, SocketCache &pushers,
                          TimePoint &grace_start) {
   vector<string> tokens;
@@ -31,22 +32,30 @@ void depart_done_handler(logger log, string &serialized,
     departing_node_map[departed_private_ip] -= 1;
 
     if (departing_node_map[departed_private_ip] == 0) {
-      string ntype;
+      Tier tier;
       if (tier_id == 1) {
-        ntype = "memory";
+        tier = Tier::MEMORY;
         removing_memory_node = false;
       } else {
-        ntype = "disk";
+        tier = Tier::DISK;
         removing_disk_node = false;
       }
 
-      log->info("Removing {} node {}/{}.", ntype, departed_public_ip,
-                departed_private_ip);
+      log->info("Emitting scale-down alert: node {}/{} (tier {}).",
+                departed_public_ip, departed_private_ip, Tier_Name(tier));
 
-      string mgmt_addr = "tcp://" + management_ip + ":" + std::to_string(kManagementNodePort + kBaseOffset);
-      string message = "remove:" + departed_private_ip + ":" + ntype;
+      ScalingAlert alert;
+      alert.set_action(ScalingAlert::REMOVE);
+      alert.set_tier(tier);
+      alert.set_count(1);
+      alert.set_departed_node_ip(departed_private_ip);
 
-      kZmqUtil->send_string(message, &pushers[mgmt_addr]);
+      string alert_addr = "tcp://" + scaling_alert_ip + ":" +
+                          std::to_string(kScalingAlertPort + kBaseOffset);
+      string alert_serialized;
+      alert.SerializeToString(&alert_serialized);
+
+      kZmqUtil->send_string(alert_serialized, &pushers[alert_addr]);
 
       // reset grace period timer
       grace_start = std::chrono::system_clock::now();

@@ -30,7 +30,7 @@ def server_binaries_exist():
 
 TEST_CONFIG_YAML = """
 monitoring:
-  mgmt_ip: 127.0.0.1
+  scaling_alert_ip: 127.0.0.1
   ip: 127.0.0.1
 routing:
   monitoring:
@@ -50,7 +50,7 @@ server:
   seed_ip: 127.0.0.1
   public_ip: 127.0.0.1
   private_ip: 127.0.0.1
-  mgmt_ip: "NULL"
+  scaling_alert_ip: "NULL"
 disk: {disk_dir}
 capacities:
   memory-cap: 1

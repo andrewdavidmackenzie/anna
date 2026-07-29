@@ -46,7 +46,7 @@ keys rather than replicating all keys uniformly:
 
 Anna supports multiple storage tiers with different cost-performance profiles:
 
-- **Memory tier**: Fast RAM-based storage (e.g., AWS EC2 instances)
+- **Memory tier**: Fast RAM-based storage (e.g., cloud VM instances)
 - **Disk tier**: Cheaper flash-based storage (e.g., disk volumes)
 - Hot data is **promoted** from disk to memory when access frequency
   exceeds a threshold
@@ -198,23 +198,25 @@ while True:
     time.sleep(CHECK_INTERVAL)
 ```
 
-### Management Node Protocol
+### Scaling Alert Protocol
 
-The built-in policy engine communicates with an external management node
-via ZMQ PUSH on port 7001:
+The built-in policy engine communicates scaling recommendations to an
+external system via ZMQ PUSH on the `scaling_alert` port (default 7001).
+Messages are serialized `ScalingAlert` protobuf messages (defined in
+`server/protobuf/metadata.proto`):
 
-- **Add nodes**: sends `"add:<count>:<tier>"` (e.g., `"add:2:memory"`)
-- **Remove nodes**: sends self-depart signal directly to the KVS node
-  (no management node involvement)
+- **Scale up**: `action=ADD`, `tier=MEMORY|DISK`, `count=N`
+- **Scale down**: `action=REMOVE`, `tier=MEMORY|DISK`, `count=1`,
+  `departed_node_ip=<ip>` (sent after a node has finished departing)
 
-The management node is not part of Anna — it's the operator's responsibility
-to implement infrastructure provisioning in response to these messages.
+The external system is not part of Anna — it's the operator's responsibility
+to implement infrastructure provisioning in response to these alerts.
 
 ## Performance Results
 
 From the [VLDB 2019 paper](http://www.vikrams.io/papers/anna-vldb19.pdf) evaluation:
 
-- Anna outperforms AWS ElastiCache and Masstree by up to 10x in
+- Anna outperforms ElastiCache and Masstree by up to 10x in
   cost-effectiveness under various contention levels
 - Anna outperforms DynamoDB by 36x at low cost and up to 355x at higher costs
 - Anna meets latency SLOs 97% of the time during dynamic workload changes

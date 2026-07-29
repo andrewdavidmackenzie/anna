@@ -43,7 +43,7 @@ struct NodeConfig {
     selective_rep: bool,
     elasticity: bool,
     tiering: bool,
-    mgmt_ip: String,
+    scaling_alert_ip: String,
     memory_cap_kb: Option<u32>,
     grace_period: u32,
     server_report_period: u32,
@@ -65,7 +65,7 @@ impl Default for NodeConfig {
             selective_rep: false,
             elasticity: false,
             tiering: false,
-            mgmt_ip: "NULL".to_string(),
+            scaling_alert_ip: "NULL".to_string(),
             memory_cap_kb: None,
             grace_period: TEST_GRACE_PERIOD,
             server_report_period: TEST_SERVER_REPORT_PERIOD,
@@ -81,7 +81,7 @@ fn write_node_config(path: &Path, cfg: &NodeConfig) {
         f,
         "\
 monitoring:
-  mgmt_ip: \"{mgmt_ip}\"
+  scaling_alert_ip: \"{scaling_alert_ip}\"
   ip: {seed_ip}
 routing:
   monitoring:
@@ -101,7 +101,7 @@ server:
   seed_ip: {seed_ip}
   public_ip: {node_ip}
   private_ip: {node_ip}
-  mgmt_ip: \"{mgmt_ip}\"
+  scaling_alert_ip: \"{scaling_alert_ip}\"
 policy:
   elasticity: {elasticity}
   selective-rep: {selective_rep}
@@ -148,7 +148,7 @@ replication:
         tombstone_gc_multiplier = cfg.tombstone_gc_multiplier,
         elasticity = cfg.elasticity,
         tiering = cfg.tiering,
-        mgmt_ip = cfg.mgmt_ip,
+        scaling_alert_ip = cfg.scaling_alert_ip,
         memory_cap_kb_line = cfg
             .memory_cap_kb
             .map(|kb| format!("  memory-cap-kb: {}", kb))
@@ -1844,10 +1844,11 @@ async fn slo_selective_replication() {
     );
 }
 
-/// Test the management node integration path: start a mock management node
-/// (ZMQ REP sockets), configure the cluster with mgmt_ip pointing to it,
-/// and verify the KVS server contacts it on startup (restart count query)
-/// and the monitor contacts it when storage policy triggers (add node).
+/// Test the external management integration path: start a mock management
+/// system (ZMQ REP sockets), configure the cluster with scaling_alert_ip
+/// pointing to it, and verify the KVS server contacts it on startup
+/// (restart count query) and the monitor contacts it when storage policy
+/// triggers (scaling alert).
 ///
 /// Uses base_offset=500 to stay in safe port range.
 #[tokio::test]
@@ -1940,7 +1941,7 @@ async fn management_node_integration() {
         }
     });
 
-    // Start cluster with mgmt_ip pointing to our mock.
+    // Start cluster with scaling_alert_ip pointing to our mock.
     // Use short timings so the func_nodes query arrives quickly.
     let short_monitoring: u32 = 3;
     let short_report: u32 = 2;
@@ -1950,7 +1951,7 @@ async fn management_node_integration() {
         seed_ip: NODE1_IP,
         replication_memory: 1,
         base_offset,
-        mgmt_ip: NODE1_IP.to_string(),
+        scaling_alert_ip: NODE1_IP.to_string(),
         monitoring_timeout: short_monitoring,
         server_report_period: short_report,
         ..Default::default()
@@ -1999,7 +2000,8 @@ async fn management_node_integration() {
 
 /// Test the storage policy elasticity path: with memory-cap-kb set very low
 /// and elasticity enabled, PUT enough data to exceed 60% capacity, then
-/// verify the monitor sends an "add:N:memory" message to the management node.
+/// verify the monitor sends a ScalingAlert protobuf to the scaling alert
+/// endpoint.
 ///
 /// Uses base_offset=600.
 #[tokio::test]
@@ -2007,6 +2009,8 @@ async fn management_node_integration() {
 #[serial(multi_node)]
 async fn elasticity_storage_policy() {
     use annalib::kvs_client::KVSClient;
+    use annalib::proto::metadata::{scaling_alert, ScalingAlert, Tier};
+    use prost::Message;
     use zeromq::{PullSocket, RepSocket, Socket, SocketRecv, SocketSend};
 
     if !server_bin_dir().join("anna-kvs").exists() {
@@ -2038,7 +2042,7 @@ async fn elasticity_storage_policy() {
 
     tokio::time::sleep(Duration::from_millis(200)).await;
 
-    // Background task to handle management node protocol
+    // Background task to handle scaling alert protocol
     let mgmt_handle = tokio::spawn(async move {
         loop {
             tokio::select! {
@@ -2059,9 +2063,8 @@ async fn elasticity_storage_policy() {
                     if let Ok(msg) = result {
                         let data: Vec<u8> = msg.into_vec()
                             .into_iter().flat_map(|f| f.to_vec()).collect();
-                        let message = String::from_utf8_lossy(&data).to_string();
-                        eprintln!("Mock mgmt: add_node request: {}", message);
-                        return Some(message);
+                        eprintln!("Mock mgmt: scaling alert received ({} bytes)", data.len());
+                        return Some(data);
                     }
                 }
             }
@@ -2081,7 +2084,7 @@ async fn elasticity_storage_policy() {
         replication_memory: 1,
         base_offset,
         elasticity: true,
-        mgmt_ip: NODE1_IP.to_string(),
+        scaling_alert_ip: NODE1_IP.to_string(),
         memory_cap_kb: Some(1),
         grace_period: short_grace,
         monitoring_timeout: short_monitoring,
@@ -2124,29 +2127,41 @@ async fn elasticity_storage_policy() {
     let result = tokio::time::timeout(timeout, mgmt_handle).await;
 
     match result {
-        Ok(Ok(Some(msg))) => {
-            eprintln!("Storage policy triggered: {}", msg);
-            assert!(
-                msg.starts_with("add:"),
-                "Expected 'add:N:tier' message, got: {}",
-                msg
+        Ok(Ok(Some(data))) => {
+            let alert = ScalingAlert::decode(data.as_slice())
+                .expect("Failed to decode ScalingAlert protobuf");
+            eprintln!(
+                "Storage policy triggered: action={:?}, tier={:?}, count={}",
+                alert.action(),
+                alert.tier(),
+                alert.count
+            );
+            assert_eq!(
+                alert.action(),
+                scaling_alert::Action::Add,
+                "Expected ADD action in scaling alert"
+            );
+            assert_eq!(
+                alert.tier(),
+                Tier::Memory,
+                "Expected MEMORY tier in scaling alert"
             );
             assert!(
-                msg.contains("memory"),
-                "Expected memory tier in add request, got: {}",
-                msg
+                alert.count > 0,
+                "Expected non-zero node count in scaling alert"
             );
         }
-        Ok(Ok(None)) => panic!("Management mock returned without receiving add_node"),
+        Ok(Ok(None)) => panic!("Management mock returned without receiving scaling alert"),
         Ok(Err(e)) => panic!("Management mock task failed: {}", e),
-        Err(_) => panic!("Storage policy did not trigger add_node within timeout"),
+        Err(_) => panic!("Storage policy did not trigger scaling alert within timeout"),
     }
 }
 
 /// Test the SLO underutilization scale-in path: with 2 memory nodes, low
 /// occupancy, and elasticity enabled, the monitor should trigger remove_node
 /// on the least-occupied node. The node self-departs, sends a depart_done
-/// ack, and the monitor sends "remove:<ip>:memory" to the management node.
+/// ack, and the monitor sends a ScalingAlert(REMOVE) to the scaling alert
+/// endpoint.
 ///
 /// This exercises: slo_policy.cpp underutilization branch, elasticity.cpp
 /// remove_node(), depart_done_handler.cpp, and membership_handler.cpp depart.
@@ -2160,6 +2175,8 @@ async fn elasticity_storage_policy() {
           // policy doesn't trigger on CI within the timeout. See #467.
 async fn underutilization_scale_in() {
     use annalib::kvs_client::KVSClient;
+    use annalib::proto::metadata::{scaling_alert, ScalingAlert, Tier};
+    use prost::Message;
     use zeromq::{PullSocket, RepSocket, Socket, SocketRecv, SocketSend};
 
     if !can_bind(NODE2_IP) {
@@ -2215,10 +2232,11 @@ async fn underutilization_scale_in() {
                     if let Ok(msg) = result {
                         let data: Vec<u8> = msg.into_vec()
                             .into_iter().flat_map(|f| f.to_vec()).collect();
-                        let message = String::from_utf8_lossy(&data).to_string();
-                        eprintln!("Mock mgmt: received: {}", message);
-                        if message.starts_with("remove:") {
-                            return Some(message);
+                        if let Ok(alert) = ScalingAlert::decode(data.as_slice()) {
+                            eprintln!("Mock mgmt: received scaling alert: action={:?}", alert.action());
+                            if alert.action() == scaling_alert::Action::Remove {
+                                return Some(alert);
+                            }
                         }
                     }
                 }
@@ -2244,7 +2262,7 @@ async fn underutilization_scale_in() {
         replication_memory: 1,
         base_offset,
         elasticity: true,
-        mgmt_ip: NODE1_IP.to_string(),
+        scaling_alert_ip: NODE1_IP.to_string(),
         grace_period: short_grace,
         monitoring_timeout: short_monitoring,
         server_report_period: short_report,
@@ -2305,17 +2323,26 @@ async fn underutilization_scale_in() {
     let result = tokio::time::timeout(timeout, mgmt_handle).await;
 
     match result {
-        Ok(Ok(Some(msg))) => {
-            eprintln!("Scale-in triggered: {}", msg);
-            assert!(
-                msg.starts_with("remove:"),
-                "Expected 'remove:...' message, got: {}",
-                msg
+        Ok(Ok(Some(alert))) => {
+            eprintln!(
+                "Scale-in triggered: action={:?}, tier={:?}, ip={}",
+                alert.action(),
+                alert.tier(),
+                alert.departed_node_ip
+            );
+            assert_eq!(
+                alert.action(),
+                scaling_alert::Action::Remove,
+                "Expected REMOVE action in scaling alert"
+            );
+            assert_eq!(
+                alert.tier(),
+                Tier::Memory,
+                "Expected MEMORY tier in scaling alert"
             );
             assert!(
-                msg.contains("memory"),
-                "Expected memory tier in remove, got: {}",
-                msg
+                !alert.departed_node_ip.is_empty(),
+                "Expected departed_node_ip to be set"
             );
         }
         Ok(Ok(None)) => panic!("Mock returned without receiving remove"),
