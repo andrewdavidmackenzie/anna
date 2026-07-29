@@ -820,3 +820,135 @@ class TestBenchValidation:
                                 "bench"]), \
              patch("anna.client.AnnaTcpClient", return_value=mock_client):
             main()
+
+
+class TestUnifiedPutSyntax:
+    """Tests for the new 'PUT <type> <key> <values...>' syntax."""
+
+    def test_put_set_unified(self):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.put.return_value = {"myset": True}
+        execute_command(client, None, "PUT set myset a b c")
+        client.put.assert_called_once()
+
+    def test_put_ordered_set_unified(self):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.put_ordered_set.return_value = {"myoset": True}
+        execute_command(client, None, "PUT ordered_set myoset x y z")
+        client.put_ordered_set.assert_called_once()
+
+    def test_put_priority_unified(self):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.put_priority.return_value = {"mykey": True}
+        execute_command(client, None, "PUT priority mykey 1.5 hello")
+        client.put_priority.assert_called_once()
+
+    def test_put_causal_unified(self):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.put_causal.return_value = {"mykey": True}
+        execute_command(client, None, "PUT causal mykey hello")
+        client.put_causal.assert_called_once()
+
+    def test_put_single_causal_unified(self):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.put_single_causal.return_value = {"mykey": True}
+        execute_command(client, None, "PUT single_causal mykey hello")
+        client.put_single_causal.assert_called_once()
+
+    def test_put_lww_explicit(self):
+        """PUT lww key value should work like PUT key value."""
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.put.return_value = {"mykey": True}
+        execute_command(client, None, "PUT lww mykey hello")
+        client.put.assert_called_once()
+
+    def test_put_key_named_set_is_lww(self, capsys):
+        """PUT set value (3 tokens) should treat 'set' as the key, not type."""
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.put.return_value = {"set": True}
+        execute_command(client, None, "PUT set value")
+        client.put.assert_called_once()
+
+
+class TestArityValidation:
+    """Tests for argument count validation."""
+
+    def test_get_no_key(self, capsys):
+        from anna.cli import execute_command
+        result = execute_command(None, None, "GET")
+        assert result is True
+        assert "Usage" in capsys.readouterr().out
+
+    def test_put_no_args(self, capsys):
+        from anna.cli import execute_command
+        result = execute_command(None, None, "PUT")
+        assert result is True
+        assert "Usage" in capsys.readouterr().out
+
+    def test_put_one_arg(self, capsys):
+        from anna.cli import execute_command
+        result = execute_command(None, None, "PUT key")
+        assert result is True
+        assert "Usage" in capsys.readouterr().out
+
+    def test_delete_no_key(self, capsys):
+        from anna.cli import execute_command
+        result = execute_command(None, None, "DELETE")
+        assert result is True
+        assert "Usage" in capsys.readouterr().out
+
+    def test_put_priority_missing_value(self, capsys):
+        from anna.cli import execute_command
+        result = execute_command(None, None, "PUT priority mykey 1.5")
+        assert result is True
+        assert "Usage" in capsys.readouterr().out
+
+
+class TestUnifiedGetFormatting:
+    """Tests for unified GET auto-detect formatting."""
+
+    def test_get_list_value_formats_as_ordered_set(self, capsys):
+        """GET on an ordered-set-like value (list) should format as [ ... ]."""
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        lattice = MagicMock()
+        lattice.reveal.return_value = [b"alpha", b"beta"]
+        client = MagicMock()
+        client.get.return_value = {"mykey": lattice}
+        execute_command(client, None, "GET mykey")
+        out = capsys.readouterr().out
+        assert "[ alpha beta ]" in out
+
+
+class TestLegacyPutAliases:
+    """Legacy PUT_* commands should still work via the unified handler."""
+
+    def test_put_set_legacy(self):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.put.return_value = {"myset": True}
+        execute_command(client, None, "PUT_SET myset a b c")
+        client.put.assert_called_once()
+
+    def test_put_priority_legacy(self):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.put_priority.return_value = {"mykey": True}
+        execute_command(client, None, "PUT_PRIORITY mykey 1.5 hello")
+        client.put_priority.assert_called_once()
