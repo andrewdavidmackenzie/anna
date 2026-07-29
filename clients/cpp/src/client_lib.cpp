@@ -241,7 +241,9 @@ string get_any(KvsClientInterface* client, const string& key) {
       kvs::SetValue sv;
       sv.ParseFromString(lww.value());
       out << "{ ";
-      for (const auto& v : sv.values()) {
+      // Sort for deterministic display (same as union SET).
+      set<string> sorted(sv.values().begin(), sv.values().end());
+      for (const auto& v : sorted) {
         out << v << " ";
       }
       out << "}";

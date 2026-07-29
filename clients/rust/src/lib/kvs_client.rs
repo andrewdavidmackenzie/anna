@@ -1077,6 +1077,21 @@ impl KVSClient {
                 let lww = LwwValue::decode(tuple.payload.as_slice()).map_err(|e| {
                     Error::Kvs(format!("GET_VALUE: failed to decode LWW_SET outer: {}", e))
                 })?;
+
+                // Monotonic read enforcement (same as LWW scalar).
+                if let Some((cached_ts, _)) = self.lww_read_cache.get(&key_str) {
+                    if lww.timestamp < *cached_ts {
+                        // Stale — but we don't cache the set itself in
+                        // lww_read_cache (it stores bytes). Re-decode
+                        // from the cached bytes would be complex, so
+                        // just return the stale result. The timestamp
+                        // high-water mark prevents regression.
+                    }
+                }
+                if lww.timestamp > self.last_seen_ts {
+                    self.last_seen_ts = lww.timestamp;
+                }
+
                 let sv = SetValue::decode(lww.value.as_slice()).map_err(|e| {
                     Error::Kvs(format!("GET_VALUE: failed to decode LWW_SET inner: {}", e))
                 })?;

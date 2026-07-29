@@ -543,9 +543,14 @@ func (c *KVSClient) PutLwwSet(key string, values []string) error {
 		return &KVSError{Message: fmt.Sprintf("PUT_LWW_SET: %v", err)}
 	}
 
-	// Wrap in an LWWValue with a timestamp.
+	// Wrap in an LWWValue with a monotonic timestamp.
+	ts := generateTimestamp()
+	if ts <= c.lastSeenTs {
+		ts = c.lastSeenTs + 1
+	}
+	c.lastSeenTs = ts
 	lww := &kvspb.LWWValue{
-		Timestamp: generateTimestamp(),
+		Timestamp: ts,
 		Value:     setPayload,
 	}
 	payload, err := proto.Marshal(lww)

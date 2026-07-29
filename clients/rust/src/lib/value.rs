@@ -131,8 +131,10 @@ impl fmt::Display for Value {
                 write!(f, "{{ {} }}", sorted.join(" "))
             }
             Value::LwwSet(values) => {
-                // LWW sets display without sorting (order is as-stored).
-                write!(f, "{{ {} }}", values.join(" "))
+                // Sort for deterministic display (same as union Set).
+                let mut sorted = values.clone();
+                sorted.sort();
+                write!(f, "{{ {} }}", sorted.join(" "))
             }
             Value::OrderedSet(values) => {
                 write!(f, "[ {} ]", values.join(" "))
@@ -246,10 +248,10 @@ mod tests {
     }
 
     #[test]
-    fn lww_set_no_sort() {
-        // LWW sets should NOT sort (unlike union sets).
+    fn lww_set_sorts_for_display() {
+        // LWW sets sort for deterministic display (same as union sets).
         let v = Value::LwwSet(vec!["z".into(), "a".into(), "m".into()]);
-        assert_eq!(v.to_string(), "{ z a m }");
+        assert_eq!(v.to_string(), "{ a m z }");
     }
 
     #[test]

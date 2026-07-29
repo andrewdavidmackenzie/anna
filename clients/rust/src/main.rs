@@ -288,7 +288,7 @@ fn parse_put_args(split: &[&str]) -> Result<(String, annalib::value::Value)> {
         Ok((key, value))
     } else {
         Err(CliError::Other(format!(
-            "Unknown type '{}'. Valid types: lww, set, ordered_set, priority, causal, single_causal",
+            "Unknown type '{}'. Valid types: lww, set, ordered_set, lww_set, priority, causal, single_causal",
             split[1]
         )))
     }
