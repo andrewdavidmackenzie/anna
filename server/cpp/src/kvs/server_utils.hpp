@@ -234,15 +234,15 @@ public:
   string get(const Key &key, kvs::AnnaError &error) {
     auto val = kvs_->get(key, error);
 
+    if (error != kvs::AnnaError::NO_ERROR) {
+      // Key not in the KVS — genuine KEY_DNE.
+      return "";
+    }
+
     // The inner value is a serialized SetValue. Check if it's empty.
-    if (val.reveal().value == "") {
+    if (val.reveal().value.empty()) {
       error = kvs::AnnaError::KEY_DNE;
-    } else {
-      kvs::SetValue sv;
-      sv.ParseFromString(val.reveal().value);
-      if (sv.values_size() == 0) {
-        error = kvs::AnnaError::KEY_DNE;
-      }
+      return "";
     }
 
     return serialize(val);

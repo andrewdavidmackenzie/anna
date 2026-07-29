@@ -101,7 +101,7 @@ void user_request_handler(
                  key, LatticeType_Name(tuple.lattice_type()),
                  LatticeType_Name(stored_key_map[key].type_),
                  __FILE__, __LINE__);
-          } else {
+           } else {
             process_put(key, tuple.lattice_type(), payload,
                         serializers[tuple.lattice_type()], stored_key_map);
 
