@@ -4,12 +4,21 @@ import sys
 from .process_mgmt import start, stop, status, PROCESS_LIST
 
 
+_TYPE_NAMES = {"lww", "set", "ordered_set", "priority", "causal", "single_causal"}
+
+
 def cli_usage():
-    return ("Valid commands are GET, GET_SET, GET_ORDERED_SET, GET_CAUSAL, "
-            "GET_SINGLE_CAUSAL, GET_PRIORITY, PUT, PUT_SET, PUT_ORDERED_SET, "
-            "PUT_CAUSAL, PUT_SINGLE_CAUSAL, PUT_PRIORITY, DELETE, "
-            "BENCH [keys] [value_size] [duration] [workload], "
-            "START, STOP, STATUS, HELP and EXIT")
+    return ("Valid commands are:\n"
+            "  GET {key}                       - get the value of any key (auto-detects type)\n"
+            "  PUT {key} {value}               - store a value (LWW, default)\n"
+            "  PUT set {key} {vals...}         - store a set (union merge)\n"
+            "  PUT ordered_set {key} {vals...} - store an ordered set\n"
+            "  PUT priority {key} {pri} {val}  - store with priority (lowest wins)\n"
+            "  PUT causal {key} {value}        - store with multi-key causal consistency\n"
+            "  PUT single_causal {key} {value} - store with single-key causal consistency\n"
+            "  DELETE {key}                    - delete a key\n"
+            "  BENCH [keys] [value_size] [duration] [workload] - run a benchmark\n"
+            "  START, STOP, STATUS, HELP, EXIT")
 
 
 def execute_command(client, config_path, line):
@@ -23,103 +32,141 @@ def execute_command(client, config_path, line):
 
     cmd = parts[0].upper()
 
-    if cmd == "GET":
-        result = client.get(parts[1])
-        val = result.get(parts[1])
-        if val is not None:
-            revealed = val.reveal()
-            if isinstance(revealed, bytes):
-                print(revealed.decode("utf-8", errors="replace"))
+    if cmd in ("GET", "GET_SET", "GET_ORDERED_SET", "GET_CAUSAL",
+               "GET_SINGLE_CAUSAL", "GET_PRIORITY"):
+        key = parts[1]
+        # For legacy GET_* commands, use the type-specific method.
+        if cmd == "GET_CAUSAL":
+            val = client.get_causal(key)
+            if val is not None:
+                for k, v in sorted(val.vector_clock.reveal().items()):
+                    print("{" + f"{k} : {v.reveal()}" + "}")
+                for dep_key, vc in sorted(val.dependencies.reveal().items()):
+                    vc_parts = " ".join(
+                        "{" + f"{k} : {v.reveal()}" + "}"
+                        for k, v in sorted(vc.reveal().items())
+                    )
+                    print(f"{dep_key} : {vc_parts}")
+                values = val.value.reveal()
+                for v in values:
+                    print(v.decode("utf-8") if isinstance(v, bytes) else str(v))
             else:
-                print(revealed)
+                print("Key not found")
+        elif cmd == "GET_SINGLE_CAUSAL":
+            val = client.get_single_causal(key)
+            if val is not None:
+                for k, v in sorted(val.vector_clock.reveal().items()):
+                    print("{" + f"{k} : {v.reveal()}" + "}")
+                values = val.value.reveal()
+                for v in values:
+                    print(v.decode("utf-8") if isinstance(v, bytes) else str(v))
+            else:
+                print("Key not found")
+        elif cmd == "GET_PRIORITY":
+            val = client.get_priority(key)
+            if val is not None:
+                print(f"priority: {val.priority}")
+                value = val.value
+                print(value.decode("utf-8") if isinstance(value, bytes) else str(value))
+            else:
+                print("Key not found")
+        elif cmd == "GET_ORDERED_SET":
+            val = client.get_ordered_set(key)
+            if val is not None:
+                items = [v.decode("utf-8", errors="replace") if isinstance(v, bytes) else str(v)
+                         for v in val.reveal()]
+                print("[ " + " ".join(items) + " ]")
+            else:
+                print("Key not found")
+        elif cmd == "GET_SET":
+            result = client.get(key)
+            val = result.get(key)
+            if val is not None:
+                items = sorted(v.decode("utf-8", errors="replace") if isinstance(v, bytes) else str(v)
+                               for v in val.reveal())
+                print("{ " + " ".join(items) + " }")
+            else:
+                print("Key not found")
         else:
-            print("Key not found")
+            # Unified GET: auto-detect type from response
+            result = client.get(key)
+            val = result.get(key)
+            if val is not None:
+                revealed = val.reveal()
+                if isinstance(revealed, bytes):
+                    print(revealed.decode("utf-8", errors="replace"))
+                elif isinstance(revealed, (set, frozenset)):
+                    items = sorted(v.decode("utf-8", errors="replace") if isinstance(v, bytes) else str(v)
+                                   for v in revealed)
+                    print("{ " + " ".join(items) + " }")
+                else:
+                    print(revealed)
+            else:
+                print("Key not found")
     elif cmd == "PUT":
-        import time
-        ts = time.time_ns()
-        val = LWWPairLattice(ts, parts[2].encode("utf-8"))
-        result = client.put(parts[1], val)
-        if not result.get(parts[1], False):
-            print("Failure!")
+        # Check for type prefix: PUT <type> <key> <values...>
+        type_name = parts[1].lower() if len(parts) > 1 else ""
+        if type_name in _TYPE_NAMES and len(parts) >= 4:
+            key_idx = 2
+            if type_name == "lww":
+                import time
+                ts = time.time_ns()
+                val = LWWPairLattice(ts, parts[3].encode("utf-8"))
+                result = client.put(parts[key_idx], val)
+                if not result.get(parts[key_idx], False):
+                    print("Failure!")
+            elif type_name == "set":
+                values = set(v.encode("utf-8") for v in parts[3:])
+                val = SetLattice(values)
+                result = client.put(parts[key_idx], val)
+                if not result.get(parts[key_idx], False):
+                    print("Failure!")
+            elif type_name == "ordered_set":
+                values = [v.encode("utf-8") for v in parts[3:]]
+                result = client.put_ordered_set(parts[key_idx], values)
+                if not result.get(parts[key_idx], False):
+                    print("Failure!")
+            elif type_name == "priority":
+                if len(parts) < 5:
+                    print("Usage: PUT priority {key} {priority} {value}")
+                else:
+                    priority = float(parts[3])
+                    result = client.put_priority(parts[key_idx], priority, parts[4])
+                    if not result.get(parts[key_idx], False):
+                        print("Failure!")
+            elif type_name == "causal":
+                result = client.put_causal(parts[key_idx], parts[3])
+                if not result.get(parts[key_idx], False):
+                    print("Failure!")
+            elif type_name == "single_causal":
+                result = client.put_single_causal(parts[key_idx], parts[3])
+                if not result.get(parts[key_idx], False):
+                    print("Failure!")
+        else:
+            # Default: LWW
+            import time
+            ts = time.time_ns()
+            val = LWWPairLattice(ts, parts[2].encode("utf-8"))
+            result = client.put(parts[1], val)
+            if not result.get(parts[1], False):
+                print("Failure!")
     elif cmd == "DELETE":
         result = client.delete(parts[1])
         if not result.get(parts[1], False):
             print("Failure!")
-    elif cmd == "GET_SET":
-        result = client.get(parts[1])
-        val = result.get(parts[1])
-        if val is not None:
-            items = sorted(v.decode("utf-8", errors="replace") if isinstance(v, bytes) else str(v)
-                           for v in val.reveal())
-            print("{ " + " ".join(items) + " }")
-        else:
-            print("Key not found")
-    elif cmd == "PUT_SET":
-        values = set(v.encode("utf-8") for v in parts[2:])
-        val = SetLattice(values)
-        result = client.put(parts[1], val)
-        if not result.get(parts[1], False):
-            print("Failure!")
-    elif cmd == "GET_CAUSAL":
-        val = client.get_causal(parts[1])
-        if val is not None:
-            for k, v in sorted(val.vector_clock.reveal().items()):
-                print("{" + f"{k} : {v.reveal()}" + "}")
-            for dep_key, vc in sorted(val.dependencies.reveal().items()):
-                vc_parts = " ".join(
-                    "{" + f"{k} : {v.reveal()}" + "}"
-                    for k, v in sorted(vc.reveal().items())
-                )
-                print(f"{dep_key} : {vc_parts}")
-            values = val.value.reveal()
-            for v in values:
-                print(v.decode("utf-8") if isinstance(v, bytes) else str(v))
-        else:
-            print("Key not found")
-    elif cmd == "PUT_CAUSAL":
-        result = client.put_causal(parts[1], parts[2])
-        if not result.get(parts[1], False):
-            print("Failure!")
-    elif cmd == "GET_ORDERED_SET":
-        val = client.get_ordered_set(parts[1])
-        if val is not None:
-            items = [v.decode("utf-8", errors="replace") if isinstance(v, bytes) else str(v)
-                     for v in val.reveal()]
-            print("[ " + " ".join(items) + " ]")
-        else:
-            print("Key not found")
-    elif cmd == "PUT_ORDERED_SET":
-        values = [v.encode("utf-8") for v in parts[2:]]
-        result = client.put_ordered_set(parts[1], values)
-        if not result.get(parts[1], False):
-            print("Failure!")
-    elif cmd == "GET_SINGLE_CAUSAL":
-        val = client.get_single_causal(parts[1])
-        if val is not None:
-            for k, v in sorted(val.vector_clock.reveal().items()):
-                print("{" + f"{k} : {v.reveal()}" + "}")
-            values = val.value.reveal()
-            for v in values:
-                print(v.decode("utf-8") if isinstance(v, bytes) else str(v))
-        else:
-            print("Key not found")
-    elif cmd == "PUT_SINGLE_CAUSAL":
-        result = client.put_single_causal(parts[1], parts[2])
-        if not result.get(parts[1], False):
-            print("Failure!")
-    elif cmd == "GET_PRIORITY":
-        val = client.get_priority(parts[1])
-        if val is not None:
-            print(f"priority: {val.priority}")
-            value = val.value
-            print(value.decode("utf-8") if isinstance(value, bytes) else str(value))
-        else:
-            print("Key not found")
-    elif cmd == "PUT_PRIORITY":
-        priority = float(parts[2])
-        result = client.put_priority(parts[1], priority, parts[3])
-        if not result.get(parts[1], False):
-            print("Failure!")
+    elif cmd in ("PUT_SET", "PUT_ORDERED_SET", "PUT_CAUSAL",
+                 "PUT_SINGLE_CAUSAL", "PUT_PRIORITY"):
+        # Legacy PUT_* aliases: remap to the unified PUT handler.
+        type_map = {
+            "PUT_SET": "set",
+            "PUT_ORDERED_SET": "ordered_set",
+            "PUT_CAUSAL": "causal",
+            "PUT_SINGLE_CAUSAL": "single_causal",
+            "PUT_PRIORITY": "priority",
+        }
+        remapped = ["PUT", type_map[cmd]] + parts[1:]
+        return execute_command(client, config_path,
+                               " ".join(remapped))
     elif cmd == "BENCH":
         from .bench import run_bench
         try:

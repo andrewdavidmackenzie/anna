@@ -67,6 +67,8 @@ pub mod threads;
 pub mod transaction;
 /// Types used by KVS
 pub mod types;
+/// A type-tagged value enum unifying all lattice types behind `get_value`/`put_value`.
+pub mod value;
 /// Subscribe to value changes for specific keys via the KVS gossip mechanism.
 pub mod value_change_subscriber;
 

@@ -61,12 +61,10 @@ See [autoscaling.md](autoscaling.md) for the full operator's guide.
 
 | Feature                    | Tested |
 |----------------------------|--------|
-| GET / PUT / DELETE (LWW)   | Yes    |
-| GET_SET / PUT_SET           | Yes    |
-| GET_ORDERED_SET / PUT_ORDERED_SET | Yes |
-| GET_CAUSAL / PUT_CAUSAL    | Yes    |
-| GET_SINGLE_CAUSAL / PUT_SINGLE_CAUSAL | Yes |
-| GET_PRIORITY / PUT_PRIORITY | Yes   |
+| Unified GET (auto-detect type) | Yes |
+| Unified PUT (type prefix)  | Yes    |
+| DELETE                     | Yes    |
+| Value enum (get_value/put_value) | Yes |
 | GET_BYTES (raw LWW value)  | Yes    |
 | Multi-key GET (get_multi)  | Yes    |
 | Address cache invalidation | Yes    |
@@ -87,12 +85,9 @@ See [autoscaling.md](autoscaling.md) for the full operator's guide.
 
 | Feature                    | Tested |
 |----------------------------|--------|
-| GET / PUT / DELETE (LWW)   | Yes    |
-| GET_SET / PUT_SET           | Yes    |
-| GET_ORDERED_SET / PUT_ORDERED_SET | Yes |
-| GET_CAUSAL / PUT_CAUSAL    | Yes    |
-| GET_SINGLE_CAUSAL / PUT_SINGLE_CAUSAL | Yes |
-| GET_PRIORITY / PUT_PRIORITY | Yes   |
+| Unified GET (get_any, auto-detect type) | Yes |
+| Unified PUT (type prefix)  | Yes    |
+| DELETE                     | Yes    |
 | GET_BYTES (raw LWW value)  | Yes    |
 | Multi-key GET (get_multi)  | Yes    |
 | Address cache invalidation | Yes    |

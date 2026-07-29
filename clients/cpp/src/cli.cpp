@@ -70,11 +70,17 @@ void print_priority_value(const annalib::PriorityResult& result) {
 }
 
 string cli_usage() {
-  return "Valid commands are GET, GET_SET, GET_ORDERED_SET, GET_CAUSAL, "
-         "GET_SINGLE_CAUSAL, GET_PRIORITY, PUT, PUT_SET, PUT_ORDERED_SET, "
-         "PUT_CAUSAL, PUT_SINGLE_CAUSAL, PUT_PRIORITY, DELETE, "
-         "BENCH [keys] [value_size] [duration] [workload], "
-         "START, STOP, STATUS, HELP and EXIT";
+  return "Valid commands are:\n"
+         "  GET {key}                       - get the value of any key (auto-detects type)\n"
+         "  PUT {key} {value}               - store a value (LWW, default)\n"
+         "  PUT set {key} {vals...}         - store a set (union merge)\n"
+         "  PUT ordered_set {key} {vals...} - store an ordered set\n"
+         "  PUT priority {key} {pri} {val}  - store with priority (lowest wins)\n"
+         "  PUT causal {key} {value}        - store with multi-key causal consistency\n"
+         "  PUT single_causal {key} {value} - store with single-key causal consistency\n"
+         "  DELETE {key}                    - delete a key\n"
+         "  BENCH [keys] [value_size] [duration] [workload] - run a benchmark\n"
+         "  START, STOP, STATUS, HELP, EXIT";
 }
 
 void execute_cli_command(KvsClientInterface* client, const string& config_file,
@@ -89,61 +95,79 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
   string command = v[0];
   std::transform(command.begin(), command.end(), command.begin(), ::toupper);
 
+  // Helper: check if a string is a known lattice type name.
+  auto is_type_name = [](const string& s) -> bool {
+    string lower = s;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    return lower == "lww" || lower == "set" || lower == "ordered_set" ||
+           lower == "priority" || lower == "causal" || lower == "single_causal";
+  };
+
   try {
-  if (command == "GET") {
-    std::cout << annalib::get(client, v[1]) << std::endl;
-  } else if (command == "GET_CAUSAL") {
-    print_causal_value(annalib::get_causal(client, v[1]));
+  // Unified GET: auto-detect lattice type from server response.
+  if (command == "GET" || command == "GET_SET" || command == "GET_ORDERED_SET" ||
+      command == "GET_CAUSAL" || command == "GET_SINGLE_CAUSAL" ||
+      command == "GET_PRIORITY") {
+    std::cout << annalib::get_any(client, v[1]) << std::endl;
   } else if (command == "DELETE") {
     if (!annalib::del(client, v[1]).succeeded()) {
       std::cerr << "Error: DELETE failed" << std::endl;
     }
-  } else if (command == "PUT") {
-    if (!annalib::put(client, v[1], v[2]).succeeded()) {
-      std::cerr << "Error: PUT failed" << std::endl;
+  } else if (command == "PUT" || command == "PUT_SET" ||
+             command == "PUT_ORDERED_SET" || command == "PUT_CAUSAL" ||
+             command == "PUT_SINGLE_CAUSAL" || command == "PUT_PRIORITY") {
+    // Determine the type prefix and adjust argument positions.
+    string type_name;
+    size_t key_idx, val_start;
+
+    if (command == "PUT" && v.size() >= 3 && is_type_name(v[1])) {
+      // PUT <type> <key> <values...>
+      type_name = v[1];
+      std::transform(type_name.begin(), type_name.end(), type_name.begin(), ::tolower);
+      key_idx = 2;
+      val_start = 3;
+    } else if (command == "PUT") {
+      // PUT <key> <value> — default LWW
+      type_name = "lww";
+      key_idx = 1;
+      val_start = 2;
+    } else if (command == "PUT_SET") {
+      type_name = "set"; key_idx = 1; val_start = 2;
+    } else if (command == "PUT_ORDERED_SET") {
+      type_name = "ordered_set"; key_idx = 1; val_start = 2;
+    } else if (command == "PUT_CAUSAL") {
+      type_name = "causal"; key_idx = 1; val_start = 2;
+    } else if (command == "PUT_SINGLE_CAUSAL") {
+      type_name = "single_causal"; key_idx = 1; val_start = 2;
+    } else { // PUT_PRIORITY
+      type_name = "priority"; key_idx = 1; val_start = 2;
     }
-  } else if (command == "PUT_CAUSAL") {
-    if (!annalib::put_causal(client, v[1], v[2]).succeeded()) {
-      std::cerr << "Error: PUT_CAUSAL failed" << std::endl;
+
+    string key = v[key_idx];
+    bool ok = true;
+
+    if (type_name == "lww") {
+      ok = annalib::put(client, key, v[val_start]).succeeded();
+    } else if (type_name == "set") {
+      set<string> values;
+      for (size_t i = val_start; i < v.size(); i++) values.insert(v[i]);
+      ok = annalib::put_set(client, key, values).succeeded();
+    } else if (type_name == "ordered_set") {
+      set<string> values;
+      for (size_t i = val_start; i < v.size(); i++) values.insert(v[i]);
+      ok = annalib::put_ordered_set(client, key, values).succeeded();
+    } else if (type_name == "priority") {
+      double priority = std::stod(v[val_start]);
+      ok = annalib::put_priority(client, key, priority, v[val_start + 1]).succeeded();
+    } else if (type_name == "causal") {
+      ok = annalib::put_causal(client, key, v[val_start]).succeeded();
+    } else if (type_name == "single_causal") {
+      ok = annalib::put_single_causal(client, key, v[val_start]).succeeded();
     }
-  } else if (command == "PUT_SET") {
-    set<string> values;
-    for (size_t i = 2; i < v.size(); i++) {
-      values.insert(v[i]);
+
+    if (!ok) {
+      std::cerr << "Error: PUT " << type_name << " failed" << std::endl;
     }
-    if (!annalib::put_set(client, v[1], values).succeeded()) {
-      std::cerr << "Error: PUT_SET failed" << std::endl;
-    }
-  } else if (command == "GET_SET") {
-    print_set(annalib::get_set(client, v[1]));
-  } else if (command == "PUT_ORDERED_SET") {
-    set<string> values;
-    for (size_t i = 2; i < v.size(); i++) {
-      values.insert(v[i]);
-    }
-    if (!annalib::put_ordered_set(client, v[1], values).succeeded()) {
-      std::cerr << "Error: PUT_ORDERED_SET failed" << std::endl;
-    }
-  } else if (command == "GET_ORDERED_SET") {
-    vector<string> values = annalib::get_ordered_set(client, v[1]);
-    std::cout << "[ ";
-    for (const auto& val : values) {
-      std::cout << val << " ";
-    }
-    std::cout << "]" << std::endl;
-  } else if (command == "PUT_SINGLE_CAUSAL") {
-    if (!annalib::put_single_causal(client, v[1], v[2]).succeeded()) {
-      std::cerr << "Error: PUT_SINGLE_CAUSAL failed" << std::endl;
-    }
-  } else if (command == "GET_SINGLE_CAUSAL") {
-    print_single_causal_value(annalib::get_single_causal(client, v[1]));
-  } else if (command == "PUT_PRIORITY") {
-    double priority = std::stod(v[2]);
-    if (!annalib::put_priority(client, v[1], priority, v[3]).succeeded()) {
-      std::cerr << "Error: PUT_PRIORITY failed" << std::endl;
-    }
-  } else if (command == "GET_PRIORITY") {
-    print_priority_value(annalib::get_priority(client, v[1]));
   } else if (command == "BENCH") {
     annalib::BenchConfig bc;
     if (v.size() > 1) bc.num_keys = std::stoul(v[1]);

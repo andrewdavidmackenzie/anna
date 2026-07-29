@@ -992,6 +992,191 @@ impl KVSClient {
         Ok(())
     }
 
+    /// Retrieve a value by key, automatically detecting the lattice type
+    /// from the server response.
+    ///
+    /// This is the unified GET that replaces the per-type methods
+    /// (`get`, `get_set`, `get_causal`, etc.) for callers that want a
+    /// single entry point. The returned [`Value`](crate::value::Value)
+    /// enum carries both the data and its lattice type.
+    pub async fn get_value<K: AsRef<str> + Display>(
+        &mut self,
+        key: K,
+    ) -> Result<crate::value::Value> {
+        debug!("GET_VALUE: {}", key);
+        let key_str = key.as_ref().to_string();
+        let response = self
+            .send_data_request(&key_str, RequestType::Get as i32, None, None)
+            .await
+            .ok_or_else(|| Error::Kvs("GET_VALUE: request failed or timed out".into()))?;
+
+        let tuple = Self::validate_response(&response, "GET_VALUE")?;
+
+        match tuple.lattice_type {
+            x if x == LatticeType::Lww as i32 => {
+                let lww = LwwValue::decode(tuple.payload.as_slice())
+                    .map_err(|e| Error::Kvs(format!("GET_VALUE: failed to decode LWW: {}", e)))?;
+                Ok(crate::value::Value::Lww(
+                    String::from_utf8_lossy(&lww.value).to_string(),
+                ))
+            }
+            x if x == LatticeType::Set as i32 => {
+                let sv = SetValue::decode(tuple.payload.as_slice())
+                    .map_err(|e| Error::Kvs(format!("GET_VALUE: failed to decode Set: {}", e)))?;
+                Ok(crate::value::Value::Set(
+                    sv.values
+                        .iter()
+                        .map(|v| String::from_utf8_lossy(v).to_string())
+                        .collect(),
+                ))
+            }
+            x if x == LatticeType::OrderedSet as i32 => {
+                let sv = SetValue::decode(tuple.payload.as_slice()).map_err(|e| {
+                    Error::Kvs(format!("GET_VALUE: failed to decode OrderedSet: {}", e))
+                })?;
+                Ok(crate::value::Value::OrderedSet(
+                    sv.values
+                        .iter()
+                        .map(|v| String::from_utf8_lossy(v).to_string())
+                        .collect(),
+                ))
+            }
+            x if x == LatticeType::Priority as i32 => {
+                let pv = PriorityValue::decode(tuple.payload.as_slice()).map_err(|e| {
+                    Error::Kvs(format!("GET_VALUE: failed to decode Priority: {}", e))
+                })?;
+                Ok(crate::value::Value::Priority {
+                    priority: pv.priority,
+                    value: String::from_utf8_lossy(&pv.value).to_string(),
+                })
+            }
+            x if x == LatticeType::SingleCausal as i32 => {
+                let skc = SingleKeyCausalValue::decode(tuple.payload.as_slice()).map_err(|e| {
+                    Error::Kvs(format!("GET_VALUE: failed to decode SingleCausal: {}", e))
+                })?;
+                Ok(crate::value::Value::SingleCausal {
+                    vector_clock: skc.vector_clock,
+                    values: skc
+                        .values
+                        .iter()
+                        .map(|v| String::from_utf8_lossy(v).to_string())
+                        .collect(),
+                })
+            }
+            x if x == LatticeType::MultiCausal as i32 => {
+                let mkc = MultiKeyCausalValue::decode(tuple.payload.as_slice()).map_err(|e| {
+                    Error::Kvs(format!("GET_VALUE: failed to decode MultiCausal: {}", e))
+                })?;
+                let deps: Vec<(String, std::collections::HashMap<String, u32>)> = mkc
+                    .dependencies
+                    .iter()
+                    .map(|kv| (kv.key.clone(), kv.vector_clock.clone()))
+                    .collect();
+                let value = mkc
+                    .values
+                    .first()
+                    .map(|v| String::from_utf8_lossy(v).to_string())
+                    .unwrap_or_default();
+                Ok(crate::value::Value::MultiCausal {
+                    vector_clock: mkc.vector_clock,
+                    dependencies: deps,
+                    value,
+                })
+            }
+            other => Err(Error::Kvs(format!(
+                "GET_VALUE: unknown lattice type {}",
+                other
+            ))),
+        }
+    }
+
+    /// Store a type-tagged value by key.
+    ///
+    /// This is the unified PUT that replaces the per-type methods
+    /// (`put`, `put_set`, `put_causal`, etc.). The lattice type is
+    /// inferred from the [`Value`](crate::value::Value) variant.
+    pub async fn put_value<K: AsRef<str> + Display>(
+        &mut self,
+        key: K,
+        value: &crate::value::Value,
+    ) -> Result<()> {
+        debug!("PUT_VALUE: {} <- {:?}", key, value.type_name());
+        let lattice_type = value.lattice_type() as i32;
+
+        let payload = match value {
+            crate::value::Value::Lww(s) => {
+                let ts = std::cmp::max(Self::generate_timestamp(), self.last_seen_ts + 1);
+                self.last_seen_ts = ts;
+                let lww = LwwValue {
+                    timestamp: ts,
+                    value: s.as_bytes().to_vec(),
+                };
+                lww.encode_to_vec()
+            }
+            crate::value::Value::Set(values) => {
+                let sv = SetValue {
+                    values: values.iter().map(|s| s.as_bytes().to_vec()).collect(),
+                };
+                sv.encode_to_vec()
+            }
+            crate::value::Value::OrderedSet(values) => {
+                let sv = SetValue {
+                    values: values.iter().map(|s| s.as_bytes().to_vec()).collect(),
+                };
+                sv.encode_to_vec()
+            }
+            crate::value::Value::Priority { priority, value } => {
+                let pv = PriorityValue {
+                    priority: *priority,
+                    value: value.as_bytes().to_vec(),
+                };
+                pv.encode_to_vec()
+            }
+            crate::value::Value::SingleCausal {
+                vector_clock,
+                values,
+            } => {
+                let skc = SingleKeyCausalValue {
+                    vector_clock: vector_clock.clone(),
+                    values: values.iter().map(|v| v.as_bytes().to_vec()).collect(),
+                };
+                skc.encode_to_vec()
+            }
+            crate::value::Value::MultiCausal {
+                vector_clock,
+                dependencies,
+                value,
+            } => {
+                let deps: Vec<crate::proto::shared::KeyVersion> = dependencies
+                    .iter()
+                    .map(|(k, vc)| crate::proto::shared::KeyVersion {
+                        key: k.clone(),
+                        vector_clock: vc.clone(),
+                    })
+                    .collect();
+                let mkc = MultiKeyCausalValue {
+                    vector_clock: vector_clock.clone(),
+                    dependencies: deps,
+                    values: vec![value.as_bytes().to_vec()],
+                };
+                mkc.encode_to_vec()
+            }
+        };
+
+        let response = self
+            .send_data_request(
+                key.as_ref(),
+                RequestType::Put as i32,
+                Some(lattice_type),
+                Some(payload),
+            )
+            .await
+            .ok_or_else(|| Error::Kvs("PUT_VALUE: request failed or timed out".into()))?;
+
+        Self::validate_response(&response, "PUT_VALUE")?;
+        Ok(())
+    }
+
     /// Delete a key by writing an empty LWW value with a dominating timestamp.
     ///
     /// ```rust
