@@ -18,7 +18,7 @@ the compiled-in default is used, preserving backward-compatible behavior.
 | Config Key | Required | Default | Meaning |
 |------------|----------|---------|---------|
 | `monitoring.ip` | Yes | — | IP address of the monitoring node |
-| `monitoring.mgmt_ip` | Yes | — | IP address of the management node |
+| `monitoring.scaling_alert_ip` | Yes | — | IP address of the scaling alert endpoint |
 
 ### Routing (`routing:`)
 
@@ -34,7 +34,7 @@ the compiled-in default is used, preserving backward-compatible behavior.
 | `server.public_ip` | Yes | — | Public IP of this KVS node |
 | `server.private_ip` | Yes | — | Private IP of this KVS node |
 | `server.seed_ip` | Yes | — | IP of the seed node to join |
-| `server.mgmt_ip` | Yes | — | Management node IP (or "NULL") |
+| `server.scaling_alert_ip` | Yes | — | Scaling alert endpoint IP (or "NULL" for standalone) |
 | `server.routing` | Yes | — | List of routing node IPs |
 | `server.monitoring` | Yes | — | List of monitoring node IPs |
 
@@ -43,7 +43,7 @@ the compiled-in default is used, preserving backward-compatible behavior.
 | Config Key | C++ Variable | Default | Meaning |
 |------------|-------------|---------|---------|
 | `ports.base_offset` | `kBaseOffset` | `0` | Offset added to all port numbers |
-| `ports.management` | `kManagementNodePort` | `7001` | Management node port for scaling commands |
+| `ports.scaling_alert` | `kScalingAlertPort` | `7001` | Port on which the external system receives scaling alerts |
 
 ## Storage Configuration
 
@@ -150,7 +150,7 @@ These parameters control the autoscaling policy engine. See
 
 ```yaml
 monitoring:
-  mgmt_ip: 127.0.0.1
+  scaling_alert_ip: 127.0.0.1
   ip: 127.0.0.1
 routing:
   monitoring:
@@ -164,7 +164,7 @@ server:
   seed_ip: 127.0.0.1
   public_ip: 127.0.0.1
   private_ip: 127.0.0.1
-  mgmt_ip: "NULL"
+  scaling_alert_ip: "NULL"
 policy:
   elasticity: false
   selective-rep: false
@@ -199,7 +199,7 @@ hashing:
   virtual_nodes_per_thread: 3000
 ports:
   base_offset: 0
-  management: 7001
+  scaling_alert: 7001
 timings:
   server_report_period: 15
   key_monitoring_period: 60

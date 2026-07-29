@@ -47,7 +47,7 @@ std::string test_config;
 void write_test_config() {
   std::ofstream f(test_config);
   f << "monitoring:\n"
-    << "  mgmt_ip: 127.0.0.1\n"
+     << "  scaling_alert_ip: 127.0.0.1\n"
     << "  ip: 127.0.0.1\n"
     << "routing:\n"
     << "  monitoring:\n"
@@ -67,7 +67,7 @@ void write_test_config() {
     << "  seed_ip: 127.0.0.1\n"
     << "  public_ip: 127.0.0.1\n"
     << "  private_ip: 127.0.0.1\n"
-    << "  mgmt_ip: \"NULL\"\n"
+     << "  scaling_alert_ip: \"NULL\"\n"
     << "disk: ./\n"
     << "capacities:\n"
     << "  memory-cap: 1\n"

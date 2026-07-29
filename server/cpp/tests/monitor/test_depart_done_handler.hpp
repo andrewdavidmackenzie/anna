@@ -22,7 +22,7 @@ TEST(DepartDoneHandler, DiskTierDepartClearsFlag) {
   departing_node_map["127.0.0.2"] = 1;  // 1 thread remaining
   bool removing_memory_node = false;
   bool removing_disk_node = true;
-  Address management_ip = "127.0.0.1";
+  Address scaling_alert_ip = "127.0.0.1";
   zmq::context_t context;
   SocketCache pushers(&context, ZMQ_PUSH);
   TimePoint grace_start = std::chrono::system_clock::now();
@@ -30,7 +30,7 @@ TEST(DepartDoneHandler, DiskTierDepartClearsFlag) {
   // Format: public_ip_private_ip_tier_id  (tier_id 2 = DISK)
   string serialized = "127.0.0.2_127.0.0.2_2";
 
-  depart_done_handler(log_, serialized, departing_node_map, management_ip,
+  depart_done_handler(log_, serialized, departing_node_map, scaling_alert_ip,
                       removing_memory_node, removing_disk_node, pushers,
                       grace_start);
 

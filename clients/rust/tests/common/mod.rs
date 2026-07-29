@@ -50,7 +50,7 @@ fn generate_config_inner(base_offset: u16, disk_tier: bool) -> String {
 
     let content = format!(
         r#"monitoring:
-  mgmt_ip: {ip}
+  scaling_alert_ip: {ip}
   ip: {ip}
 routing:
   monitoring:
@@ -70,7 +70,7 @@ server:
   seed_ip: {ip}
   public_ip: {ip}
   private_ip: {ip}
-  mgmt_ip: "NULL"
+  scaling_alert_ip: "NULL"
 policy:
   elasticity: false
   selective-rep: false

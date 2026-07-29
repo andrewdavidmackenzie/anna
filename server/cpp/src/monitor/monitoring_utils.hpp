@@ -137,8 +137,9 @@ void change_replication_factor(map<Key, KeyReplication> &requests,
                                zmq::socket_t &response_puller, logger log,
                                unsigned &rid);
 
-void add_node(logger log, string tier, unsigned number, unsigned &adding,
-              SocketCache &pushers, const Address &management_ip);
+void emit_scale_up_alert(logger log, string tier, unsigned number,
+                         unsigned &adding, SocketCache &pushers,
+                         const Address &scaling_alert_ip);
 
 void remove_node(logger log, ServerThread &node, string tier,
                  bool &removing_flag, SocketCache &pushers,

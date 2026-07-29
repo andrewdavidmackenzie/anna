@@ -71,7 +71,7 @@ fn write_monitor_config(path: &Path, cfg: &MonitorConfig) {
         f,
         "\
 monitoring:
-  mgmt_ip: {ip}
+  scaling_alert_ip: {ip}
   ip: {ip}
 routing:
   monitoring:
@@ -91,7 +91,7 @@ server:
   seed_ip: {ip}
   public_ip: {ip}
   private_ip: {ip}
-  mgmt_ip: \"NULL\"
+  scaling_alert_ip: \"NULL\"
 policy:
   elasticity: false
   selective-rep: {selective_rep}

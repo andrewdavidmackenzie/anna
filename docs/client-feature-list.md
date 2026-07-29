@@ -26,7 +26,7 @@ to external systems, or any pattern that needs to react to key changes.
 
 This feature replaces the original Cloudburst management-node-based cache
 registration with direct client-to-server registration, enabling
-subscribers in standalone mode (`mgmt_ip: "NULL"`).
+subscribers in standalone mode (`scaling_alert_ip: "NULL"`).
 
 ## Latency Feedback (LatencyReporter)
 

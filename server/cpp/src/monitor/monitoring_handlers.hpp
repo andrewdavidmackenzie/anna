@@ -29,7 +29,8 @@ void membership_handler(logger log, string &serialized,
 
 void depart_done_handler(logger log, string &serialized,
                          map<Address, unsigned> &departing_node_map,
-                         Address management_ip, bool &removing_memory_node,
+                         Address scaling_alert_ip,
+                         bool &removing_memory_node,
                          bool &removing_disk_node, SocketCache &pushers,
                          TimePoint &grace_start);
 

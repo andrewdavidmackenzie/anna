@@ -62,7 +62,7 @@ def write_test_config(path):
     with open(path, "w") as f:
         f.write("""\
 monitoring:
-  mgmt_ip: 127.0.0.1
+  scaling_alert_ip: 127.0.0.1
   ip: 127.0.0.1
 routing:
   monitoring:
@@ -82,7 +82,7 @@ server:
   seed_ip: 127.0.0.1
   public_ip: 127.0.0.1
   private_ip: 127.0.0.1
-  mgmt_ip: "NULL"
+  scaling_alert_ip: "NULL"
 disk: test_data
 capacities:
   memory-cap: 1

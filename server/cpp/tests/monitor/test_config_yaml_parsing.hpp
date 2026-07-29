@@ -107,8 +107,8 @@ static void apply_ports_config(const YAML::Node &conf) {
     YAML::Node ports = conf["ports"];
     if (ports["base_offset"])
       kBaseOffset = ports["base_offset"].as<unsigned>();
-    if (ports["management"])
-      kManagementNodePort = ports["management"].as<unsigned>();
+    if (ports["scaling_alert"])
+      kScalingAlertPort = ports["scaling_alert"].as<unsigned>();
   }
 }
 
@@ -174,7 +174,7 @@ protected:
   unsigned saved_kTombstoneGcMultiplier;
   unsigned saved_kDataRedistributeThreshold;
   unsigned saved_kGarbageCollectThreshold;
-  unsigned saved_kManagementNodePort;
+  unsigned saved_kScalingAlertPort;
   unsigned saved_kBaseOffset;
 
   void SetUp() override {
@@ -199,7 +199,7 @@ protected:
     saved_kTombstoneGcMultiplier = kTombstoneGcMultiplier;
     saved_kDataRedistributeThreshold = kDataRedistributeThreshold;
     saved_kGarbageCollectThreshold = kGarbageCollectThreshold;
-    saved_kManagementNodePort = kManagementNodePort;
+    saved_kScalingAlertPort = kScalingAlertPort;
     saved_kBaseOffset = kBaseOffset;
   }
 
@@ -225,7 +225,7 @@ protected:
     kTombstoneGcMultiplier = saved_kTombstoneGcMultiplier;
     kDataRedistributeThreshold = saved_kDataRedistributeThreshold;
     kGarbageCollectThreshold = saved_kGarbageCollectThreshold;
-    kManagementNodePort = saved_kManagementNodePort;
+    kScalingAlertPort = saved_kScalingAlertPort;
     kBaseOffset = saved_kBaseOffset;
   }
 };
@@ -355,11 +355,11 @@ TEST_F(ConfigYamlParsingTest, PolicySloOccupancyLower) {
 
 // --- ports section ---
 
-TEST_F(ConfigYamlParsingTest, PortsManagement) {
-  auto path = write_temp_yaml("ports:\n  management: 8001\n");
+TEST_F(ConfigYamlParsingTest, PortsScalingAlert) {
+  auto path = write_temp_yaml("ports:\n  scaling_alert: 8001\n");
   YAML::Node conf = YAML::LoadFile(path);
   apply_ports_config(conf);
-  EXPECT_EQ(kManagementNodePort, 8001u);
+  EXPECT_EQ(kScalingAlertPort, 8001u);
   std::remove(path.c_str());
 }
 
@@ -429,7 +429,7 @@ TEST_F(ConfigYamlParsingTest, EmptyConfigLeavesDefaults) {
   EXPECT_DOUBLE_EQ(kMaxMemoryNodeConsumption, 0.6);
   EXPECT_EQ(kVirtualThreadNum, 3000u);
   EXPECT_EQ(kSloWorst, 3000u);
-  EXPECT_EQ(kManagementNodePort, 7001u);
+  EXPECT_EQ(kScalingAlertPort, 7001u);
   EXPECT_EQ(kGarbageCollectThreshold, 10000000u);
   EXPECT_EQ(kMetadataReplicationFactor, 1u);
 
@@ -485,7 +485,7 @@ TEST_F(ConfigYamlParsingTest, FullConfigOverridesAllKeys) {
       "  virtual_nodes_per_thread: 1000\n"
       "ports:\n"
       "  base_offset: 100\n"
-      "  management: 9999\n"
+      "  scaling_alert: 9999\n"
       "replication:\n"
       "  metadata: 2\n"
       "  metadata_local: 3\n"
@@ -515,7 +515,7 @@ TEST_F(ConfigYamlParsingTest, FullConfigOverridesAllKeys) {
   EXPECT_DOUBLE_EQ(kSloOccupancyLower, 0.01);
   EXPECT_EQ(kVirtualThreadNum, 1000u);
   EXPECT_EQ(kBaseOffset, 100u);
-  EXPECT_EQ(kManagementNodePort, 9999u);
+  EXPECT_EQ(kScalingAlertPort, 9999u);
   EXPECT_EQ(kMetadataReplicationFactor, 2u);
   EXPECT_EQ(kMetadataLocalReplicationFactor, 3u);
   EXPECT_EQ(kGarbageCollectThreshold, 99999u);

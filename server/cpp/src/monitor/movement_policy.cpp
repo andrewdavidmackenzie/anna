@@ -19,7 +19,7 @@ void movement_policy(logger log, GlobalRingMap &global_hash_rings,
                      LocalRingMap &local_hash_rings, TimePoint &grace_start,
                      SummaryStats &ss, unsigned &memory_node_count,
                      unsigned &disk_node_count, unsigned &new_memory_count,
-                     unsigned &new_disk_count, Address management_ip,
+                     unsigned &new_disk_count, Address scaling_alert_ip,
                      map<Key, KeyReplication> &key_replication_map,
                      map<Key, unsigned> &key_access_summary,
                      map<Key, unsigned> &key_size, MonitoringThread &mt,
@@ -76,8 +76,8 @@ void movement_policy(logger log, GlobalRingMap &global_hash_rings,
 
       if (total_memory_node_needed > memory_node_count) {
         unsigned node_to_add = (total_memory_node_needed - memory_node_count);
-        add_node(log, "memory", node_to_add, new_memory_count, pushers,
-                 management_ip);
+        emit_scale_up_alert(log, "memory", node_to_add, new_memory_count,
+                            pushers, scaling_alert_ip);
       }
     }
   }
@@ -123,8 +123,8 @@ void movement_policy(logger log, GlobalRingMap &global_hash_rings,
 
       if (total_disk_node_needed > disk_node_count) {
         unsigned node_to_add = (total_disk_node_needed - disk_node_count);
-        add_node(log, "disk", node_to_add, new_disk_count, pushers,
-                 management_ip);
+        emit_scale_up_alert(log, "disk", node_to_add, new_disk_count, pushers,
+                            scaling_alert_ip);
       }
     }
   }

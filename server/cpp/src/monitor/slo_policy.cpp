@@ -19,7 +19,7 @@ void slo_policy(logger log, GlobalRingMap &global_hash_rings,
                 LocalRingMap &local_hash_rings, TimePoint &grace_start,
                 SummaryStats &ss, unsigned &memory_node_count,
                 unsigned &new_memory_count, bool &removing_memory_node,
-                Address management_ip,
+                Address scaling_alert_ip,
                 map<Key, KeyReplication> &key_replication_map,
                 map<Key, unsigned> &key_access_summary, MonitoringThread &mt,
                 map<Address, unsigned> &departing_node_map,
@@ -42,8 +42,8 @@ void slo_policy(logger log, GlobalRingMap &global_hash_rings,
                               std::chrono::system_clock::now() - grace_start)
                               .count();
       if (time_elapsed > kGracePeriod) {
-        add_node(log, "memory", node_to_add, new_memory_count, pushers,
-                 management_ip);
+        emit_scale_up_alert(log, "memory", node_to_add, new_memory_count,
+                            pushers, scaling_alert_ip);
       }
     } else if (kEnableSelectiveRep) {
       for (const auto &key_access_pair : key_access_summary) {

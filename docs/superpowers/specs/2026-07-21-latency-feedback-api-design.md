@@ -120,7 +120,7 @@ flag for specifying the server-side YAML file.
 
 - `conf/` → `server/conf/` — reference/example configs only
 - No code outside `server/` references these files
-- `dockerfiles/start-anna.sh` generates config at runtime from env vars (no change needed)
+- Docker entrypoint scripts (if any) generate config at runtime from env vars (no change needed)
 
 ## 6. Test Infrastructure Updates
 

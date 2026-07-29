@@ -19,7 +19,7 @@ void storage_policy(logger log, GlobalRingMap &global_hash_rings,
                     TimePoint &grace_start, SummaryStats &ss,
                     unsigned &memory_node_count, unsigned &disk_node_count,
                     unsigned &new_memory_count, unsigned &new_disk_count,
-                    bool &removing_disk_node, Address management_ip,
+                    bool &removing_disk_node, Address scaling_alert_ip,
                     MonitoringThread &mt,
                     map<Address, unsigned> &departing_node_map,
                     SocketCache &pushers) {
@@ -30,8 +30,8 @@ void storage_policy(logger log, GlobalRingMap &global_hash_rings,
                               std::chrono::system_clock::now() - grace_start)
                               .count();
       if (time_elapsed > kGracePeriod) {
-        add_node(log, "memory", kNodeAdditionBatchSize, new_memory_count,
-                 pushers, management_ip);
+        emit_scale_up_alert(log, "memory", kNodeAdditionBatchSize,
+                            new_memory_count, pushers, scaling_alert_ip);
       }
     }
 
@@ -41,8 +41,8 @@ void storage_policy(logger log, GlobalRingMap &global_hash_rings,
                               std::chrono::system_clock::now() - grace_start)
                               .count();
       if (time_elapsed > kGracePeriod) {
-        add_node(log, "disk", kNodeAdditionBatchSize, new_disk_count, pushers,
-                 management_ip);
+        emit_scale_up_alert(log, "disk", kNodeAdditionBatchSize,
+                            new_disk_count, pushers, scaling_alert_ip);
       }
     }
 

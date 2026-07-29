@@ -82,15 +82,15 @@ const unsigned kFeedbackReportPort = 6750;
 const unsigned kBenchmarkCommandPort = 6900;
 
 // The port on which storage nodes retrieve their restart counts from the
-// management system.
-const unsigned kKopsRestartCountPort = 7000;
+// external management system.
+const unsigned kManagementRestartCountPort = 7000;
 
 // The port on which KVS servers listen for direct cache registration messages.
 const unsigned kCacheRegistrationPort = 7200;
 
-// The port on which the management server will listen for requests for
-// executor nodes.
-const unsigned kKopsFuncNodesPort = 7002;
+// The port on which the external management system listens for requests
+// for executor/function node lists.
+const unsigned kManagementFuncNodesPort = 7002;
 
 class ServerThread {
   Address public_ip_;
@@ -338,12 +338,14 @@ private:
   unsigned tid_;
 };
 
-inline string get_join_count_req_address(string management_ip) {
-  return "tcp://" + management_ip + ":" + std::to_string(kKopsRestartCountPort + kBaseOffset);
+inline string get_join_count_req_address(string scaling_alert_ip) {
+  return "tcp://" + scaling_alert_ip + ":" +
+         std::to_string(kManagementRestartCountPort + kBaseOffset);
 }
 
-inline string get_func_nodes_req_address(string management_ip) {
-  return "tcp://" + management_ip + ":" + std::to_string(kKopsFuncNodesPort + kBaseOffset);
+inline string get_func_nodes_req_address(string scaling_alert_ip) {
+  return "tcp://" + scaling_alert_ip + ":" +
+         std::to_string(kManagementFuncNodesPort + kBaseOffset);
 }
 
 struct ThreadHash {

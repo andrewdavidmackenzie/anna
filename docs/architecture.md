@@ -58,9 +58,10 @@ The monitoring system collects statistics and drives the policy engine:
 
 ### Cluster Management
 
-In a cloud deployment, Anna uses Kubernetes for allocating and deallocating nodes.
-The cluster management pod receives REST requests from the policy engine and
-executes node additions/removals.
+In a cloud deployment, an external orchestration system handles allocating and
+deallocating nodes. The monitor's policy engine emits scaling alerts (protobuf
+`ScalingAlert` messages via ZMQ PUSH) that the operator's tooling consumes to
+provision or decommission infrastructure.
 
 ## Actor Model and Event Loop
 
