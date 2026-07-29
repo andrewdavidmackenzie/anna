@@ -527,6 +527,41 @@ func (c *KVSClient) PutSet(key string, values []string) error {
 	return err
 }
 
+// PutLwwSet stores a set of values under key with LWW (last-writer-wins)
+// semantics. The entire set is replaced on each write based on timestamp,
+// rather than being merged via union.
+func (c *KVSClient) PutLwwSet(key string, values []string) error {
+	// Build the inner SetValue proto.
+	sv := &kvspb.SetValue{
+		Values: make([][]byte, len(values)),
+	}
+	for i, v := range values {
+		sv.Values[i] = []byte(v)
+	}
+	setPayload, err := proto.Marshal(sv)
+	if err != nil {
+		return &KVSError{Message: fmt.Sprintf("PUT_LWW_SET: %v", err)}
+	}
+
+	// Wrap in an LWWValue with a timestamp.
+	lww := &kvspb.LWWValue{
+		Timestamp: generateTimestamp(),
+		Value:     setPayload,
+	}
+	payload, err := proto.Marshal(lww)
+	if err != nil {
+		return &KVSError{Message: fmt.Sprintf("PUT_LWW_SET: %v", err)}
+	}
+
+	response, err := c.sendDataRequest(key, kvspb.RequestType_PUT, kvspb.LatticeType_LWW_SET, payload)
+	if err != nil {
+		return err
+	}
+
+	_, err = validateResponse(response, "PUT_LWW_SET")
+	return err
+}
+
 // CausalValue holds the result of a causal GET.
 type CausalValue struct {
 	VectorClock  map[string]uint32

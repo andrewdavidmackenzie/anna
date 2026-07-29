@@ -13,6 +13,7 @@ pub const TYPE_NAMES: &[&str] = &[
     "lww",
     "set",
     "ordered_set",
+    "lww_set",
     "priority",
     "causal",
     "single_causal",
@@ -50,6 +51,10 @@ pub enum Value {
         values: Vec<String>,
     },
 
+    /// Last-writer-wins set: a set of values where the entire set is replaced
+    /// on each write (timestamp-based), rather than merged via union.
+    LwwSet(Vec<String>),
+
     /// Scalar with multi-key causal consistency (cross-key dependencies).
     MultiCausal {
         /// The vector clock for this key.
@@ -68,6 +73,7 @@ impl Value {
             Value::Lww(_) => "lww",
             Value::Set(_) => "set",
             Value::OrderedSet(_) => "ordered_set",
+            Value::LwwSet(_) => "lww_set",
             Value::Priority { .. } => "priority",
             Value::SingleCausal { .. } => "single_causal",
             Value::MultiCausal { .. } => "causal",
@@ -80,6 +86,7 @@ impl Value {
             Value::Lww(_) => LatticeType::Lww,
             Value::Set(_) => LatticeType::Set,
             Value::OrderedSet(_) => LatticeType::OrderedSet,
+            Value::LwwSet(_) => LatticeType::LwwSet,
             Value::Priority { .. } => LatticeType::Priority,
             Value::SingleCausal { .. } => LatticeType::SingleCausal,
             Value::MultiCausal { .. } => LatticeType::MultiCausal,
@@ -95,6 +102,7 @@ pub fn parse_type_name(name: &str) -> Option<LatticeType> {
         "lww" => Some(LatticeType::Lww),
         "set" => Some(LatticeType::Set),
         "ordered_set" => Some(LatticeType::OrderedSet),
+        "lww_set" => Some(LatticeType::LwwSet),
         "priority" => Some(LatticeType::Priority),
         "causal" => Some(LatticeType::MultiCausal),
         "single_causal" => Some(LatticeType::SingleCausal),
@@ -121,6 +129,10 @@ impl fmt::Display for Value {
                 let mut sorted = values.clone();
                 sorted.sort();
                 write!(f, "{{ {} }}", sorted.join(" "))
+            }
+            Value::LwwSet(values) => {
+                // LWW sets display without sorting (order is as-stored).
+                write!(f, "{{ {} }}", values.join(" "))
             }
             Value::OrderedSet(values) => {
                 write!(f, "[ {} ]", values.join(" "))
@@ -227,6 +239,20 @@ mod tests {
     }
 
     #[test]
+    fn display_lww_set() {
+        let v = Value::LwwSet(vec!["x".into(), "y".into(), "z".into()]);
+        assert_eq!(v.to_string(), "{ x y z }");
+        assert_eq!(v.type_name(), "lww_set");
+    }
+
+    #[test]
+    fn lww_set_no_sort() {
+        // LWW sets should NOT sort (unlike union sets).
+        let v = Value::LwwSet(vec!["z".into(), "a".into(), "m".into()]);
+        assert_eq!(v.to_string(), "{ z a m }");
+    }
+
+    #[test]
     fn parse_type_name_valid() {
         assert_eq!(parse_type_name("lww"), Some(LatticeType::Lww));
         assert_eq!(parse_type_name("set"), Some(LatticeType::Set));
@@ -234,6 +260,7 @@ mod tests {
             parse_type_name("ordered_set"),
             Some(LatticeType::OrderedSet)
         );
+        assert_eq!(parse_type_name("lww_set"), Some(LatticeType::LwwSet));
         assert_eq!(parse_type_name("priority"), Some(LatticeType::Priority));
         assert_eq!(parse_type_name("causal"), Some(LatticeType::MultiCausal));
         assert_eq!(

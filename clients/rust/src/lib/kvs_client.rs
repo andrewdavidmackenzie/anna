@@ -1071,6 +1071,22 @@ impl KVSClient {
                         .collect(),
                 ))
             }
+            x if x == LatticeType::LwwSet as i32 => {
+                // LWW_SET is stored as LwwValue where the value bytes
+                // contain a serialized SetValue.
+                let lww = LwwValue::decode(tuple.payload.as_slice()).map_err(|e| {
+                    Error::Kvs(format!("GET_VALUE: failed to decode LWW_SET outer: {}", e))
+                })?;
+                let sv = SetValue::decode(lww.value.as_slice()).map_err(|e| {
+                    Error::Kvs(format!("GET_VALUE: failed to decode LWW_SET inner: {}", e))
+                })?;
+                Ok(crate::value::Value::LwwSet(
+                    sv.values
+                        .iter()
+                        .map(|v| String::from_utf8_lossy(v).to_string())
+                        .collect(),
+                ))
+            }
             x if x == LatticeType::Priority as i32 => {
                 let pv = PriorityValue::decode(tuple.payload.as_slice()).map_err(|e| {
                     Error::Kvs(format!("GET_VALUE: failed to decode Priority: {}", e))
@@ -1156,6 +1172,19 @@ impl KVSClient {
                     values: values.iter().map(|s| s.as_bytes().to_vec()).collect(),
                 };
                 sv.encode_to_vec()
+            }
+            crate::value::Value::LwwSet(values) => {
+                // LWW_SET: wrap a SetValue inside an LwwValue with a timestamp.
+                let sv = SetValue {
+                    values: values.iter().map(|s| s.as_bytes().to_vec()).collect(),
+                };
+                let ts = std::cmp::max(Self::generate_timestamp(), self.last_seen_ts + 1);
+                self.last_seen_ts = ts;
+                let lww = LwwValue {
+                    timestamp: ts,
+                    value: sv.encode_to_vec(),
+                };
+                lww.encode_to_vec()
             }
             crate::value::Value::Priority { priority, value } => {
                 let pv = PriorityValue {

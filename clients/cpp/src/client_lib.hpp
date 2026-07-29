@@ -130,6 +130,12 @@ PutResult put_priority(KvsClientInterface* client, const string& key,
 // Issue a blocking GET for `key` under the priority lattice type.
 PriorityResult get_priority(KvsClientInterface* client, const string& key);
 
+// Issue a blocking PUT of `values` for `key` under the LWW-set lattice type.
+// The entire set is replaced on each write (timestamp-based), rather than
+// merged via union.
+PutResult put_lww_set(KvsClientInterface* client, const string& key,
+                      const set<string>& values);
+
 // Issue a blocking GET for `key` under the default (LWW) lattice type and
 // return its raw value bytes.  Functionally identical to get() in C++ (since
 // std::string is byte-transparent), but provided for API symmetry with the
