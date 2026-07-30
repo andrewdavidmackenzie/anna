@@ -567,6 +567,24 @@ func (c *KVSClient) PutLwwSet(key string, values []string) error {
 	return err
 }
 
+// PutUnionScalar appends a value fragment to the union-scalar key.
+// Each PUT adds to the accumulated set of fragments; GET returns them
+// concatenated in sorted order.
+func (c *KVSClient) PutUnionScalar(key, value string) error {
+	payload, err := buildSetPayload([]string{value})
+	if err != nil {
+		return &KVSError{Message: fmt.Sprintf("PUT_UNION_SCALAR: %v", err)}
+	}
+
+	response, err := c.sendDataRequest(key, kvspb.RequestType_PUT, kvspb.LatticeType_UNION_SCALAR, payload)
+	if err != nil {
+		return err
+	}
+
+	_, err = validateResponse(response, "PUT_UNION_SCALAR")
+	return err
+}
+
 // CausalValue holds the result of a causal GET.
 type CausalValue struct {
 	VectorClock  map[string]uint32

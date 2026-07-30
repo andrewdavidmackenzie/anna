@@ -55,6 +55,11 @@ enum LatticeType {
   // Last-writer-wins set: a set of values where the entire set is replaced
   // on each write (timestamp-based), rather than merged via union.
   LWW_SET = 7;
+
+  // Union scalar: each PUT appends a string fragment. The merge is set-union
+  // of all fragments, displayed concatenated in sorted order. Useful for
+  // append-only logs, sensor readings, or accumulating text.
+  UNION_SCALAR = 8;
 }
 
 enum AnnaError {

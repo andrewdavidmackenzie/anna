@@ -22,6 +22,9 @@ PUT lww_set mylwwset p q r
 GET mylwwset
 PUT lww_set mylwwset x y
 GET mylwwset
+PUT union mylog entry1
+PUT union mylog entry2
+GET mylog
 PUT g deleteme
 GET g
 DELETE g

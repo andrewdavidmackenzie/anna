@@ -1102,6 +1102,20 @@ impl KVSClient {
                         .collect(),
                 ))
             }
+            x if x == LatticeType::UnionScalar as i32 => {
+                // UNION_SCALAR is stored as SetValue (same as SET).
+                // Display as concatenated sorted fragments.
+                let sv = SetValue::decode(tuple.payload.as_slice()).map_err(|e| {
+                    Error::Kvs(format!("GET_VALUE: failed to decode UnionScalar: {}", e))
+                })?;
+                let mut fragments: Vec<String> = sv
+                    .values
+                    .iter()
+                    .map(|v| String::from_utf8_lossy(v).to_string())
+                    .collect();
+                fragments.sort();
+                Ok(crate::value::Value::UnionScalar(fragments.join("\n")))
+            }
             x if x == LatticeType::Priority as i32 => {
                 let pv = PriorityValue::decode(tuple.payload.as_slice()).map_err(|e| {
                     Error::Kvs(format!("GET_VALUE: failed to decode Priority: {}", e))
@@ -1185,6 +1199,14 @@ impl KVSClient {
             crate::value::Value::OrderedSet(values) => {
                 let sv = SetValue {
                     values: values.iter().map(|s| s.as_bytes().to_vec()).collect(),
+                };
+                sv.encode_to_vec()
+            }
+            crate::value::Value::UnionScalar(s) => {
+                // UNION_SCALAR: send as a SetValue with one entry.
+                // The server merges via set union (accumulates fragments).
+                let sv = SetValue {
+                    values: vec![s.as_bytes().to_vec()],
                 };
                 sv.encode_to_vec()
             }
@@ -2276,6 +2298,22 @@ mod tests {
         );
     }
 
+    fn make_union_scalar_response(key: &str, fragments: &[&str]) -> Vec<u8> {
+        let sv = SetValue {
+            values: fragments.iter().map(|v| v.as_bytes().to_vec()).collect(),
+        };
+        let response = KeyResponse {
+            tuples: vec![KeyTuple {
+                key: key.to_string(),
+                lattice_type: LatticeType::UnionScalar as i32,
+                payload: sv.encode_to_vec(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        response.encode_to_vec()
+    }
+
     fn make_lww_set_response(key: &str, values: &[&str]) -> Vec<u8> {
         let sv = SetValue {
             values: values.iter().map(|v| v.as_bytes().to_vec()).collect(),
@@ -2294,6 +2332,40 @@ mod tests {
             ..Default::default()
         };
         response.encode_to_vec()
+    }
+
+    #[tokio::test]
+    async fn get_value_union_scalar() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(202);
+        client.push_mock_response(true, Some(make_routing_response("ukey", worker)));
+        client.push_mock_response(
+            false,
+            Some(make_union_scalar_response("ukey", &["b_second", "a_first"])),
+        );
+
+        let val = client.get_value("ukey").await.expect("get_value failed");
+        match val {
+            crate::value::Value::UnionScalar(s) => {
+                // Should be sorted: a_first\nb_second
+                assert_eq!(s, "a_first\nb_second");
+            }
+            other => panic!("Expected UnionScalar, got {:?}", other.type_name()),
+        }
+    }
+
+    #[tokio::test]
+    async fn put_value_union_scalar() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(203);
+        client.push_mock_response(true, Some(make_routing_response("uput", worker)));
+        client.push_mock_response(false, Some(make_put_response("uput")));
+
+        let val = crate::value::Value::UnionScalar("fragment".into());
+        client
+            .put_value("uput", &val)
+            .await
+            .expect("put_value failed");
     }
 
     #[tokio::test]

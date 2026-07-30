@@ -111,6 +111,39 @@ async fn test_consistency(client: &mut KVSClient, prefix: &str) {
         assert!(!vc_a2.is_empty());
         assert!(!val_a2.is_empty());
     }
+    // === UNION_SCALAR: append-only accumulation ===
+    {
+        use annalib::value::Value;
+        let union_key = format!("{prefix}_union");
+        let val1 = Value::UnionScalar("first".into());
+        client
+            .put_value(&union_key, &val1)
+            .await
+            .expect("PUT UNION first failed");
+
+        let val2 = Value::UnionScalar("second".into());
+        client
+            .put_value(&union_key, &val2)
+            .await
+            .expect("PUT UNION second failed");
+
+        let got = client
+            .get_value(&union_key)
+            .await
+            .expect("GET UNION failed");
+        match &got {
+            Value::UnionScalar(s) => {
+                // Both fragments should be present, sorted.
+                assert!(
+                    s.contains("first") && s.contains("second"),
+                    "Expected both fragments, got: {}",
+                    s
+                );
+            }
+            other => panic!("Expected UnionScalar, got {:?}", other.type_name()),
+        }
+    }
+
     // === LWW_SET: last-writer-wins set ===
     {
         use annalib::value::Value;

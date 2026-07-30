@@ -4,7 +4,7 @@ import sys
 from .process_mgmt import start, stop, status, PROCESS_LIST
 
 
-_TYPE_NAMES = {"lww", "set", "ordered_set", "lww_set", "priority", "causal", "single_causal"}
+_TYPE_NAMES = {"lww", "set", "ordered_set", "lww_set", "union", "priority", "causal", "single_causal"}
 
 
 def cli_usage():
@@ -14,6 +14,7 @@ def cli_usage():
             "  PUT set {key} {vals...}         - store a set (union merge)\n"
             "  PUT ordered_set {key} {vals...} - store an ordered set\n"
             "  PUT lww_set {key} {vals...}     - store a set (LWW, replaces on write)\n"
+            "  PUT union {key} {value}         - append a value (accumulates via union)\n"
             "  PUT priority {key} {pri} {val}  - store with priority (lowest wins)\n"
             "  PUT causal {key} {value}        - store with multi-key causal consistency\n"
             "  PUT single_causal {key} {value} - store with single-key causal consistency\n"
@@ -163,6 +164,20 @@ def execute_command(client, config_path, line):
                         res.value = self.val
                         return res, LWW_SET_TYPE
                 val = _LwwSetLattice(ts, sv.SerializeToString())
+                result = client.put(parts[key_idx], val)
+                if not result.get(parts[key_idx], False):
+                    print("Failure!")
+            elif type_name == "union":
+                # UNION_SCALAR: send as SetLattice with one value and
+                # UNION_SCALAR type tag. Use a thin wrapper like LwwSet.
+                from .kvs_pb2 import SetValue as SetValuePb, UNION_SCALAR as UNION_TYPE
+                class _UnionScalarLattice(SetLattice):
+                    def serialize(self):
+                        sv = SetValuePb()
+                        for v in self.val:
+                            sv.values.append(v)
+                        return sv, UNION_TYPE
+                val = _UnionScalarLattice({parts[3].encode("utf-8")})
                 result = client.put(parts[key_idx], val)
                 if not result.get(parts[key_idx], False):
                     print("Failure!")
