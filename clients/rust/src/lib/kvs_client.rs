@@ -1234,21 +1234,8 @@ impl KVSClient {
                 };
                 sv.encode_to_vec()
             }
-            crate::value::Value::LwwSet(values) => {
-                // LWW_SET: wrap a SetValue inside an LwwValue with a timestamp.
-                let sv = SetValue {
-                    values: values.iter().map(|s| s.as_bytes().to_vec()).collect(),
-                };
-                let ts = std::cmp::max(Self::generate_timestamp(), self.last_seen_ts + 1);
-                self.last_seen_ts = ts;
-                let lww = LwwValue {
-                    timestamp: ts,
-                    value: sv.encode_to_vec(),
-                };
-                lww.encode_to_vec()
-            }
-            crate::value::Value::LwwOrderedSet(values) => {
-                // Same wire format as LWW_SET.
+            crate::value::Value::LwwSet(values) | crate::value::Value::LwwOrderedSet(values) => {
+                // LWW_SET / LWW_ORDERED_SET: wrap SetValue in LwwValue.
                 let sv = SetValue {
                     values: values.iter().map(|s| s.as_bytes().to_vec()).collect(),
                 };
