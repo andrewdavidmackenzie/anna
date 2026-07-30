@@ -2858,4 +2858,109 @@ mod tests {
             .await
             .expect("put_value failed");
     }
+
+    #[tokio::test]
+    async fn get_value_priority_ordered_set() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(226);
+        client.push_mock_response(true, Some(make_routing_response("pos", worker)));
+        client.push_mock_response(
+            false,
+            Some(make_priority_set_response(
+                "pos",
+                3.0,
+                &["b", "a"],
+                LatticeType::PriorityOrderedSet,
+            )),
+        );
+        let val = client.get_value("pos").await.expect("get_value failed");
+        assert_eq!(val.type_name(), "priority_ordered_set");
+    }
+
+    #[tokio::test]
+    async fn put_value_priority_ordered_set() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(227);
+        client.push_mock_response(true, Some(make_routing_response("posp", worker)));
+        client.push_mock_response(false, Some(make_put_response("posp")));
+        let val = crate::value::Value::PriorityOrderedSet {
+            priority: 1.0,
+            values: vec!["x".into()],
+        };
+        client
+            .put_value("posp", &val)
+            .await
+            .expect("put_value failed");
+    }
+
+    #[tokio::test]
+    async fn get_value_causal_ordered_set() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(228);
+        client.push_mock_response(true, Some(make_routing_response("cos", worker)));
+        client.push_mock_response(
+            false,
+            Some(make_causal_set_response(
+                "cos",
+                &["y", "x"],
+                LatticeType::CausalOrderedSet,
+            )),
+        );
+        let val = client.get_value("cos").await.expect("get_value failed");
+        assert_eq!(val.type_name(), "causal_ordered_set");
+    }
+
+    #[tokio::test]
+    async fn put_value_causal_ordered_set() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(229);
+        client.push_mock_response(true, Some(make_routing_response("cosp", worker)));
+        client.push_mock_response(false, Some(make_put_response("cosp")));
+        let mut vc = std::collections::HashMap::new();
+        vc.insert("t".to_string(), 1u32);
+        let val = crate::value::Value::CausalOrderedSet {
+            vector_clock: vc,
+            values: vec!["x".into()],
+        };
+        client
+            .put_value("cosp", &val)
+            .await
+            .expect("put_value failed");
+    }
+
+    #[tokio::test]
+    async fn get_value_multi_causal_ordered_set() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(230);
+        client.push_mock_response(true, Some(make_routing_response("mcos", worker)));
+        client.push_mock_response(
+            false,
+            Some(make_multi_causal_set_response(
+                "mcos",
+                &["b", "a"],
+                LatticeType::MultiCausalOrderedSet,
+            )),
+        );
+        let val = client.get_value("mcos").await.expect("get_value failed");
+        assert_eq!(val.type_name(), "multi_causal_ordered_set");
+    }
+
+    #[tokio::test]
+    async fn put_value_multi_causal_ordered_set() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(231);
+        client.push_mock_response(true, Some(make_routing_response("mcosp", worker)));
+        client.push_mock_response(false, Some(make_put_response("mcosp")));
+        let mut vc = std::collections::HashMap::new();
+        vc.insert("t".to_string(), 1u32);
+        let val = crate::value::Value::MultiCausalOrderedSet {
+            vector_clock: vc,
+            dependencies: vec![],
+            values: vec!["x".into()],
+        };
+        client
+            .put_value("mcosp", &val)
+            .await
+            .expect("put_value failed");
+    }
 }
