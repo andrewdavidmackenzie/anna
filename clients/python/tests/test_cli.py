@@ -1135,6 +1135,88 @@ class TestPrioritySetType:
         result = BaseAnnaClient._deserialize(tup)
         assert isinstance(result, SetLattice)
 
+    def test_put_priority_ordered_set_unified(self):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.put.return_value = {"mykey": True}
+        execute_command(client, None, "PUT priority_ordered_set mykey 1.5 a b c")
+        client.put.assert_called_once()
+
+    def test_put_causal_ordered_set_unified(self):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.put.return_value = {"mykey": True}
+        execute_command(client, None, "PUT causal_ordered_set mykey x y")
+        client.put.assert_called_once()
+
+    def test_put_multi_causal_ordered_set_unified(self):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.put.return_value = {"mykey": True}
+        execute_command(client, None, "PUT multi_causal_ordered_set mykey a b")
+        client.put.assert_called_once()
+
+    def test_priority_ordered_set_deserialize(self):
+        from anna.base_client import BaseAnnaClient
+        from anna.kvs_pb2 import PriorityValue, SetValue, KeyTuple, PRIORITY_ORDERED_SET
+        from anna.lattices import OrderedSetLattice
+        sv = SetValue()
+        sv.values.append(b"x")
+        pv = PriorityValue()
+        pv.priority = 1.5
+        pv.value = sv.SerializeToString()
+        tup = KeyTuple()
+        tup.lattice_type = PRIORITY_ORDERED_SET
+        tup.payload = pv.SerializeToString()
+        result = BaseAnnaClient._deserialize(tup)
+        assert isinstance(result, OrderedSetLattice)
+
+    def test_causal_ordered_set_deserialize(self):
+        from anna.base_client import BaseAnnaClient
+        from anna.kvs_pb2 import SingleKeyCausalValue, SetValue, KeyTuple, CAUSAL_ORDERED_SET
+        from anna.lattices import OrderedSetLattice
+        sv = SetValue()
+        sv.values.append(b"a")
+        skc = SingleKeyCausalValue()
+        skc.vector_clock["test"] = 1
+        skc.values.append(sv.SerializeToString())
+        tup = KeyTuple()
+        tup.lattice_type = CAUSAL_ORDERED_SET
+        tup.payload = skc.SerializeToString()
+        result = BaseAnnaClient._deserialize(tup)
+        assert isinstance(result, OrderedSetLattice)
+
+    def test_multi_causal_set_deserialize(self):
+        from anna.base_client import BaseAnnaClient
+        from anna.kvs_pb2 import MultiKeyCausalValue, SetValue, KeyTuple, MULTI_CAUSAL_SET
+        from anna.lattices import SetLattice
+        sv = SetValue()
+        sv.values.append(b"a")
+        mkc = MultiKeyCausalValue()
+        mkc.values.append(sv.SerializeToString())
+        tup = KeyTuple()
+        tup.lattice_type = MULTI_CAUSAL_SET
+        tup.payload = mkc.SerializeToString()
+        result = BaseAnnaClient._deserialize(tup)
+        assert isinstance(result, SetLattice)
+
+    def test_multi_causal_ordered_set_deserialize(self):
+        from anna.base_client import BaseAnnaClient
+        from anna.kvs_pb2 import MultiKeyCausalValue, SetValue, KeyTuple, MULTI_CAUSAL_ORDERED_SET
+        from anna.lattices import OrderedSetLattice
+        sv = SetValue()
+        sv.values.append(b"a")
+        mkc = MultiKeyCausalValue()
+        mkc.values.append(sv.SerializeToString())
+        tup = KeyTuple()
+        tup.lattice_type = MULTI_CAUSAL_ORDERED_SET
+        tup.payload = mkc.SerializeToString()
+        result = BaseAnnaClient._deserialize(tup)
+        assert isinstance(result, OrderedSetLattice)
+
 
 class TestLwwOrderedSetType:
     """Tests for the LWW_ORDERED_SET lattice type support."""

@@ -822,6 +822,282 @@ func TestPutMultiCausalSetWithMock(t *testing.T) {
 	}
 }
 
+func TestPutPriorityOrderedSetWithMock(t *testing.T) {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "pos", Error: kvspb.AnnaError_NO_ERROR}},
+	}
+	respBytes, _ := proto.Marshal(response)
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "pos", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	err := client.PutPriorityOrderedSet("pos", 2.5, []string{"x", "y"})
+	if err != nil {
+		t.Fatalf("PutPriorityOrderedSet failed: %v", err)
+	}
+
+	if len(tp.sentMessages) < 2 {
+		t.Fatalf("Expected at least 2 sent messages (routing + put), got %d", len(tp.sentMessages))
+	}
+	var req kvspb.KeyRequest
+	if err := proto.Unmarshal(tp.sentMessages[1].data, &req); err != nil {
+		t.Fatalf("Failed to unmarshal PUT request: %v", err)
+	}
+	if len(req.Tuples) == 0 {
+		t.Fatal("PUT request has no tuples")
+	}
+	if req.Tuples[0].LatticeType != kvspb.LatticeType_PRIORITY_ORDERED_SET {
+		t.Errorf("Expected PRIORITY_ORDERED_SET lattice type, got %v", req.Tuples[0].LatticeType)
+	}
+	if req.Tuples[0].Key != "pos" {
+		t.Errorf("Expected key 'pos', got '%s'", req.Tuples[0].Key)
+	}
+	var pv kvspb.PriorityValue
+	if err := proto.Unmarshal(req.Tuples[0].Payload, &pv); err != nil {
+		t.Fatalf("Failed to unmarshal PriorityValue: %v", err)
+	}
+	if pv.Priority != 2.5 {
+		t.Errorf("Expected priority 2.5, got %f", pv.Priority)
+	}
+	var sv kvspb.SetValue
+	if err := proto.Unmarshal(pv.Value, &sv); err != nil {
+		t.Fatalf("Failed to unmarshal inner SetValue: %v", err)
+	}
+	if len(sv.Values) != 2 {
+		t.Errorf("Expected 2 values, got %d", len(sv.Values))
+	}
+}
+
+func TestPutCausalOrderedSetWithMock(t *testing.T) {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "cos", Error: kvspb.AnnaError_NO_ERROR}},
+	}
+	respBytes, _ := proto.Marshal(response)
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "cos", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	err := client.PutCausalOrderedSet("cos", []string{"p", "q"})
+	if err != nil {
+		t.Fatalf("PutCausalOrderedSet failed: %v", err)
+	}
+
+	if len(tp.sentMessages) < 2 {
+		t.Fatalf("Expected at least 2 sent messages (routing + put), got %d", len(tp.sentMessages))
+	}
+	var req kvspb.KeyRequest
+	if err := proto.Unmarshal(tp.sentMessages[1].data, &req); err != nil {
+		t.Fatalf("Failed to unmarshal PUT request: %v", err)
+	}
+	if len(req.Tuples) == 0 {
+		t.Fatal("PUT request has no tuples")
+	}
+	if req.Tuples[0].LatticeType != kvspb.LatticeType_CAUSAL_ORDERED_SET {
+		t.Errorf("Expected CAUSAL_ORDERED_SET lattice type, got %v", req.Tuples[0].LatticeType)
+	}
+	if req.Tuples[0].Key != "cos" {
+		t.Errorf("Expected key 'cos', got '%s'", req.Tuples[0].Key)
+	}
+	var skc kvspb.SingleKeyCausalValue
+	if err := proto.Unmarshal(req.Tuples[0].Payload, &skc); err != nil {
+		t.Fatalf("Failed to unmarshal SingleKeyCausalValue: %v", err)
+	}
+	if skc.VectorClock["test"] != 1 {
+		t.Errorf("Expected VC test=1, got %v", skc.VectorClock)
+	}
+	if len(skc.Values) != 1 {
+		t.Fatalf("Expected 1 values entry, got %d", len(skc.Values))
+	}
+	var sv kvspb.SetValue
+	if err := proto.Unmarshal(skc.Values[0], &sv); err != nil {
+		t.Fatalf("Failed to unmarshal inner SetValue: %v", err)
+	}
+	if len(sv.Values) != 2 {
+		t.Errorf("Expected 2 values, got %d", len(sv.Values))
+	}
+}
+
+func TestPutMultiCausalOrderedSetWithMock(t *testing.T) {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "mcos", Error: kvspb.AnnaError_NO_ERROR}},
+	}
+	respBytes, _ := proto.Marshal(response)
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "mcos", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	err := client.PutMultiCausalOrderedSet("mcos", []string{"r", "s"})
+	if err != nil {
+		t.Fatalf("PutMultiCausalOrderedSet failed: %v", err)
+	}
+
+	if len(tp.sentMessages) < 2 {
+		t.Fatalf("Expected at least 2 sent messages (routing + put), got %d", len(tp.sentMessages))
+	}
+	var req kvspb.KeyRequest
+	if err := proto.Unmarshal(tp.sentMessages[1].data, &req); err != nil {
+		t.Fatalf("Failed to unmarshal PUT request: %v", err)
+	}
+	if len(req.Tuples) == 0 {
+		t.Fatal("PUT request has no tuples")
+	}
+	if req.Tuples[0].LatticeType != kvspb.LatticeType_MULTI_CAUSAL_ORDERED_SET {
+		t.Errorf("Expected MULTI_CAUSAL_ORDERED_SET lattice type, got %v", req.Tuples[0].LatticeType)
+	}
+	if req.Tuples[0].Key != "mcos" {
+		t.Errorf("Expected key 'mcos', got '%s'", req.Tuples[0].Key)
+	}
+	var mkc kvspb.MultiKeyCausalValue
+	if err := proto.Unmarshal(req.Tuples[0].Payload, &mkc); err != nil {
+		t.Fatalf("Failed to unmarshal MultiKeyCausalValue: %v", err)
+	}
+	if mkc.VectorClock["test"] != 1 {
+		t.Errorf("Expected VC test=1, got %v", mkc.VectorClock)
+	}
+	if len(mkc.Dependencies) != 1 || mkc.Dependencies[0].Key != "dep1" {
+		t.Errorf("Expected dep1, got %v", mkc.Dependencies)
+	}
+	if len(mkc.Values) != 1 {
+		t.Fatalf("Expected 1 values entry, got %d", len(mkc.Values))
+	}
+	var sv kvspb.SetValue
+	if err := proto.Unmarshal(mkc.Values[0], &sv); err != nil {
+		t.Fatalf("Failed to unmarshal inner SetValue: %v", err)
+	}
+	if len(sv.Values) != 2 {
+		t.Errorf("Expected 2 values, got %d", len(sv.Values))
+	}
+}
+
+func TestGetAutoDetectsPrioritySet(t *testing.T) {
+	sv := &kvspb.SetValue{Values: [][]byte{[]byte("b"), []byte("a")}}
+	svBytes, _ := proto.Marshal(sv)
+	pv := &kvspb.PriorityValue{Priority: 1.5, Value: svBytes}
+	pvBytes, _ := proto.Marshal(pv)
+
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{
+			Key:         "psget",
+			Error:       kvspb.AnnaError_NO_ERROR,
+			LatticeType: kvspb.LatticeType_PRIORITY_SET,
+			Payload:     pvBytes,
+		}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "psget", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	val, err := client.Get("psget")
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	// PRIORITY_SET sorts values, so a before b
+	expected := "priority: 1.5\n{ a b }"
+	if val != expected {
+		t.Errorf("Expected %q, got %q", expected, val)
+	}
+}
+
+func TestGetAutoDetectsCausalSet(t *testing.T) {
+	sv := &kvspb.SetValue{Values: [][]byte{[]byte("y"), []byte("x")}}
+	svBytes, _ := proto.Marshal(sv)
+	skc := &kvspb.SingleKeyCausalValue{
+		VectorClock: map[string]uint32{"node1": 3},
+		Values:      [][]byte{svBytes},
+	}
+	skcBytes, _ := proto.Marshal(skc)
+
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{
+			Key:         "csget",
+			Error:       kvspb.AnnaError_NO_ERROR,
+			LatticeType: kvspb.LatticeType_CAUSAL_SET,
+			Payload:     skcBytes,
+		}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "csget", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	val, err := client.Get("csget")
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	// CAUSAL_SET sorts values, so x before y; VC line first
+	expected := "{node1 : 3}\n{ x y }"
+	if val != expected {
+		t.Errorf("Expected %q, got %q", expected, val)
+	}
+}
+
+func TestGetAutoDetectsMultiCausalSet(t *testing.T) {
+	sv := &kvspb.SetValue{Values: [][]byte{[]byte("q"), []byte("p")}}
+	svBytes, _ := proto.Marshal(sv)
+	mkc := &kvspb.MultiKeyCausalValue{
+		VectorClock: map[string]uint32{"nodeA": 2},
+		Dependencies: []*sharedpb.KeyVersion{
+			{Key: "dep1", VectorClock: map[string]uint32{"nodeB": 1}},
+		},
+		Values: [][]byte{svBytes},
+	}
+	mkcBytes, _ := proto.Marshal(mkc)
+
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{
+			Key:         "mcsget",
+			Error:       kvspb.AnnaError_NO_ERROR,
+			LatticeType: kvspb.LatticeType_MULTI_CAUSAL_SET,
+			Payload:     mkcBytes,
+		}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "mcsget", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	val, err := client.Get("mcsget")
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	// MULTI_CAUSAL_SET sorts values; VC line, dep line, then values
+	expected := "{nodeA : 2}\ndep1 : {nodeB : 1}\n{ p q }"
+	if val != expected {
+		t.Errorf("Expected %q, got %q", expected, val)
+	}
+}
+
 func TestPutUnionScalarWithMock(t *testing.T) {
 	response := &kvspb.KeyResponse{
 		Tuples: []*kvspb.KeyTuple{{Key: "uk", Error: kvspb.AnnaError_NO_ERROR}},

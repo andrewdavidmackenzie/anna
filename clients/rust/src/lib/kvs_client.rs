@@ -2631,4 +2631,231 @@ mod tests {
             .await
             .expect("put_value failed");
     }
+
+    fn make_priority_set_response(
+        key: &str,
+        priority: f64,
+        values: &[&str],
+        lattice_type: LatticeType,
+    ) -> Vec<u8> {
+        let sv = SetValue {
+            values: values.iter().map(|v| v.as_bytes().to_vec()).collect(),
+        };
+        let pv = PriorityValue {
+            priority,
+            value: sv.encode_to_vec(),
+        };
+        let response = KeyResponse {
+            tuples: vec![KeyTuple {
+                key: key.to_string(),
+                lattice_type: lattice_type as i32,
+                payload: pv.encode_to_vec(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        response.encode_to_vec()
+    }
+
+    #[tokio::test]
+    async fn get_value_priority_set() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(220);
+        client.push_mock_response(true, Some(make_routing_response("ps_key", worker)));
+        client.push_mock_response(
+            false,
+            Some(make_priority_set_response(
+                "ps_key",
+                3.5,
+                &["x", "y", "z"],
+                LatticeType::PrioritySet,
+            )),
+        );
+
+        let val = client.get_value("ps_key").await.expect("get_value failed");
+        match val {
+            crate::value::Value::PrioritySet { priority, values } => {
+                assert!((priority - 3.5).abs() < f64::EPSILON);
+                let mut sorted = values.clone();
+                sorted.sort();
+                assert_eq!(sorted, vec!["x", "y", "z"]);
+            }
+            other => panic!("Expected PrioritySet, got {:?}", other.type_name()),
+        }
+    }
+
+    #[tokio::test]
+    async fn put_value_priority_set() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(221);
+        client.push_mock_response(true, Some(make_routing_response("ps_put", worker)));
+        client.push_mock_response(false, Some(make_put_response("ps_put")));
+
+        let val = crate::value::Value::PrioritySet {
+            priority: 2.0,
+            values: vec!["a".into(), "b".into()],
+        };
+        client
+            .put_value("ps_put", &val)
+            .await
+            .expect("put_value failed");
+    }
+
+    fn make_causal_set_response(key: &str, values: &[&str], lattice_type: LatticeType) -> Vec<u8> {
+        let sv = SetValue {
+            values: values.iter().map(|v| v.as_bytes().to_vec()).collect(),
+        };
+        let mut vc = HashMap::new();
+        vc.insert("node1".to_string(), 3u32);
+        let skc = SingleKeyCausalValue {
+            vector_clock: vc,
+            values: vec![sv.encode_to_vec()],
+        };
+        let response = KeyResponse {
+            tuples: vec![KeyTuple {
+                key: key.to_string(),
+                lattice_type: lattice_type as i32,
+                payload: skc.encode_to_vec(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        response.encode_to_vec()
+    }
+
+    #[tokio::test]
+    async fn get_value_causal_set() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(222);
+        client.push_mock_response(true, Some(make_routing_response("cs_key", worker)));
+        client.push_mock_response(
+            false,
+            Some(make_causal_set_response(
+                "cs_key",
+                &["p", "q"],
+                LatticeType::CausalSet,
+            )),
+        );
+
+        let val = client.get_value("cs_key").await.expect("get_value failed");
+        match val {
+            crate::value::Value::CausalSet {
+                vector_clock,
+                values,
+            } => {
+                assert_eq!(vector_clock["node1"], 3);
+                let mut sorted = values.clone();
+                sorted.sort();
+                assert_eq!(sorted, vec!["p", "q"]);
+            }
+            other => panic!("Expected CausalSet, got {:?}", other.type_name()),
+        }
+    }
+
+    #[tokio::test]
+    async fn put_value_causal_set() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(223);
+        client.push_mock_response(true, Some(make_routing_response("cs_put", worker)));
+        client.push_mock_response(false, Some(make_put_response("cs_put")));
+
+        let mut vc = HashMap::new();
+        vc.insert("node1".to_string(), 5u32);
+        let val = crate::value::Value::CausalSet {
+            vector_clock: vc,
+            values: vec!["m".into(), "n".into()],
+        };
+        client
+            .put_value("cs_put", &val)
+            .await
+            .expect("put_value failed");
+    }
+
+    fn make_multi_causal_set_response(
+        key: &str,
+        values: &[&str],
+        lattice_type: LatticeType,
+    ) -> Vec<u8> {
+        let sv = SetValue {
+            values: values.iter().map(|v| v.as_bytes().to_vec()).collect(),
+        };
+        let mut vc = HashMap::new();
+        vc.insert("nodeA".to_string(), 7u32);
+        let mut dep_vc = HashMap::new();
+        dep_vc.insert("nodeB".to_string(), 2u32);
+        let dep = crate::proto::shared::KeyVersion {
+            key: "dep_key".to_string(),
+            vector_clock: dep_vc,
+        };
+        let mkc = MultiKeyCausalValue {
+            vector_clock: vc,
+            dependencies: vec![dep],
+            values: vec![sv.encode_to_vec()],
+        };
+        let response = KeyResponse {
+            tuples: vec![KeyTuple {
+                key: key.to_string(),
+                lattice_type: lattice_type as i32,
+                payload: mkc.encode_to_vec(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        response.encode_to_vec()
+    }
+
+    #[tokio::test]
+    async fn get_value_multi_causal_set() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(224);
+        client.push_mock_response(true, Some(make_routing_response("mcs_key", worker)));
+        client.push_mock_response(
+            false,
+            Some(make_multi_causal_set_response(
+                "mcs_key",
+                &["r", "s"],
+                LatticeType::MultiCausalSet,
+            )),
+        );
+
+        let val = client.get_value("mcs_key").await.expect("get_value failed");
+        match val {
+            crate::value::Value::MultiCausalSet {
+                vector_clock,
+                dependencies,
+                values,
+            } => {
+                assert_eq!(vector_clock["nodeA"], 7);
+                assert_eq!(dependencies.len(), 1);
+                assert_eq!(dependencies[0].0, "dep_key");
+                assert_eq!(dependencies[0].1["nodeB"], 2);
+                let mut sorted = values.clone();
+                sorted.sort();
+                assert_eq!(sorted, vec!["r", "s"]);
+            }
+            other => panic!("Expected MultiCausalSet, got {:?}", other.type_name()),
+        }
+    }
+
+    #[tokio::test]
+    async fn put_value_multi_causal_set() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(225);
+        client.push_mock_response(true, Some(make_routing_response("mcs_put", worker)));
+        client.push_mock_response(false, Some(make_put_response("mcs_put")));
+
+        let mut vc = HashMap::new();
+        vc.insert("nodeA".to_string(), 1u32);
+        let mut dep_vc = HashMap::new();
+        dep_vc.insert("nodeC".to_string(), 4u32);
+        let val = crate::value::Value::MultiCausalSet {
+            vector_clock: vc,
+            dependencies: vec![("other_key".to_string(), dep_vc)],
+            values: vec!["v1".into(), "v2".into()],
+        };
+        client
+            .put_value("mcs_put", &val)
+            .await
+            .expect("put_value failed");
+    }
 }
