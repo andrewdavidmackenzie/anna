@@ -249,6 +249,21 @@ string get_any(KvsClientInterface* client, const string& key) {
       out << "}";
       break;
     }
+    case kvs::LatticeType::LWW_ORDERED_SET: {
+      // Same as LWW_SET but display as [ ... ] in sorted order.
+      kvs::LWWValue lww;
+      lww.ParseFromString(payload);
+      kvs::SetValue sv;
+      sv.ParseFromString(lww.value());
+      vector<string> vals(sv.values().begin(), sv.values().end());
+      std::sort(vals.begin(), vals.end());
+      out << "[ ";
+      for (const auto& v : vals) {
+        out << v << " ";
+      }
+      out << "]";
+      break;
+    }
     case kvs::LatticeType::UNION_SCALAR: {
       // UNION_SCALAR: stored as SetValue (same as SET).
       // Display as concatenated sorted fragments.
@@ -418,6 +433,32 @@ PutResult put_lww_set(KvsClientInterface* client, const string& key,
 
   auto responses = receive_with_deadline(client);
 
+  return to_put_result(responses[0], rid);
+}
+
+PutResult put_lww_ordered_set(KvsClientInterface* client, const string& key,
+                              const vector<string>& values) {
+  uint64_t ts = generate_timestamp(0);
+  if (ts <= last_seen_ts) {
+    ts = last_seen_ts + 1;
+  }
+  last_seen_ts = ts;
+
+  kvs::SetValue sv;
+  for (const auto& v : values) {
+    sv.add_values(v);
+  }
+  string set_payload;
+  sv.SerializeToString(&set_payload);
+
+  kvs::LWWValue lww;
+  lww.set_timestamp(ts);
+  lww.set_value(set_payload);
+  string payload;
+  lww.SerializeToString(&payload);
+
+  string rid = client->put_async(key, payload, kvs::LatticeType::LWW_ORDERED_SET);
+  auto responses = receive_with_deadline(client);
   return to_put_result(responses[0], rid);
 }
 

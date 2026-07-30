@@ -205,7 +205,7 @@ func formatStatus(statuses []annalib.ProcessStatus) string {
 // isTypeName returns true if name is a known lattice type name.
 func isTypeName(name string) bool {
 	switch strings.ToLower(name) {
-	case "lww", "set", "ordered_set", "lww_set", "union", "priority", "causal", "single_causal":
+	case "lww", "set", "ordered_set", "lww_set", "lww_ordered_set", "union", "priority", "causal", "single_causal":
 		return true
 	}
 	return false
@@ -348,6 +348,13 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 			if err := client.PutLwwSet(key, parts[valStart:]); err != nil {
 				return false, err
 			}
+		case "lww_ordered_set":
+			if valStart >= len(parts) {
+				return false, fmt.Errorf("usage: PUT lww_ordered_set <key> <value1> [value2 ...]")
+			}
+			if err := client.PutLwwOrderedSet(key, parts[valStart:]); err != nil {
+				return false, err
+			}
 		case "union":
 			if len(parts) != valStart+1 {
 				return false, fmt.Errorf("usage: PUT union <key> <value>")
@@ -455,6 +462,7 @@ func cliUsage() string {
 	put set {key} {vals...}           - store a set (union merge)
 	put ordered_set {key} {vals...}   - store an ordered set
 	put lww_set {key} {vals...}       - store a set (LWW, replaces on write)
+	put lww_ordered_set {key} {vals...} - store an ordered set (LWW)
 	put union {key} {value}           - append a value (accumulates via union)
 	put priority {key} {pri} {val}    - store with priority (lowest wins)
 	put causal {key} {value}          - store with multi-key causal consistency

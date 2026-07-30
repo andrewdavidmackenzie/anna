@@ -449,6 +449,22 @@ func (c *KVSClient) Get(key string) (string, error) {
 	}
 
 	// Auto-detect lattice type from server response.
+	if tuple.LatticeType == kvspb.LatticeType_LWW_ORDERED_SET {
+		var lww kvspb.LWWValue
+		if err := proto.Unmarshal(tuple.Payload, &lww); err != nil {
+			return "", &KVSError{Message: fmt.Sprintf("GET: failed to decode LWW_ORDERED_SET: %v", err)}
+		}
+		var sv kvspb.SetValue
+		if err := proto.Unmarshal(lww.Value, &sv); err != nil {
+			return "", &KVSError{Message: fmt.Sprintf("GET: failed to decode LWW_ORDERED_SET inner: %v", err)}
+		}
+		parts := make([]string, len(sv.Values))
+		for i, v := range sv.Values {
+			parts[i] = string(v)
+		}
+		sort.Strings(parts)
+		return "[ " + strings.Join(parts, " ") + " ]", nil
+	}
 	if tuple.LatticeType == kvspb.LatticeType_UNION_SCALAR {
 		var sv kvspb.SetValue
 		if err := proto.Unmarshal(tuple.Payload, &sv); err != nil {
@@ -579,6 +595,43 @@ func (c *KVSClient) PutLwwSet(key string, values []string) error {
 	}
 
 	_, err = validateResponse(response, "PUT_LWW_SET")
+	return err
+}
+
+// PutLwwOrderedSet stores an ordered list of values under key with LWW
+// semantics. Same as PutLwwSet but preserves insertion order.
+func (c *KVSClient) PutLwwOrderedSet(key string, values []string) error {
+	sv := &kvspb.SetValue{
+		Values: make([][]byte, len(values)),
+	}
+	for i, v := range values {
+		sv.Values[i] = []byte(v)
+	}
+	setPayload, err := proto.Marshal(sv)
+	if err != nil {
+		return &KVSError{Message: fmt.Sprintf("PUT_LWW_ORDERED_SET: %v", err)}
+	}
+
+	ts := generateTimestamp()
+	if ts <= c.lastSeenTs {
+		ts = c.lastSeenTs + 1
+	}
+	c.lastSeenTs = ts
+	lww := &kvspb.LWWValue{
+		Timestamp: ts,
+		Value:     setPayload,
+	}
+	payload, err := proto.Marshal(lww)
+	if err != nil {
+		return &KVSError{Message: fmt.Sprintf("PUT_LWW_ORDERED_SET: %v", err)}
+	}
+
+	response, err := c.sendDataRequest(key, kvspb.RequestType_PUT, kvspb.LatticeType_LWW_ORDERED_SET, payload)
+	if err != nil {
+		return err
+	}
+
+	_, err = validateResponse(response, "PUT_LWW_ORDERED_SET")
 	return err
 }
 

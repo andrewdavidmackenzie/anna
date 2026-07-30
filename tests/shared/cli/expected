@@ -14,6 +14,8 @@ priority: 1.5
 important
 { p q r }
 { x y }
+[ a b c ]
+[ y z ]
 entry1
 entry2
 deleteme

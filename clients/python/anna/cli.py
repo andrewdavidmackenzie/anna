@@ -4,7 +4,7 @@ import sys
 from .process_mgmt import start, stop, status, PROCESS_LIST
 
 
-_TYPE_NAMES = {"lww", "set", "ordered_set", "lww_set", "union", "priority", "causal", "single_causal"}
+_TYPE_NAMES = {"lww", "set", "ordered_set", "lww_set", "lww_ordered_set", "union", "priority", "causal", "single_causal"}
 
 
 def cli_usage():
@@ -14,6 +14,7 @@ def cli_usage():
             "  PUT set {key} {vals...}         - store a set (union merge)\n"
             "  PUT ordered_set {key} {vals...} - store an ordered set\n"
             "  PUT lww_set {key} {vals...}     - store a set (LWW, replaces on write)\n"
+            "  PUT lww_ordered_set {key} {vals...} - store an ordered set (LWW)\n"
             "  PUT union {key} {value}         - append a value (accumulates via union)\n"
             "  PUT priority {key} {pri} {val}  - store with priority (lowest wins)\n"
             "  PUT causal {key} {value}        - store with multi-key causal consistency\n"
@@ -164,6 +165,25 @@ def execute_command(client, config_path, line):
                         res.value = self.val
                         return res, LWW_SET_TYPE
                 val = _LwwSetLattice(ts, sv.SerializeToString())
+                result = client.put(parts[key_idx], val)
+                if not result.get(parts[key_idx], False):
+                    print("Failure!")
+            elif type_name == "lww_ordered_set":
+                # Same as lww_set but with LWW_ORDERED_SET type tag.
+                from .kvs_pb2 import SetValue as SetValuePb, LWW_ORDERED_SET as LOS_TYPE
+                from .kvs_pb2 import LWWValue as LWWValuePb
+                sv = SetValuePb()
+                for v in parts[3:]:
+                    sv.values.append(v.encode("utf-8"))
+                import time
+                ts = time.time_ns()
+                class _LwwOrderedSetLattice(LWWPairLattice):
+                    def serialize(self):
+                        res = LWWValuePb()
+                        res.timestamp = self.ts
+                        res.value = self.val
+                        return res, LOS_TYPE
+                val = _LwwOrderedSetLattice(ts, sv.SerializeToString())
                 result = client.put(parts[key_idx], val)
                 if not result.get(parts[key_idx], False):
                     print("Failure!")

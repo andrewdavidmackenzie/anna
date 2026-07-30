@@ -14,6 +14,7 @@ pub const TYPE_NAMES: &[&str] = &[
     "set",
     "ordered_set",
     "lww_set",
+    "lww_ordered_set",
     "union",
     "priority",
     "causal",
@@ -56,6 +57,9 @@ pub enum Value {
     /// on each write (timestamp-based), rather than merged via union.
     LwwSet(Vec<String>),
 
+    /// Last-writer-wins ordered set: like LwwSet but preserves insertion order.
+    LwwOrderedSet(Vec<String>),
+
     /// Union scalar: each PUT appends a string fragment. Fragments accumulate
     /// via set union and are displayed concatenated in sorted order.
     UnionScalar(String),
@@ -79,6 +83,7 @@ impl Value {
             Value::Set(_) => "set",
             Value::OrderedSet(_) => "ordered_set",
             Value::LwwSet(_) => "lww_set",
+            Value::LwwOrderedSet(_) => "lww_ordered_set",
             Value::UnionScalar(_) => "union",
             Value::Priority { .. } => "priority",
             Value::SingleCausal { .. } => "single_causal",
@@ -93,6 +98,7 @@ impl Value {
             Value::Set(_) => LatticeType::Set,
             Value::OrderedSet(_) => LatticeType::OrderedSet,
             Value::LwwSet(_) => LatticeType::LwwSet,
+            Value::LwwOrderedSet(_) => LatticeType::LwwOrderedSet,
             Value::UnionScalar(_) => LatticeType::UnionScalar,
             Value::Priority { .. } => LatticeType::Priority,
             Value::SingleCausal { .. } => LatticeType::SingleCausal,
@@ -110,6 +116,7 @@ pub fn parse_type_name(name: &str) -> Option<LatticeType> {
         "set" => Some(LatticeType::Set),
         "ordered_set" => Some(LatticeType::OrderedSet),
         "lww_set" => Some(LatticeType::LwwSet),
+        "lww_ordered_set" => Some(LatticeType::LwwOrderedSet),
         "union" => Some(LatticeType::UnionScalar),
         "priority" => Some(LatticeType::Priority),
         "causal" => Some(LatticeType::MultiCausal),
@@ -143,6 +150,11 @@ impl fmt::Display for Value {
                 let mut sorted = values.clone();
                 sorted.sort();
                 write!(f, "{{ {} }}", sorted.join(" "))
+            }
+            Value::LwwOrderedSet(values) => {
+                let mut sorted = values.clone();
+                sorted.sort();
+                write!(f, "[ {} ]", sorted.join(" "))
             }
             Value::UnionScalar(s) => write!(f, "{}", s),
             Value::OrderedSet(values) => {
@@ -264,6 +276,13 @@ mod tests {
     }
 
     #[test]
+    fn display_lww_ordered_set() {
+        let v = Value::LwwOrderedSet(vec!["c".into(), "b".into(), "a".into()]);
+        assert_eq!(v.to_string(), "[ a b c ]");
+        assert_eq!(v.type_name(), "lww_ordered_set");
+    }
+
+    #[test]
     fn display_union_scalar() {
         let v = Value::UnionScalar("hello world".into());
         assert_eq!(v.to_string(), "hello world");
@@ -279,6 +298,10 @@ mod tests {
             Some(LatticeType::OrderedSet)
         );
         assert_eq!(parse_type_name("lww_set"), Some(LatticeType::LwwSet));
+        assert_eq!(
+            parse_type_name("lww_ordered_set"),
+            Some(LatticeType::LwwOrderedSet)
+        );
         assert_eq!(parse_type_name("union"), Some(LatticeType::UnionScalar));
         assert_eq!(parse_type_name("priority"), Some(LatticeType::Priority));
         assert_eq!(parse_type_name("causal"), Some(LatticeType::MultiCausal));

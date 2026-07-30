@@ -1102,6 +1102,30 @@ impl KVSClient {
                         .collect(),
                 ))
             }
+            x if x == LatticeType::LwwOrderedSet as i32 => {
+                // Same wire format as LWW_SET but preserves insertion order.
+                let lww = LwwValue::decode(tuple.payload.as_slice()).map_err(|e| {
+                    Error::Kvs(format!(
+                        "GET_VALUE: failed to decode LWW_ORDERED_SET outer: {}",
+                        e
+                    ))
+                })?;
+                if lww.timestamp > self.last_seen_ts {
+                    self.last_seen_ts = lww.timestamp;
+                }
+                let sv = SetValue::decode(lww.value.as_slice()).map_err(|e| {
+                    Error::Kvs(format!(
+                        "GET_VALUE: failed to decode LWW_ORDERED_SET inner: {}",
+                        e
+                    ))
+                })?;
+                Ok(crate::value::Value::LwwOrderedSet(
+                    sv.values
+                        .iter()
+                        .map(|v| String::from_utf8_lossy(v).to_string())
+                        .collect(),
+                ))
+            }
             x if x == LatticeType::UnionScalar as i32 => {
                 // UNION_SCALAR is stored as SetValue (same as SET).
                 // Display as concatenated sorted fragments.
@@ -1212,6 +1236,19 @@ impl KVSClient {
             }
             crate::value::Value::LwwSet(values) => {
                 // LWW_SET: wrap a SetValue inside an LwwValue with a timestamp.
+                let sv = SetValue {
+                    values: values.iter().map(|s| s.as_bytes().to_vec()).collect(),
+                };
+                let ts = std::cmp::max(Self::generate_timestamp(), self.last_seen_ts + 1);
+                self.last_seen_ts = ts;
+                let lww = LwwValue {
+                    timestamp: ts,
+                    value: sv.encode_to_vec(),
+                };
+                lww.encode_to_vec()
+            }
+            crate::value::Value::LwwOrderedSet(values) => {
+                // Same wire format as LWW_SET.
                 let sv = SetValue {
                     values: values.iter().map(|s| s.as_bytes().to_vec()).collect(),
                 };

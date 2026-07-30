@@ -136,6 +136,11 @@ PriorityResult get_priority(KvsClientInterface* client, const string& key);
 PutResult put_lww_set(KvsClientInterface* client, const string& key,
                       const set<string>& values);
 
+// Issue a blocking PUT of `values` for `key` under the LWW-ordered-set
+// lattice type. Same as put_lww_set but preserves insertion order.
+PutResult put_lww_ordered_set(KvsClientInterface* client, const string& key,
+                               const vector<string>& values);
+
 // Issue a blocking PUT of `value` for `key` under the union-scalar lattice
 // type. Each PUT appends a fragment; the server accumulates all fragments
 // via set union.

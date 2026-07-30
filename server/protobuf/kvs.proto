@@ -60,6 +60,11 @@ enum LatticeType {
   // of all fragments, displayed concatenated in sorted order. Useful for
   // append-only logs, sensor readings, or accumulating text.
   UNION_SCALAR = 8;
+
+  // Last-writer-wins ordered set: an ordered collection where the entire
+  // list is replaced on each write (timestamp-based), preserving insertion
+  // order. Like LWW_SET but ordered.
+  LWW_ORDERED_SET = 9;
 }
 
 enum AnnaError {
