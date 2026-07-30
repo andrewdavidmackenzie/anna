@@ -245,6 +245,7 @@ fn parse_put_args(split: &[&str]) -> Result<(String, annalib::value::Value)> {
             LatticeType::LwwSet => {
                 Value::LwwSet(split[3..].iter().map(|s| s.to_string()).collect())
             }
+            LatticeType::UnionScalar => Value::UnionScalar(split[3].into()),
             LatticeType::Priority => {
                 if split.len() < 5 {
                     return Err(CliError::Other(
@@ -288,7 +289,7 @@ fn parse_put_args(split: &[&str]) -> Result<(String, annalib::value::Value)> {
         Ok((key, value))
     } else {
         Err(CliError::Other(format!(
-            "Unknown type '{}'. Valid types: lww, set, ordered_set, lww_set, priority, causal, single_causal",
+            "Unknown type '{}'. Valid types: lww, set, ordered_set, lww_set, union, priority, causal, single_causal",
             split[1]
         )))
     }
@@ -401,6 +402,7 @@ fn cli_usage() -> String {
     \n\tput set {key} {vals...} \t\t- store a set (union merge)\
     \n\tput ordered_set {key} {vals...} \t- store an ordered set\
     \n\tput lww_set {key} {vals...} \t- store a set (LWW, replaces on write)\
+    \n\tput union {key} {value} \t- append a value (accumulates via union)\
     \n\tput priority {key} {pri} {val} \t- store with priority (lowest wins)\
     \n\tput causal {key} {value} \t- store with multi-key causal consistency\
     \n\tput single_causal {key} {value} \t- store with single-key causal consistency\

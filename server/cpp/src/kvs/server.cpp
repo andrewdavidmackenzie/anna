@@ -189,6 +189,7 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
   Serializer *mk_causal_serializer;
   Serializer *priority_serializer;
   Serializer *lww_set_serializer;
+  Serializer *union_scalar_serializer;
 
   if (kSelfTier == Tier::MEMORY) {
     MemoryLWWKVS *lww_kvs = new MemoryLWWKVS();
@@ -213,6 +214,12 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
 
     MemoryLWWKVS *lww_set_kvs = new MemoryLWWKVS();
     lww_set_serializer = new MemoryLWWSetSerializer(lww_set_kvs);
+
+    // UNION_SCALAR reuses the Set serializer (set union merge) with a
+    // separate KVS instance. The client sends single values and displays
+    // the result as concatenated text rather than as { ... }.
+    MemorySetKVS *union_scalar_kvs = new MemorySetKVS();
+    union_scalar_serializer = new MemorySetSerializer(union_scalar_kvs);
   } else if (kSelfTier == Tier::DISK) {
     lww_serializer = new DiskLWWSerializer(thread_id, disk_root);
     set_serializer = new DiskSetSerializer(thread_id, disk_root);
@@ -221,6 +228,7 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
     mk_causal_serializer = new DiskMultiKeyCausalSerializer(thread_id, disk_root);
     priority_serializer = new DiskPrioritySerializer(thread_id, disk_root);
     lww_set_serializer = new DiskLWWSetSerializer(thread_id, disk_root);
+    union_scalar_serializer = new DiskSetSerializer(thread_id, disk_root);
   } else {
     log->info("Invalid node type");
     exit(1);
@@ -233,6 +241,7 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
   serializers[kvs::LatticeType::MULTI_CAUSAL] = mk_causal_serializer;
   serializers[kvs::LatticeType::PRIORITY] = priority_serializer;
   serializers[kvs::LatticeType::LWW_SET] = lww_set_serializer;
+  serializers[kvs::LatticeType::UNION_SCALAR] = union_scalar_serializer;
 
   // the set of changes made on this thread since the last round of gossip
   set<Key> local_changeset;

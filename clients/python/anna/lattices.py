@@ -150,6 +150,32 @@ class SetLattice(Lattice):
         return res, SET
 
 
+class UnionScalarLattice(SetLattice):
+    """A set lattice that serializes with UNION_SCALAR type tag.
+
+    Fragments accumulate via set union. reveal() returns the fragments
+    concatenated in sorted order as bytes.
+    """
+
+    def reveal(self):
+        """Return fragments concatenated in sorted order as bytes."""
+        fragments = sorted(
+            v.decode("utf-8", errors="replace") if isinstance(v, bytes) else str(v)
+            for v in self.val
+        )
+        return "\n".join(fragments).encode("utf-8")
+
+    def serialize(self):
+        from .kvs_pb2 import UNION_SCALAR as US
+        res = SetValue()
+        for v in self.val:
+            if type(v) != bytes:
+                raise ValueError('Unsupported type %s in UnionScalarLattice!' %
+                                 (str(type(v))))
+            res.values.append(v)
+        return res, US
+
+
 # A wrapper class that implements some convenience OrderedSet operations on
 # top of a list.  # We use this because it is way cheaper to deserialize into,
 # at the cost of having expensive reordering operations (e.g. random insert),

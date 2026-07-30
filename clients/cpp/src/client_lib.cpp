@@ -249,6 +249,19 @@ string get_any(KvsClientInterface* client, const string& key) {
       out << "}";
       break;
     }
+    case kvs::LatticeType::UNION_SCALAR: {
+      // UNION_SCALAR: stored as SetValue (same as SET).
+      // Display as concatenated sorted fragments.
+      kvs::SetValue sv;
+      sv.ParseFromString(payload);
+      vector<string> fragments(sv.values().begin(), sv.values().end());
+      std::sort(fragments.begin(), fragments.end());
+      for (size_t i = 0; i < fragments.size(); i++) {
+        if (i > 0) out << std::endl;
+        out << fragments[i];
+      }
+      break;
+    }
     case kvs::LatticeType::PRIORITY: {
       kvs::PriorityValue pv;
       pv.ParseFromString(payload);
@@ -405,6 +418,16 @@ PutResult put_lww_set(KvsClientInterface* client, const string& key,
 
   auto responses = receive_with_deadline(client);
 
+  return to_put_result(responses[0], rid);
+}
+
+PutResult put_union_scalar(KvsClientInterface* client, const string& key,
+                           const string& value) {
+  set<string> values;
+  values.insert(value);
+  string rid = client->put_async(key, make_set_payload(values),
+                                 kvs::LatticeType::UNION_SCALAR);
+  auto responses = receive_with_deadline(client);
   return to_put_result(responses[0], rid);
 }
 

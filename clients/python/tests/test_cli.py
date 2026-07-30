@@ -954,6 +954,75 @@ class TestLegacyPutAliases:
         client.put_priority.assert_called_once()
 
 
+class TestUnionScalarType:
+    """Tests for the UNION_SCALAR lattice type support."""
+
+    def test_put_union_unified(self):
+        """PUT union should call client.put with a UnionScalarLattice."""
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.put.return_value = {"mykey": True}
+        execute_command(client, None, "PUT union mykey hello")
+        client.put.assert_called_once()
+        # Check lattice type tag
+        args = client.put.call_args
+        lattice = args[0][1]
+        _, lt = lattice.serialize()
+        from anna.kvs_pb2 import UNION_SCALAR
+        assert lt == UNION_SCALAR
+
+    def test_union_scalar_deserialize(self):
+        """_deserialize should decode UNION_SCALAR as UnionScalarLattice."""
+        from anna.base_client import BaseAnnaClient
+        from anna.kvs_pb2 import SetValue, KeyTuple, UNION_SCALAR
+        from anna.lattices import UnionScalarLattice
+
+        sv = SetValue()
+        sv.values.append(b"beta")
+        sv.values.append(b"alpha")
+
+        tup = KeyTuple()
+        tup.lattice_type = UNION_SCALAR
+        tup.payload = sv.SerializeToString()
+
+        result = BaseAnnaClient._deserialize(tup)
+        assert isinstance(result, UnionScalarLattice)
+        revealed = result.reveal()
+        assert b"alpha" in revealed
+        assert b"beta" in revealed
+        # Should be sorted
+        assert revealed == b"alpha\nbeta"
+
+    def test_get_union_scalar_formats_as_text(self, capsys):
+        """Unified GET on a UNION_SCALAR key should format as text."""
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        from anna.lattices import UnionScalarLattice
+        client = MagicMock()
+        client.get.return_value = {"mykey": UnionScalarLattice({b"line1", b"line2"})}
+        execute_command(client, None, "GET mykey")
+        out = capsys.readouterr().out
+        assert "line1" in out
+        assert "line2" in out
+
+    def test_union_scalar_lattice_serialize(self):
+        """UnionScalarLattice.serialize() should return UNION_SCALAR type."""
+        from anna.lattices import UnionScalarLattice
+        from anna.kvs_pb2 import UNION_SCALAR
+        l = UnionScalarLattice({b"x", b"y"})
+        proto, lt = l.serialize()
+        assert lt == UNION_SCALAR
+        assert len(proto.values) == 2
+
+    def test_union_scalar_lattice_reveal_sorted(self):
+        """UnionScalarLattice.reveal() returns sorted concatenation."""
+        from anna.lattices import UnionScalarLattice
+        l = UnionScalarLattice({b"z_last", b"a_first"})
+        result = l.reveal()
+        assert result == b"a_first\nz_last"
+
+
 class TestLwwSetType:
     """Tests for the LWW_SET lattice type support."""
 

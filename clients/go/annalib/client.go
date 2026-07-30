@@ -6,6 +6,7 @@ import (
 	"hash/fnv"
 	"log"
 	"math/rand"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -447,6 +448,20 @@ func (c *KVSClient) Get(key string) (string, error) {
 		return "", err
 	}
 
+	// Auto-detect lattice type from server response.
+	if tuple.LatticeType == kvspb.LatticeType_UNION_SCALAR {
+		var sv kvspb.SetValue
+		if err := proto.Unmarshal(tuple.Payload, &sv); err != nil {
+			return "", &KVSError{Message: fmt.Sprintf("GET: failed to decode UNION_SCALAR: %v", err)}
+		}
+		fragments := make([]string, len(sv.Values))
+		for i, v := range sv.Values {
+			fragments[i] = string(v)
+		}
+		sort.Strings(fragments)
+		return strings.Join(fragments, "\n"), nil
+	}
+
 	value, timestamp, err := parseLWWPayload(tuple.Payload)
 	if err != nil {
 		return "", err
@@ -565,6 +580,50 @@ func (c *KVSClient) PutLwwSet(key string, values []string) error {
 
 	_, err = validateResponse(response, "PUT_LWW_SET")
 	return err
+}
+
+// PutUnionScalar appends a value fragment to the union-scalar key.
+// Each PUT adds to the accumulated set of fragments; GET returns them
+// concatenated in sorted order.
+func (c *KVSClient) PutUnionScalar(key, value string) error {
+	payload, err := buildSetPayload([]string{value})
+	if err != nil {
+		return &KVSError{Message: fmt.Sprintf("PUT_UNION_SCALAR: %v", err)}
+	}
+
+	response, err := c.sendDataRequest(key, kvspb.RequestType_PUT, kvspb.LatticeType_UNION_SCALAR, payload)
+	if err != nil {
+		return err
+	}
+
+	_, err = validateResponse(response, "PUT_UNION_SCALAR")
+	return err
+}
+
+// GetUnionScalar retrieves a union-scalar key. Returns the accumulated
+// fragments concatenated in sorted order.
+func (c *KVSClient) GetUnionScalar(key string) (string, error) {
+	response, err := c.sendDataRequest(key, kvspb.RequestType_GET, kvspb.LatticeType_NONE, nil)
+	if err != nil {
+		return "", err
+	}
+
+	tuple, err := validateResponse(response, "GET_UNION_SCALAR")
+	if err != nil {
+		return "", err
+	}
+
+	var sv kvspb.SetValue
+	if err := proto.Unmarshal(tuple.Payload, &sv); err != nil {
+		return "", &KVSError{Message: fmt.Sprintf("GET_UNION_SCALAR: %v", err)}
+	}
+
+	fragments := make([]string, len(sv.Values))
+	for i, v := range sv.Values {
+		fragments[i] = string(v)
+	}
+	sort.Strings(fragments)
+	return strings.Join(fragments, "\n"), nil
 }
 
 // CausalValue holds the result of a causal GET.
