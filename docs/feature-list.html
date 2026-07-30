@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-06f449a7.js";
+            window.path_to_searchindex_js = "../searchindex-20a2be6e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-65030116.js"></script>
@@ -193,6 +193,7 @@ mocks.</p>
 <tr><td>PUT set {key} {vals…}</td><td>Store a set (union merge)</td><td>Yes</td></tr>
 <tr><td>PUT ordered_set {key} …</td><td>Store an ordered set</td><td>Yes</td></tr>
 <tr><td>PUT lww_set {key} {vals…}</td><td>Store a set (LWW, replaces entire set on write)</td><td>Yes</td></tr>
+<tr><td>PUT lww_ordered_set {key} …</td><td>Store an ordered set (LWW, replaces on write)</td><td>Yes</td></tr>
 <tr><td>PUT union {key} {value}</td><td>Append a value (accumulates via set union)</td><td>Yes</td></tr>
 <tr><td>PUT priority {key} {p} {v}</td><td>Store with priority (lowest wins)</td><td>Yes</td></tr>
 <tr><td>PUT causal {key} {value}</td><td>Store with multi-key causal consistency</td><td>Yes</td></tr>
