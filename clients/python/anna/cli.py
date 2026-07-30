@@ -141,15 +141,28 @@ def execute_command(client, config_path, line):
                 if not result.get(parts[key_idx], False):
                     print("Failure!")
             elif type_name == "lww_set":
-                # LWW_SET: wrap a SetValue inside an LWWPairLattice.
-                # The inner value is the serialized SetValue proto bytes.
-                from .kvs_pb2 import SetValue as SetValuePb
+                # LWW_SET: wrap a SetValue inside an LWWValue, then send
+                # with lattice_type = LWW_SET. We can't use client.put()
+                # because LWWPairLattice.serialize() returns LWW, not LWW_SET.
+                from .kvs_pb2 import SetValue as SetValuePb, LWW_SET as LWW_SET_TYPE
+                from .kvs_pb2 import LWWValue as LWWValuePb
                 sv = SetValuePb()
                 for v in parts[3:]:
                     sv.values.append(v.encode("utf-8"))
                 import time
                 ts = time.time_ns()
-                val = LWWPairLattice(ts, sv.SerializeToString())
+                lww = LWWValuePb()
+                lww.timestamp = ts
+                lww.value = sv.SerializeToString()
+                # Use put_all with a custom lattice that returns LWW_SET.
+                # Create a thin wrapper that serializes correctly.
+                class _LwwSetLattice(LWWPairLattice):
+                    def serialize(self):
+                        res = LWWValuePb()
+                        res.timestamp = self.ts
+                        res.value = self.val
+                        return res, LWW_SET_TYPE
+                val = _LwwSetLattice(ts, sv.SerializeToString())
                 result = client.put(parts[key_idx], val)
                 if not result.get(parts[key_idx], False):
                     print("Failure!")

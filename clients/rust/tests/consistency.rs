@@ -111,6 +111,50 @@ async fn test_consistency(client: &mut KVSClient, prefix: &str) {
         assert!(!vc_a2.is_empty());
         assert!(!val_a2.is_empty());
     }
+    // === LWW_SET: last-writer-wins set ===
+    {
+        use annalib::value::Value;
+        let lww_set_key = format!("{prefix}_lww_set");
+        let val1 = Value::LwwSet(vec!["a".into(), "b".into(), "c".into()]);
+        client
+            .put_value(&lww_set_key, &val1)
+            .await
+            .expect("PUT LWW_SET first failed");
+
+        let got = client
+            .get_value(&lww_set_key)
+            .await
+            .expect("GET LWW_SET first failed");
+        match &got {
+            Value::LwwSet(vals) => {
+                let mut sorted = vals.clone();
+                sorted.sort();
+                assert_eq!(sorted, vec!["a", "b", "c"]);
+            }
+            other => panic!("Expected LwwSet, got {:?}", other.type_name()),
+        }
+
+        // Second PUT should replace the entire set (LWW semantics).
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let val2 = Value::LwwSet(vec!["x".into(), "y".into()]);
+        client
+            .put_value(&lww_set_key, &val2)
+            .await
+            .expect("PUT LWW_SET second failed");
+
+        let got2 = client
+            .get_value(&lww_set_key)
+            .await
+            .expect("GET LWW_SET second failed");
+        match &got2 {
+            Value::LwwSet(vals) => {
+                let mut sorted = vals.clone();
+                sorted.sort();
+                assert_eq!(sorted, vec!["x", "y"], "LWW_SET: latest set should replace");
+            }
+            other => panic!("Expected LwwSet, got {:?}", other.type_name()),
+        }
+    }
 }
 
 #[tokio::test]
