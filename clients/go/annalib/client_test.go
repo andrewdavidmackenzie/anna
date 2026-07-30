@@ -551,6 +551,27 @@ func TestPutSetWithMock(t *testing.T) {
 	}
 }
 
+func TestPutLwwSetWithMock(t *testing.T) {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "ls", Error: kvspb.AnnaError_NO_ERROR}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "ls", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	err := client.PutLwwSet("ls", []string{"a", "b", "c"})
+	if err != nil {
+		t.Fatalf("PutLwwSet failed: %v", err)
+	}
+}
+
 func TestGetErrorResponse(t *testing.T) {
 	response := &kvspb.KeyResponse{
 		Tuples: []*kvspb.KeyTuple{{Key: "k", Error: kvspb.AnnaError_KEY_DNE}},
