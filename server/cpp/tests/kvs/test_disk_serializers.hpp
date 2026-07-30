@@ -508,3 +508,181 @@ TEST_F(DiskSerializerTest, DiskRootWithoutTrailingSlash) {
   pv.SerializeToString(&ppayload);
   EXPECT_GT(pri_ser.put("pri_slash_key", ppayload), 0);
 }
+
+// --- LWW_SET serializer tests ---
+
+TEST(MemoryLWWSetSerializerTest, PutGetRoundtrip) {
+  MemoryLWWKVS kvs;
+  MemoryLWWSetSerializer serializer(&kvs);
+
+  // Build a SetValue payload wrapped in LWWValue.
+  kvs::SetValue sv;
+  sv.add_values("alpha");
+  sv.add_values("beta");
+  string set_payload;
+  sv.SerializeToString(&set_payload);
+
+  kvs::LWWValue lww;
+  lww.set_timestamp(100);
+  lww.set_value(set_payload);
+  string payload;
+  lww.SerializeToString(&payload);
+
+  int size = serializer.put("lww_set_key", payload);
+  EXPECT_GT(size, 0);
+
+  kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
+  string result = serializer.get("lww_set_key", error);
+  EXPECT_EQ(error, kvs::AnnaError::NO_ERROR);
+
+  // Decode outer LWWValue, then inner SetValue.
+  kvs::LWWValue decoded_lww;
+  decoded_lww.ParseFromString(result);
+  EXPECT_EQ(decoded_lww.timestamp(), 100u);
+
+  kvs::SetValue decoded_sv;
+  decoded_sv.ParseFromString(decoded_lww.value());
+  EXPECT_EQ(decoded_sv.values_size(), 2);
+  set<string> values(decoded_sv.values().begin(), decoded_sv.values().end());
+  EXPECT_TRUE(values.count("alpha"));
+  EXPECT_TRUE(values.count("beta"));
+}
+
+TEST(MemoryLWWSetSerializerTest, GetMissingKeyReturnsKeyDne) {
+  MemoryLWWKVS kvs;
+  MemoryLWWSetSerializer serializer(&kvs);
+
+  kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
+  serializer.get("nonexistent", error);
+  EXPECT_EQ(error, kvs::AnnaError::KEY_DNE);
+}
+
+TEST(MemoryLWWSetSerializerTest, LWWReplacesEntireSet) {
+  MemoryLWWKVS kvs;
+  MemoryLWWSetSerializer serializer(&kvs);
+
+  // First PUT: {a, b}
+  kvs::SetValue sv1;
+  sv1.add_values("a");
+  sv1.add_values("b");
+  string sp1;
+  sv1.SerializeToString(&sp1);
+  kvs::LWWValue lww1;
+  lww1.set_timestamp(100);
+  lww1.set_value(sp1);
+  string p1;
+  lww1.SerializeToString(&p1);
+  serializer.put("replace_key", p1);
+
+  // Second PUT with higher timestamp: {x, y, z}
+  kvs::SetValue sv2;
+  sv2.add_values("x");
+  sv2.add_values("y");
+  sv2.add_values("z");
+  string sp2;
+  sv2.SerializeToString(&sp2);
+  kvs::LWWValue lww2;
+  lww2.set_timestamp(200);
+  lww2.set_value(sp2);
+  string p2;
+  lww2.SerializeToString(&p2);
+  serializer.put("replace_key", p2);
+
+  // GET should return the second set (LWW replacement).
+  kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
+  string result = serializer.get("replace_key", error);
+  EXPECT_EQ(error, kvs::AnnaError::NO_ERROR);
+
+  kvs::LWWValue decoded;
+  decoded.ParseFromString(result);
+  EXPECT_EQ(decoded.timestamp(), 200u);
+
+  kvs::SetValue decoded_sv;
+  decoded_sv.ParseFromString(decoded.value());
+  EXPECT_EQ(decoded_sv.values_size(), 3);
+  set<string> values(decoded_sv.values().begin(), decoded_sv.values().end());
+  EXPECT_TRUE(values.count("x"));
+  EXPECT_TRUE(values.count("y"));
+  EXPECT_TRUE(values.count("z"));
+  EXPECT_FALSE(values.count("a"));
+}
+
+TEST_F(DiskSerializerTest, LWWSetPutGet) {
+  DiskLWWSetSerializer serializer(tid_, disk_root_);
+
+  kvs::SetValue sv;
+  sv.add_values("disk_val1");
+  sv.add_values("disk_val2");
+  string set_payload;
+  sv.SerializeToString(&set_payload);
+
+  kvs::LWWValue lww;
+  lww.set_timestamp(42);
+  lww.set_value(set_payload);
+  string payload;
+  lww.SerializeToString(&payload);
+
+  int size = serializer.put("disk_lww_set", payload);
+  EXPECT_GT(size, 0);
+
+  kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
+  string result = serializer.get("disk_lww_set", error);
+  EXPECT_EQ(error, kvs::AnnaError::NO_ERROR);
+
+  kvs::LWWValue decoded;
+  decoded.ParseFromString(result);
+  EXPECT_EQ(decoded.timestamp(), 42u);
+
+  kvs::SetValue decoded_sv;
+  decoded_sv.ParseFromString(decoded.value());
+  EXPECT_EQ(decoded_sv.values_size(), 2);
+}
+
+TEST_F(DiskSerializerTest, LWWSetGetMissing) {
+  DiskLWWSetSerializer serializer(tid_, disk_root_);
+
+  kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
+  serializer.get("no_such_key", error);
+  EXPECT_EQ(error, kvs::AnnaError::KEY_DNE);
+}
+
+TEST_F(DiskSerializerTest, LWWSetReplaces) {
+  DiskLWWSetSerializer serializer(tid_, disk_root_);
+
+  // First PUT
+  kvs::SetValue sv1;
+  sv1.add_values("old");
+  string sp1;
+  sv1.SerializeToString(&sp1);
+  kvs::LWWValue lww1;
+  lww1.set_timestamp(10);
+  lww1.set_value(sp1);
+  string p1;
+  lww1.SerializeToString(&p1);
+  serializer.put("disk_replace", p1);
+
+  // Second PUT with higher timestamp
+  kvs::SetValue sv2;
+  sv2.add_values("new1");
+  sv2.add_values("new2");
+  string sp2;
+  sv2.SerializeToString(&sp2);
+  kvs::LWWValue lww2;
+  lww2.set_timestamp(20);
+  lww2.set_value(sp2);
+  string p2;
+  lww2.SerializeToString(&p2);
+  serializer.put("disk_replace", p2);
+
+  kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
+  string result = serializer.get("disk_replace", error);
+  EXPECT_EQ(error, kvs::AnnaError::NO_ERROR);
+
+  kvs::LWWValue decoded;
+  decoded.ParseFromString(result);
+  EXPECT_EQ(decoded.timestamp(), 20u);
+
+  kvs::SetValue decoded_sv;
+  decoded_sv.ParseFromString(decoded.value());
+  EXPECT_EQ(decoded_sv.values_size(), 2);
+}

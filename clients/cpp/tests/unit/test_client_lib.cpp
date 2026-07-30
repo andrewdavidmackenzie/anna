@@ -1251,3 +1251,59 @@ TEST(BenchTest, MixedWorkloadRuns) {
   EXPECT_EQ(result.workload, "MIXED");
   EXPECT_GT(result.total_ops, 0u);
 }
+
+// --- LWW_SET tests ---
+
+// Helper to create an LWW_SET response for mock client.
+kvs::KeyResponse make_lww_set_response(const string& response_id,
+                                        const set<string>& values) {
+  kvs::SetValue sv;
+  for (const auto& v : values) {
+    sv.add_values(v);
+  }
+  string set_payload;
+  sv.SerializeToString(&set_payload);
+
+  kvs::LWWValue lww;
+  lww.set_timestamp(100);
+  lww.set_value(set_payload);
+  string payload;
+  lww.SerializeToString(&payload);
+
+  kvs::KeyResponse response;
+  response.set_response_id(response_id);
+  kvs::KeyTuple* tuple = response.add_tuples();
+  tuple->set_lattice_type(kvs::LatticeType::LWW_SET);
+  tuple->set_payload(payload);
+
+  return response;
+}
+
+TEST(ClientLibTest, PutLwwSetSendsCorrectPayload) {
+  MockKvsClient client;
+  client.responses_.push_back(make_lww_set_response("1", {}));
+
+  annalib::PutResult result =
+      annalib::put_lww_set(&client, "my_lww_set", {"a", "b", "c"});
+
+  ASSERT_EQ(client.keys_put_.size(), 1u);
+  EXPECT_EQ(client.keys_put_[0], "my_lww_set");
+  EXPECT_TRUE(result.succeeded());
+
+  // Verify the lattice type was LWW_SET.
+  EXPECT_EQ(client.lattice_types_[0], kvs::LatticeType::LWW_SET);
+}
+
+TEST(ClientLibTest, GetAnyDecodesLwwSet) {
+  MockKvsClient client;
+  client.responses_.push_back(make_lww_set_response("1", {"x", "y", "z"}));
+
+  string result = annalib::get_any(&client, "any_lww_set_key");
+
+  // Should contain sorted values in { ... } format.
+  EXPECT_TRUE(result.find("{ ") != string::npos);
+  EXPECT_TRUE(result.find("x") != string::npos);
+  EXPECT_TRUE(result.find("y") != string::npos);
+  EXPECT_TRUE(result.find("z") != string::npos);
+  EXPECT_TRUE(result.find("}") != string::npos);
+}
