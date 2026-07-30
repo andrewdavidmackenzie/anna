@@ -29,6 +29,7 @@ from .lattices import (
     OrderedSetLattice,
     PriorityLattice,
     SetLattice,
+    UnionScalarLattice,
     SingleKeyCausalLattice,
     VectorClock
 )
@@ -200,16 +201,14 @@ class BaseAnnaClient:
             return PriorityLattice(val.priority, val.value)
         elif tup.lattice_type == UNION_SCALAR:
             # UNION_SCALAR: stored as SetValue (same wire format as SET).
-            # Return as LWWPairLattice with sorted fragments concatenated,
-            # so the CLI displays it as text rather than as { ... }.
+            # Return UnionScalarLattice which preserves the type tag and
+            # reveals as concatenated sorted text.
             sv = SetValue()
             sv.ParseFromString(tup.payload)
-            fragments = sorted(
-                v.decode("utf-8", errors="replace") if isinstance(v, bytes) else str(v)
-                for v in sv.values
-            )
-            concatenated = "\n".join(fragments)
-            return LWWPairLattice(0, concatenated.encode("utf-8"))
+            result = set()
+            for v in sv.values:
+                result.add(v)
+            return UnionScalarLattice(result)
         elif tup.lattice_type == LWW_SET:
             # Deserialize LWW-set: unwrap LwwValue, then parse inner SetValue.
             lww = LWWValue()

@@ -606,6 +606,39 @@ func TestPutLwwSetWithMock(t *testing.T) {
 	}
 }
 
+func TestPutUnionScalarWithMock(t *testing.T) {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "uk", Error: kvspb.AnnaError_NO_ERROR}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "uk", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	err := client.PutUnionScalar("uk", "fragment1")
+	if err != nil {
+		t.Fatalf("PutUnionScalar failed: %v", err)
+	}
+
+	// Validate sent request
+	if len(tp.sentMessages) < 2 {
+		t.Fatalf("Expected at least 2 sent messages, got %d", len(tp.sentMessages))
+	}
+	var req kvspb.KeyRequest
+	if err := proto.Unmarshal(tp.sentMessages[1].data, &req); err != nil {
+		t.Fatalf("Failed to unmarshal request: %v", err)
+	}
+	if req.Tuples[0].LatticeType != kvspb.LatticeType_UNION_SCALAR {
+		t.Errorf("Expected UNION_SCALAR, got %v", req.Tuples[0].LatticeType)
+	}
+}
+
 func TestGetErrorResponse(t *testing.T) {
 	response := &kvspb.KeyResponse{
 		Tuples: []*kvspb.KeyTuple{{Key: "k", Error: kvspb.AnnaError_KEY_DNE}},
