@@ -1006,6 +1006,22 @@ class TestUnionScalarType:
         assert "line1" in out
         assert "line2" in out
 
+    def test_union_scalar_lattice_serialize(self):
+        """UnionScalarLattice.serialize() should return UNION_SCALAR type."""
+        from anna.lattices import UnionScalarLattice
+        from anna.kvs_pb2 import UNION_SCALAR
+        l = UnionScalarLattice({b"x", b"y"})
+        proto, lt = l.serialize()
+        assert lt == UNION_SCALAR
+        assert len(proto.values) == 2
+
+    def test_union_scalar_lattice_reveal_sorted(self):
+        """UnionScalarLattice.reveal() returns sorted concatenation."""
+        from anna.lattices import UnionScalarLattice
+        l = UnionScalarLattice({b"z_last", b"a_first"})
+        result = l.reveal()
+        assert result == b"a_first\nz_last"
+
 
 class TestLwwSetType:
     """Tests for the LWW_SET lattice type support."""

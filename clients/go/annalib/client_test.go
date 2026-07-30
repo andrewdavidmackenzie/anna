@@ -606,6 +606,74 @@ func TestPutLwwSetWithMock(t *testing.T) {
 	}
 }
 
+func TestGetUnionScalarWithMock(t *testing.T) {
+	// Build a UNION_SCALAR response (SetValue payload with UNION_SCALAR type).
+	sv := &kvspb.SetValue{Values: [][]byte{[]byte("beta"), []byte("alpha")}}
+	svBytes, _ := proto.Marshal(sv)
+
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{
+			Key:         "uget",
+			Error:       kvspb.AnnaError_NO_ERROR,
+			LatticeType: kvspb.LatticeType_UNION_SCALAR,
+			Payload:     svBytes,
+		}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "uget", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	val, err := client.GetUnionScalar("uget")
+	if err != nil {
+		t.Fatalf("GetUnionScalar failed: %v", err)
+	}
+	// Should be sorted: alpha\nbeta
+	if val != "alpha\nbeta" {
+		t.Errorf("Expected 'alpha\\nbeta', got '%s'", val)
+	}
+}
+
+func TestGetAutoDetectsUnionScalar(t *testing.T) {
+	// Build a UNION_SCALAR response — Get() should auto-detect.
+	sv := &kvspb.SetValue{Values: [][]byte{[]byte("z"), []byte("a")}}
+	svBytes, _ := proto.Marshal(sv)
+
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{
+			Key:         "uauto",
+			Error:       kvspb.AnnaError_NO_ERROR,
+			LatticeType: kvspb.LatticeType_UNION_SCALAR,
+			Payload:     svBytes,
+		}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "uauto", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	val, err := client.Get("uauto")
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	// Auto-detect should return sorted fragments
+	if val != "a\nz" {
+		t.Errorf("Expected 'a\\nz', got '%s'", val)
+	}
+}
+
 func TestPutUnionScalarWithMock(t *testing.T) {
 	response := &kvspb.KeyResponse{
 		Tuples: []*kvspb.KeyTuple{{Key: "uk", Error: kvspb.AnnaError_NO_ERROR}},
