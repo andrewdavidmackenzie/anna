@@ -201,7 +201,9 @@ class BaseAnnaClient:
             return PriorityLattice(val.priority, val.value)
         elif tup.lattice_type == LWW_ORDERED_SET:
             # LWW_ORDERED_SET: unwrap LwwValue, parse inner SetValue,
-            # return as OrderedSetLattice (preserves insertion order).
+            # return as OrderedSetLattice for display. Note: this loses
+            # the LWW timestamp; re-serializing would emit ORDERED_SET
+            # type. Use only for read-display, not round-trip.
             lww = LWWValue()
             lww.ParseFromString(tup.payload)
             sv = SetValue()

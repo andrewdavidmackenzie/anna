@@ -674,6 +674,76 @@ func TestGetAutoDetectsUnionScalar(t *testing.T) {
 	}
 }
 
+func TestPutLwwOrderedSetWithMock(t *testing.T) {
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "los", Error: kvspb.AnnaError_NO_ERROR}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "los", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	err := client.PutLwwOrderedSet("los", []string{"c", "b", "a"})
+	if err != nil {
+		t.Fatalf("PutLwwOrderedSet failed: %v", err)
+	}
+
+	if len(tp.sentMessages) < 2 {
+		t.Fatalf("Expected at least 2 sent messages, got %d", len(tp.sentMessages))
+	}
+	var req kvspb.KeyRequest
+	if err := proto.Unmarshal(tp.sentMessages[1].data, &req); err != nil {
+		t.Fatalf("Failed to unmarshal request: %v", err)
+	}
+	if req.Tuples[0].LatticeType != kvspb.LatticeType_LWW_ORDERED_SET {
+		t.Errorf("Expected LWW_ORDERED_SET, got %v", req.Tuples[0].LatticeType)
+	}
+}
+
+func TestGetAutoDetectsLwwOrderedSet(t *testing.T) {
+	sv := &kvspb.SetValue{Values: [][]byte{[]byte("c"), []byte("a"), []byte("b")}}
+	svBytes, _ := proto.Marshal(sv)
+	lww := &kvspb.LWWValue{Timestamp: 500, Value: svBytes}
+	lwwBytes, _ := proto.Marshal(lww)
+
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{
+			Key:         "losget",
+			Error:       kvspb.AnnaError_NO_ERROR,
+			LatticeType: kvspb.LatticeType_LWW_ORDERED_SET,
+			Payload:     lwwBytes,
+		}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "losget", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	val, err := client.Get("losget")
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	if val != "[ a b c ]" {
+		t.Errorf("Expected '[ a b c ]', got '%s'", val)
+	}
+	// Verify lastSeenTs was updated
+	if client.lastSeenTs < 500 {
+		t.Errorf("lastSeenTs should be >= 500, got %d", client.lastSeenTs)
+	}
+}
+
 func TestPutUnionScalarWithMock(t *testing.T) {
 	response := &kvspb.KeyResponse{
 		Tuples: []*kvspb.KeyTuple{{Key: "uk", Error: kvspb.AnnaError_NO_ERROR}},

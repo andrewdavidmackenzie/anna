@@ -454,6 +454,10 @@ func (c *KVSClient) Get(key string) (string, error) {
 		if err := proto.Unmarshal(tuple.Payload, &lww); err != nil {
 			return "", &KVSError{Message: fmt.Sprintf("GET: failed to decode LWW_ORDERED_SET: %v", err)}
 		}
+		// Advance the LWW timestamp high-water mark.
+		if lww.Timestamp > c.lastSeenTs {
+			c.lastSeenTs = lww.Timestamp
+		}
 		var sv kvspb.SetValue
 		if err := proto.Unmarshal(lww.Value, &sv); err != nil {
 			return "", &KVSError{Message: fmt.Sprintf("GET: failed to decode LWW_ORDERED_SET inner: %v", err)}

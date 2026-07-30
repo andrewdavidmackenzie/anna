@@ -238,6 +238,9 @@ string get_any(KvsClientInterface* client, const string& key) {
       // LWW_SET: unwrap LwwValue, then parse inner SetValue.
       kvs::LWWValue lww;
       lww.ParseFromString(payload);
+      if (lww.timestamp() > last_seen_ts) {
+        last_seen_ts = lww.timestamp();
+      }
       kvs::SetValue sv;
       sv.ParseFromString(lww.value());
       out << "{ ";
@@ -253,6 +256,9 @@ string get_any(KvsClientInterface* client, const string& key) {
       // Same as LWW_SET but display as [ ... ] in sorted order.
       kvs::LWWValue lww;
       lww.ParseFromString(payload);
+      if (lww.timestamp() > last_seen_ts) {
+        last_seen_ts = lww.timestamp();
+      }
       kvs::SetValue sv;
       sv.ParseFromString(lww.value());
       vector<string> vals(sv.values().begin(), sv.values().end());
