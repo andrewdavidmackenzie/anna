@@ -222,6 +222,44 @@ public:
   }
 };
 
+// LWW-Set: a set of values where the entire set is replaced on each write
+// (timestamp-based), rather than merged via union. Internally stores
+// LWWPairLattice<string> where the string is a serialized SetValue protobuf.
+class MemoryLWWSetSerializer : public Serializer {
+  MemoryLWWKVS *kvs_;
+
+public:
+  MemoryLWWSetSerializer(MemoryLWWKVS *kvs) : kvs_(kvs) {}
+
+  string get(const Key &key, kvs::AnnaError &error) {
+    auto val = kvs_->get(key, error);
+
+    if (error != kvs::AnnaError::NO_ERROR) {
+      // Key not in the KVS — genuine KEY_DNE.
+      return "";
+    }
+
+    // The inner value is a serialized SetValue. Check if it's empty.
+    if (val.reveal().value.empty()) {
+      error = kvs::AnnaError::KEY_DNE;
+      return "";
+    }
+
+    return serialize(val);
+  }
+
+  int put(const Key &key, const string &serialized) {
+    LWWPairLattice<string> val = deserialize_lww(serialized);
+    kvs_->put(key, val);
+    return static_cast<int>(kvs_->size(key));
+  }
+
+  bool remove(const Key &key) {
+    kvs_->remove(key);
+    return true;
+  }
+};
+
 // Common disk I/O helpers shared by all disk serializers.
 // Each serializer stores protobuf values as files at:
 //   <disk_root>/disk_<tid>/<key>
@@ -297,6 +335,61 @@ public:
         error = kvs::AnnaError::KEY_DNE;
       } else {
         value.SerializeToString(&res);
+      }
+    }
+    return res;
+  }
+
+  int put(const Key &key, const string &serialized) {
+    kvs::LWWValue input_value;
+    input_value.ParseFromString(serialized);
+
+    string path = disk_fname(disk_root_, tid_, key);
+    kvs::LWWValue original_value;
+    kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
+
+    if (!disk_read(path, original_value, error)) {
+      return disk_write(path, input_value);
+    } else if (input_value.timestamp() >= original_value.timestamp()) {
+      return disk_write(path, input_value);
+    } else {
+      std::fstream input(path, std::ios::in | std::ios::binary);
+      input.seekg(0, std::ios::end);
+      return static_cast<int>(input.tellg());
+    }
+  }
+
+  bool remove(const Key &key) {
+    return disk_remove(disk_fname(disk_root_, tid_, key));
+  }
+};
+
+// LWW-Set on disk: same merge as DiskLWWSerializer (timestamp comparison),
+// but the KEY_DNE check parses the inner SetValue.
+class DiskLWWSetSerializer : public Serializer {
+  unsigned tid_;
+  string disk_root_;
+
+public:
+  DiskLWWSetSerializer(unsigned &tid, string disk_root) : tid_(tid) {
+    disk_root_ = disk_root;
+    if (disk_root_.back() != '/') disk_root_ += "/";
+  }
+
+  string get(const Key &key, kvs::AnnaError &error) {
+    string res;
+    kvs::LWWValue value;
+    if (disk_read(disk_fname(disk_root_, tid_, key), value, error)) {
+      if (value.value() == "") {
+        error = kvs::AnnaError::KEY_DNE;
+      } else {
+        kvs::SetValue sv;
+        sv.ParseFromString(value.value());
+        if (sv.values_size() == 0) {
+          error = kvs::AnnaError::KEY_DNE;
+        } else {
+          value.SerializeToString(&res);
+        }
       }
     }
     return res;

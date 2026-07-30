@@ -234,6 +234,21 @@ string get_any(KvsClientInterface* client, const string& key) {
       out << "]";
       break;
     }
+    case kvs::LatticeType::LWW_SET: {
+      // LWW_SET: unwrap LwwValue, then parse inner SetValue.
+      kvs::LWWValue lww;
+      lww.ParseFromString(payload);
+      kvs::SetValue sv;
+      sv.ParseFromString(lww.value());
+      out << "{ ";
+      // Sort for deterministic display (same as union SET).
+      set<string> sorted(sv.values().begin(), sv.values().end());
+      for (const auto& v : sorted) {
+        out << v << " ";
+      }
+      out << "}";
+      break;
+    }
     case kvs::LatticeType::PRIORITY: {
       kvs::PriorityValue pv;
       pv.ParseFromString(payload);
@@ -364,6 +379,29 @@ PutResult put_set(KvsClientInterface* client, const string& key,
                   const set<string>& values) {
   string rid = client->put_async(key, make_set_payload(values),
                                  kvs::LatticeType::SET);
+
+  auto responses = receive_with_deadline(client);
+
+  return to_put_result(responses[0], rid);
+}
+
+PutResult put_lww_set(KvsClientInterface* client, const string& key,
+                      const set<string>& values) {
+  uint64_t ts = generate_timestamp(0);
+  if (ts <= last_seen_ts) {
+    ts = last_seen_ts + 1;
+  }
+  last_seen_ts = ts;
+
+  // Wrap the SetValue inside an LwwValue.
+  kvs::LWWValue lww;
+  lww.set_timestamp(ts);
+  string set_payload = make_set_payload(values);
+  lww.set_value(set_payload);
+  string payload;
+  lww.SerializeToString(&payload);
+
+  string rid = client->put_async(key, payload, kvs::LatticeType::LWW_SET);
 
   auto responses = receive_with_deadline(client);
 

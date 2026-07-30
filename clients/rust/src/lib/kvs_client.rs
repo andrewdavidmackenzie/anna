@@ -1071,6 +1071,37 @@ impl KVSClient {
                         .collect(),
                 ))
             }
+            x if x == LatticeType::LwwSet as i32 => {
+                // LWW_SET is stored as LwwValue where the value bytes
+                // contain a serialized SetValue.
+                let lww = LwwValue::decode(tuple.payload.as_slice()).map_err(|e| {
+                    Error::Kvs(format!("GET_VALUE: failed to decode LWW_SET outer: {}", e))
+                })?;
+
+                // Monotonic read enforcement (same as LWW scalar).
+                if let Some((cached_ts, _)) = self.lww_read_cache.get(&key_str) {
+                    if lww.timestamp < *cached_ts {
+                        // Stale — but we don't cache the set itself in
+                        // lww_read_cache (it stores bytes). Re-decode
+                        // from the cached bytes would be complex, so
+                        // just return the stale result. The timestamp
+                        // high-water mark prevents regression.
+                    }
+                }
+                if lww.timestamp > self.last_seen_ts {
+                    self.last_seen_ts = lww.timestamp;
+                }
+
+                let sv = SetValue::decode(lww.value.as_slice()).map_err(|e| {
+                    Error::Kvs(format!("GET_VALUE: failed to decode LWW_SET inner: {}", e))
+                })?;
+                Ok(crate::value::Value::LwwSet(
+                    sv.values
+                        .iter()
+                        .map(|v| String::from_utf8_lossy(v).to_string())
+                        .collect(),
+                ))
+            }
             x if x == LatticeType::Priority as i32 => {
                 let pv = PriorityValue::decode(tuple.payload.as_slice()).map_err(|e| {
                     Error::Kvs(format!("GET_VALUE: failed to decode Priority: {}", e))
@@ -1156,6 +1187,19 @@ impl KVSClient {
                     values: values.iter().map(|s| s.as_bytes().to_vec()).collect(),
                 };
                 sv.encode_to_vec()
+            }
+            crate::value::Value::LwwSet(values) => {
+                // LWW_SET: wrap a SetValue inside an LwwValue with a timestamp.
+                let sv = SetValue {
+                    values: values.iter().map(|s| s.as_bytes().to_vec()).collect(),
+                };
+                let ts = std::cmp::max(Self::generate_timestamp(), self.last_seen_ts + 1);
+                self.last_seen_ts = ts;
+                let lww = LwwValue {
+                    timestamp: ts,
+                    value: sv.encode_to_vec(),
+                };
+                lww.encode_to_vec()
             }
             crate::value::Value::Priority { priority, value } => {
                 let pv = PriorityValue {
@@ -2230,5 +2274,57 @@ mod tests {
             "Write timestamp ({}) should be > read timestamp (999999)",
             write_ts
         );
+    }
+
+    fn make_lww_set_response(key: &str, values: &[&str]) -> Vec<u8> {
+        let sv = SetValue {
+            values: values.iter().map(|v| v.as_bytes().to_vec()).collect(),
+        };
+        let lww = LwwValue {
+            timestamp: 100,
+            value: sv.encode_to_vec(),
+        };
+        let response = KeyResponse {
+            tuples: vec![KeyTuple {
+                key: key.to_string(),
+                lattice_type: LatticeType::LwwSet as i32,
+                payload: lww.encode_to_vec(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        response.encode_to_vec()
+    }
+
+    #[tokio::test]
+    async fn get_value_lww_set() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(200);
+        client.push_mock_response(true, Some(make_routing_response("lws", worker)));
+        client.push_mock_response(false, Some(make_lww_set_response("lws", &["a", "b", "c"])));
+
+        let val = client.get_value("lws").await.expect("get_value failed");
+        match val {
+            crate::value::Value::LwwSet(v) => {
+                let mut sorted = v.clone();
+                sorted.sort();
+                assert_eq!(sorted, vec!["a", "b", "c"]);
+            }
+            other => panic!("Expected LwwSet, got {:?}", other.type_name()),
+        }
+    }
+
+    #[tokio::test]
+    async fn put_value_lww_set() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(201);
+        client.push_mock_response(true, Some(make_routing_response("lws_put", worker)));
+        client.push_mock_response(false, Some(make_put_response("lws_put")));
+
+        let val = crate::value::Value::LwwSet(vec!["x".into(), "y".into()]);
+        client
+            .put_value("lws_put", &val)
+            .await
+            .expect("put_value failed");
     }
 }

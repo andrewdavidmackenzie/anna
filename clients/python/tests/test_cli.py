@@ -952,3 +952,60 @@ class TestLegacyPutAliases:
         client.put_priority.return_value = {"mykey": True}
         execute_command(client, None, "PUT_PRIORITY mykey 1.5 hello")
         client.put_priority.assert_called_once()
+
+
+class TestLwwSetType:
+    """Tests for the LWW_SET lattice type support."""
+
+    def test_put_lww_set_unified(self):
+        """PUT lww_set should call client.put with an LwwSetLattice."""
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.put.return_value = {"mykey": True}
+        execute_command(client, None, "PUT lww_set mykey a b c")
+        client.put.assert_called_once()
+        # Check that the lattice has the correct type tag
+        args = client.put.call_args
+        lattice = args[0][1]
+        _, lt = lattice.serialize()
+        from anna.kvs_pb2 import LWW_SET
+        assert lt == LWW_SET
+
+    def test_lww_set_deserialize(self):
+        """_deserialize should decode LWW_SET responses as SetLattice."""
+        from anna.base_client import BaseAnnaClient
+        from anna.kvs_pb2 import LWWValue, SetValue, KeyTuple, LWW_SET
+        from anna.lattices import SetLattice
+
+        # Build a mock tuple with LWW_SET lattice type
+        sv = SetValue()
+        sv.values.append(b"x")
+        sv.values.append(b"y")
+        lww = LWWValue()
+        lww.timestamp = 12345
+        lww.value = sv.SerializeToString()
+
+        tup = KeyTuple()
+        tup.lattice_type = LWW_SET
+        tup.payload = lww.SerializeToString()
+
+        result = BaseAnnaClient._deserialize(tup)
+        assert isinstance(result, SetLattice)
+        revealed = result.reveal()
+        assert b"x" in revealed
+        assert b"y" in revealed
+
+    def test_get_lww_set_formats_as_set(self, capsys):
+        """Unified GET on an LWW_SET key should format as { ... }."""
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        from anna.lattices import SetLattice
+        client = MagicMock()
+        client.get.return_value = {"mykey": SetLattice({b"p", b"q", b"r"})}
+        execute_command(client, None, "GET mykey")
+        out = capsys.readouterr().out
+        assert "{ " in out
+        assert "p" in out
+        assert "q" in out
+        assert "r" in out

@@ -51,6 +51,10 @@ enum LatticeType {
 
   // Priority lattice
   PRIORITY = 6;
+
+  // Last-writer-wins set: a set of values where the entire set is replaced
+  // on each write (timestamp-based), rather than merged via union.
+  LWW_SET = 7;
 }
 
 enum AnnaError {

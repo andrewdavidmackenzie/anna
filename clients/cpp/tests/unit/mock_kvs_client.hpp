@@ -30,6 +30,7 @@ class MockKvsClient : public KvsClientInterface {
   string put_async(const Key& key, const string& payload,
                    kvs::LatticeType lattice_type) {
     keys_put_.push_back(key);
+    lattice_types_.push_back(lattice_type);
     return get_request_id();
   }
 
@@ -51,6 +52,7 @@ class MockKvsClient : public KvsClientInterface {
   void clear() {
     keys_put_.clear();
     keys_get_.clear();
+    lattice_types_.clear();
     responses_.clear();
   }
 
@@ -58,6 +60,8 @@ class MockKvsClient : public KvsClientInterface {
   vector<Key> keys_put_;
   // keys passed to get_async(), in call order
   vector<Key> keys_get_;
+  // lattice types passed to put_async(), in call order
+  vector<kvs::LatticeType> lattice_types_;
   // responses to return from the next call to receive_async()
   vector<kvs::KeyResponse> responses_;
 

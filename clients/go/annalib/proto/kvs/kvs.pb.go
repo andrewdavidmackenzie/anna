@@ -106,6 +106,9 @@ const (
 	LatticeType_ORDERED_SET LatticeType = 5
 	// Priority lattice
 	LatticeType_PRIORITY LatticeType = 6
+	// Last-writer-wins set: a set of values where the entire set is replaced
+	// on each write (timestamp-based), rather than merged via union.
+	LatticeType_LWW_SET LatticeType = 7
 )
 
 // Enum value maps for LatticeType.
@@ -118,6 +121,7 @@ var (
 		4: "MULTI_CAUSAL",
 		5: "ORDERED_SET",
 		6: "PRIORITY",
+		7: "LWW_SET",
 	}
 	LatticeType_value = map[string]int32{
 		"NONE":          0,
@@ -127,6 +131,7 @@ var (
 		"MULTI_CAUSAL":  4,
 		"ORDERED_SET":   5,
 		"PRIORITY":      6,
+		"LWW_SET":       7,
 	}
 )
 
@@ -989,7 +994,7 @@ const file_kvs_proto_rawDesc = "" +
 	"\vRequestType\x12\x12\n" +
 	"\x0eRT_UNSPECIFIED\x10\x00\x12\a\n" +
 	"\x03GET\x10\x01\x12\a\n" +
-	"\x03PUT\x10\x02*m\n" +
+	"\x03PUT\x10\x02*z\n" +
 	"\vLatticeType\x12\b\n" +
 	"\x04NONE\x10\x00\x12\a\n" +
 	"\x03LWW\x10\x01\x12\a\n" +
@@ -997,7 +1002,8 @@ const file_kvs_proto_rawDesc = "" +
 	"\rSINGLE_CAUSAL\x10\x03\x12\x10\n" +
 	"\fMULTI_CAUSAL\x10\x04\x12\x0f\n" +
 	"\vORDERED_SET\x10\x05\x12\f\n" +
-	"\bPRIORITY\x10\x06*b\n" +
+	"\bPRIORITY\x10\x06\x12\v\n" +
+	"\aLWW_SET\x10\a*b\n" +
 	"\tAnnaError\x12\f\n" +
 	"\bNO_ERROR\x10\x00\x12\v\n" +
 	"\aKEY_DNE\x10\x01\x12\x10\n" +

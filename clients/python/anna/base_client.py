@@ -15,7 +15,7 @@
 from .causal_pb2 import CausalTuple
 from .kvs_pb2 import (
     # Protobuf enum lattices types
-    LWW, SET, ORDERED_SET, SINGLE_CAUSAL, MULTI_CAUSAL, PRIORITY,
+    LWW, SET, ORDERED_SET, SINGLE_CAUSAL, MULTI_CAUSAL, PRIORITY, LWW_SET,
     # Serialized lattice protobuf representations
     LWWValue, SetValue, SingleKeyCausalValue, MultiKeyCausalValue, PriorityValue
 )
@@ -197,6 +197,18 @@ class BaseAnnaClient:
             val.ParseFromString(tup.payload)
 
             return PriorityLattice(val.priority, val.value)
+        elif tup.lattice_type == LWW_SET:
+            # Deserialize LWW-set: unwrap LwwValue, then parse inner SetValue.
+            lww = LWWValue()
+            lww.ParseFromString(tup.payload)
+            sv = SetValue()
+            sv.ParseFromString(lww.value)
+
+            result = set()
+            for v in sv.values:
+                result.add(v)
+
+            return SetLattice(result)
         else:
             raise ValueError('Unsupported type cannot be serialized: ' +
                              str(tup.lattice_type))
