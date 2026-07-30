@@ -1078,3 +1078,57 @@ class TestLwwSetType:
         assert "p" in out
         assert "q" in out
         assert "r" in out
+
+
+class TestLwwOrderedSetType:
+    """Tests for the LWW_ORDERED_SET lattice type support."""
+
+    def test_put_lww_ordered_set_unified(self):
+        """PUT lww_ordered_set should call client.put with correct type."""
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.put.return_value = {"mykey": True}
+        execute_command(client, None, "PUT lww_ordered_set mykey c b a")
+        client.put.assert_called_once()
+        args = client.put.call_args
+        lattice = args[0][1]
+        _, lt = lattice.serialize()
+        from anna.kvs_pb2 import LWW_ORDERED_SET
+        assert lt == LWW_ORDERED_SET
+
+    def test_lww_ordered_set_deserialize(self):
+        """_deserialize should decode LWW_ORDERED_SET as OrderedSetLattice."""
+        from anna.base_client import BaseAnnaClient
+        from anna.kvs_pb2 import LWWValue, SetValue, KeyTuple, LWW_ORDERED_SET
+        from anna.lattices import OrderedSetLattice
+
+        sv = SetValue()
+        sv.values.append(b"c")
+        sv.values.append(b"a")
+        lww = LWWValue()
+        lww.timestamp = 42
+        lww.value = sv.SerializeToString()
+
+        tup = KeyTuple()
+        tup.lattice_type = LWW_ORDERED_SET
+        tup.payload = lww.SerializeToString()
+
+        result = BaseAnnaClient._deserialize(tup)
+        assert isinstance(result, OrderedSetLattice)
+
+    def test_get_lww_ordered_set_formats_as_ordered(self, capsys):
+        """Unified GET on an LWW_ORDERED_SET should format as [ ... ]."""
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        from anna.lattices import OrderedSetLattice, ListBasedOrderedSet
+        los = ListBasedOrderedSet()
+        los.insert(b"x")
+        los.insert(b"y")
+        client = MagicMock()
+        client.get.return_value = {"mykey": OrderedSetLattice(los)}
+        execute_command(client, None, "GET mykey")
+        out = capsys.readouterr().out
+        assert "[ " in out
+        assert "x" in out
+        assert "y" in out
