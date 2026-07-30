@@ -76,6 +76,7 @@ string cli_usage() {
          "  PUT set {key} {vals...}         - store a set (union merge)\n"
          "  PUT ordered_set {key} {vals...} - store an ordered set\n"
          "  PUT lww_set {key} {vals...}     - store a set (LWW, replaces on write)\n"
+         "  PUT lww_ordered_set {key} {vals...} - store an ordered set (LWW)\n"
          "  PUT union {key} {value}         - append a value (accumulates via union)\n"
          "  PUT priority {key} {pri} {val}  - store with priority (lowest wins)\n"
          "  PUT causal {key} {value}        - store with multi-key causal consistency\n"
@@ -102,7 +103,8 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
     string lower = s;
     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
     return lower == "lww" || lower == "set" || lower == "ordered_set" ||
-           lower == "lww_set" || lower == "union" || lower == "priority" ||
+           lower == "lww_set" || lower == "lww_ordered_set" || lower == "union" ||
+           lower == "priority" ||
            lower == "causal" || lower == "single_causal";
   };
 
@@ -186,6 +188,10 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
         set<string> values;
         for (size_t i = val_start; i < v.size(); i++) values.insert(v[i]);
         ok = annalib::put_lww_set(client, key, values).succeeded();
+      } else if (type_name == "lww_ordered_set") {
+        vector<string> values;
+        for (size_t i = val_start; i < v.size(); i++) values.push_back(v[i]);
+        ok = annalib::put_lww_ordered_set(client, key, values).succeeded();
       } else if (type_name == "union") {
         ok = annalib::put_union_scalar(client, key, v[val_start]).succeeded();
       } else if (type_name == "priority") {

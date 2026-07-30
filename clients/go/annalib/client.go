@@ -449,6 +449,26 @@ func (c *KVSClient) Get(key string) (string, error) {
 	}
 
 	// Auto-detect lattice type from server response.
+	if tuple.LatticeType == kvspb.LatticeType_LWW_ORDERED_SET {
+		var lww kvspb.LWWValue
+		if err := proto.Unmarshal(tuple.Payload, &lww); err != nil {
+			return "", &KVSError{Message: fmt.Sprintf("GET: failed to decode LWW_ORDERED_SET: %v", err)}
+		}
+		// Advance the LWW timestamp high-water mark.
+		if lww.Timestamp > c.lastSeenTs {
+			c.lastSeenTs = lww.Timestamp
+		}
+		var sv kvspb.SetValue
+		if err := proto.Unmarshal(lww.Value, &sv); err != nil {
+			return "", &KVSError{Message: fmt.Sprintf("GET: failed to decode LWW_ORDERED_SET inner: %v", err)}
+		}
+		parts := make([]string, len(sv.Values))
+		for i, v := range sv.Values {
+			parts[i] = string(v)
+		}
+		sort.Strings(parts)
+		return "[ " + strings.Join(parts, " ") + " ]", nil
+	}
 	if tuple.LatticeType == kvspb.LatticeType_UNION_SCALAR {
 		var sv kvspb.SetValue
 		if err := proto.Unmarshal(tuple.Payload, &sv); err != nil {
@@ -542,11 +562,9 @@ func (c *KVSClient) PutSet(key string, values []string) error {
 	return err
 }
 
-// PutLwwSet stores a set of values under key with LWW (last-writer-wins)
-// semantics. The entire set is replaced on each write based on timestamp,
-// rather than being merged via union.
-func (c *KVSClient) PutLwwSet(key string, values []string) error {
-	// Build the inner SetValue proto.
+// buildLwwPayloadForSet creates an LWWValue-wrapped SetValue payload with
+// a monotonic timestamp, suitable for LWW_SET and LWW_ORDERED_SET PUTs.
+func (c *KVSClient) buildLwwPayloadForSet(values []string) ([]byte, error) {
 	sv := &kvspb.SetValue{
 		Values: make([][]byte, len(values)),
 	}
@@ -555,10 +573,9 @@ func (c *KVSClient) PutLwwSet(key string, values []string) error {
 	}
 	setPayload, err := proto.Marshal(sv)
 	if err != nil {
-		return &KVSError{Message: fmt.Sprintf("PUT_LWW_SET: %v", err)}
+		return nil, err
 	}
 
-	// Wrap in an LWWValue with a monotonic timestamp.
 	ts := generateTimestamp()
 	if ts <= c.lastSeenTs {
 		ts = c.lastSeenTs + 1
@@ -568,7 +585,14 @@ func (c *KVSClient) PutLwwSet(key string, values []string) error {
 		Timestamp: ts,
 		Value:     setPayload,
 	}
-	payload, err := proto.Marshal(lww)
+	return proto.Marshal(lww)
+}
+
+// PutLwwSet stores a set of values under key with LWW (last-writer-wins)
+// semantics. The entire set is replaced on each write based on timestamp,
+// rather than being merged via union.
+func (c *KVSClient) PutLwwSet(key string, values []string) error {
+	payload, err := c.buildLwwPayloadForSet(values)
 	if err != nil {
 		return &KVSError{Message: fmt.Sprintf("PUT_LWW_SET: %v", err)}
 	}
@@ -579,6 +603,23 @@ func (c *KVSClient) PutLwwSet(key string, values []string) error {
 	}
 
 	_, err = validateResponse(response, "PUT_LWW_SET")
+	return err
+}
+
+// PutLwwOrderedSet stores an ordered list of values under key with LWW
+// semantics. Same as PutLwwSet but preserves insertion order.
+func (c *KVSClient) PutLwwOrderedSet(key string, values []string) error {
+	payload, err := c.buildLwwPayloadForSet(values)
+	if err != nil {
+		return &KVSError{Message: fmt.Sprintf("PUT_LWW_ORDERED_SET: %v", err)}
+	}
+
+	response, err := c.sendDataRequest(key, kvspb.RequestType_PUT, kvspb.LatticeType_LWW_ORDERED_SET, payload)
+	if err != nil {
+		return err
+	}
+
+	_, err = validateResponse(response, "PUT_LWW_ORDERED_SET")
 	return err
 }
 

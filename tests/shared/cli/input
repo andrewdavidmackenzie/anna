@@ -22,6 +22,10 @@ PUT lww_set mylwwset p q r
 GET mylwwset
 PUT lww_set mylwwset x y
 GET mylwwset
+PUT lww_ordered_set myloset c b a
+GET myloset
+PUT lww_ordered_set myloset z y
+GET myloset
 PUT union mylog entry1
 PUT union mylog entry2
 GET mylog

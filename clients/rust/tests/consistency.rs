@@ -111,6 +111,51 @@ async fn test_consistency(client: &mut KVSClient, prefix: &str) {
         assert!(!vc_a2.is_empty());
         assert!(!val_a2.is_empty());
     }
+    // === LWW_ORDERED_SET: last-writer-wins ordered set ===
+    {
+        use annalib::value::Value;
+        let los_key = format!("{prefix}_lww_oset");
+        let val1 = Value::LwwOrderedSet(vec!["c".into(), "b".into(), "a".into()]);
+        client
+            .put_value(&los_key, &val1)
+            .await
+            .expect("PUT LWW_ORDERED_SET first failed");
+
+        let got = client
+            .get_value(&los_key)
+            .await
+            .expect("GET LWW_ORDERED_SET first failed");
+        match &got {
+            Value::LwwOrderedSet(vals) => {
+                let mut sorted = vals.clone();
+                sorted.sort();
+                assert_eq!(sorted, vec!["a", "b", "c"]);
+            }
+            other => panic!("Expected LwwOrderedSet, got {:?}", other.type_name()),
+        }
+
+        // Second PUT replaces entirely.
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let val2 = Value::LwwOrderedSet(vec!["z".into(), "y".into()]);
+        client
+            .put_value(&los_key, &val2)
+            .await
+            .expect("PUT LWW_ORDERED_SET second failed");
+
+        let got2 = client
+            .get_value(&los_key)
+            .await
+            .expect("GET LWW_ORDERED_SET second failed");
+        match &got2 {
+            Value::LwwOrderedSet(vals) => {
+                let mut sorted = vals.clone();
+                sorted.sort();
+                assert_eq!(sorted, vec!["y", "z"], "LWW should replace");
+            }
+            other => panic!("Expected LwwOrderedSet, got {:?}", other.type_name()),
+        }
+    }
+
     // === UNION_SCALAR: append-only accumulation ===
     {
         use annalib::value::Value;

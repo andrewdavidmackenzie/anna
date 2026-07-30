@@ -1102,6 +1102,30 @@ impl KVSClient {
                         .collect(),
                 ))
             }
+            x if x == LatticeType::LwwOrderedSet as i32 => {
+                // Same wire format as LWW_SET but preserves insertion order.
+                let lww = LwwValue::decode(tuple.payload.as_slice()).map_err(|e| {
+                    Error::Kvs(format!(
+                        "GET_VALUE: failed to decode LWW_ORDERED_SET outer: {}",
+                        e
+                    ))
+                })?;
+                if lww.timestamp > self.last_seen_ts {
+                    self.last_seen_ts = lww.timestamp;
+                }
+                let sv = SetValue::decode(lww.value.as_slice()).map_err(|e| {
+                    Error::Kvs(format!(
+                        "GET_VALUE: failed to decode LWW_ORDERED_SET inner: {}",
+                        e
+                    ))
+                })?;
+                Ok(crate::value::Value::LwwOrderedSet(
+                    sv.values
+                        .iter()
+                        .map(|v| String::from_utf8_lossy(v).to_string())
+                        .collect(),
+                ))
+            }
             x if x == LatticeType::UnionScalar as i32 => {
                 // UNION_SCALAR is stored as SetValue (same as SET).
                 // Display as concatenated sorted fragments.
@@ -1210,8 +1234,8 @@ impl KVSClient {
                 };
                 sv.encode_to_vec()
             }
-            crate::value::Value::LwwSet(values) => {
-                // LWW_SET: wrap a SetValue inside an LwwValue with a timestamp.
+            crate::value::Value::LwwSet(values) | crate::value::Value::LwwOrderedSet(values) => {
+                // LWW_SET / LWW_ORDERED_SET: wrap SetValue in LwwValue.
                 let sv = SetValue {
                     values: values.iter().map(|s| s.as_bytes().to_vec()).collect(),
                 };
@@ -2298,6 +2322,26 @@ mod tests {
         );
     }
 
+    fn make_lww_ordered_set_response(key: &str, values: &[&str]) -> Vec<u8> {
+        let sv = SetValue {
+            values: values.iter().map(|v| v.as_bytes().to_vec()).collect(),
+        };
+        let lww = LwwValue {
+            timestamp: 200,
+            value: sv.encode_to_vec(),
+        };
+        let response = KeyResponse {
+            tuples: vec![KeyTuple {
+                key: key.to_string(),
+                lattice_type: LatticeType::LwwOrderedSet as i32,
+                payload: lww.encode_to_vec(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        response.encode_to_vec()
+    }
+
     fn make_union_scalar_response(key: &str, fragments: &[&str]) -> Vec<u8> {
         let sv = SetValue {
             values: fragments.iter().map(|v| v.as_bytes().to_vec()).collect(),
@@ -2332,6 +2376,39 @@ mod tests {
             ..Default::default()
         };
         response.encode_to_vec()
+    }
+
+    #[tokio::test]
+    async fn get_value_lww_ordered_set() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(204);
+        client.push_mock_response(true, Some(make_routing_response("los", worker)));
+        client.push_mock_response(
+            false,
+            Some(make_lww_ordered_set_response("los", &["c", "a", "b"])),
+        );
+
+        let val = client.get_value("los").await.expect("get_value failed");
+        match val {
+            crate::value::Value::LwwOrderedSet(v) => {
+                assert_eq!(v, vec!["c", "a", "b"]);
+            }
+            other => panic!("Expected LwwOrderedSet, got {:?}", other.type_name()),
+        }
+    }
+
+    #[tokio::test]
+    async fn put_value_lww_ordered_set() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(205);
+        client.push_mock_response(true, Some(make_routing_response("losput", worker)));
+        client.push_mock_response(false, Some(make_put_response("losput")));
+
+        let val = crate::value::Value::LwwOrderedSet(vec!["x".into(), "y".into()]);
+        client
+            .put_value("losput", &val)
+            .await
+            .expect("put_value failed");
     }
 
     #[tokio::test]

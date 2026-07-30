@@ -16,7 +16,7 @@ from .causal_pb2 import CausalTuple
 from .kvs_pb2 import (
     # Protobuf enum lattices types
     LWW, SET, ORDERED_SET, SINGLE_CAUSAL, MULTI_CAUSAL, PRIORITY, LWW_SET,
-    UNION_SCALAR,
+    LWW_ORDERED_SET, UNION_SCALAR,
     # Serialized lattice protobuf representations
     LWWValue, SetValue, SingleKeyCausalValue, MultiKeyCausalValue, PriorityValue
 )
@@ -199,6 +199,19 @@ class BaseAnnaClient:
             val.ParseFromString(tup.payload)
 
             return PriorityLattice(val.priority, val.value)
+        elif tup.lattice_type == LWW_ORDERED_SET:
+            # LWW_ORDERED_SET: unwrap LwwValue, parse inner SetValue,
+            # return as OrderedSetLattice for display. Note: this loses
+            # the LWW timestamp; re-serializing would emit ORDERED_SET
+            # type. Use only for read-display, not round-trip.
+            lww = LWWValue()
+            lww.ParseFromString(tup.payload)
+            sv = SetValue()
+            sv.ParseFromString(lww.value)
+            res = ListBasedOrderedSet()
+            for v in sv.values:
+                res.insert(v)
+            return OrderedSetLattice(res)
         elif tup.lattice_type == UNION_SCALAR:
             # UNION_SCALAR: stored as SetValue (same wire format as SET).
             # Return UnionScalarLattice which preserves the type tag and

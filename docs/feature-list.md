@@ -17,6 +17,7 @@ mocks.
 | PUT set {key} {vals...}    | Store a set (union merge)                                    | Yes           |
 | PUT ordered_set {key} ...  | Store an ordered set                                         | Yes           |
 | PUT lww_set {key} {vals...} | Store a set (LWW, replaces entire set on write)             | Yes           |
+| PUT lww_ordered_set {key} ... | Store an ordered set (LWW, replaces on write)             | Yes           |
 | PUT union {key} {value}    | Append a value (accumulates via set union)                   | Yes           |
 | PUT priority {key} {p} {v} | Store with priority (lowest wins)                            | Yes           |
 | PUT causal {key} {value}   | Store with multi-key causal consistency                      | Yes           |

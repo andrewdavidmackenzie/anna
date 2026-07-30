@@ -113,6 +113,10 @@ const (
 	// of all fragments, displayed concatenated in sorted order. Useful for
 	// append-only logs, sensor readings, or accumulating text.
 	LatticeType_UNION_SCALAR LatticeType = 8
+	// Last-writer-wins ordered set: an ordered collection where the entire
+	// list is replaced on each write (timestamp-based), preserving insertion
+	// order. Like LWW_SET but ordered.
+	LatticeType_LWW_ORDERED_SET LatticeType = 9
 )
 
 // Enum value maps for LatticeType.
@@ -127,17 +131,19 @@ var (
 		6: "PRIORITY",
 		7: "LWW_SET",
 		8: "UNION_SCALAR",
+		9: "LWW_ORDERED_SET",
 	}
 	LatticeType_value = map[string]int32{
-		"NONE":          0,
-		"LWW":           1,
-		"SET":           2,
-		"SINGLE_CAUSAL": 3,
-		"MULTI_CAUSAL":  4,
-		"ORDERED_SET":   5,
-		"PRIORITY":      6,
-		"LWW_SET":       7,
-		"UNION_SCALAR":  8,
+		"NONE":            0,
+		"LWW":             1,
+		"SET":             2,
+		"SINGLE_CAUSAL":   3,
+		"MULTI_CAUSAL":    4,
+		"ORDERED_SET":     5,
+		"PRIORITY":        6,
+		"LWW_SET":         7,
+		"UNION_SCALAR":    8,
+		"LWW_ORDERED_SET": 9,
 	}
 )
 
@@ -1000,7 +1006,7 @@ const file_kvs_proto_rawDesc = "" +
 	"\vRequestType\x12\x12\n" +
 	"\x0eRT_UNSPECIFIED\x10\x00\x12\a\n" +
 	"\x03GET\x10\x01\x12\a\n" +
-	"\x03PUT\x10\x02*\x8c\x01\n" +
+	"\x03PUT\x10\x02*\xa1\x01\n" +
 	"\vLatticeType\x12\b\n" +
 	"\x04NONE\x10\x00\x12\a\n" +
 	"\x03LWW\x10\x01\x12\a\n" +
@@ -1010,7 +1016,8 @@ const file_kvs_proto_rawDesc = "" +
 	"\vORDERED_SET\x10\x05\x12\f\n" +
 	"\bPRIORITY\x10\x06\x12\v\n" +
 	"\aLWW_SET\x10\a\x12\x10\n" +
-	"\fUNION_SCALAR\x10\b*b\n" +
+	"\fUNION_SCALAR\x10\b\x12\x13\n" +
+	"\x0fLWW_ORDERED_SET\x10\t*b\n" +
 	"\tAnnaError\x12\f\n" +
 	"\bNO_ERROR\x10\x00\x12\v\n" +
 	"\aKEY_DNE\x10\x01\x12\x10\n" +
