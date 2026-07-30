@@ -1140,6 +1140,106 @@ impl KVSClient {
                 fragments.sort();
                 Ok(crate::value::Value::UnionScalar(fragments.join("\n")))
             }
+            x if x == LatticeType::PrioritySet as i32
+                || x == LatticeType::PriorityOrderedSet as i32 =>
+            {
+                let pv = PriorityValue::decode(tuple.payload.as_slice()).map_err(|e| {
+                    Error::Kvs(format!("GET_VALUE: failed to decode PrioritySet: {}", e))
+                })?;
+                let sv = SetValue::decode(pv.value.as_slice()).map_err(|e| {
+                    Error::Kvs(format!(
+                        "GET_VALUE: failed to decode PrioritySet inner: {}",
+                        e
+                    ))
+                })?;
+                let vals: Vec<String> = sv
+                    .values
+                    .iter()
+                    .map(|v| String::from_utf8_lossy(v).to_string())
+                    .collect();
+                if x == LatticeType::PrioritySet as i32 {
+                    Ok(crate::value::Value::PrioritySet {
+                        priority: pv.priority,
+                        values: vals,
+                    })
+                } else {
+                    Ok(crate::value::Value::PriorityOrderedSet {
+                        priority: pv.priority,
+                        values: vals,
+                    })
+                }
+            }
+            x if x == LatticeType::CausalSet as i32
+                || x == LatticeType::CausalOrderedSet as i32 =>
+            {
+                let skc = SingleKeyCausalValue::decode(tuple.payload.as_slice()).map_err(|e| {
+                    Error::Kvs(format!("GET_VALUE: failed to decode CausalSet: {}", e))
+                })?;
+                let vals: Vec<String> = skc
+                    .values
+                    .iter()
+                    .flat_map(|v| {
+                        if let Ok(sv) = SetValue::decode(v.as_slice()) {
+                            sv.values
+                                .iter()
+                                .map(|v| String::from_utf8_lossy(v).to_string())
+                                .collect::<Vec<_>>()
+                        } else {
+                            vec![String::from_utf8_lossy(v).to_string()]
+                        }
+                    })
+                    .collect();
+                if x == LatticeType::CausalSet as i32 {
+                    Ok(crate::value::Value::CausalSet {
+                        vector_clock: skc.vector_clock,
+                        values: vals,
+                    })
+                } else {
+                    Ok(crate::value::Value::CausalOrderedSet {
+                        vector_clock: skc.vector_clock,
+                        values: vals,
+                    })
+                }
+            }
+            x if x == LatticeType::MultiCausalSet as i32
+                || x == LatticeType::MultiCausalOrderedSet as i32 =>
+            {
+                let mkc = MultiKeyCausalValue::decode(tuple.payload.as_slice()).map_err(|e| {
+                    Error::Kvs(format!("GET_VALUE: failed to decode MultiCausalSet: {}", e))
+                })?;
+                let deps: Vec<(String, std::collections::HashMap<String, u32>)> = mkc
+                    .dependencies
+                    .iter()
+                    .map(|kv| (kv.key.clone(), kv.vector_clock.clone()))
+                    .collect();
+                let vals: Vec<String> = mkc
+                    .values
+                    .iter()
+                    .flat_map(|v| {
+                        if let Ok(sv) = SetValue::decode(v.as_slice()) {
+                            sv.values
+                                .iter()
+                                .map(|v| String::from_utf8_lossy(v).to_string())
+                                .collect::<Vec<_>>()
+                        } else {
+                            vec![String::from_utf8_lossy(v).to_string()]
+                        }
+                    })
+                    .collect();
+                if x == LatticeType::MultiCausalSet as i32 {
+                    Ok(crate::value::Value::MultiCausalSet {
+                        vector_clock: mkc.vector_clock,
+                        dependencies: deps,
+                        values: vals,
+                    })
+                } else {
+                    Ok(crate::value::Value::MultiCausalOrderedSet {
+                        vector_clock: mkc.vector_clock,
+                        dependencies: deps,
+                        values: vals,
+                    })
+                }
+            }
             x if x == LatticeType::Priority as i32 => {
                 let pv = PriorityValue::decode(tuple.payload.as_slice()).map_err(|e| {
                     Error::Kvs(format!("GET_VALUE: failed to decode Priority: {}", e))
@@ -1233,6 +1333,61 @@ impl KVSClient {
                     values: vec![s.as_bytes().to_vec()],
                 };
                 sv.encode_to_vec()
+            }
+            crate::value::Value::PrioritySet { priority, values }
+            | crate::value::Value::PriorityOrderedSet { priority, values } => {
+                let sv = SetValue {
+                    values: values.iter().map(|s| s.as_bytes().to_vec()).collect(),
+                };
+                let pv = PriorityValue {
+                    priority: *priority,
+                    value: sv.encode_to_vec(),
+                };
+                pv.encode_to_vec()
+            }
+            crate::value::Value::CausalSet {
+                vector_clock,
+                values,
+            }
+            | crate::value::Value::CausalOrderedSet {
+                vector_clock,
+                values,
+            } => {
+                let sv = SetValue {
+                    values: values.iter().map(|s| s.as_bytes().to_vec()).collect(),
+                };
+                let skc = SingleKeyCausalValue {
+                    vector_clock: vector_clock.clone(),
+                    values: vec![sv.encode_to_vec()],
+                };
+                skc.encode_to_vec()
+            }
+            crate::value::Value::MultiCausalSet {
+                vector_clock,
+                dependencies,
+                values,
+            }
+            | crate::value::Value::MultiCausalOrderedSet {
+                vector_clock,
+                dependencies,
+                values,
+            } => {
+                let sv = SetValue {
+                    values: values.iter().map(|s| s.as_bytes().to_vec()).collect(),
+                };
+                let deps: Vec<crate::proto::shared::KeyVersion> = dependencies
+                    .iter()
+                    .map(|(k, vc)| crate::proto::shared::KeyVersion {
+                        key: k.clone(),
+                        vector_clock: vc.clone(),
+                    })
+                    .collect();
+                let mkc = MultiKeyCausalValue {
+                    vector_clock: vector_clock.clone(),
+                    dependencies: deps,
+                    values: vec![sv.encode_to_vec()],
+                };
+                mkc.encode_to_vec()
             }
             crate::value::Value::LwwSet(values) | crate::value::Value::LwwOrderedSet(values) => {
                 // LWW_SET / LWW_ORDERED_SET: wrap SetValue in LwwValue.

@@ -117,33 +117,63 @@ const (
 	// list is replaced on each write (timestamp-based), preserving insertion
 	// order. Like LWW_SET but ordered.
 	LatticeType_LWW_ORDERED_SET LatticeType = 9
+	// Priority set: a set of values where the entire set with the lowest
+	// priority wins. The value field in PriorityValue holds a serialized
+	// SetValue.
+	LatticeType_PRIORITY_SET LatticeType = 10
+	// Priority ordered set: like PRIORITY_SET but preserves insertion order.
+	LatticeType_PRIORITY_ORDERED_SET LatticeType = 11
+	// Single-key causal set: a set of values with single-key causal
+	// consistency. Each values entry in SingleKeyCausalValue holds a
+	// serialized SetValue.
+	LatticeType_CAUSAL_SET LatticeType = 12
+	// Single-key causal ordered set: like CAUSAL_SET but ordered.
+	LatticeType_CAUSAL_ORDERED_SET LatticeType = 13
+	// Multi-key causal set: a set of values with multi-key causal
+	// consistency and cross-key dependencies. Each values entry in
+	// MultiKeyCausalValue holds a serialized SetValue.
+	LatticeType_MULTI_CAUSAL_SET LatticeType = 14
+	// Multi-key causal ordered set: like MULTI_CAUSAL_SET but ordered.
+	LatticeType_MULTI_CAUSAL_ORDERED_SET LatticeType = 15
 )
 
 // Enum value maps for LatticeType.
 var (
 	LatticeType_name = map[int32]string{
-		0: "NONE",
-		1: "LWW",
-		2: "SET",
-		3: "SINGLE_CAUSAL",
-		4: "MULTI_CAUSAL",
-		5: "ORDERED_SET",
-		6: "PRIORITY",
-		7: "LWW_SET",
-		8: "UNION_SCALAR",
-		9: "LWW_ORDERED_SET",
+		0:  "NONE",
+		1:  "LWW",
+		2:  "SET",
+		3:  "SINGLE_CAUSAL",
+		4:  "MULTI_CAUSAL",
+		5:  "ORDERED_SET",
+		6:  "PRIORITY",
+		7:  "LWW_SET",
+		8:  "UNION_SCALAR",
+		9:  "LWW_ORDERED_SET",
+		10: "PRIORITY_SET",
+		11: "PRIORITY_ORDERED_SET",
+		12: "CAUSAL_SET",
+		13: "CAUSAL_ORDERED_SET",
+		14: "MULTI_CAUSAL_SET",
+		15: "MULTI_CAUSAL_ORDERED_SET",
 	}
 	LatticeType_value = map[string]int32{
-		"NONE":            0,
-		"LWW":             1,
-		"SET":             2,
-		"SINGLE_CAUSAL":   3,
-		"MULTI_CAUSAL":    4,
-		"ORDERED_SET":     5,
-		"PRIORITY":        6,
-		"LWW_SET":         7,
-		"UNION_SCALAR":    8,
-		"LWW_ORDERED_SET": 9,
+		"NONE":                     0,
+		"LWW":                      1,
+		"SET":                      2,
+		"SINGLE_CAUSAL":            3,
+		"MULTI_CAUSAL":             4,
+		"ORDERED_SET":              5,
+		"PRIORITY":                 6,
+		"LWW_SET":                  7,
+		"UNION_SCALAR":             8,
+		"LWW_ORDERED_SET":          9,
+		"PRIORITY_SET":             10,
+		"PRIORITY_ORDERED_SET":     11,
+		"CAUSAL_SET":               12,
+		"CAUSAL_ORDERED_SET":       13,
+		"MULTI_CAUSAL_SET":         14,
+		"MULTI_CAUSAL_ORDERED_SET": 15,
 	}
 )
 
@@ -1006,7 +1036,7 @@ const file_kvs_proto_rawDesc = "" +
 	"\vRequestType\x12\x12\n" +
 	"\x0eRT_UNSPECIFIED\x10\x00\x12\a\n" +
 	"\x03GET\x10\x01\x12\a\n" +
-	"\x03PUT\x10\x02*\xa1\x01\n" +
+	"\x03PUT\x10\x02*\xa9\x02\n" +
 	"\vLatticeType\x12\b\n" +
 	"\x04NONE\x10\x00\x12\a\n" +
 	"\x03LWW\x10\x01\x12\a\n" +
@@ -1017,7 +1047,15 @@ const file_kvs_proto_rawDesc = "" +
 	"\bPRIORITY\x10\x06\x12\v\n" +
 	"\aLWW_SET\x10\a\x12\x10\n" +
 	"\fUNION_SCALAR\x10\b\x12\x13\n" +
-	"\x0fLWW_ORDERED_SET\x10\t*b\n" +
+	"\x0fLWW_ORDERED_SET\x10\t\x12\x10\n" +
+	"\fPRIORITY_SET\x10\n" +
+	"\x12\x18\n" +
+	"\x14PRIORITY_ORDERED_SET\x10\v\x12\x0e\n" +
+	"\n" +
+	"CAUSAL_SET\x10\f\x12\x16\n" +
+	"\x12CAUSAL_ORDERED_SET\x10\r\x12\x14\n" +
+	"\x10MULTI_CAUSAL_SET\x10\x0e\x12\x1c\n" +
+	"\x18MULTI_CAUSAL_ORDERED_SET\x10\x0f*b\n" +
 	"\tAnnaError\x12\f\n" +
 	"\bNO_ERROR\x10\x00\x12\v\n" +
 	"\aKEY_DNE\x10\x01\x12\x10\n" +

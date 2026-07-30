@@ -290,6 +290,135 @@ string get_any(KvsClientInterface* client, const string& key) {
       out << pv.value();
       break;
     }
+    case kvs::LatticeType::PRIORITY_SET: {
+      kvs::PriorityValue pv;
+      pv.ParseFromString(payload);
+      kvs::SetValue sv;
+      sv.ParseFromString(pv.value());
+      out << "priority: " << pv.priority() << std::endl;
+      out << "{ ";
+      set<string> sorted(sv.values().begin(), sv.values().end());
+      for (const auto& v : sorted) {
+        out << v << " ";
+      }
+      out << "}";
+      break;
+    }
+    case kvs::LatticeType::PRIORITY_ORDERED_SET: {
+      kvs::PriorityValue pv;
+      pv.ParseFromString(payload);
+      kvs::SetValue sv;
+      sv.ParseFromString(pv.value());
+      out << "priority: " << pv.priority() << std::endl;
+      vector<string> vals(sv.values().begin(), sv.values().end());
+      std::sort(vals.begin(), vals.end());
+      out << "[ ";
+      for (const auto& v : vals) {
+        out << v << " ";
+      }
+      out << "]";
+      break;
+    }
+    case kvs::LatticeType::CAUSAL_SET: {
+      kvs::SingleKeyCausalValue skc;
+      skc.ParseFromString(payload);
+      for (const auto& pair : skc.vector_clock()) {
+        out << "{" << pair.first << " : " << pair.second << "}" << std::endl;
+      }
+      set<string> sorted;
+      for (const auto& v : skc.values()) {
+        kvs::SetValue sv;
+        sv.ParseFromString(v);
+        for (const auto& sv_val : sv.values()) {
+          sorted.insert(sv_val);
+        }
+      }
+      out << "{ ";
+      for (const auto& v : sorted) {
+        out << v << " ";
+      }
+      out << "}";
+      break;
+    }
+    case kvs::LatticeType::CAUSAL_ORDERED_SET: {
+      kvs::SingleKeyCausalValue skc;
+      skc.ParseFromString(payload);
+      for (const auto& pair : skc.vector_clock()) {
+        out << "{" << pair.first << " : " << pair.second << "}" << std::endl;
+      }
+      vector<string> vals;
+      for (const auto& v : skc.values()) {
+        kvs::SetValue sv;
+        sv.ParseFromString(v);
+        for (const auto& sv_val : sv.values()) {
+          vals.push_back(sv_val);
+        }
+      }
+      std::sort(vals.begin(), vals.end());
+      out << "[ ";
+      for (const auto& v : vals) {
+        out << v << " ";
+      }
+      out << "]";
+      break;
+    }
+    case kvs::LatticeType::MULTI_CAUSAL_SET: {
+      kvs::MultiKeyCausalValue mkc;
+      mkc.ParseFromString(payload);
+      for (const auto& pair : mkc.vector_clock()) {
+        out << "{" << pair.first << " : " << pair.second << "}" << std::endl;
+      }
+      for (const auto& dep : mkc.dependencies()) {
+        out << dep.key() << " : ";
+        for (const auto& vc_pair : dep.vector_clock()) {
+          out << "{" << vc_pair.first << " : " << vc_pair.second << "}";
+        }
+        out << std::endl;
+      }
+      set<string> sorted;
+      for (const auto& v : mkc.values()) {
+        kvs::SetValue sv;
+        sv.ParseFromString(v);
+        for (const auto& sv_val : sv.values()) {
+          sorted.insert(sv_val);
+        }
+      }
+      out << "{ ";
+      for (const auto& v : sorted) {
+        out << v << " ";
+      }
+      out << "}";
+      break;
+    }
+    case kvs::LatticeType::MULTI_CAUSAL_ORDERED_SET: {
+      kvs::MultiKeyCausalValue mkc;
+      mkc.ParseFromString(payload);
+      for (const auto& pair : mkc.vector_clock()) {
+        out << "{" << pair.first << " : " << pair.second << "}" << std::endl;
+      }
+      for (const auto& dep : mkc.dependencies()) {
+        out << dep.key() << " : ";
+        for (const auto& vc_pair : dep.vector_clock()) {
+          out << "{" << vc_pair.first << " : " << vc_pair.second << "}";
+        }
+        out << std::endl;
+      }
+      vector<string> vals;
+      for (const auto& v : mkc.values()) {
+        kvs::SetValue sv;
+        sv.ParseFromString(v);
+        for (const auto& sv_val : sv.values()) {
+          vals.push_back(sv_val);
+        }
+      }
+      std::sort(vals.begin(), vals.end());
+      out << "[ ";
+      for (const auto& v : vals) {
+        out << v << " ";
+      }
+      out << "]";
+      break;
+    }
     case kvs::LatticeType::SINGLE_CAUSAL: {
       kvs::SingleKeyCausalValue skc;
       skc.ParseFromString(payload);
@@ -591,6 +720,127 @@ PriorityResult get_priority(KvsClientInterface* client, const string& key) {
   result.value = pv.value();
 
   return result;
+}
+
+PutResult put_priority_set(KvsClientInterface* client, const string& key,
+                           double priority, const set<string>& values) {
+  kvs::PriorityValue pv;
+  pv.set_priority(priority);
+  pv.set_value(make_set_payload(values));
+
+  string payload;
+  pv.SerializeToString(&payload);
+
+  string rid = client->put_async(key, payload,
+                                 kvs::LatticeType::PRIORITY_SET);
+  auto responses = receive_with_deadline(client);
+  return to_put_result(responses[0], rid);
+}
+
+PutResult put_priority_ordered_set(KvsClientInterface* client, const string& key,
+                                   double priority, const set<string>& values) {
+  kvs::PriorityValue pv;
+  pv.set_priority(priority);
+  pv.set_value(make_set_payload(values));
+
+  string payload;
+  pv.SerializeToString(&payload);
+
+  string rid = client->put_async(key, payload,
+                                 kvs::LatticeType::PRIORITY_ORDERED_SET);
+  auto responses = receive_with_deadline(client);
+  return to_put_result(responses[0], rid);
+}
+
+PutResult put_causal_set(KvsClientInterface* client, const string& key,
+                         const set<string>& values) {
+  kvs::SingleKeyCausalValue skc;
+
+  auto* vc = skc.mutable_vector_clock();
+  (*vc)["test"] = 1;
+
+  for (const auto& v : values) {
+    skc.add_values(make_set_payload({v}));
+  }
+
+  string payload;
+  skc.SerializeToString(&payload);
+
+  string rid = client->put_async(key, payload,
+                                 kvs::LatticeType::CAUSAL_SET);
+  auto responses = receive_with_deadline(client);
+  return to_put_result(responses[0], rid);
+}
+
+PutResult put_causal_ordered_set(KvsClientInterface* client, const string& key,
+                                 const set<string>& values) {
+  kvs::SingleKeyCausalValue skc;
+
+  auto* vc = skc.mutable_vector_clock();
+  (*vc)["test"] = 1;
+
+  for (const auto& v : values) {
+    skc.add_values(make_set_payload({v}));
+  }
+
+  string payload;
+  skc.SerializeToString(&payload);
+
+  string rid = client->put_async(key, payload,
+                                 kvs::LatticeType::CAUSAL_ORDERED_SET);
+  auto responses = receive_with_deadline(client);
+  return to_put_result(responses[0], rid);
+}
+
+PutResult put_multi_causal_set(KvsClientInterface* client, const string& key,
+                               const set<string>& values) {
+  kvs::MultiKeyCausalValue mkc;
+
+  auto* vc = mkc.mutable_vector_clock();
+  (*vc)["test"] = 1;
+
+  auto* dep = mkc.add_dependencies();
+  dep->set_key("dep1");
+  auto* dep_vc = dep->mutable_vector_clock();
+  (*dep_vc)["test1"] = 1;
+
+  for (const auto& v : values) {
+    mkc.add_values(make_set_payload({v}));
+  }
+
+  string payload;
+  mkc.SerializeToString(&payload);
+
+  string rid = client->put_async(key, payload,
+                                 kvs::LatticeType::MULTI_CAUSAL_SET);
+  auto responses = receive_with_deadline(client);
+  return to_put_result(responses[0], rid);
+}
+
+PutResult put_multi_causal_ordered_set(KvsClientInterface* client,
+                                       const string& key,
+                                       const set<string>& values) {
+  kvs::MultiKeyCausalValue mkc;
+
+  auto* vc = mkc.mutable_vector_clock();
+  (*vc)["test"] = 1;
+
+  auto* dep = mkc.add_dependencies();
+  dep->set_key("dep1");
+  auto* dep_vc = dep->mutable_vector_clock();
+  (*dep_vc)["test1"] = 1;
+
+  for (const auto& v : values) {
+    mkc.add_values(make_set_payload({v}));
+  }
+
+  string payload;
+  mkc.SerializeToString(&payload);
+
+  string rid = client->put_async(key, payload,
+                                 kvs::LatticeType::MULTI_CAUSAL_ORDERED_SET);
+  auto responses = receive_with_deadline(client);
+  return to_put_result(responses[0], rid);
 }
 
 string get_bytes(KvsClientInterface* client, const string& key) {

@@ -17,8 +17,14 @@ pub const TYPE_NAMES: &[&str] = &[
     "lww_ordered_set",
     "union",
     "priority",
+    "priority_set",
+    "priority_ordered_set",
     "causal",
     "single_causal",
+    "causal_set",
+    "causal_ordered_set",
+    "multi_causal_set",
+    "multi_causal_ordered_set",
 ];
 
 /// A type-tagged value from the Anna KVS.
@@ -60,6 +66,58 @@ pub enum Value {
     /// Last-writer-wins ordered set: like LwwSet but preserves insertion order.
     LwwOrderedSet(Vec<String>),
 
+    /// Priority set: the set with the lowest priority wins entirely.
+    PrioritySet {
+        /// The priority number (lower = wins).
+        priority: f64,
+        /// The set values.
+        values: Vec<String>,
+    },
+
+    /// Priority ordered set: like PrioritySet but displayed in sorted order.
+    PriorityOrderedSet {
+        /// The priority number (lower = wins).
+        priority: f64,
+        /// The ordered set values.
+        values: Vec<String>,
+    },
+
+    /// Single-key causal set: a set with single-key causal consistency.
+    CausalSet {
+        /// The vector clock for this key.
+        vector_clock: HashMap<String, u32>,
+        /// The set values (may contain concurrent versions).
+        values: Vec<String>,
+    },
+
+    /// Single-key causal ordered set.
+    CausalOrderedSet {
+        /// The vector clock for this key.
+        vector_clock: HashMap<String, u32>,
+        /// The ordered set values.
+        values: Vec<String>,
+    },
+
+    /// Multi-key causal set: a set with multi-key causal consistency.
+    MultiCausalSet {
+        /// The vector clock for this key.
+        vector_clock: HashMap<String, u32>,
+        /// Dependencies on other keys.
+        dependencies: Vec<(String, HashMap<String, u32>)>,
+        /// The set values.
+        values: Vec<String>,
+    },
+
+    /// Multi-key causal ordered set.
+    MultiCausalOrderedSet {
+        /// The vector clock for this key.
+        vector_clock: HashMap<String, u32>,
+        /// Dependencies on other keys.
+        dependencies: Vec<(String, HashMap<String, u32>)>,
+        /// The ordered set values.
+        values: Vec<String>,
+    },
+
     /// Union scalar: each PUT appends a string fragment. Fragments accumulate
     /// via set union and are displayed concatenated in sorted order.
     UnionScalar(String),
@@ -86,8 +144,14 @@ impl Value {
             Value::LwwOrderedSet(_) => "lww_ordered_set",
             Value::UnionScalar(_) => "union",
             Value::Priority { .. } => "priority",
+            Value::PrioritySet { .. } => "priority_set",
+            Value::PriorityOrderedSet { .. } => "priority_ordered_set",
             Value::SingleCausal { .. } => "single_causal",
+            Value::CausalSet { .. } => "causal_set",
+            Value::CausalOrderedSet { .. } => "causal_ordered_set",
             Value::MultiCausal { .. } => "causal",
+            Value::MultiCausalSet { .. } => "multi_causal_set",
+            Value::MultiCausalOrderedSet { .. } => "multi_causal_ordered_set",
         }
     }
 
@@ -101,8 +165,14 @@ impl Value {
             Value::LwwOrderedSet(_) => LatticeType::LwwOrderedSet,
             Value::UnionScalar(_) => LatticeType::UnionScalar,
             Value::Priority { .. } => LatticeType::Priority,
+            Value::PrioritySet { .. } => LatticeType::PrioritySet,
+            Value::PriorityOrderedSet { .. } => LatticeType::PriorityOrderedSet,
             Value::SingleCausal { .. } => LatticeType::SingleCausal,
+            Value::CausalSet { .. } => LatticeType::CausalSet,
+            Value::CausalOrderedSet { .. } => LatticeType::CausalOrderedSet,
             Value::MultiCausal { .. } => LatticeType::MultiCausal,
+            Value::MultiCausalSet { .. } => LatticeType::MultiCausalSet,
+            Value::MultiCausalOrderedSet { .. } => LatticeType::MultiCausalOrderedSet,
         }
     }
 }
@@ -119,8 +189,14 @@ pub fn parse_type_name(name: &str) -> Option<LatticeType> {
         "lww_ordered_set" => Some(LatticeType::LwwOrderedSet),
         "union" => Some(LatticeType::UnionScalar),
         "priority" => Some(LatticeType::Priority),
+        "priority_set" => Some(LatticeType::PrioritySet),
+        "priority_ordered_set" => Some(LatticeType::PriorityOrderedSet),
         "causal" => Some(LatticeType::MultiCausal),
         "single_causal" => Some(LatticeType::SingleCausal),
+        "causal_set" => Some(LatticeType::CausalSet),
+        "causal_ordered_set" => Some(LatticeType::CausalOrderedSet),
+        "multi_causal_set" => Some(LatticeType::MultiCausalSet),
+        "multi_causal_ordered_set" => Some(LatticeType::MultiCausalOrderedSet),
         _ => None,
     }
 }
@@ -155,6 +231,76 @@ impl fmt::Display for Value {
                 let mut sorted = values.clone();
                 sorted.sort();
                 write!(f, "[ {} ]", sorted.join(" "))
+            }
+            Value::PrioritySet { priority, values } => {
+                let mut sorted = values.clone();
+                sorted.sort();
+                write!(f, "priority: {}\n{{ {} }}", priority, sorted.join(" "))
+            }
+            Value::PriorityOrderedSet { priority, values } => {
+                let mut sorted = values.clone();
+                sorted.sort();
+                write!(f, "priority: {}\n[ {} ]", priority, sorted.join(" "))
+            }
+            Value::CausalSet {
+                vector_clock,
+                values,
+            } => {
+                write!(f, "{}", format_vector_clock(vector_clock))?;
+                let mut sorted = values.clone();
+                sorted.sort();
+                write!(f, "\n{{ {} }}", sorted.join(" "))
+            }
+            Value::CausalOrderedSet {
+                vector_clock,
+                values,
+            } => {
+                write!(f, "{}", format_vector_clock(vector_clock))?;
+                let mut sorted = values.clone();
+                sorted.sort();
+                write!(f, "\n[ {} ]", sorted.join(" "))
+            }
+            Value::MultiCausalSet {
+                vector_clock,
+                dependencies,
+                values,
+            } => {
+                write!(f, "{}", format_vector_clock(vector_clock))?;
+                let mut sorted_deps = dependencies.clone();
+                sorted_deps.sort_by(|(a, _), (b, _)| a.cmp(b));
+                for (dep_key, dep_vc) in &sorted_deps {
+                    let mut sorted_vc: Vec<_> = dep_vc.iter().collect();
+                    sorted_vc.sort_by_key(|(k, _)| k.to_string());
+                    let vc_str: Vec<String> = sorted_vc
+                        .iter()
+                        .map(|(k, v)| format!("{{{} : {}}}", k, v))
+                        .collect();
+                    write!(f, "\n{} : {}", dep_key, vc_str.join(" "))?;
+                }
+                let mut sorted = values.clone();
+                sorted.sort();
+                write!(f, "\n{{ {} }}", sorted.join(" "))
+            }
+            Value::MultiCausalOrderedSet {
+                vector_clock,
+                dependencies,
+                values,
+            } => {
+                write!(f, "{}", format_vector_clock(vector_clock))?;
+                let mut sorted_deps = dependencies.clone();
+                sorted_deps.sort_by(|(a, _), (b, _)| a.cmp(b));
+                for (dep_key, dep_vc) in &sorted_deps {
+                    let mut sorted_vc: Vec<_> = dep_vc.iter().collect();
+                    sorted_vc.sort_by_key(|(k, _)| k.to_string());
+                    let vc_str: Vec<String> = sorted_vc
+                        .iter()
+                        .map(|(k, v)| format!("{{{} : {}}}", k, v))
+                        .collect();
+                    write!(f, "\n{} : {}", dep_key, vc_str.join(" "))?;
+                }
+                let mut sorted = values.clone();
+                sorted.sort();
+                write!(f, "\n[ {} ]", sorted.join(" "))
             }
             Value::UnionScalar(s) => write!(f, "{}", s),
             Value::OrderedSet(values) => {
@@ -280,6 +426,53 @@ mod tests {
         let v = Value::LwwOrderedSet(vec!["c".into(), "b".into(), "a".into()]);
         assert_eq!(v.to_string(), "[ a b c ]");
         assert_eq!(v.type_name(), "lww_ordered_set");
+    }
+
+    #[test]
+    fn display_priority_set() {
+        let v = Value::PrioritySet {
+            priority: 1.5,
+            values: vec!["b".into(), "a".into()],
+        };
+        assert_eq!(v.to_string(), "priority: 1.5\n{ a b }");
+        assert_eq!(v.type_name(), "priority_set");
+    }
+
+    #[test]
+    fn display_causal_set() {
+        let mut vc = HashMap::new();
+        vc.insert("test".into(), 1);
+        let v = Value::CausalSet {
+            vector_clock: vc,
+            values: vec!["y".into(), "x".into()],
+        };
+        assert_eq!(v.to_string(), "{test : 1}\n{ x y }");
+        assert_eq!(v.type_name(), "causal_set");
+    }
+
+    #[test]
+    fn parse_new_type_names() {
+        assert_eq!(
+            parse_type_name("priority_set"),
+            Some(LatticeType::PrioritySet)
+        );
+        assert_eq!(
+            parse_type_name("priority_ordered_set"),
+            Some(LatticeType::PriorityOrderedSet)
+        );
+        assert_eq!(parse_type_name("causal_set"), Some(LatticeType::CausalSet));
+        assert_eq!(
+            parse_type_name("causal_ordered_set"),
+            Some(LatticeType::CausalOrderedSet)
+        );
+        assert_eq!(
+            parse_type_name("multi_causal_set"),
+            Some(LatticeType::MultiCausalSet)
+        );
+        assert_eq!(
+            parse_type_name("multi_causal_ordered_set"),
+            Some(LatticeType::MultiCausalOrderedSet)
+        );
     }
 
     #[test]

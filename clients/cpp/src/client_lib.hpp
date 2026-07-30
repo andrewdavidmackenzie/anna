@@ -130,6 +130,37 @@ PutResult put_priority(KvsClientInterface* client, const string& key,
 // Issue a blocking GET for `key` under the priority lattice type.
 PriorityResult get_priority(KvsClientInterface* client, const string& key);
 
+// Issue a blocking PUT of a set `values` with `priority` for `key` under the
+// priority-set lattice type (lower priority wins, values merged via set union).
+PutResult put_priority_set(KvsClientInterface* client, const string& key,
+                           double priority, const set<string>& values);
+
+// Issue a blocking PUT of a set `values` with `priority` for `key` under the
+// priority-ordered-set lattice type (like priority_set but preserves order).
+PutResult put_priority_ordered_set(KvsClientInterface* client, const string& key,
+                                   double priority, const set<string>& values);
+
+// Issue a blocking PUT of `values` for `key` under the causal-set
+// (single-key causal) lattice type.
+PutResult put_causal_set(KvsClientInterface* client, const string& key,
+                         const set<string>& values);
+
+// Issue a blocking PUT of `values` for `key` under the causal-ordered-set
+// (single-key causal) lattice type.
+PutResult put_causal_ordered_set(KvsClientInterface* client, const string& key,
+                                 const set<string>& values);
+
+// Issue a blocking PUT of `values` for `key` under the multi-causal-set
+// lattice type.
+PutResult put_multi_causal_set(KvsClientInterface* client, const string& key,
+                               const set<string>& values);
+
+// Issue a blocking PUT of `values` for `key` under the multi-causal-ordered-set
+// lattice type.
+PutResult put_multi_causal_ordered_set(KvsClientInterface* client,
+                                       const string& key,
+                                       const set<string>& values);
+
 // Issue a blocking PUT of `values` for `key` under the LWW-set lattice type.
 // The entire set is replaced on each write (timestamp-based), rather than
 // merged via union.
