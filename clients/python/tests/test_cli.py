@@ -1116,6 +1116,8 @@ class TestLwwOrderedSetType:
 
         result = BaseAnnaClient._deserialize(tup)
         assert isinstance(result, OrderedSetLattice)
+        revealed = result.reveal()
+        assert revealed == [b"a", b"c"], f"Expected sorted [a, c], got {revealed}"
 
     def test_get_lww_ordered_set_formats_as_ordered(self, capsys):
         """Unified GET on an LWW_ORDERED_SET should format as [ ... ]."""
@@ -1129,6 +1131,4 @@ class TestLwwOrderedSetType:
         client.get.return_value = {"mykey": OrderedSetLattice(los)}
         execute_command(client, None, "GET mykey")
         out = capsys.readouterr().out
-        assert "[ " in out
-        assert "x" in out
-        assert "y" in out
+        assert out.strip() == "[ x y ]"

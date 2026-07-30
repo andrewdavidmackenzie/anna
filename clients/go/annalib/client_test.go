@@ -701,8 +701,29 @@ func TestPutLwwOrderedSetWithMock(t *testing.T) {
 	if err := proto.Unmarshal(tp.sentMessages[1].data, &req); err != nil {
 		t.Fatalf("Failed to unmarshal request: %v", err)
 	}
+	if len(req.Tuples) != 1 {
+		t.Fatalf("Expected 1 tuple, got %d", len(req.Tuples))
+	}
 	if req.Tuples[0].LatticeType != kvspb.LatticeType_LWW_ORDERED_SET {
 		t.Errorf("Expected LWW_ORDERED_SET, got %v", req.Tuples[0].LatticeType)
+	}
+	if req.Tuples[0].Key != "los" {
+		t.Errorf("Expected key 'los', got '%s'", req.Tuples[0].Key)
+	}
+	// Decode payload: outer LWWValue wrapping inner SetValue.
+	var lww kvspb.LWWValue
+	if err := proto.Unmarshal(req.Tuples[0].Payload, &lww); err != nil {
+		t.Fatalf("Failed to unmarshal LWWValue: %v", err)
+	}
+	if lww.Timestamp == 0 {
+		t.Error("LWWValue timestamp should be non-zero")
+	}
+	var sv kvspb.SetValue
+	if err := proto.Unmarshal(lww.Value, &sv); err != nil {
+		t.Fatalf("Failed to unmarshal inner SetValue: %v", err)
+	}
+	if len(sv.Values) != 3 {
+		t.Errorf("Expected 3 values, got %d", len(sv.Values))
 	}
 }
 
