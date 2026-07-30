@@ -36,6 +36,12 @@ Before committing new work to a branch, the following checks should pass:
 - `make fmt`
 - `make test`
 
+Expect the PR checks to check for:
+- non-reducing code coverage of the project and the patch (lines changed), add tests to reduce the possibility
+of these checks failing after pushing. Use local test coverage report if possible.
+- Code review by a bot like code rabbit. Perform your own code review before pushing and fix issues, to attempt
+to avoid the PR check failing after push.
+
 ## When is a PR ready to be merged?
 
 A PR can be considered ready to be merged when:
@@ -45,5 +51,8 @@ A PR can be considered ready to be merged when:
 - There is no code review in progress since the last pushed change
 - There are no unaddressed code review comments since the last change was pushed 
 - All the comments from code reviews have been addressed, even the Nit ones.
+
+If code coverage checks or code review fails in the PR checks, then iterate with fixes until the PR
+is green, all checks pass, and it is ready to be considered for merge.
 
 Don't suggest merging until the above list is met.
