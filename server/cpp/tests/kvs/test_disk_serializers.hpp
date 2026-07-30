@@ -686,3 +686,88 @@ TEST_F(DiskSerializerTest, LWWSetReplaces) {
   decoded_sv.ParseFromString(decoded.value());
   EXPECT_EQ(decoded_sv.values_size(), 2);
 }
+
+TEST_F(DiskSerializerTest, LWWSetOlderTimestampIgnored) {
+  DiskLWWSetSerializer serializer(tid_, disk_root_);
+
+  // PUT with timestamp 100
+  kvs::SetValue sv1;
+  sv1.add_values("newer");
+  string sp1;
+  sv1.SerializeToString(&sp1);
+  kvs::LWWValue lww1;
+  lww1.set_timestamp(100);
+  lww1.set_value(sp1);
+  string p1;
+  lww1.SerializeToString(&p1);
+  serializer.put("ts_key", p1);
+
+  // PUT with older timestamp 50 — should be ignored
+  kvs::SetValue sv2;
+  sv2.add_values("older");
+  string sp2;
+  sv2.SerializeToString(&sp2);
+  kvs::LWWValue lww2;
+  lww2.set_timestamp(50);
+  lww2.set_value(sp2);
+  string p2;
+  lww2.SerializeToString(&p2);
+  serializer.put("ts_key", p2);
+
+  // GET should return the first set (higher timestamp)
+  kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
+  string result = serializer.get("ts_key", error);
+  EXPECT_EQ(error, kvs::AnnaError::NO_ERROR);
+
+  kvs::LWWValue decoded;
+  decoded.ParseFromString(result);
+  EXPECT_EQ(decoded.timestamp(), 100u);
+
+  kvs::SetValue decoded_sv;
+  decoded_sv.ParseFromString(decoded.value());
+  EXPECT_EQ(decoded_sv.values_size(), 1);
+  EXPECT_EQ(decoded_sv.values(0), "newer");
+}
+
+TEST_F(DiskSerializerTest, LWWSetRemove) {
+  DiskLWWSetSerializer serializer(tid_, disk_root_);
+
+  kvs::SetValue sv;
+  sv.add_values("to_delete");
+  string sp;
+  sv.SerializeToString(&sp);
+  kvs::LWWValue lww;
+  lww.set_timestamp(1);
+  lww.set_value(sp);
+  string payload;
+  lww.SerializeToString(&payload);
+  serializer.put("rm_key", payload);
+
+  EXPECT_TRUE(serializer.remove("rm_key"));
+
+  kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
+  serializer.get("rm_key", error);
+  EXPECT_EQ(error, kvs::AnnaError::KEY_DNE);
+}
+
+TEST(MemoryLWWSetSerializerTest, RemoveKey) {
+  MemoryLWWKVS kvs;
+  MemoryLWWSetSerializer serializer(&kvs);
+
+  kvs::SetValue sv;
+  sv.add_values("val");
+  string sp;
+  sv.SerializeToString(&sp);
+  kvs::LWWValue lww;
+  lww.set_timestamp(1);
+  lww.set_value(sp);
+  string payload;
+  lww.SerializeToString(&payload);
+  serializer.put("rm_test", payload);
+
+  EXPECT_TRUE(serializer.remove("rm_test"));
+
+  kvs::AnnaError error = kvs::AnnaError::NO_ERROR;
+  serializer.get("rm_test", error);
+  EXPECT_EQ(error, kvs::AnnaError::KEY_DNE);
+}
