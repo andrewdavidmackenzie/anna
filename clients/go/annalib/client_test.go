@@ -570,6 +570,40 @@ func TestPutLwwSetWithMock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PutLwwSet failed: %v", err)
 	}
+
+	// Validate the sent request has the correct lattice type and payload.
+	if len(tp.sentMessages) < 2 {
+		t.Fatalf("Expected at least 2 sent messages (routing + put), got %d", len(tp.sentMessages))
+	}
+	// The second message is the PUT request.
+	var req kvspb.KeyRequest
+	if err := proto.Unmarshal(tp.sentMessages[1].data, &req); err != nil {
+		t.Fatalf("Failed to unmarshal PUT request: %v", err)
+	}
+	if len(req.Tuples) == 0 {
+		t.Fatal("PUT request has no tuples")
+	}
+	if req.Tuples[0].LatticeType != kvspb.LatticeType_LWW_SET {
+		t.Errorf("Expected LWW_SET lattice type, got %v", req.Tuples[0].LatticeType)
+	}
+	if req.Tuples[0].Key != "ls" {
+		t.Errorf("Expected key 'ls', got '%s'", req.Tuples[0].Key)
+	}
+	// Decode the payload: outer LWWValue, inner SetValue.
+	var lww kvspb.LWWValue
+	if err := proto.Unmarshal(req.Tuples[0].Payload, &lww); err != nil {
+		t.Fatalf("Failed to unmarshal LWWValue: %v", err)
+	}
+	if lww.Timestamp == 0 {
+		t.Error("LWWValue timestamp should be non-zero")
+	}
+	var sv kvspb.SetValue
+	if err := proto.Unmarshal(lww.Value, &sv); err != nil {
+		t.Fatalf("Failed to unmarshal inner SetValue: %v", err)
+	}
+	if len(sv.Values) != 3 {
+		t.Errorf("Expected 3 values, got %d", len(sv.Values))
+	}
 }
 
 func TestGetErrorResponse(t *testing.T) {
