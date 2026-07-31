@@ -495,10 +495,11 @@ func (c *KVSClient) Get(key string) (string, error) {
 		for i, v := range sv.Values {
 			parts[i] = string(v)
 		}
+		sort.Strings(parts)
 		if tuple.LatticeType == kvspb.LatticeType_PRIORITY_SET {
-			sort.Strings(parts)
+			return fmt.Sprintf("priority: %g\n{ %s }", pv.Priority, strings.Join(parts, " ")), nil
 		}
-		return fmt.Sprintf("priority: %g\n{ %s }", pv.Priority, strings.Join(parts, " ")), nil
+		return fmt.Sprintf("priority: %g\n[ %s ]", pv.Priority, strings.Join(parts, " ")), nil
 	}
 	if tuple.LatticeType == kvspb.LatticeType_CAUSAL_SET ||
 		tuple.LatticeType == kvspb.LatticeType_CAUSAL_ORDERED_SET {
@@ -524,10 +525,12 @@ func (c *KVSClient) Get(key string) (string, error) {
 			for i, v := range sv.Values {
 				parts[i] = string(v)
 			}
+			sort.Strings(parts)
 			if tuple.LatticeType == kvspb.LatticeType_CAUSAL_SET {
-				sort.Strings(parts)
+				lines = append(lines, fmt.Sprintf("{ %s }", strings.Join(parts, " ")))
+			} else {
+				lines = append(lines, fmt.Sprintf("[ %s ]", strings.Join(parts, " ")))
 			}
-			lines = append(lines, fmt.Sprintf("{ %s }", strings.Join(parts, " ")))
 		}
 		return strings.Join(lines, "\n"), nil
 	}
@@ -567,10 +570,12 @@ func (c *KVSClient) Get(key string) (string, error) {
 			for i, v := range sv.Values {
 				parts[i] = string(v)
 			}
+			sort.Strings(parts)
 			if tuple.LatticeType == kvspb.LatticeType_MULTI_CAUSAL_SET {
-				sort.Strings(parts)
+				lines = append(lines, fmt.Sprintf("{ %s }", strings.Join(parts, " ")))
+			} else {
+				lines = append(lines, fmt.Sprintf("[ %s ]", strings.Join(parts, " ")))
 			}
-			lines = append(lines, fmt.Sprintf("{ %s }", strings.Join(parts, " ")))
 		}
 		return strings.Join(lines, "\n"), nil
 	}

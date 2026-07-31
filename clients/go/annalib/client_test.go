@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -1095,6 +1096,88 @@ func TestGetAutoDetectsMultiCausalSet(t *testing.T) {
 	expected := "{nodeA : 2}\ndep1 : {nodeB : 1}\n{ p q }"
 	if val != expected {
 		t.Errorf("Expected %q, got %q", expected, val)
+	}
+}
+
+func TestGetAutoDetectsPriorityOrderedSet(t *testing.T) {
+	sv := &kvspb.SetValue{Values: [][]byte{[]byte("c"), []byte("a")}}
+	svBytes, _ := proto.Marshal(sv)
+	pv := &kvspb.PriorityValue{Priority: 2.0, Value: svBytes}
+	pvBytes, _ := proto.Marshal(pv)
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "posget", Error: kvspb.AnnaError_NO_ERROR,
+			LatticeType: kvspb.LatticeType_PRIORITY_ORDERED_SET, Payload: pvBytes}},
+	}
+	respBytes, _ := proto.Marshal(response)
+	routingResp := &kvspb.KeyAddressResponse{
+		Error: kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "posget", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+	val, err := client.Get("posget")
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	if !strings.Contains(val, "[ ") || !strings.Contains(val, "]") {
+		t.Errorf("Expected ordered set format, got %q", val)
+	}
+}
+
+func TestGetAutoDetectsCausalOrderedSet(t *testing.T) {
+	sv := &kvspb.SetValue{Values: [][]byte{[]byte("b"), []byte("a")}}
+	svBytes, _ := proto.Marshal(sv)
+	skc := &kvspb.SingleKeyCausalValue{VectorClock: map[string]uint32{"n1": 1}, Values: [][]byte{svBytes}}
+	skcBytes, _ := proto.Marshal(skc)
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "cosget", Error: kvspb.AnnaError_NO_ERROR,
+			LatticeType: kvspb.LatticeType_CAUSAL_ORDERED_SET, Payload: skcBytes}},
+	}
+	respBytes, _ := proto.Marshal(response)
+	routingResp := &kvspb.KeyAddressResponse{
+		Error: kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "cosget", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+	val, err := client.Get("cosget")
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	if !strings.Contains(val, "[ ") || !strings.Contains(val, "]") {
+		t.Errorf("Expected ordered set format, got %q", val)
+	}
+}
+
+func TestGetAutoDetectsMultiCausalOrderedSet(t *testing.T) {
+	sv := &kvspb.SetValue{Values: [][]byte{[]byte("z"), []byte("a")}}
+	svBytes, _ := proto.Marshal(sv)
+	mkc := &kvspb.MultiKeyCausalValue{
+		VectorClock: map[string]uint32{"n1": 1},
+		Dependencies: []*sharedpb.KeyVersion{{Key: "d1", VectorClock: map[string]uint32{"n2": 1}}},
+		Values: [][]byte{svBytes},
+	}
+	mkcBytes, _ := proto.Marshal(mkc)
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "mcosget", Error: kvspb.AnnaError_NO_ERROR,
+			LatticeType: kvspb.LatticeType_MULTI_CAUSAL_ORDERED_SET, Payload: mkcBytes}},
+	}
+	respBytes, _ := proto.Marshal(response)
+	routingResp := &kvspb.KeyAddressResponse{
+		Error: kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "mcosget", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+	val, err := client.Get("mcosget")
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	if !strings.Contains(val, "[ ") || !strings.Contains(val, "]") {
+		t.Errorf("Expected ordered set format, got %q", val)
 	}
 }
 
