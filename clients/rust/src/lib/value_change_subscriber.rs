@@ -457,6 +457,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(unix)] // Windows SO_REUSEADDR allows duplicate binds
     async fn new_fails_on_port_conflict() {
         let config = crate::client_config::ClientConfig::default();
         // First subscriber binds the port successfully.
