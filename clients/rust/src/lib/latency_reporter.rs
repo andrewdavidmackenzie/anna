@@ -352,4 +352,24 @@ mod tests {
         reporter.connect().await.expect("connect failed");
         assert_eq!(reporter.socket_cache.len(), 1);
     }
+
+    #[tokio::test]
+    async fn get_or_connect_rejects_invalid_address() {
+        let mut reporter = LatencyReporter::with_monitoring_ips(vec!["127.0.0.1".into()], 0, None);
+        let result = reporter.get_or_connect("not_a_valid_endpoint").await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Invalid address"), "unexpected error: {}", err);
+    }
+
+    #[tokio::test]
+    async fn new_from_mock_client() {
+        let mut client = KVSClient::new_mock("127.0.0.1", 83);
+        // Mock has no monitoring IPs metadata, so new() falls back to empty vec.
+        let reporter = LatencyReporter::new(&mut client, Some(83))
+            .await
+            .expect("new failed");
+        assert_eq!(reporter.uid, "rust_client:83");
+        assert!(reporter.monitoring_ips.is_empty());
+    }
 }

@@ -47,6 +47,7 @@ const K_CACHE_UPDATE_PORT: usize = 7150;
 /// # Ok(())
 /// # }
 /// ```
+#[derive(Debug)]
 pub struct ValueChangeSubscriber {
     ctx: Context,
     cache_ip: Address,
@@ -431,5 +432,72 @@ mod tests {
             .await
             .expect("create failed");
         assert_eq!(sub.memory_threads, 4);
+    }
+
+    #[tokio::test]
+    async fn get_or_connect_rejects_invalid_address() {
+        let config = crate::client_config::ClientConfig::default();
+        let mut sub = ValueChangeSubscriber::new(&config, Some(95))
+            .await
+            .expect("create failed");
+        let result = sub.get_or_connect("not_a_valid_endpoint").await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Invalid address"), "unexpected error: {}", err);
+    }
+
+    #[tokio::test]
+    async fn new_rejects_unparseable_bind_address() {
+        let config = crate::client_config::ClientConfig {
+            routing_addresses: vec!["tcp://127.0.0.1:6450".to_string()],
+            client_ip: "not a valid ip".to_string(),
+        };
+        let result = ValueChangeSubscriber::new(&config, Some(96)).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn new_fails_on_port_conflict() {
+        let config = crate::client_config::ClientConfig::default();
+        // First subscriber binds the port successfully.
+        let _sub1 = ValueChangeSubscriber::new(&config, Some(97))
+            .await
+            .expect("first create failed");
+        // Second subscriber tries to bind the same port and should fail.
+        let result = ValueChangeSubscriber::new(&config, Some(97)).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Failed to bind"), "unexpected error: {}", err);
+    }
+
+    #[tokio::test]
+    async fn watch_sends_registration() {
+        let config = crate::client_config::ClientConfig::default();
+        // Use memory_threads=1 and create a PULL socket to receive the
+        // registration message sent by watch().
+        let mut sub = ValueChangeSubscriber::with_memory_threads(&config, Some(98), 1)
+            .await
+            .expect("create failed");
+
+        let reg_addr = format!("tcp://127.0.0.1:{}", K_CACHE_REGISTRATION_PORT);
+        let ctx = Context::new();
+        let puller = ctx.socket(SocketType::Pull, Options::default());
+        puller
+            .bind(reg_addr.parse().expect("parse failed"))
+            .await
+            .expect("bind failed");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        sub.watch(&["test_key".to_string()])
+            .await
+            .expect("watch failed");
+
+        let msg = tokio::time::timeout(Duration::from_secs(5), puller.recv())
+            .await
+            .expect("recv timed out")
+            .expect("recv failed");
+        let bytes: Vec<u8> = msg.iter().flat_map(|f| f.to_vec()).collect();
+        let ss = StringSet::decode(bytes.as_slice()).expect("decode failed");
+        assert!(ss.keys.contains(&"test_key".to_string()));
     }
 }
