@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <fstream>
 #include <string>
+#include <thread>
 #include <unistd.h>
 
 #include "gtest/gtest.h"
@@ -147,12 +148,33 @@ static void apply_timings_config(const YAML::Node &conf) {
   }
 }
 
+// Helper: apply the threads-section parsing pattern, including auto-detect.
+// Mirrors the code in server.cpp / monitoring.cpp / routing.cpp.
+static void apply_threads_config(const YAML::Node &conf) {
+  if (conf["threads"]) {
+    YAML::Node threads = conf["threads"];
+    if (threads["memory"])
+      kMemoryThreadCount = threads["memory"].as<unsigned>();
+    if (threads["disk"])
+      kDiskThreadCount = threads["disk"].as<unsigned>();
+
+    // A thread count of 0 means "auto-detect from available cores".
+    unsigned hw_threads = std::thread::hardware_concurrency();
+    if (hw_threads == 0) hw_threads = 1;
+
+    if (kMemoryThreadCount == 0) kMemoryThreadCount = hw_threads;
+    if (kDiskThreadCount == 0) kDiskThreadCount = hw_threads;
+  }
+}
+
 // A fixture that saves and restores all configurable globals so tests are
 // independent. Each test modifies globals via YAML parsing and they are
 // restored to defaults after.
 class ConfigYamlParsingTest : public ::testing::Test {
 protected:
   // Saved copies of all configurable globals.
+  unsigned saved_kMemoryThreadCount;
+  unsigned saved_kDiskThreadCount;
   unsigned saved_kNodeAdditionBatchSize;
   double saved_kMaxMemoryNodeConsumption;
   double saved_kMinMemoryNodeConsumption;
@@ -178,6 +200,8 @@ protected:
   unsigned saved_kBaseOffset;
 
   void SetUp() override {
+    saved_kMemoryThreadCount = kMemoryThreadCount;
+    saved_kDiskThreadCount = kDiskThreadCount;
     saved_kNodeAdditionBatchSize = kNodeAdditionBatchSize;
     saved_kMaxMemoryNodeConsumption = kMaxMemoryNodeConsumption;
     saved_kMinMemoryNodeConsumption = kMinMemoryNodeConsumption;
@@ -204,6 +228,8 @@ protected:
   }
 
   void TearDown() override {
+    kMemoryThreadCount = saved_kMemoryThreadCount;
+    kDiskThreadCount = saved_kDiskThreadCount;
     kNodeAdditionBatchSize = saved_kNodeAdditionBatchSize;
     kMaxMemoryNodeConsumption = saved_kMaxMemoryNodeConsumption;
     kMinMemoryNodeConsumption = saved_kMinMemoryNodeConsumption;
@@ -563,5 +589,38 @@ TEST_F(ConfigYamlParsingTest, OccupancyLowerGreaterThanUpperIsSwapped) {
   // Values should be swapped so lower <= upper.
   EXPECT_DOUBLE_EQ(kSloOccupancyLower, 0.05);
   EXPECT_DOUBLE_EQ(kSloOccupancyUpper, 0.15);
+  std::remove(path.c_str());
+}
+
+// --- threads section ---
+
+TEST_F(ConfigYamlParsingTest, ThreadsExplicitValues) {
+  auto path = write_temp_yaml("threads:\n  memory: 8\n  disk: 2\n");
+  YAML::Node conf = YAML::LoadFile(path);
+  apply_threads_config(conf);
+  EXPECT_EQ(kMemoryThreadCount, 8u);
+  EXPECT_EQ(kDiskThreadCount, 2u);
+  std::remove(path.c_str());
+}
+
+TEST_F(ConfigYamlParsingTest, ThreadsZeroAutoDetects) {
+  auto path = write_temp_yaml("threads:\n  memory: 0\n  disk: 0\n");
+  YAML::Node conf = YAML::LoadFile(path);
+  apply_threads_config(conf);
+  unsigned hw = std::thread::hardware_concurrency();
+  if (hw == 0) hw = 1;
+  EXPECT_EQ(kMemoryThreadCount, hw);
+  EXPECT_EQ(kDiskThreadCount, hw);
+  std::remove(path.c_str());
+}
+
+TEST_F(ConfigYamlParsingTest, ThreadsPartialAutoDetect) {
+  auto path = write_temp_yaml("threads:\n  memory: 0\n  disk: 3\n");
+  YAML::Node conf = YAML::LoadFile(path);
+  apply_threads_config(conf);
+  unsigned hw = std::thread::hardware_concurrency();
+  if (hw == 0) hw = 1;
+  EXPECT_EQ(kMemoryThreadCount, hw);
+  EXPECT_EQ(kDiskThreadCount, 3u);
   std::remove(path.c_str());
 }

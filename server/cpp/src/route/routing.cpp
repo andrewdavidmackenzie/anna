@@ -12,6 +12,8 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
+#include <thread>
+
 #include "route/routing_handlers.hpp"
 #include "signal_handler.hpp"
 #include "yaml-cpp/yaml.h"
@@ -171,6 +173,14 @@ int main(int argc, char *argv[]) {
   unsigned kMemoryThreadCount = threads["memory"].as<unsigned>();
   unsigned kDiskThreadCount = threads["disk"].as<unsigned>();
   kRoutingThreadCount = threads["routing"].as<unsigned>();
+
+  // A thread count of 0 means "auto-detect from available cores".
+  unsigned hw_threads = std::thread::hardware_concurrency();
+  if (hw_threads == 0) hw_threads = 1;  // fallback if detection fails
+
+  if (kMemoryThreadCount == 0) kMemoryThreadCount = hw_threads;
+  if (kDiskThreadCount == 0) kDiskThreadCount = hw_threads;
+  if (kRoutingThreadCount == 0) kRoutingThreadCount = hw_threads;
 
   YAML::Node capacities = conf["capacities"];
   kMemoryNodeCapacity = capacities["memory-cap"].as<unsigned>() * 1000000;

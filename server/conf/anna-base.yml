@@ -3,8 +3,8 @@ capacities: # in GB
   memory-cap: 45 
   disk-cap: 256
 threads:
-  memory: 4
-  disk: 4
+  memory: 0  # 0 = auto-detect from available cores
+  disk: 0
   routing: 4
   benchmark: 4
 hashing:
