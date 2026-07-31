@@ -46,7 +46,7 @@ capacities: # in GB
   memory-cap: 1 
   disk-cap: 0
 threads:
-  memory: 1
+  memory: 1  # 0 = auto-detect from available cores
   disk: 1
   routing: 1
   benchmark: 1

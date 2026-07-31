@@ -12,6 +12,8 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
+#include <thread>
+
 #include "kvs/kvs_handlers.hpp"
 #include "signal_handler.hpp"
 #include "yaml-cpp/yaml.h"
@@ -916,6 +918,19 @@ int main(int argc, char *argv[]) {
   YAML::Node threads = conf["threads"];
   kMemoryThreadCount = threads["memory"].as<unsigned>();
   kDiskThreadCount = threads["disk"].as<unsigned>();
+
+  // A thread count of 0 means "auto-detect from available cores".
+  unsigned hw_threads = std::thread::hardware_concurrency();
+  if (hw_threads == 0) hw_threads = 1;  // fallback if detection fails
+
+  if (kMemoryThreadCount == 0) {
+    kMemoryThreadCount = hw_threads;
+    spdlog::info("Auto-detected memory thread count: {}", kMemoryThreadCount);
+  }
+  if (kDiskThreadCount == 0) {
+    kDiskThreadCount = hw_threads;
+    spdlog::info("Auto-detected disk thread count: {}", kDiskThreadCount);
+  }
 
   YAML::Node capacities = conf["capacities"];
   if (capacities["memory-cap-kb"]) {
