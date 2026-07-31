@@ -156,6 +156,46 @@ async fn test_consistency(client: &mut KVSClient, prefix: &str) {
         }
     }
 
+    // === PRIORITY_SET: lowest priority set wins ===
+    {
+        use annalib::value::Value;
+        let pset_key = format!("{prefix}_pset");
+        let val = Value::PrioritySet {
+            priority: 2.0,
+            values: vec!["a".into(), "b".into()],
+        };
+        client
+            .put_value(&pset_key, &val)
+            .await
+            .expect("PUT priority_set failed");
+        let got = client
+            .get_value(&pset_key)
+            .await
+            .expect("GET priority_set failed");
+        assert_eq!(got.type_name(), "priority_set");
+    }
+
+    // === CAUSAL_SET: single-key causal set ===
+    {
+        use annalib::value::Value;
+        let cset_key = format!("{prefix}_cset");
+        let mut vc = std::collections::HashMap::new();
+        vc.insert("test".to_string(), 1u32);
+        let val = Value::CausalSet {
+            vector_clock: vc,
+            values: vec!["x".into(), "y".into()],
+        };
+        client
+            .put_value(&cset_key, &val)
+            .await
+            .expect("PUT causal_set failed");
+        let got = client
+            .get_value(&cset_key)
+            .await
+            .expect("GET causal_set failed");
+        assert_eq!(got.type_name(), "causal_set");
+    }
+
     // === UNION_SCALAR: append-only accumulation ===
     {
         use annalib::value::Value;

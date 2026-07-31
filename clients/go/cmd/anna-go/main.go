@@ -205,7 +205,11 @@ func formatStatus(statuses []annalib.ProcessStatus) string {
 // isTypeName returns true if name is a known lattice type name.
 func isTypeName(name string) bool {
 	switch strings.ToLower(name) {
-	case "lww", "set", "ordered_set", "lww_set", "lww_ordered_set", "union", "priority", "causal", "single_causal":
+	case "lww", "set", "ordered_set", "lww_set", "lww_ordered_set", "union",
+		"priority", "causal", "single_causal",
+		"priority_set", "priority_ordered_set",
+		"causal_set", "causal_ordered_set",
+		"multi_causal_set", "multi_causal_ordered_set":
 		return true
 	}
 	return false
@@ -387,6 +391,56 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 			if err := client.PutSingleCausal(key, parts[valStart]); err != nil {
 				return false, err
 			}
+		case "priority_set":
+			if len(parts) < valStart+2 {
+				return false, fmt.Errorf("usage: PUT priority_set <key> <priority> <val1> [val2 ...]")
+			}
+			var priority float64
+			if _, err := fmt.Sscanf(parts[valStart], "%f", &priority); err != nil {
+				return false, fmt.Errorf("invalid priority value: %s", parts[valStart])
+			}
+			if err := client.PutPrioritySet(key, priority, parts[valStart+1:]); err != nil {
+				return false, err
+			}
+		case "priority_ordered_set":
+			if len(parts) < valStart+2 {
+				return false, fmt.Errorf("usage: PUT priority_ordered_set <key> <priority> <val1> [val2 ...]")
+			}
+			var priority float64
+			if _, err := fmt.Sscanf(parts[valStart], "%f", &priority); err != nil {
+				return false, fmt.Errorf("invalid priority value: %s", parts[valStart])
+			}
+			if err := client.PutPriorityOrderedSet(key, priority, parts[valStart+1:]); err != nil {
+				return false, err
+			}
+		case "causal_set":
+			if valStart >= len(parts) {
+				return false, fmt.Errorf("usage: PUT causal_set <key> <val1> [val2 ...]")
+			}
+			if err := client.PutCausalSet(key, parts[valStart:]); err != nil {
+				return false, err
+			}
+		case "causal_ordered_set":
+			if valStart >= len(parts) {
+				return false, fmt.Errorf("usage: PUT causal_ordered_set <key> <val1> [val2 ...]")
+			}
+			if err := client.PutCausalOrderedSet(key, parts[valStart:]); err != nil {
+				return false, err
+			}
+		case "multi_causal_set":
+			if valStart >= len(parts) {
+				return false, fmt.Errorf("usage: PUT multi_causal_set <key> <val1> [val2 ...]")
+			}
+			if err := client.PutMultiCausalSet(key, parts[valStart:]); err != nil {
+				return false, err
+			}
+		case "multi_causal_ordered_set":
+			if valStart >= len(parts) {
+				return false, fmt.Errorf("usage: PUT multi_causal_ordered_set <key> <val1> [val2 ...]")
+			}
+			if err := client.PutMultiCausalOrderedSet(key, parts[valStart:]); err != nil {
+				return false, err
+			}
 		}
 
 	case "BENCH":
@@ -457,23 +511,29 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 
 func cliUsage() string {
 	return `Valid commands are:
-	get {key}                         - get the value of any key (auto-detects type)
-	put {key} {value}                 - store a value (LWW, default)
-	put set {key} {vals...}           - store a set (union merge)
-	put ordered_set {key} {vals...}   - store an ordered set
-	put lww_set {key} {vals...}       - store a set (LWW, replaces on write)
-	put lww_ordered_set {key} {vals...} - store an ordered set (LWW)
-	put union {key} {value}           - append a value (accumulates via union)
-	put priority {key} {pri} {val}    - store with priority (lowest wins)
-	put causal {key} {value}          - store with multi-key causal consistency
-	put single_causal {key} {value}   - store with single-key causal consistency
-	delete {key}                      - delete a key from the KVS
+	get {key}                                    - get the value of any key (auto-detects type)
+	put {key} {value}                            - store a value (LWW, default)
+	put set {key} {vals...}                      - store a set (union merge)
+	put ordered_set {key} {vals...}              - store an ordered set
+	put lww_set {key} {vals...}                  - store a set (LWW, replaces on write)
+	put lww_ordered_set {key} {vals...}          - store an ordered set (LWW)
+	put union {key} {value}                      - append a value (accumulates via union)
+	put priority {key} {pri} {val}               - store with priority (lowest wins)
+	put priority_set {key} {pri} {vals...}       - store a set with priority (lowest wins)
+	put priority_ordered_set {key} {pri} {vals...} - store an ordered set with priority
+	put causal {key} {value}                     - store with multi-key causal consistency
+	put single_causal {key} {value}              - store with single-key causal consistency
+	put causal_set {key} {vals...}               - store a set with single-key causal consistency
+	put causal_ordered_set {key} {vals...}       - store an ordered set with single-key causal
+	put multi_causal_set {key} {vals...}         - store a set with multi-key causal consistency
+	put multi_causal_ordered_set {key} {vals...} - store an ordered set with multi-key causal
+	delete {key}                                 - delete a key from the KVS
 	bench [keys] [value_size] [duration] [workload] - run a benchmark
-	start                             - start anna processes
-	stop                              - stop running anna processes
-	status                            - print the status of anna processes
-	help                              - print this usage message
-	exit                              - exit the CLI (does not stop any anna processes)
+	start                                        - start anna processes
+	stop                                         - stop running anna processes
+	status                                       - print the status of anna processes
+	help                                         - print this usage message
+	exit                                         - exit the CLI (does not stop any anna processes)
 `
 }
 

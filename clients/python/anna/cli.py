@@ -4,7 +4,11 @@ import sys
 from .process_mgmt import start, stop, status, PROCESS_LIST
 
 
-_TYPE_NAMES = {"lww", "set", "ordered_set", "lww_set", "lww_ordered_set", "union", "priority", "causal", "single_causal"}
+_TYPE_NAMES = {"lww", "set", "ordered_set", "lww_set", "lww_ordered_set",
+               "priority_set", "priority_ordered_set",
+               "causal_set", "causal_ordered_set",
+               "multi_causal_set", "multi_causal_ordered_set",
+               "union", "priority", "causal", "single_causal"}
 
 
 def cli_usage():
@@ -15,6 +19,12 @@ def cli_usage():
             "  PUT ordered_set {key} {vals...} - store an ordered set\n"
             "  PUT lww_set {key} {vals...}     - store a set (LWW, replaces on write)\n"
             "  PUT lww_ordered_set {key} {vals...} - store an ordered set (LWW)\n"
+            "  PUT priority_set {key} {pri} {vals...} - store a set with priority (lowest wins)\n"
+            "  PUT priority_ordered_set {key} {pri} {vals...} - store an ordered set with priority\n"
+            "  PUT causal_set {key} {vals...}  - store a set with single-key causal consistency\n"
+            "  PUT causal_ordered_set {key} {vals...} - store an ordered set (single-key causal)\n"
+            "  PUT multi_causal_set {key} {vals...} - store a set with multi-key causal consistency\n"
+            "  PUT multi_causal_ordered_set {key} {vals...} - store an ordered set (multi-key causal)\n"
             "  PUT union {key} {value}         - append a value (accumulates via union)\n"
             "  PUT priority {key} {pri} {val}  - store with priority (lowest wins)\n"
             "  PUT causal {key} {value}        - store with multi-key causal consistency\n"
@@ -184,6 +194,127 @@ def execute_command(client, config_path, line):
                         res.value = self.val
                         return res, LOS_TYPE
                 val = _LwwOrderedSetLattice(ts, sv.SerializeToString())
+                result = client.put(parts[key_idx], val)
+                if not result.get(parts[key_idx], False):
+                    print("Failure!")
+            elif type_name == "priority_set":
+                # PRIORITY_SET: wrap a SetValue inside PriorityValue, then
+                # send with lattice_type = PRIORITY_SET.
+                from .kvs_pb2 import SetValue as SetValuePb, PRIORITY_SET as PS_TYPE
+                from .kvs_pb2 import PriorityValue as PriorityValuePb
+                if len(parts) < 5:
+                    print("Usage: PUT priority_set {key} {priority} {vals...}")
+                else:
+                    priority = float(parts[3])
+                    sv = SetValuePb()
+                    for v in parts[4:]:
+                        sv.values.append(v.encode("utf-8"))
+                    class _PrioritySetLattice(PriorityLattice):
+                        def serialize(self):
+                            res = PriorityValuePb()
+                            res.priority = self.priority
+                            res.value = self.value
+                            return res, PS_TYPE
+                    val = _PrioritySetLattice(priority, sv.SerializeToString())
+                    result = client.put(parts[key_idx], val)
+                    if not result.get(parts[key_idx], False):
+                        print("Failure!")
+            elif type_name == "priority_ordered_set":
+                # Same as priority_set but with PRIORITY_ORDERED_SET type tag.
+                from .kvs_pb2 import SetValue as SetValuePb, PRIORITY_ORDERED_SET as POS_TYPE
+                from .kvs_pb2 import PriorityValue as PriorityValuePb
+                if len(parts) < 5:
+                    print("Usage: PUT priority_ordered_set {key} {priority} {vals...}")
+                else:
+                    priority = float(parts[3])
+                    sv = SetValuePb()
+                    for v in parts[4:]:
+                        sv.values.append(v.encode("utf-8"))
+                    class _PriorityOrderedSetLattice(PriorityLattice):
+                        def serialize(self):
+                            res = PriorityValuePb()
+                            res.priority = self.priority
+                            res.value = self.value
+                            return res, POS_TYPE
+                    val = _PriorityOrderedSetLattice(priority, sv.SerializeToString())
+                    result = client.put(parts[key_idx], val)
+                    if not result.get(parts[key_idx], False):
+                        print("Failure!")
+            elif type_name == "causal_set":
+                # CAUSAL_SET: wrap a SetValue inside SingleKeyCausalValue,
+                # then send with lattice_type = CAUSAL_SET.
+                from .kvs_pb2 import (SetValue as SetValuePb,
+                                      SingleKeyCausalValue as SKCVPb,
+                                      CAUSAL_SET as CS_TYPE)
+                sv = SetValuePb()
+                for v in parts[3:]:
+                    sv.values.append(v.encode("utf-8"))
+                skcv = SKCVPb()
+                skcv.values.append(sv.SerializeToString())
+                class _CausalSetLattice(SingleKeyCausalLattice):
+                    def __init__(self, payload):
+                        # bypass normal init; we just need serialize()
+                        self._payload = payload
+                    def serialize(self):
+                        return self._payload, CS_TYPE
+                val = _CausalSetLattice(skcv)
+                result = client.put(parts[key_idx], val)
+                if not result.get(parts[key_idx], False):
+                    print("Failure!")
+            elif type_name == "causal_ordered_set":
+                # Same as causal_set but with CAUSAL_ORDERED_SET type tag.
+                from .kvs_pb2 import (SetValue as SetValuePb,
+                                      SingleKeyCausalValue as SKCVPb,
+                                      CAUSAL_ORDERED_SET as COS_TYPE)
+                sv = SetValuePb()
+                for v in parts[3:]:
+                    sv.values.append(v.encode("utf-8"))
+                skcv = SKCVPb()
+                skcv.values.append(sv.SerializeToString())
+                class _CausalOrderedSetLattice(SingleKeyCausalLattice):
+                    def __init__(self, payload):
+                        self._payload = payload
+                    def serialize(self):
+                        return self._payload, COS_TYPE
+                val = _CausalOrderedSetLattice(skcv)
+                result = client.put(parts[key_idx], val)
+                if not result.get(parts[key_idx], False):
+                    print("Failure!")
+            elif type_name == "multi_causal_set":
+                # MULTI_CAUSAL_SET: wrap a SetValue inside MultiKeyCausalValue.
+                from .kvs_pb2 import (SetValue as SetValuePb,
+                                      MultiKeyCausalValue as MKCVPb,
+                                      MULTI_CAUSAL_SET as MCS_TYPE)
+                sv = SetValuePb()
+                for v in parts[3:]:
+                    sv.values.append(v.encode("utf-8"))
+                mkcv = MKCVPb()
+                mkcv.values.append(sv.SerializeToString())
+                class _MultiCausalSetLattice(SingleKeyCausalLattice):
+                    def __init__(self, payload):
+                        self._payload = payload
+                    def serialize(self):
+                        return self._payload, MCS_TYPE
+                val = _MultiCausalSetLattice(mkcv)
+                result = client.put(parts[key_idx], val)
+                if not result.get(parts[key_idx], False):
+                    print("Failure!")
+            elif type_name == "multi_causal_ordered_set":
+                # Same as multi_causal_set but MULTI_CAUSAL_ORDERED_SET.
+                from .kvs_pb2 import (SetValue as SetValuePb,
+                                      MultiKeyCausalValue as MKCVPb,
+                                      MULTI_CAUSAL_ORDERED_SET as MCOS_TYPE)
+                sv = SetValuePb()
+                for v in parts[3:]:
+                    sv.values.append(v.encode("utf-8"))
+                mkcv = MKCVPb()
+                mkcv.values.append(sv.SerializeToString())
+                class _MultiCausalOrderedSetLattice(SingleKeyCausalLattice):
+                    def __init__(self, payload):
+                        self._payload = payload
+                    def serialize(self):
+                        return self._payload, MCOS_TYPE
+                val = _MultiCausalOrderedSetLattice(mkcv)
                 result = client.put(parts[key_idx], val)
                 if not result.get(parts[key_idx], False):
                     print("Failure!")

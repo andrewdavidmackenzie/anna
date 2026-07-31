@@ -191,6 +191,12 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
   Serializer *lww_set_serializer;
   Serializer *lww_ordered_set_serializer;
   Serializer *union_scalar_serializer;
+  Serializer *priority_set_serializer;
+  Serializer *priority_ordered_set_serializer;
+  Serializer *causal_set_serializer;
+  Serializer *causal_ordered_set_serializer;
+  Serializer *multi_causal_set_serializer;
+  Serializer *multi_causal_ordered_set_serializer;
 
   if (kSelfTier == Tier::MEMORY) {
     MemoryLWWKVS *lww_kvs = new MemoryLWWKVS();
@@ -224,6 +230,23 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
     // the result as concatenated text rather than as { ... }.
     MemorySetKVS *union_scalar_kvs = new MemorySetKVS();
     union_scalar_serializer = new MemorySetSerializer(union_scalar_kvs);
+
+    // Priority set types reuse PrioritySerializer — the client wraps
+    // a SetValue inside PriorityValue.value.
+    MemoryPriorityKVS *priority_set_kvs = new MemoryPriorityKVS();
+    priority_set_serializer = new MemoryPrioritySerializer(priority_set_kvs);
+    MemoryPriorityKVS *priority_ordered_set_kvs = new MemoryPriorityKVS();
+    priority_ordered_set_serializer = new MemoryPrioritySerializer(priority_ordered_set_kvs);
+
+    // Causal set types reuse their respective causal serializers.
+    MemorySingleKeyCausalKVS *causal_set_kvs = new MemorySingleKeyCausalKVS();
+    causal_set_serializer = new MemorySingleKeyCausalSerializer(causal_set_kvs);
+    MemorySingleKeyCausalKVS *causal_ordered_set_kvs = new MemorySingleKeyCausalKVS();
+    causal_ordered_set_serializer = new MemorySingleKeyCausalSerializer(causal_ordered_set_kvs);
+    MemoryMultiKeyCausalKVS *multi_causal_set_kvs = new MemoryMultiKeyCausalKVS();
+    multi_causal_set_serializer = new MemoryMultiKeyCausalSerializer(multi_causal_set_kvs);
+    MemoryMultiKeyCausalKVS *multi_causal_ordered_set_kvs = new MemoryMultiKeyCausalKVS();
+    multi_causal_ordered_set_serializer = new MemoryMultiKeyCausalSerializer(multi_causal_ordered_set_kvs);
   } else if (kSelfTier == Tier::DISK) {
     lww_serializer = new DiskLWWSerializer(thread_id, disk_root);
     set_serializer = new DiskSetSerializer(thread_id, disk_root);
@@ -234,6 +257,12 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
     lww_set_serializer = new DiskLWWSetSerializer(thread_id, disk_root);
     lww_ordered_set_serializer = new DiskLWWSetSerializer(thread_id, disk_root);
     union_scalar_serializer = new DiskSetSerializer(thread_id, disk_root);
+    priority_set_serializer = new DiskPrioritySerializer(thread_id, disk_root);
+    priority_ordered_set_serializer = new DiskPrioritySerializer(thread_id, disk_root);
+    causal_set_serializer = new DiskSingleKeyCausalSerializer(thread_id, disk_root);
+    causal_ordered_set_serializer = new DiskSingleKeyCausalSerializer(thread_id, disk_root);
+    multi_causal_set_serializer = new DiskMultiKeyCausalSerializer(thread_id, disk_root);
+    multi_causal_ordered_set_serializer = new DiskMultiKeyCausalSerializer(thread_id, disk_root);
   } else {
     log->info("Invalid node type");
     exit(1);
@@ -248,6 +277,12 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
   serializers[kvs::LatticeType::LWW_SET] = lww_set_serializer;
   serializers[kvs::LatticeType::LWW_ORDERED_SET] = lww_ordered_set_serializer;
   serializers[kvs::LatticeType::UNION_SCALAR] = union_scalar_serializer;
+  serializers[kvs::LatticeType::PRIORITY_SET] = priority_set_serializer;
+  serializers[kvs::LatticeType::PRIORITY_ORDERED_SET] = priority_ordered_set_serializer;
+  serializers[kvs::LatticeType::CAUSAL_SET] = causal_set_serializer;
+  serializers[kvs::LatticeType::CAUSAL_ORDERED_SET] = causal_ordered_set_serializer;
+  serializers[kvs::LatticeType::MULTI_CAUSAL_SET] = multi_causal_set_serializer;
+  serializers[kvs::LatticeType::MULTI_CAUSAL_ORDERED_SET] = multi_causal_ordered_set_serializer;
 
   // the set of changes made on this thread since the last round of gossip
   set<Key> local_changeset;

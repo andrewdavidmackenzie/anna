@@ -17,6 +17,9 @@ from .kvs_pb2 import (
     # Protobuf enum lattices types
     LWW, SET, ORDERED_SET, SINGLE_CAUSAL, MULTI_CAUSAL, PRIORITY, LWW_SET,
     LWW_ORDERED_SET, UNION_SCALAR,
+    PRIORITY_SET, PRIORITY_ORDERED_SET,
+    CAUSAL_SET, CAUSAL_ORDERED_SET,
+    MULTI_CAUSAL_SET, MULTI_CAUSAL_ORDERED_SET,
     # Serialized lattice protobuf representations
     LWWValue, SetValue, SingleKeyCausalValue, MultiKeyCausalValue, PriorityValue
 )
@@ -234,6 +237,74 @@ class BaseAnnaClient:
                 result.add(v)
 
             return SetLattice(result)
+        elif tup.lattice_type == PRIORITY_SET:
+            # PRIORITY_SET: unwrap PriorityValue, parse inner SetValue,
+            # return as SetLattice for display as { ... }.
+            pv = PriorityValue()
+            pv.ParseFromString(tup.payload)
+            sv = SetValue()
+            sv.ParseFromString(pv.value)
+            result = set()
+            for v in sv.values:
+                result.add(v)
+            return SetLattice(result)
+        elif tup.lattice_type == PRIORITY_ORDERED_SET:
+            # PRIORITY_ORDERED_SET: unwrap PriorityValue, parse inner
+            # SetValue, return as OrderedSetLattice for display as [ ... ].
+            pv = PriorityValue()
+            pv.ParseFromString(tup.payload)
+            sv = SetValue()
+            sv.ParseFromString(pv.value)
+            res = ListBasedOrderedSet()
+            for v in sv.values:
+                res.insert(v)
+            return OrderedSetLattice(res)
+        elif tup.lattice_type == CAUSAL_SET:
+            # CAUSAL_SET: unwrap SingleKeyCausalValue, parse each inner
+            # SetValue entry, return flattened SetLattice.
+            val = SingleKeyCausalValue()
+            val.ParseFromString(tup.payload)
+            result = set()
+            for raw in val.values:
+                sv = SetValue()
+                sv.ParseFromString(raw)
+                for v in sv.values:
+                    result.add(v)
+            return SetLattice(result)
+        elif tup.lattice_type == CAUSAL_ORDERED_SET:
+            # CAUSAL_ORDERED_SET: same as CAUSAL_SET but ordered.
+            val = SingleKeyCausalValue()
+            val.ParseFromString(tup.payload)
+            res = ListBasedOrderedSet()
+            for raw in val.values:
+                sv = SetValue()
+                sv.ParseFromString(raw)
+                for v in sv.values:
+                    res.insert(v)
+            return OrderedSetLattice(res)
+        elif tup.lattice_type == MULTI_CAUSAL_SET:
+            # MULTI_CAUSAL_SET: unwrap MultiKeyCausalValue, parse each
+            # inner SetValue entry, return flattened SetLattice.
+            val = MultiKeyCausalValue()
+            val.ParseFromString(tup.payload)
+            result = set()
+            for raw in val.values:
+                sv = SetValue()
+                sv.ParseFromString(raw)
+                for v in sv.values:
+                    result.add(v)
+            return SetLattice(result)
+        elif tup.lattice_type == MULTI_CAUSAL_ORDERED_SET:
+            # MULTI_CAUSAL_ORDERED_SET: same as MULTI_CAUSAL_SET but ordered.
+            val = MultiKeyCausalValue()
+            val.ParseFromString(tup.payload)
+            res = ListBasedOrderedSet()
+            for raw in val.values:
+                sv = SetValue()
+                sv.ParseFromString(raw)
+                for v in sv.values:
+                    res.insert(v)
+            return OrderedSetLattice(res)
         else:
             raise ValueError('Unsupported type cannot be serialized: ' +
                              str(tup.lattice_type))

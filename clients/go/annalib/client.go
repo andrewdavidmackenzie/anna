@@ -481,6 +481,104 @@ func (c *KVSClient) Get(key string) (string, error) {
 		sort.Strings(fragments)
 		return strings.Join(fragments, "\n"), nil
 	}
+	if tuple.LatticeType == kvspb.LatticeType_PRIORITY_SET ||
+		tuple.LatticeType == kvspb.LatticeType_PRIORITY_ORDERED_SET {
+		var pv kvspb.PriorityValue
+		if err := proto.Unmarshal(tuple.Payload, &pv); err != nil {
+			return "", &KVSError{Message: fmt.Sprintf("GET: failed to decode %s: %v", tuple.LatticeType, err)}
+		}
+		var sv kvspb.SetValue
+		if err := proto.Unmarshal(pv.Value, &sv); err != nil {
+			return "", &KVSError{Message: fmt.Sprintf("GET: failed to decode %s inner set: %v", tuple.LatticeType, err)}
+		}
+		parts := make([]string, len(sv.Values))
+		for i, v := range sv.Values {
+			parts[i] = string(v)
+		}
+		sort.Strings(parts)
+		if tuple.LatticeType == kvspb.LatticeType_PRIORITY_SET {
+			return fmt.Sprintf("priority: %g\n{ %s }", pv.Priority, strings.Join(parts, " ")), nil
+		}
+		return fmt.Sprintf("priority: %g\n[ %s ]", pv.Priority, strings.Join(parts, " ")), nil
+	}
+	if tuple.LatticeType == kvspb.LatticeType_CAUSAL_SET ||
+		tuple.LatticeType == kvspb.LatticeType_CAUSAL_ORDERED_SET {
+		var skc kvspb.SingleKeyCausalValue
+		if err := proto.Unmarshal(tuple.Payload, &skc); err != nil {
+			return "", &KVSError{Message: fmt.Sprintf("GET: failed to decode %s: %v", tuple.LatticeType, err)}
+		}
+		var lines []string
+		vcKeys := make([]string, 0, len(skc.VectorClock))
+		for k := range skc.VectorClock {
+			vcKeys = append(vcKeys, k)
+		}
+		sort.Strings(vcKeys)
+		for _, k := range vcKeys {
+			lines = append(lines, fmt.Sprintf("{%s : %d}", k, skc.VectorClock[k]))
+		}
+		for _, raw := range skc.Values {
+			var sv kvspb.SetValue
+			if err := proto.Unmarshal(raw, &sv); err != nil {
+				return "", &KVSError{Message: fmt.Sprintf("GET: failed to decode %s inner set: %v", tuple.LatticeType, err)}
+			}
+			parts := make([]string, len(sv.Values))
+			for i, v := range sv.Values {
+				parts[i] = string(v)
+			}
+			sort.Strings(parts)
+			if tuple.LatticeType == kvspb.LatticeType_CAUSAL_SET {
+				lines = append(lines, fmt.Sprintf("{ %s }", strings.Join(parts, " ")))
+			} else {
+				lines = append(lines, fmt.Sprintf("[ %s ]", strings.Join(parts, " ")))
+			}
+		}
+		return strings.Join(lines, "\n"), nil
+	}
+	if tuple.LatticeType == kvspb.LatticeType_MULTI_CAUSAL_SET ||
+		tuple.LatticeType == kvspb.LatticeType_MULTI_CAUSAL_ORDERED_SET {
+		var mkc kvspb.MultiKeyCausalValue
+		if err := proto.Unmarshal(tuple.Payload, &mkc); err != nil {
+			return "", &KVSError{Message: fmt.Sprintf("GET: failed to decode %s: %v", tuple.LatticeType, err)}
+		}
+		var lines []string
+		vcKeys := make([]string, 0, len(mkc.VectorClock))
+		for k := range mkc.VectorClock {
+			vcKeys = append(vcKeys, k)
+		}
+		sort.Strings(vcKeys)
+		for _, k := range vcKeys {
+			lines = append(lines, fmt.Sprintf("{%s : %d}", k, mkc.VectorClock[k]))
+		}
+		for _, dep := range mkc.Dependencies {
+			depVCKeys := make([]string, 0, len(dep.VectorClock))
+			for k := range dep.VectorClock {
+				depVCKeys = append(depVCKeys, k)
+			}
+			sort.Strings(depVCKeys)
+			var vcParts []string
+			for _, k := range depVCKeys {
+				vcParts = append(vcParts, fmt.Sprintf("{%s : %d}", k, dep.VectorClock[k]))
+			}
+			lines = append(lines, fmt.Sprintf("%s : %s", dep.Key, strings.Join(vcParts, " ")))
+		}
+		for _, raw := range mkc.Values {
+			var sv kvspb.SetValue
+			if err := proto.Unmarshal(raw, &sv); err != nil {
+				return "", &KVSError{Message: fmt.Sprintf("GET: failed to decode %s inner set: %v", tuple.LatticeType, err)}
+			}
+			parts := make([]string, len(sv.Values))
+			for i, v := range sv.Values {
+				parts[i] = string(v)
+			}
+			sort.Strings(parts)
+			if tuple.LatticeType == kvspb.LatticeType_MULTI_CAUSAL_SET {
+				lines = append(lines, fmt.Sprintf("{ %s }", strings.Join(parts, " ")))
+			} else {
+				lines = append(lines, fmt.Sprintf("[ %s ]", strings.Join(parts, " ")))
+			}
+		}
+		return strings.Join(lines, "\n"), nil
+	}
 
 	value, timestamp, err := parseLWWPayload(tuple.Payload)
 	if err != nil {
@@ -907,6 +1005,183 @@ func (c *KVSClient) PutPriority(key string, priority float64, value string) erro
 	return err
 }
 
+
+// --- Priority Set helpers and methods ---
+
+// buildPriorityPayloadForSet creates a PriorityValue-wrapped SetValue payload,
+// suitable for PRIORITY_SET and PRIORITY_ORDERED_SET PUTs.
+func buildPriorityPayloadForSet(priority float64, values []string) ([]byte, error) {
+	sv := &kvspb.SetValue{
+		Values: make([][]byte, len(values)),
+	}
+	for i, v := range values {
+		sv.Values[i] = []byte(v)
+	}
+	setPayload, err := proto.Marshal(sv)
+	if err != nil {
+		return nil, err
+	}
+	pv := &kvspb.PriorityValue{
+		Priority: priority,
+		Value:    setPayload,
+	}
+	return proto.Marshal(pv)
+}
+
+// PutPrioritySet stores a set of values under key with priority semantics
+// (lowest priority wins). The value field of PriorityValue holds a serialized
+// SetValue.
+func (c *KVSClient) PutPrioritySet(key string, priority float64, values []string) error {
+	payload, err := buildPriorityPayloadForSet(priority, values)
+	if err != nil {
+		return &KVSError{Message: fmt.Sprintf("PUT_PRIORITY_SET: %v", err)}
+	}
+
+	response, err := c.sendDataRequest(key, kvspb.RequestType_PUT, kvspb.LatticeType_PRIORITY_SET, payload)
+	if err != nil {
+		return err
+	}
+
+	_, err = validateResponse(response, "PUT_PRIORITY_SET")
+	return err
+}
+
+// PutPriorityOrderedSet stores an ordered set of values under key with
+// priority semantics (lowest priority wins). Same as PutPrioritySet but
+// preserves insertion order.
+func (c *KVSClient) PutPriorityOrderedSet(key string, priority float64, values []string) error {
+	payload, err := buildPriorityPayloadForSet(priority, values)
+	if err != nil {
+		return &KVSError{Message: fmt.Sprintf("PUT_PRIORITY_ORDERED_SET: %v", err)}
+	}
+
+	response, err := c.sendDataRequest(key, kvspb.RequestType_PUT, kvspb.LatticeType_PRIORITY_ORDERED_SET, payload)
+	if err != nil {
+		return err
+	}
+
+	_, err = validateResponse(response, "PUT_PRIORITY_ORDERED_SET")
+	return err
+}
+
+// --- Causal Set helpers and methods ---
+
+// buildSingleCausalPayloadForSet creates a SingleKeyCausalValue-wrapped
+// SetValue payload, suitable for CAUSAL_SET and CAUSAL_ORDERED_SET PUTs.
+func buildSingleCausalPayloadForSet(values []string) ([]byte, error) {
+	sv := &kvspb.SetValue{
+		Values: make([][]byte, len(values)),
+	}
+	for i, v := range values {
+		sv.Values[i] = []byte(v)
+	}
+	setPayload, err := proto.Marshal(sv)
+	if err != nil {
+		return nil, err
+	}
+	skc := &kvspb.SingleKeyCausalValue{
+		VectorClock: map[string]uint32{"test": 1},
+		Values:      [][]byte{setPayload},
+	}
+	return proto.Marshal(skc)
+}
+
+// PutCausalSet stores a set of values under key with single-key causal
+// consistency. Each values entry in SingleKeyCausalValue holds a serialized
+// SetValue.
+func (c *KVSClient) PutCausalSet(key string, values []string) error {
+	payload, err := buildSingleCausalPayloadForSet(values)
+	if err != nil {
+		return &KVSError{Message: fmt.Sprintf("PUT_CAUSAL_SET: %v", err)}
+	}
+
+	response, err := c.sendDataRequest(key, kvspb.RequestType_PUT, kvspb.LatticeType_CAUSAL_SET, payload)
+	if err != nil {
+		return err
+	}
+
+	_, err = validateResponse(response, "PUT_CAUSAL_SET")
+	return err
+}
+
+// PutCausalOrderedSet stores an ordered set of values under key with
+// single-key causal consistency. Same as PutCausalSet but preserves
+// insertion order.
+func (c *KVSClient) PutCausalOrderedSet(key string, values []string) error {
+	payload, err := buildSingleCausalPayloadForSet(values)
+	if err != nil {
+		return &KVSError{Message: fmt.Sprintf("PUT_CAUSAL_ORDERED_SET: %v", err)}
+	}
+
+	response, err := c.sendDataRequest(key, kvspb.RequestType_PUT, kvspb.LatticeType_CAUSAL_ORDERED_SET, payload)
+	if err != nil {
+		return err
+	}
+
+	_, err = validateResponse(response, "PUT_CAUSAL_ORDERED_SET")
+	return err
+}
+
+// --- Multi-Causal Set helpers and methods ---
+
+// buildCausalPayloadForSet creates a MultiKeyCausalValue-wrapped SetValue
+// payload, suitable for MULTI_CAUSAL_SET and MULTI_CAUSAL_ORDERED_SET PUTs.
+func buildCausalPayloadForSet(values []string) ([]byte, error) {
+	sv := &kvspb.SetValue{
+		Values: make([][]byte, len(values)),
+	}
+	for i, v := range values {
+		sv.Values[i] = []byte(v)
+	}
+	setPayload, err := proto.Marshal(sv)
+	if err != nil {
+		return nil, err
+	}
+	mkc := &kvspb.MultiKeyCausalValue{
+		VectorClock: map[string]uint32{"test": 1},
+		Dependencies: []*sharedpb.KeyVersion{
+			{Key: "dep1", VectorClock: map[string]uint32{"test1": 1}},
+		},
+		Values: [][]byte{setPayload},
+	}
+	return proto.Marshal(mkc)
+}
+
+// PutMultiCausalSet stores a set of values under key with multi-key causal
+// consistency and cross-key dependencies. Each values entry in
+// MultiKeyCausalValue holds a serialized SetValue.
+func (c *KVSClient) PutMultiCausalSet(key string, values []string) error {
+	payload, err := buildCausalPayloadForSet(values)
+	if err != nil {
+		return &KVSError{Message: fmt.Sprintf("PUT_MULTI_CAUSAL_SET: %v", err)}
+	}
+
+	response, err := c.sendDataRequest(key, kvspb.RequestType_PUT, kvspb.LatticeType_MULTI_CAUSAL_SET, payload)
+	if err != nil {
+		return err
+	}
+
+	_, err = validateResponse(response, "PUT_MULTI_CAUSAL_SET")
+	return err
+}
+
+// PutMultiCausalOrderedSet stores an ordered set of values under key with
+// multi-key causal consistency. Same as PutMultiCausalSet but preserves
+// insertion order.
+func (c *KVSClient) PutMultiCausalOrderedSet(key string, values []string) error {
+	payload, err := buildCausalPayloadForSet(values)
+	if err != nil {
+		return &KVSError{Message: fmt.Sprintf("PUT_MULTI_CAUSAL_ORDERED_SET: %v", err)}
+	}
+
+	response, err := c.sendDataRequest(key, kvspb.RequestType_PUT, kvspb.LatticeType_MULTI_CAUSAL_ORDERED_SET, payload)
+	if err != nil {
+		return err
+	}
+
+	_, err = validateResponse(response, "PUT_MULTI_CAUSAL_ORDERED_SET")
+	return err
+}
 
 // --- Metadata / stats helpers ---
 

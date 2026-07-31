@@ -65,6 +65,30 @@ enum LatticeType {
   // list is replaced on each write (timestamp-based), preserving insertion
   // order. Like LWW_SET but ordered.
   LWW_ORDERED_SET = 9;
+
+  // Priority set: a set of values where the entire set with the lowest
+  // priority wins. The value field in PriorityValue holds a serialized
+  // SetValue.
+  PRIORITY_SET = 10;
+
+  // Priority ordered set: like PRIORITY_SET but preserves insertion order.
+  PRIORITY_ORDERED_SET = 11;
+
+  // Single-key causal set: a set of values with single-key causal
+  // consistency. Each values entry in SingleKeyCausalValue holds a
+  // serialized SetValue.
+  CAUSAL_SET = 12;
+
+  // Single-key causal ordered set: like CAUSAL_SET but ordered.
+  CAUSAL_ORDERED_SET = 13;
+
+  // Multi-key causal set: a set of values with multi-key causal
+  // consistency and cross-key dependencies. Each values entry in
+  // MultiKeyCausalValue holds a serialized SetValue.
+  MULTI_CAUSAL_SET = 14;
+
+  // Multi-key causal ordered set: like MULTI_CAUSAL_SET but ordered.
+  MULTI_CAUSAL_ORDERED_SET = 15;
 }
 
 enum AnnaError {

@@ -1307,3 +1307,297 @@ TEST(ClientLibTest, GetAnyDecodesLwwSet) {
   EXPECT_TRUE(result.find("z") != string::npos);
   EXPECT_TRUE(result.find("}") != string::npos);
 }
+
+// --- PRIORITY_SET / CAUSAL_SET / MULTI_CAUSAL_SET tests ---
+
+// Helper: build a PRIORITY_SET response (PriorityValue wrapping SetValue).
+kvs::KeyResponse make_priority_set_response(const string& response_id,
+                                             double priority,
+                                             const set<string>& values) {
+  kvs::SetValue sv;
+  for (const auto& v : values) {
+    sv.add_values(v);
+  }
+  string set_payload;
+  sv.SerializeToString(&set_payload);
+
+  kvs::PriorityValue pv;
+  pv.set_priority(priority);
+  pv.set_value(set_payload);
+  string payload;
+  pv.SerializeToString(&payload);
+
+  kvs::KeyResponse response;
+  response.set_response_id(response_id);
+  kvs::KeyTuple* tuple = response.add_tuples();
+  tuple->set_lattice_type(kvs::LatticeType::PRIORITY_SET);
+  tuple->set_payload(payload);
+
+  return response;
+}
+
+// Helper: build a CAUSAL_SET response (SingleKeyCausalValue wrapping SetValue).
+kvs::KeyResponse make_causal_set_response(const string& response_id,
+                                           const set<string>& values) {
+  kvs::SingleKeyCausalValue skc;
+  auto* vc = skc.mutable_vector_clock();
+  (*vc)["client1"] = 1;
+
+  for (const auto& v : values) {
+    kvs::SetValue sv;
+    sv.add_values(v);
+    string sv_payload;
+    sv.SerializeToString(&sv_payload);
+    skc.add_values(sv_payload);
+  }
+
+  string payload;
+  skc.SerializeToString(&payload);
+
+  kvs::KeyResponse response;
+  response.set_response_id(response_id);
+  kvs::KeyTuple* tuple = response.add_tuples();
+  tuple->set_lattice_type(kvs::LatticeType::CAUSAL_SET);
+  tuple->set_payload(payload);
+
+  return response;
+}
+
+// Helper: build a MULTI_CAUSAL_SET response (MultiKeyCausalValue wrapping
+// SetValue).
+kvs::KeyResponse make_multi_causal_set_response(const string& response_id,
+                                                 const set<string>& values) {
+  kvs::MultiKeyCausalValue mkc;
+  auto* vc = mkc.mutable_vector_clock();
+  (*vc)["client1"] = 1;
+
+  auto* dep = mkc.add_dependencies();
+  dep->set_key("dep_key");
+  auto* dep_vc = dep->mutable_vector_clock();
+  (*dep_vc)["dep_client"] = 2;
+
+  for (const auto& v : values) {
+    kvs::SetValue sv;
+    sv.add_values(v);
+    string sv_payload;
+    sv.SerializeToString(&sv_payload);
+    mkc.add_values(sv_payload);
+  }
+
+  string payload;
+  mkc.SerializeToString(&payload);
+
+  kvs::KeyResponse response;
+  response.set_response_id(response_id);
+  kvs::KeyTuple* tuple = response.add_tuples();
+  tuple->set_lattice_type(kvs::LatticeType::MULTI_CAUSAL_SET);
+  tuple->set_payload(payload);
+
+  return response;
+}
+
+TEST(ClientLibTest, PutPrioritySetSendsCorrectPayload) {
+  MockKvsClient client;
+  client.responses_.push_back(make_priority_set_response("1", 0.0, {}));
+
+  annalib::PutResult result =
+      annalib::put_priority_set(&client, "my_ps_key", 2.5, {"a", "b"});
+
+  ASSERT_EQ(client.keys_put_.size(), 1u);
+  EXPECT_EQ(client.keys_put_[0], "my_ps_key");
+  EXPECT_TRUE(result.succeeded());
+  EXPECT_EQ(client.lattice_types_[0], kvs::LatticeType::PRIORITY_SET);
+}
+
+TEST(ClientLibTest, PutCausalSetSendsCorrectPayload) {
+  MockKvsClient client;
+  client.responses_.push_back(make_causal_set_response("1", {}));
+
+  annalib::PutResult result =
+      annalib::put_causal_set(&client, "my_cs_key", {"x", "y"});
+
+  ASSERT_EQ(client.keys_put_.size(), 1u);
+  EXPECT_EQ(client.keys_put_[0], "my_cs_key");
+  EXPECT_TRUE(result.succeeded());
+  EXPECT_EQ(client.lattice_types_[0], kvs::LatticeType::CAUSAL_SET);
+}
+
+TEST(ClientLibTest, PutMultiCausalSetSendsCorrectPayload) {
+  MockKvsClient client;
+  client.responses_.push_back(make_multi_causal_set_response("1", {}));
+
+  annalib::PutResult result =
+      annalib::put_multi_causal_set(&client, "my_mcs_key", {"p", "q"});
+
+  ASSERT_EQ(client.keys_put_.size(), 1u);
+  EXPECT_EQ(client.keys_put_[0], "my_mcs_key");
+  EXPECT_TRUE(result.succeeded());
+  EXPECT_EQ(client.lattice_types_[0], kvs::LatticeType::MULTI_CAUSAL_SET);
+}
+
+TEST(ClientLibTest, GetAnyDecodesPrioritySet) {
+  MockKvsClient client;
+  client.responses_.push_back(
+      make_priority_set_response("1", 5.0, {"alpha", "beta"}));
+
+  string result = annalib::get_any(&client, "any_ps_key");
+
+  // Output should contain "priority:" and the set values.
+  EXPECT_TRUE(result.find("priority:") != string::npos);
+  EXPECT_TRUE(result.find("5") != string::npos);
+  EXPECT_TRUE(result.find("alpha") != string::npos);
+  EXPECT_TRUE(result.find("beta") != string::npos);
+  EXPECT_TRUE(result.find("{ ") != string::npos);
+  EXPECT_TRUE(result.find("}") != string::npos);
+}
+
+TEST(ClientLibTest, GetAnyDecodesCausalSet) {
+  MockKvsClient client;
+  client.responses_.push_back(make_causal_set_response("1", {"foo", "bar"}));
+
+  string result = annalib::get_any(&client, "any_cs_key");
+
+  // Output should contain vc entry and set values.
+  EXPECT_TRUE(result.find("client1") != string::npos);
+  EXPECT_TRUE(result.find("1") != string::npos);
+  EXPECT_TRUE(result.find("foo") != string::npos);
+  EXPECT_TRUE(result.find("bar") != string::npos);
+  EXPECT_TRUE(result.find("{ ") != string::npos);
+  EXPECT_TRUE(result.find("}") != string::npos);
+}
+
+TEST(ClientLibTest, GetAnyDecodesMultiCausalSet) {
+  MockKvsClient client;
+  client.responses_.push_back(
+      make_multi_causal_set_response("1", {"m1", "m2"}));
+
+  string result = annalib::get_any(&client, "any_mcs_key");
+
+  // Output should contain vc, dependency info, and set values.
+  EXPECT_TRUE(result.find("client1") != string::npos);
+  EXPECT_TRUE(result.find("dep_key") != string::npos);
+  EXPECT_TRUE(result.find("dep_client") != string::npos);
+  EXPECT_TRUE(result.find("m1") != string::npos);
+  EXPECT_TRUE(result.find("m2") != string::npos);
+  EXPECT_TRUE(result.find("{ ") != string::npos);
+  EXPECT_TRUE(result.find("}") != string::npos);
+}
+
+// --- Ordered-set variant tests for the 3 merged get_any cases ---
+
+kvs::KeyResponse make_priority_ordered_set_response(const string& rid,
+                                                     double priority,
+                                                     const set<string>& values) {
+  kvs::SetValue sv;
+  for (const auto& v : values) sv.add_values(v);
+  string set_payload;
+  sv.SerializeToString(&set_payload);
+  kvs::PriorityValue pv;
+  pv.set_priority(priority);
+  pv.set_value(set_payload);
+  string payload;
+  pv.SerializeToString(&payload);
+  kvs::KeyResponse response;
+  response.set_response_id(rid);
+  auto* tuple = response.add_tuples();
+  tuple->set_lattice_type(kvs::LatticeType::PRIORITY_ORDERED_SET);
+  tuple->set_payload(payload);
+  return response;
+}
+
+kvs::KeyResponse make_causal_ordered_set_response(const string& rid,
+                                                   const set<string>& values) {
+  kvs::SingleKeyCausalValue skc;
+  (*skc.mutable_vector_clock())["node1"] = 1;
+  for (const auto& v : values) {
+    kvs::SetValue sv;
+    sv.add_values(v);
+    string sp;
+    sv.SerializeToString(&sp);
+    skc.add_values(sp);
+  }
+  string payload;
+  skc.SerializeToString(&payload);
+  kvs::KeyResponse response;
+  response.set_response_id(rid);
+  auto* tuple = response.add_tuples();
+  tuple->set_lattice_type(kvs::LatticeType::CAUSAL_ORDERED_SET);
+  tuple->set_payload(payload);
+  return response;
+}
+
+kvs::KeyResponse make_multi_causal_ordered_set_response(const string& rid,
+                                                         const set<string>& values) {
+  kvs::MultiKeyCausalValue mkc;
+  (*mkc.mutable_vector_clock())["node1"] = 1;
+  auto* dep = mkc.add_dependencies();
+  dep->set_key("dep_key");
+  (*dep->mutable_vector_clock())["dep_node"] = 1;
+  for (const auto& v : values) {
+    kvs::SetValue sv;
+    sv.add_values(v);
+    string sp;
+    sv.SerializeToString(&sp);
+    mkc.add_values(sp);
+  }
+  string payload;
+  mkc.SerializeToString(&payload);
+  kvs::KeyResponse response;
+  response.set_response_id(rid);
+  auto* tuple = response.add_tuples();
+  tuple->set_lattice_type(kvs::LatticeType::MULTI_CAUSAL_ORDERED_SET);
+  tuple->set_payload(payload);
+  return response;
+}
+
+TEST(ClientLibTest, PutPriorityOrderedSetSendsCorrectPayload) {
+  MockKvsClient client;
+  client.responses_.push_back(make_priority_ordered_set_response("1", 0, {}));
+  auto result = annalib::put_priority_ordered_set(&client, "pos_key", 2.5, {"x", "y"});
+  EXPECT_TRUE(result.succeeded());
+  EXPECT_EQ(client.lattice_types_[0], kvs::LatticeType::PRIORITY_ORDERED_SET);
+}
+
+TEST(ClientLibTest, PutCausalOrderedSetSendsCorrectPayload) {
+  MockKvsClient client;
+  client.responses_.push_back(make_causal_ordered_set_response("1", {}));
+  auto result = annalib::put_causal_ordered_set(&client, "cos_key", {"a", "b"});
+  EXPECT_TRUE(result.succeeded());
+  EXPECT_EQ(client.lattice_types_[0], kvs::LatticeType::CAUSAL_ORDERED_SET);
+}
+
+TEST(ClientLibTest, PutMultiCausalOrderedSetSendsCorrectPayload) {
+  MockKvsClient client;
+  client.responses_.push_back(make_multi_causal_ordered_set_response("1", {}));
+  auto result = annalib::put_multi_causal_ordered_set(&client, "mcos_key", {"p", "q"});
+  EXPECT_TRUE(result.succeeded());
+  EXPECT_EQ(client.lattice_types_[0], kvs::LatticeType::MULTI_CAUSAL_ORDERED_SET);
+}
+
+TEST(ClientLibTest, GetAnyDecodesPriorityOrderedSet) {
+  MockKvsClient client;
+  client.responses_.push_back(make_priority_ordered_set_response("1", 1.5, {"b", "a"}));
+  string result = annalib::get_any(&client, "pos_get");
+  EXPECT_TRUE(result.find("priority:") != string::npos);
+  EXPECT_TRUE(result.find("[ ") != string::npos);
+  EXPECT_TRUE(result.find("]") != string::npos);
+}
+
+TEST(ClientLibTest, GetAnyDecodesCausalOrderedSet) {
+  MockKvsClient client;
+  client.responses_.push_back(make_causal_ordered_set_response("1", {"y", "x"}));
+  string result = annalib::get_any(&client, "cos_get");
+  EXPECT_TRUE(result.find("node1") != string::npos);
+  EXPECT_TRUE(result.find("[ ") != string::npos);
+  EXPECT_TRUE(result.find("]") != string::npos);
+}
+
+TEST(ClientLibTest, GetAnyDecodesMultiCausalOrderedSet) {
+  MockKvsClient client;
+  client.responses_.push_back(make_multi_causal_ordered_set_response("1", {"b", "a"}));
+  string result = annalib::get_any(&client, "mcos_get");
+  EXPECT_TRUE(result.find("node1") != string::npos);
+  EXPECT_TRUE(result.find("dep_key") != string::npos);
+  EXPECT_TRUE(result.find("[ ") != string::npos);
+  EXPECT_TRUE(result.find("]") != string::npos);
+}

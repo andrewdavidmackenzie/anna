@@ -249,6 +249,72 @@ fn parse_put_args(split: &[&str]) -> Result<(String, annalib::value::Value)> {
                 Value::LwwOrderedSet(split[3..].iter().map(|s| s.to_string()).collect())
             }
             LatticeType::UnionScalar => Value::UnionScalar(split[3].into()),
+            LatticeType::PrioritySet => {
+                if split.len() < 5 {
+                    return Err(CliError::Other(
+                        "PUT priority_set requires key, priority, and values".into(),
+                    ));
+                }
+                let priority = split[3].parse::<f64>().map_err(|e| {
+                    CliError::Other(format!("Invalid priority '{}': {}", split[3], e))
+                })?;
+                Value::PrioritySet {
+                    priority,
+                    values: split[4..].iter().map(|s| s.to_string()).collect(),
+                }
+            }
+            LatticeType::PriorityOrderedSet => {
+                if split.len() < 5 {
+                    return Err(CliError::Other(
+                        "PUT priority_ordered_set requires key, priority, and values".into(),
+                    ));
+                }
+                let priority = split[3].parse::<f64>().map_err(|e| {
+                    CliError::Other(format!("Invalid priority '{}': {}", split[3], e))
+                })?;
+                Value::PriorityOrderedSet {
+                    priority,
+                    values: split[4..].iter().map(|s| s.to_string()).collect(),
+                }
+            }
+            LatticeType::CausalSet => {
+                let mut vc = std::collections::HashMap::new();
+                vc.insert("test".to_string(), 1u32);
+                Value::CausalSet {
+                    vector_clock: vc,
+                    values: split[3..].iter().map(|s| s.to_string()).collect(),
+                }
+            }
+            LatticeType::CausalOrderedSet => {
+                let mut vc = std::collections::HashMap::new();
+                vc.insert("test".to_string(), 1u32);
+                Value::CausalOrderedSet {
+                    vector_clock: vc,
+                    values: split[3..].iter().map(|s| s.to_string()).collect(),
+                }
+            }
+            LatticeType::MultiCausalSet => {
+                let mut vc = std::collections::HashMap::new();
+                vc.insert("test".to_string(), 1u32);
+                let mut dep_vc = std::collections::HashMap::new();
+                dep_vc.insert("test1".to_string(), 1u32);
+                Value::MultiCausalSet {
+                    vector_clock: vc,
+                    dependencies: vec![("dep1".into(), dep_vc)],
+                    values: split[3..].iter().map(|s| s.to_string()).collect(),
+                }
+            }
+            LatticeType::MultiCausalOrderedSet => {
+                let mut vc = std::collections::HashMap::new();
+                vc.insert("test".to_string(), 1u32);
+                let mut dep_vc = std::collections::HashMap::new();
+                dep_vc.insert("test1".to_string(), 1u32);
+                Value::MultiCausalOrderedSet {
+                    vector_clock: vc,
+                    dependencies: vec![("dep1".into(), dep_vc)],
+                    values: split[3..].iter().map(|s| s.to_string()).collect(),
+                }
+            }
             LatticeType::Priority => {
                 if split.len() < 5 {
                     return Err(CliError::Other(
@@ -406,6 +472,12 @@ fn cli_usage() -> String {
     \n\tput ordered_set {key} {vals...} \t- store an ordered set\
     \n\tput lww_set {key} {vals...} \t- store a set (LWW, replaces on write)\
     \n\tput lww_ordered_set {key} {vals...} - store an ordered set (LWW)\
+    \n\tput priority_set {key} {pri} {vals...} - store a set (lowest priority wins)\
+    \n\tput priority_ordered_set {key} {pri} {vals...} - store ordered set (priority)\
+    \n\tput causal_set {key} {vals...} \t- store a set (causal consistency)\
+    \n\tput causal_ordered_set {key} {vals...} - store ordered set (causal)\
+    \n\tput multi_causal_set {key} {vals...} - store a set (multi-key causal)\
+    \n\tput multi_causal_ordered_set {key} {vals...} - ordered set (multi-key causal)\
     \n\tput union {key} {value} \t- append a value (accumulates via union)\
     \n\tput priority {key} {pri} {val} \t- store with priority (lowest wins)\
     \n\tput causal {key} {value} \t- store with multi-key causal consistency\

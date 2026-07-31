@@ -79,8 +79,14 @@ string cli_usage() {
          "  PUT lww_ordered_set {key} {vals...} - store an ordered set (LWW)\n"
          "  PUT union {key} {value}         - append a value (accumulates via union)\n"
          "  PUT priority {key} {pri} {val}  - store with priority (lowest wins)\n"
+         "  PUT priority_set {key} {pri} {vals...} - store a set with priority\n"
+         "  PUT priority_ordered_set {key} {pri} {vals...} - store an ordered set with priority\n"
          "  PUT causal {key} {value}        - store with multi-key causal consistency\n"
          "  PUT single_causal {key} {value} - store with single-key causal consistency\n"
+         "  PUT causal_set {key} {vals...}  - store a set with single-key causal consistency\n"
+         "  PUT causal_ordered_set {key} {vals...} - store an ordered set with single-key causal\n"
+         "  PUT multi_causal_set {key} {vals...} - store a set with multi-key causal consistency\n"
+         "  PUT multi_causal_ordered_set {key} {vals...} - store an ordered set with multi-key causal\n"
          "  DELETE {key}                    - delete a key\n"
          "  BENCH [keys] [value_size] [duration] [workload] - run a benchmark\n"
          "  START, STOP, STATUS, HELP, EXIT";
@@ -104,8 +110,11 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
     return lower == "lww" || lower == "set" || lower == "ordered_set" ||
            lower == "lww_set" || lower == "lww_ordered_set" || lower == "union" ||
-           lower == "priority" ||
-           lower == "causal" || lower == "single_causal";
+           lower == "priority" || lower == "priority_set" ||
+           lower == "priority_ordered_set" ||
+           lower == "causal" || lower == "single_causal" ||
+           lower == "causal_set" || lower == "causal_ordered_set" ||
+           lower == "multi_causal_set" || lower == "multi_causal_ordered_set";
   };
 
   try {
@@ -202,6 +211,34 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
         ok = annalib::put_causal(client, key, v[val_start]).succeeded();
       } else if (type_name == "single_causal") {
         ok = annalib::put_single_causal(client, key, v[val_start]).succeeded();
+      } else if (type_name == "priority_set") {
+        if (val_start + 1 >= v.size()) { std::cerr << "Usage: PUT priority_set <key> <priority> <values...>" << std::endl; return; }
+        double priority = std::stod(v[val_start]);
+        set<string> values;
+        for (size_t i = val_start + 1; i < v.size(); i++) values.insert(v[i]);
+        ok = annalib::put_priority_set(client, key, priority, values).succeeded();
+      } else if (type_name == "priority_ordered_set") {
+        if (val_start + 1 >= v.size()) { std::cerr << "Usage: PUT priority_ordered_set <key> <priority> <values...>" << std::endl; return; }
+        double priority = std::stod(v[val_start]);
+        set<string> values;
+        for (size_t i = val_start + 1; i < v.size(); i++) values.insert(v[i]);
+        ok = annalib::put_priority_ordered_set(client, key, priority, values).succeeded();
+      } else if (type_name == "causal_set") {
+        set<string> values;
+        for (size_t i = val_start; i < v.size(); i++) values.insert(v[i]);
+        ok = annalib::put_causal_set(client, key, values).succeeded();
+      } else if (type_name == "causal_ordered_set") {
+        set<string> values;
+        for (size_t i = val_start; i < v.size(); i++) values.insert(v[i]);
+        ok = annalib::put_causal_ordered_set(client, key, values).succeeded();
+      } else if (type_name == "multi_causal_set") {
+        set<string> values;
+        for (size_t i = val_start; i < v.size(); i++) values.insert(v[i]);
+        ok = annalib::put_multi_causal_set(client, key, values).succeeded();
+      } else if (type_name == "multi_causal_ordered_set") {
+        set<string> values;
+        for (size_t i = val_start; i < v.size(); i++) values.insert(v[i]);
+        ok = annalib::put_multi_causal_ordered_set(client, key, values).succeeded();
       }
 
       if (!ok) {
