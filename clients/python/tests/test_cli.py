@@ -1105,6 +1105,66 @@ class TestPrioritySetType:
         execute_command(client, None, "PUT multi_causal_set mykey a b")
         client.put.assert_called_once()
 
+    def test_put_priority_ordered_set_type_tag(self):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.put.return_value = {"mykey": True}
+        execute_command(client, None, "PUT priority_ordered_set mykey 1.5 a b")
+        args = client.put.call_args
+        lattice = args[0][1]
+        _, lt = lattice.serialize()
+        from anna.kvs_pb2 import PRIORITY_ORDERED_SET
+        assert lt == PRIORITY_ORDERED_SET
+
+    def test_put_causal_set_type_tag(self):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.put.return_value = {"mykey": True}
+        execute_command(client, None, "PUT causal_set mykey x y")
+        args = client.put.call_args
+        lattice = args[0][1]
+        _, lt = lattice.serialize()
+        from anna.kvs_pb2 import CAUSAL_SET
+        assert lt == CAUSAL_SET
+
+    def test_put_causal_ordered_set_type_tag(self):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.put.return_value = {"mykey": True}
+        execute_command(client, None, "PUT causal_ordered_set mykey x y")
+        args = client.put.call_args
+        lattice = args[0][1]
+        _, lt = lattice.serialize()
+        from anna.kvs_pb2 import CAUSAL_ORDERED_SET
+        assert lt == CAUSAL_ORDERED_SET
+
+    def test_put_multi_causal_set_type_tag(self):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.put.return_value = {"mykey": True}
+        execute_command(client, None, "PUT multi_causal_set mykey a b")
+        args = client.put.call_args
+        lattice = args[0][1]
+        _, lt = lattice.serialize()
+        from anna.kvs_pb2 import MULTI_CAUSAL_SET
+        assert lt == MULTI_CAUSAL_SET
+
+    def test_put_multi_causal_ordered_set_type_tag(self):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.put.return_value = {"mykey": True}
+        execute_command(client, None, "PUT multi_causal_ordered_set mykey a b")
+        args = client.put.call_args
+        lattice = args[0][1]
+        _, lt = lattice.serialize()
+        from anna.kvs_pb2 import MULTI_CAUSAL_ORDERED_SET
+        assert lt == MULTI_CAUSAL_ORDERED_SET
+
     def test_priority_set_deserialize(self):
         from anna.base_client import BaseAnnaClient
         from anna.kvs_pb2 import PriorityValue, SetValue, KeyTuple, PRIORITY_SET

@@ -451,6 +451,52 @@ mod tests {
     }
 
     #[test]
+    fn display_priority_ordered_set() {
+        let v = Value::PriorityOrderedSet {
+            priority: 2.0,
+            values: vec!["c".into(), "a".into()],
+        };
+        assert_eq!(v.to_string(), "priority: 2\n[ a c ]");
+    }
+
+    #[test]
+    fn display_causal_ordered_set() {
+        let mut vc = HashMap::new();
+        vc.insert("n".into(), 1);
+        let v = Value::CausalOrderedSet {
+            vector_clock: vc,
+            values: vec!["z".into(), "a".into()],
+        };
+        assert_eq!(v.to_string(), "{n : 1}\n[ a z ]");
+    }
+
+    #[test]
+    fn display_multi_causal_set() {
+        let mut vc = HashMap::new();
+        vc.insert("n".into(), 1);
+        let mut dvc = HashMap::new();
+        dvc.insert("d".into(), 2);
+        let v = Value::MultiCausalSet {
+            vector_clock: vc,
+            dependencies: vec![("dep".into(), dvc)],
+            values: vec!["b".into(), "a".into()],
+        };
+        assert!(v.to_string().contains("{ a b }"));
+    }
+
+    #[test]
+    fn display_multi_causal_ordered_set() {
+        let mut vc = HashMap::new();
+        vc.insert("n".into(), 1);
+        let v = Value::MultiCausalOrderedSet {
+            vector_clock: vc,
+            dependencies: vec![],
+            values: vec!["y".into(), "x".into()],
+        };
+        assert!(v.to_string().contains("[ x y ]"));
+    }
+
+    #[test]
     fn parse_new_type_names() {
         assert_eq!(
             parse_type_name("priority_set"),
