@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-20a2be6e.js";
+            window.path_to_searchindex_js = "../searchindex-dab0bfb9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-65030116.js"></script>
@@ -194,6 +194,12 @@ mocks.</p>
 <tr><td>PUT ordered_set {key} …</td><td>Store an ordered set</td><td>Yes</td></tr>
 <tr><td>PUT lww_set {key} {vals…}</td><td>Store a set (LWW, replaces entire set on write)</td><td>Yes</td></tr>
 <tr><td>PUT lww_ordered_set {key} …</td><td>Store an ordered set (LWW, replaces on write)</td><td>Yes</td></tr>
+<tr><td>PUT priority_set {key} {p} …</td><td>Store a set (lowest priority wins)</td><td>Yes</td></tr>
+<tr><td>PUT priority_ordered_set …</td><td>Store ordered set (lowest priority wins)</td><td>Yes</td></tr>
+<tr><td>PUT causal_set {key} {vals…}</td><td>Store a set (single-key causal)</td><td>Yes</td></tr>
+<tr><td>PUT causal_ordered_set …</td><td>Store ordered set (single-key causal)</td><td>Yes</td></tr>
+<tr><td>PUT multi_causal_set …</td><td>Store a set (multi-key causal)</td><td>Yes</td></tr>
+<tr><td>PUT multi_causal_ordered_set …</td><td>Store ordered set (multi-key causal)</td><td>Yes</td></tr>
 <tr><td>PUT union {key} {value}</td><td>Append a value (accumulates via set union)</td><td>Yes</td></tr>
 <tr><td>PUT priority {key} {p} {v}</td><td>Store with priority (lowest wins)</td><td>Yes</td></tr>
 <tr><td>PUT causal {key} {value}</td><td>Store with multi-key causal consistency</td><td>Yes</td></tr>
