@@ -5,10 +5,10 @@ use crate::proto::metadata::UserFeedback;
 use crate::proto::shared::StringSet;
 use crate::types::Address;
 use log::info;
+use omq_tokio::{Context, Message as ZmqMessage, Options, Socket as OmqSocket, SocketType};
 use prost::Message;
 use std::collections::HashMap;
 use std::time::Duration;
-use zeromq::{PushSocket, Socket, SocketSend};
 
 const K_FEEDBACK_REPORT_PORT: usize = 6750;
 const MONITORING_IPS_KEY: &str = "ANNA_METADATA|monitoring_ips";
@@ -38,9 +38,10 @@ const MONITORING_IPS_KEY: &str = "ANNA_METADATA|monitoring_ips";
 /// ```
 pub struct LatencyReporter {
     uid: String,
+    ctx: Context,
     base_offset: usize,
     warmup: bool,
-    socket_cache: HashMap<Address, PushSocket>,
+    socket_cache: HashMap<Address, OmqSocket>,
     monitoring_ips: Vec<Address>,
 }
 
@@ -70,6 +71,7 @@ impl LatencyReporter {
 
         Ok(LatencyReporter {
             uid,
+            ctx: Context::new(),
             base_offset,
             warmup: false,
             socket_cache: HashMap::new(),
@@ -86,6 +88,7 @@ impl LatencyReporter {
         let tid = tid.unwrap_or(0);
         LatencyReporter {
             uid: format!("rust_client:{}", tid),
+            ctx: Context::new(),
             base_offset,
             warmup: false,
             socket_cache: HashMap::new(),
@@ -162,7 +165,7 @@ impl LatencyReporter {
             let addr = format!("tcp://{}:{}", ip, K_FEEDBACK_REPORT_PORT + self.base_offset);
             let socket = self.get_or_connect(&addr).await?;
             socket
-                .send(zeromq::ZmqMessage::from(payload.clone()))
+                .send(ZmqMessage::from(payload.clone()))
                 .await
                 .map_err(|e| Error::Kvs(format!("Failed to send feedback to {}: {}", addr, e)))?;
         }
@@ -170,12 +173,15 @@ impl LatencyReporter {
         Ok(())
     }
 
-    async fn get_or_connect(&mut self, addr: &str) -> Result<&mut PushSocket> {
+    async fn get_or_connect(&mut self, addr: &str) -> Result<&mut OmqSocket> {
         if !self.socket_cache.contains_key(addr) {
             let mut last_err = None;
             for attempt in 0..5 {
-                let mut sock = PushSocket::new();
-                match tokio::time::timeout(Duration::from_secs(5), sock.connect(addr)).await {
+                let sock = self.ctx.socket(SocketType::Push, Options::default());
+                let endpoint = addr
+                    .parse()
+                    .map_err(|e| Error::Kvs(format!("Invalid address {}: {}", addr, e)))?;
+                match tokio::time::timeout(Duration::from_secs(5), sock.connect(endpoint)).await {
                     Ok(Ok(())) => {
                         self.socket_cache.insert(addr.to_string(), sock);
                         last_err = None;
@@ -274,12 +280,11 @@ mod tests {
 
     #[tokio::test]
     async fn send_and_receive_feedback() {
-        use zeromq::{PullSocket, SocketRecv};
-
         let port = 6750 + 80;
-        let mut puller = PullSocket::new();
+        let ctx = Context::new();
+        let puller = ctx.socket(SocketType::Pull, Options::default());
         puller
-            .bind(&format!("tcp://127.0.0.1:{}", port))
+            .bind(format!("tcp://127.0.0.1:{}", port).parse().unwrap())
             .await
             .expect("bind failed");
 
@@ -297,11 +302,7 @@ mod tests {
             .await
             .expect("recv timed out")
             .expect("recv failed");
-        let bytes: Vec<u8> = msg
-            .into_vec()
-            .into_iter()
-            .flat_map(|f| f.to_vec())
-            .collect();
+        let bytes: Vec<u8> = msg.iter().flat_map(|f| f.to_vec()).collect();
         let decoded = UserFeedback::decode(bytes.as_slice()).expect("decode failed");
         assert_eq!(decoded.uid, "rust_client:0");
         assert!((decoded.latency - 5000.0).abs() < f64::EPSILON);
@@ -312,12 +313,11 @@ mod tests {
 
     #[tokio::test]
     async fn send_finish_signal() {
-        use zeromq::{PullSocket, SocketRecv};
-
         let port = 6750 + 81;
-        let mut puller = PullSocket::new();
+        let ctx = Context::new();
+        let puller = ctx.socket(SocketType::Pull, Options::default());
         puller
-            .bind(&format!("tcp://127.0.0.1:{}", port))
+            .bind(format!("tcp://127.0.0.1:{}", port).parse().unwrap())
             .await
             .expect("bind failed");
 
@@ -332,23 +332,18 @@ mod tests {
             .await
             .expect("recv timed out")
             .expect("recv failed");
-        let bytes: Vec<u8> = msg
-            .into_vec()
-            .into_iter()
-            .flat_map(|f| f.to_vec())
-            .collect();
+        let bytes: Vec<u8> = msg.iter().flat_map(|f| f.to_vec()).collect();
         let decoded = UserFeedback::decode(bytes.as_slice()).expect("decode failed");
         assert!(decoded.finish);
     }
 
     #[tokio::test]
     async fn connect_pre_establishes_sockets() {
-        use zeromq::PullSocket;
-
         let port = 6750 + 82;
-        let mut puller = PullSocket::new();
+        let ctx = Context::new();
+        let puller = ctx.socket(SocketType::Pull, Options::default());
         puller
-            .bind(&format!("tcp://127.0.0.1:{}", port))
+            .bind(format!("tcp://127.0.0.1:{}", port).parse().unwrap())
             .await
             .expect("bind failed");
 

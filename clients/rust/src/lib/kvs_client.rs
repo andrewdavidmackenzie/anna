@@ -8,6 +8,7 @@ use crate::proto::kvs::{
 use crate::threads::{UserRoutingThread, UserThread};
 use crate::types::{Address, Key, ThreadID};
 use log::{debug, error, info, warn};
+use omq_tokio::{Context, Message as ZmqMessage, Options, Socket as OmqSocket, SocketType};
 use prost::Message;
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
@@ -16,13 +17,13 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use zeromq::{PullSocket, PushSocket, Socket, SocketRecv, SocketSend};
 
 enum Transport {
     Zmq {
-        socket_cache: HashMap<Address, PushSocket>,
-        key_address_puller: PullSocket,
-        response_puller: PullSocket,
+        ctx: Context,
+        socket_cache: HashMap<Address, OmqSocket>,
+        key_address_puller: OmqSocket,
+        response_puller: OmqSocket,
     },
     #[cfg(test)]
     Mock {
@@ -104,15 +105,24 @@ impl KVSClient {
 
         let ut = UserThread::with_offset(&config.client_ip, tid, base_offset);
 
-        let mut key_address_puller = PullSocket::new();
+        let ctx = Context::new();
+        let key_address_puller = ctx.socket(SocketType::Pull, Options::default());
         key_address_puller
-            .bind(&ut.key_address_bind_address())
+            .bind(
+                ut.key_address_bind_address()
+                    .parse()
+                    .expect("invalid bind address"),
+            )
             .await
             .expect("Failed to bind key address puller");
 
-        let mut response_puller = PullSocket::new();
+        let response_puller = ctx.socket(SocketType::Pull, Options::default());
         response_puller
-            .bind(&ut.response_bind_address())
+            .bind(
+                ut.response_bind_address()
+                    .parse()
+                    .expect("invalid bind address"),
+            )
             .await
             .expect("Failed to bind response puller");
 
@@ -125,6 +135,7 @@ impl KVSClient {
             key_address_cache: HashMap::new(),
             timeout: Duration::from_secs(10),
             transport: Transport::Zmq {
+                ctx,
                 socket_cache: HashMap::new(),
                 key_address_puller,
                 response_puller,
@@ -188,16 +199,21 @@ impl KVSClient {
 
     async fn send_request(&mut self, msg: &[u8], addr: &str) -> Result<()> {
         match &mut self.transport {
-            Transport::Zmq { socket_cache, .. } => {
+            Transport::Zmq {
+                ctx, socket_cache, ..
+            } => {
                 if !socket_cache.contains_key(addr) {
-                    let mut sock = PushSocket::new();
-                    sock.connect(addr)
-                        .await
-                        .map_err(|e| Error::Kvs(format!("Failed to connect to {}: {}", addr, e)))?;
+                    let sock = ctx.socket(SocketType::Push, Options::default());
+                    sock.connect(
+                        addr.parse()
+                            .map_err(|e| Error::Kvs(format!("Invalid address {}: {}", addr, e)))?,
+                    )
+                    .await
+                    .map_err(|e| Error::Kvs(format!("Failed to connect to {}: {}", addr, e)))?;
                     socket_cache.insert(addr.to_string(), sock);
                 }
                 let sock = socket_cache.get_mut(addr).expect("socket just inserted");
-                sock.send(msg.to_vec().into())
+                sock.send(ZmqMessage::from(msg.to_vec()))
                     .await
                     .map_err(|e| Error::Kvs(format!("Failed to send: {}", e)))?;
                 Ok(())
@@ -220,7 +236,7 @@ impl KVSClient {
                     response_puller
                 };
                 match tokio::time::timeout(self.timeout, sock.recv()).await {
-                    Ok(Ok(msg)) => msg.into_vec().pop().map(|b| b.to_vec()),
+                    Ok(Ok(msg)) => msg.get(0).map(|b| b.to_vec()),
                     Ok(Err(e)) => {
                         error!("ZMQ recv error: {}", e);
                         None

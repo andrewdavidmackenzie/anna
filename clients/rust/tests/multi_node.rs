@@ -436,8 +436,8 @@ impl MultiNodeCluster {
         use annalib::proto::metadata::{
             replication_factor::ReplicationValue, ReplicationFactor, ReplicationFactorUpdate, Tier,
         };
+        use omq_tokio::{Context, Message as ZmqMessage, Options, SocketType};
         use prost::Message;
-        use zeromq::{PushSocket, Socket, SocketSend};
 
         let rep = ReplicationFactor {
             key: key.to_string(),
@@ -459,26 +459,27 @@ impl MultiNodeCluster {
         let update = ReplicationFactorUpdate { updates: vec![rep] };
         let encoded = update.encode_to_vec();
 
+        let ctx = Context::new();
         let routing_port = 6550 + self.base_offset;
         let routing_addr = format!("tcp://{}:{}", routing_ip, routing_port);
-        let mut rsock = PushSocket::new();
+        let rsock = ctx.socket(SocketType::Push, Options::default());
         rsock
-            .connect(&routing_addr)
+            .connect(routing_addr.parse().unwrap())
             .await
             .expect("Failed to connect to routing replication change port");
         tokio::time::sleep(Duration::from_millis(200)).await;
         rsock
-            .send(encoded.clone().into())
+            .send(ZmqMessage::from(encoded.clone()))
             .await
             .expect("Failed to send to routing");
 
         for kvs_ip in [NODE1_IP, NODE2_IP] {
             let kvs_port = 6300 + self.base_offset;
             let kvs_addr = format!("tcp://{}:{}", kvs_ip, kvs_port);
-            let mut ksock = PushSocket::new();
-            if ksock.connect(&kvs_addr).await.is_ok() {
+            let ksock = ctx.socket(SocketType::Push, Options::default());
+            if ksock.connect(kvs_addr.parse().unwrap()).await.is_ok() {
                 tokio::time::sleep(Duration::from_millis(100)).await;
-                ksock.send(encoded.clone().into()).await.ok();
+                ksock.send(ZmqMessage::from(encoded.clone())).await.ok();
             }
         }
         std::thread::sleep(Duration::from_millis(ZMQ_SETTLE_MS));
@@ -1733,8 +1734,8 @@ async fn slo_selective_replication() {
     use annalib::kvs_client::KVSClient;
     use annalib::proto::metadata::user_feedback::KeyLatency;
     use annalib::proto::metadata::{ReplicationFactor, UserFeedback};
+    use omq_tokio::{Context, Message as ZmqMessage, Options, SocketType};
     use prost::Message;
-    use zeromq::{PushSocket, Socket, SocketSend};
 
     if !can_bind(NODE2_IP) {
         eprintln!("SKIP: {} not bindable", NODE2_IP);
@@ -1772,9 +1773,10 @@ async fn slo_selective_replication() {
 
     // Connect to monitor feedback port using raw ZMQ
     let feedback_addr = format!("tcp://{}:{}", NODE1_IP, 6750 + 400);
-    let mut feedback_pusher = PushSocket::new();
+    let ctx = Context::new();
+    let feedback_pusher = ctx.socket(SocketType::Push, Options::default());
     feedback_pusher
-        .connect(&feedback_addr)
+        .connect(feedback_addr.parse().unwrap())
         .await
         .expect("feedback connect failed");
     tokio::time::sleep(Duration::from_millis(ZMQ_SETTLE_MS)).await;
@@ -1795,7 +1797,7 @@ async fn slo_selective_replication() {
                 ..Default::default()
             };
             if feedback_pusher
-                .send(zeromq::ZmqMessage::from(feedback.encode_to_vec()))
+                .send(ZmqMessage::from(feedback.encode_to_vec()))
                 .await
                 .is_err()
             {
@@ -1856,7 +1858,7 @@ async fn slo_selective_replication() {
 #[serial(multi_node)]
 async fn management_node_integration() {
     use annalib::kvs_client::KVSClient;
-    use zeromq::{PullSocket, RepSocket, Socket, SocketRecv, SocketSend};
+    use omq_tokio::{Context, Message as ZmqMessage, Options, SocketType};
 
     if !server_bin_dir().join("anna-kvs").exists() {
         eprintln!("SKIP: server binaries not built");
@@ -1865,19 +1867,29 @@ async fn management_node_integration() {
 
     let base_offset: u32 = 500;
 
+    let ctx = Context::new();
+
     // Start mock management node BEFORE starting the cluster.
     // Port 7000+offset: REP socket for "restart:<ip>" queries
-    let mut restart_count_rep = RepSocket::new();
+    let restart_count_rep = ctx.socket(SocketType::Rep, Options::default());
     restart_count_rep
-        .bind(&format!("tcp://{}:{}", NODE1_IP, 7000 + base_offset))
+        .bind(
+            format!("tcp://{}:{}", NODE1_IP, 7000 + base_offset)
+                .parse()
+                .unwrap(),
+        )
         .await
         .expect("Failed to bind restart count REP");
 
     // Port 7002+offset: PULL socket for func/cache node queries
     // (KVS sends via PUSH, so we receive via PULL)
-    let mut func_nodes_pull = PullSocket::new();
+    let func_nodes_pull = ctx.socket(SocketType::Pull, Options::default());
     func_nodes_pull
-        .bind(&format!("tcp://{}:{}", NODE1_IP, 7002 + base_offset))
+        .bind(
+            format!("tcp://{}:{}", NODE1_IP, 7002 + base_offset)
+                .parse()
+                .unwrap(),
+        )
         .await
         .expect("Failed to bind func nodes PULL");
 
@@ -1886,6 +1898,7 @@ async fn management_node_integration() {
     // Spawn a background task to handle management node requests.
     // The KVS server sends "restart:<ip>" on startup and expects a count.
     // The KVS also periodically queries func_nodes for cache IPs.
+    let ctx2 = ctx.clone();
     let mgmt_handle = tokio::spawn(async move {
         let mut restart_count = 0u32;
         let mut func_count = 0u32;
@@ -1894,21 +1907,21 @@ async fn management_node_integration() {
             tokio::select! {
                 result = restart_count_rep.recv() => {
                     if let Ok(msg) = result {
-                        let data: Vec<u8> = msg.into_vec()
-                            .into_iter().flat_map(|f| f.to_vec()).collect();
+                        let data: Vec<u8> = msg.iter()
+                            .flat_map(|f| f.to_vec()).collect();
                         let request = String::from_utf8_lossy(&data);
                         eprintln!("Mock mgmt: restart query: {}", request);
                         restart_count += 1;
                         restart_count_rep
-                            .send(zeromq::ZmqMessage::from("0".as_bytes().to_vec()))
+                            .send(ZmqMessage::from("0".as_bytes().to_vec()))
                             .await
                             .ok();
                     }
                 }
                 result = func_nodes_pull.recv() => {
                     if let Ok(msg) = result {
-                        let data: Vec<u8> = msg.into_vec()
-                            .into_iter().flat_map(|f| f.to_vec()).collect();
+                        let data: Vec<u8> = msg.iter()
+                            .flat_map(|f| f.to_vec()).collect();
                         let response_addr = String::from_utf8_lossy(&data).to_string();
                         eprintln!("Mock mgmt: func nodes query, response addr: {}", response_addr);
 
@@ -1921,11 +1934,11 @@ async fn management_node_integration() {
                             let cache_ips = StringSet {
                                 keys: vec!["10.0.0.99".to_string()],
                             };
-                            let mut push = zeromq::PushSocket::new();
-                            push.connect(&response_addr).await
+                            let push = ctx2.socket(SocketType::Push, Options::default());
+                            push.connect(response_addr.parse().unwrap()).await
                                 .expect("Failed to connect to KVS response addr");
                             tokio::time::sleep(Duration::from_millis(100)).await;
-                            push.send(zeromq::ZmqMessage::from(cache_ips.encode_to_vec()))
+                            push.send(ZmqMessage::from(cache_ips.encode_to_vec()))
                                 .await
                                 .expect("Failed to send cache IPs to KVS");
                             eprintln!("Mock mgmt: sent cache IP list to {}", response_addr);
@@ -2010,8 +2023,8 @@ async fn management_node_integration() {
 async fn elasticity_storage_policy() {
     use annalib::kvs_client::KVSClient;
     use annalib::proto::metadata::{scaling_alert, ScalingAlert, Tier};
+    use omq_tokio::{Context, Message as ZmqMessage, Options, SocketType};
     use prost::Message;
-    use zeromq::{PullSocket, RepSocket, Socket, SocketRecv, SocketSend};
 
     if !server_bin_dir().join("anna-kvs").exists() {
         eprintln!("SKIP: server binaries not built");
@@ -2020,23 +2033,37 @@ async fn elasticity_storage_policy() {
 
     let base_offset: u32 = 600;
 
+    let ctx = Context::new();
+
     // Mock management node sockets
-    let mut restart_rep = RepSocket::new();
+    let restart_rep = ctx.socket(SocketType::Rep, Options::default());
     restart_rep
-        .bind(&format!("tcp://{}:{}", NODE1_IP, 7000 + base_offset))
+        .bind(
+            format!("tcp://{}:{}", NODE1_IP, 7000 + base_offset)
+                .parse()
+                .unwrap(),
+        )
         .await
         .expect("bind restart REP failed");
 
-    let mut func_pull = PullSocket::new();
+    let func_pull = ctx.socket(SocketType::Pull, Options::default());
     func_pull
-        .bind(&format!("tcp://{}:{}", NODE1_IP, 7002 + base_offset))
+        .bind(
+            format!("tcp://{}:{}", NODE1_IP, 7002 + base_offset)
+                .parse()
+                .unwrap(),
+        )
         .await
         .expect("bind func PULL failed");
 
     // Port 7001+offset for add/remove messages from monitor
-    let mut add_node_pull = PullSocket::new();
+    let add_node_pull = ctx.socket(SocketType::Pull, Options::default());
     add_node_pull
-        .bind(&format!("tcp://{}:{}", NODE1_IP, 7001 + base_offset))
+        .bind(
+            format!("tcp://{}:{}", NODE1_IP, 7001 + base_offset)
+                .parse()
+                .unwrap(),
+        )
         .await
         .expect("bind add_node PULL failed");
 
@@ -2049,7 +2076,7 @@ async fn elasticity_storage_policy() {
                 result = restart_rep.recv() => {
                     if result.is_ok() {
                         restart_rep
-                            .send(zeromq::ZmqMessage::from("0".as_bytes().to_vec()))
+                            .send(ZmqMessage::from("0".as_bytes().to_vec()))
                             .await
                             .ok();
                     }
@@ -2061,8 +2088,8 @@ async fn elasticity_storage_policy() {
                 }
                 result = add_node_pull.recv() => {
                     if let Ok(msg) = result {
-                        let data: Vec<u8> = msg.into_vec()
-                            .into_iter().flat_map(|f| f.to_vec()).collect();
+                        let data: Vec<u8> = msg.iter()
+                            .flat_map(|f| f.to_vec()).collect();
                         eprintln!("Mock mgmt: scaling alert received ({} bytes)", data.len());
                         return Some(data);
                     }
@@ -2176,8 +2203,8 @@ async fn elasticity_storage_policy() {
 async fn underutilization_scale_in() {
     use annalib::kvs_client::KVSClient;
     use annalib::proto::metadata::{scaling_alert, ScalingAlert, Tier};
+    use omq_tokio::{Context, Message as ZmqMessage, Options, SocketType};
     use prost::Message;
-    use zeromq::{PullSocket, RepSocket, Socket, SocketRecv, SocketSend};
 
     if !can_bind(NODE2_IP) {
         eprintln!("SKIP: {} not bindable", NODE2_IP);
@@ -2191,23 +2218,37 @@ async fn underutilization_scale_in() {
 
     let base_offset: u32 = 700;
 
+    let ctx = Context::new();
+
     // Mock management node sockets
-    let mut restart_rep = RepSocket::new();
+    let restart_rep = ctx.socket(SocketType::Rep, Options::default());
     restart_rep
-        .bind(&format!("tcp://{}:{}", NODE1_IP, 7000 + base_offset))
+        .bind(
+            format!("tcp://{}:{}", NODE1_IP, 7000 + base_offset)
+                .parse()
+                .unwrap(),
+        )
         .await
         .expect("bind restart REP failed");
 
-    let mut func_pull = PullSocket::new();
+    let func_pull = ctx.socket(SocketType::Pull, Options::default());
     func_pull
-        .bind(&format!("tcp://{}:{}", NODE1_IP, 7002 + base_offset))
+        .bind(
+            format!("tcp://{}:{}", NODE1_IP, 7002 + base_offset)
+                .parse()
+                .unwrap(),
+        )
         .await
         .expect("bind func PULL failed");
 
     // Port 7001+offset for add/remove messages from monitor
-    let mut mgmt_pull = PullSocket::new();
+    let mgmt_pull = ctx.socket(SocketType::Pull, Options::default());
     mgmt_pull
-        .bind(&format!("tcp://{}:{}", NODE1_IP, 7001 + base_offset))
+        .bind(
+            format!("tcp://{}:{}", NODE1_IP, 7001 + base_offset)
+                .parse()
+                .unwrap(),
+        )
         .await
         .expect("bind mgmt PULL failed");
 
@@ -2220,7 +2261,7 @@ async fn underutilization_scale_in() {
                 result = restart_rep.recv() => {
                     if result.is_ok() {
                         restart_rep
-                            .send(zeromq::ZmqMessage::from("0".as_bytes().to_vec()))
+                            .send(ZmqMessage::from("0".as_bytes().to_vec()))
                             .await
                             .ok();
                     }
@@ -2230,8 +2271,8 @@ async fn underutilization_scale_in() {
                 }
                 result = mgmt_pull.recv() => {
                     if let Ok(msg) = result {
-                        let data: Vec<u8> = msg.into_vec()
-                            .into_iter().flat_map(|f| f.to_vec()).collect();
+                        let data: Vec<u8> = msg.iter()
+                            .flat_map(|f| f.to_vec()).collect();
                         if let Ok(alert) = ScalingAlert::decode(data.as_slice()) {
                             eprintln!("Mock mgmt: received scaling alert: action={:?}", alert.action());
                             if alert.action() == scaling_alert::Action::Remove {

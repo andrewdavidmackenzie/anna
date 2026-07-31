@@ -8,7 +8,7 @@ documentation = "https://github.com/andrewdavidmackenzie/anna/cli/README.md"
 repository = "https://github.com/andrewdavidmackenzie/anna/"
 readme = "README.md"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.93"
 
 [[bin]]
 name = "anna"
@@ -31,7 +31,7 @@ thiserror = "2"
 sysinfo = "0.39.5"
 nix = { version = "0.31.3", default-features = false, features = ["signal", "process"] }
 rustyline = "18.0.1"
-zeromq = "0.6"
+omq-tokio = "0.20"
 tokio = { version = "1", features = ["full"] }
 rand = "0.10.2"
 prost = "0.14"
