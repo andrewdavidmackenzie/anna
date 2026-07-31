@@ -4,10 +4,10 @@ use crate::proto::kvs::{KeyResponse, LwwValue};
 use crate::proto::shared::StringSet;
 use crate::types::{Address, Key};
 use log::{debug, info};
+use omq_tokio::{Context, Message as ZmqMessage, Options, Socket as OmqSocket, SocketType};
 use prost::Message;
 use std::collections::HashMap;
 use std::time::Duration;
-use zeromq::{PullSocket, PushSocket, Socket, SocketRecv, SocketSend};
 
 // The port on which KVS servers listen for direct cache registration.
 const K_CACHE_REGISTRATION_PORT: usize = 7200;
@@ -47,13 +47,15 @@ const K_CACHE_UPDATE_PORT: usize = 7150;
 /// # Ok(())
 /// # }
 /// ```
+#[derive(Debug)]
 pub struct ValueChangeSubscriber {
+    ctx: Context,
     cache_ip: Address,
     base_offset: usize,
     server_ip: Address,
     memory_threads: usize,
-    socket_cache: HashMap<Address, PushSocket>,
-    update_puller: PullSocket,
+    socket_cache: HashMap<Address, OmqSocket>,
+    update_puller: OmqSocket,
     local_cache: HashMap<Key, Vec<u8>>,
     watched_keys: Vec<Key>,
 }
@@ -90,17 +92,27 @@ impl ValueChangeSubscriber {
             cache_ip,
             tid + K_CACHE_UPDATE_PORT + base_offset
         );
-        let mut update_puller = PullSocket::new();
-        update_puller.bind(&bind_addr).await.map_err(|e| {
-            Error::Kvs(format!(
-                "Failed to bind cache update puller on {}: {}",
-                bind_addr, e
-            ))
-        })?;
+        let ctx = Context::new();
+        let update_puller = ctx.socket(SocketType::Pull, Options::default());
+        update_puller
+            .bind(bind_addr.parse().map_err(|e| {
+                Error::Kvs(format!(
+                    "Failed to parse cache update bind address {}: {}",
+                    bind_addr, e
+                ))
+            })?)
+            .await
+            .map_err(|e| {
+                Error::Kvs(format!(
+                    "Failed to bind cache update puller on {}: {}",
+                    bind_addr, e
+                ))
+            })?;
 
         info!("Cache client listening for updates on {}", bind_addr);
 
         Ok(ValueChangeSubscriber {
+            ctx,
             cache_ip,
             base_offset,
             server_ip,
@@ -135,7 +147,7 @@ impl ValueChangeSubscriber {
             );
             let socket = self.get_or_connect(&addr).await?;
             socket
-                .send(zeromq::ZmqMessage::from(payload.clone()))
+                .send(ZmqMessage::from(payload.clone()))
                 .await
                 .map_err(|e| {
                     Error::Kvs(format!("Failed to send registration to {}: {}", addr, e))
@@ -168,11 +180,7 @@ impl ValueChangeSubscriber {
 
         match result {
             Ok(Ok(msg)) => {
-                let bytes: Vec<u8> = msg
-                    .into_vec()
-                    .into_iter()
-                    .flat_map(|frame| frame.to_vec())
-                    .collect();
+                let bytes: Vec<u8> = msg.iter().flat_map(|frame| frame.to_vec()).collect();
 
                 let response = KeyResponse::decode(bytes.as_slice())
                     .map_err(|e| Error::Kvs(format!("Failed to decode cache update: {}", e)))?;
@@ -217,12 +225,15 @@ impl ValueChangeSubscriber {
         &self.watched_keys
     }
 
-    async fn get_or_connect(&mut self, addr: &str) -> Result<&mut PushSocket> {
+    async fn get_or_connect(&mut self, addr: &str) -> Result<&mut OmqSocket> {
         if !self.socket_cache.contains_key(addr) {
             let mut last_err = None;
             for attempt in 0..5 {
-                let mut sock = PushSocket::new();
-                match tokio::time::timeout(Duration::from_secs(5), sock.connect(addr)).await {
+                let sock = self.ctx.socket(SocketType::Push, Options::default());
+                let endpoint = addr
+                    .parse()
+                    .map_err(|e| Error::Kvs(format!("Invalid address {}: {}", addr, e)))?;
+                match tokio::time::timeout(Duration::from_secs(5), sock.connect(endpoint)).await {
                     Ok(Ok(())) => {
                         self.socket_cache.insert(addr.to_string(), sock);
                         last_err = None;
@@ -327,8 +338,12 @@ mod tests {
             .expect("create failed");
 
         let update_addr = format!("tcp://127.0.0.1:{}", 92 + K_CACHE_UPDATE_PORT);
-        let mut pusher = PushSocket::new();
-        pusher.connect(&update_addr).await.expect("connect failed");
+        let ctx = Context::new();
+        let pusher = ctx.socket(SocketType::Push, Options::default());
+        pusher
+            .connect(update_addr.parse().unwrap())
+            .await
+            .expect("connect failed");
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         let response = KeyResponse {
@@ -341,7 +356,7 @@ mod tests {
         };
         let bytes = response.encode_to_vec();
         pusher
-            .send(zeromq::ZmqMessage::from(bytes))
+            .send(ZmqMessage::from(bytes))
             .await
             .expect("send failed");
 
@@ -368,8 +383,12 @@ mod tests {
             .expect("create failed");
 
         let update_addr = format!("tcp://127.0.0.1:{}", 93 + K_CACHE_UPDATE_PORT);
-        let mut pusher = PushSocket::new();
-        pusher.connect(&update_addr).await.expect("connect failed");
+        let ctx = Context::new();
+        let pusher = ctx.socket(SocketType::Push, Options::default());
+        pusher
+            .connect(update_addr.parse().unwrap())
+            .await
+            .expect("connect failed");
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         let response = KeyResponse {
@@ -381,7 +400,7 @@ mod tests {
             ..Default::default()
         };
         pusher
-            .send(zeromq::ZmqMessage::from(response.encode_to_vec()))
+            .send(ZmqMessage::from(response.encode_to_vec()))
             .await
             .expect("send failed");
 
@@ -413,5 +432,73 @@ mod tests {
             .await
             .expect("create failed");
         assert_eq!(sub.memory_threads, 4);
+    }
+
+    #[tokio::test]
+    async fn get_or_connect_rejects_invalid_address() {
+        let config = crate::client_config::ClientConfig::default();
+        let mut sub = ValueChangeSubscriber::new(&config, Some(95))
+            .await
+            .expect("create failed");
+        let result = sub.get_or_connect("not_a_valid_endpoint").await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Invalid address"), "unexpected error: {}", err);
+    }
+
+    #[tokio::test]
+    async fn new_rejects_unparseable_bind_address() {
+        let config = crate::client_config::ClientConfig {
+            routing_addresses: vec!["tcp://127.0.0.1:6450".to_string()],
+            client_ip: "not a valid ip".to_string(),
+        };
+        let result = ValueChangeSubscriber::new(&config, Some(96)).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    #[cfg(unix)] // Windows SO_REUSEADDR allows duplicate binds
+    async fn new_fails_on_port_conflict() {
+        let config = crate::client_config::ClientConfig::default();
+        // First subscriber binds the port successfully.
+        let _sub1 = ValueChangeSubscriber::new(&config, Some(97))
+            .await
+            .expect("first create failed");
+        // Second subscriber tries to bind the same port and should fail.
+        let result = ValueChangeSubscriber::new(&config, Some(97)).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Failed to bind"), "unexpected error: {}", err);
+    }
+
+    #[tokio::test]
+    async fn watch_sends_registration() {
+        let config = crate::client_config::ClientConfig::default();
+        // Use memory_threads=1 and create a PULL socket to receive the
+        // registration message sent by watch().
+        let mut sub = ValueChangeSubscriber::with_memory_threads(&config, Some(98), 1)
+            .await
+            .expect("create failed");
+
+        let reg_addr = format!("tcp://127.0.0.1:{}", K_CACHE_REGISTRATION_PORT);
+        let ctx = Context::new();
+        let puller = ctx.socket(SocketType::Pull, Options::default());
+        puller
+            .bind(reg_addr.parse().expect("parse failed"))
+            .await
+            .expect("bind failed");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        sub.watch(&["test_key".to_string()])
+            .await
+            .expect("watch failed");
+
+        let msg = tokio::time::timeout(Duration::from_secs(5), puller.recv())
+            .await
+            .expect("recv timed out")
+            .expect("recv failed");
+        let bytes: Vec<u8> = msg.iter().flat_map(|f| f.to_vec()).collect();
+        let ss = StringSet::decode(bytes.as_slice()).expect("decode failed");
+        assert!(ss.keys.contains(&"test_key".to_string()));
     }
 }

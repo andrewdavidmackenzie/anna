@@ -564,8 +564,8 @@ async fn latency_feedback_ingestion() {
     use annalib::kvs_client::KVSClient;
     use annalib::proto::metadata::user_feedback::KeyLatency;
     use annalib::proto::metadata::UserFeedback;
+    use omq_tokio::{Context, Message as ZmqMessage, Options, SocketType};
     use prost::Message;
-    use zeromq::{PushSocket, Socket, SocketSend};
 
     if !server_bin_dir().join("anna-kvs").exists() {
         eprintln!("SKIP: server binaries not built");
@@ -597,9 +597,10 @@ async fn latency_feedback_ingestion() {
 
     // Send UserFeedback to the monitor's feedback port
     let feedback_addr = format!("tcp://{}:{}", NODE_IP, 6750 + 6300);
-    let mut pusher = PushSocket::new();
+    let ctx = Context::new();
+    let pusher = ctx.socket(SocketType::Push, Options::default());
     pusher
-        .connect(&feedback_addr)
+        .connect(feedback_addr.parse().unwrap())
         .await
         .expect("connect failed");
     tokio::time::sleep(Duration::from_millis(200)).await;
@@ -623,7 +624,7 @@ async fn latency_feedback_ingestion() {
     };
     let bytes = feedback.encode_to_vec();
     pusher
-        .send(zeromq::ZmqMessage::from(bytes))
+        .send(ZmqMessage::from(bytes))
         .await
         .expect("Failed to send feedback");
 
@@ -658,7 +659,7 @@ async fn latency_feedback_ingestion() {
         ..Default::default()
     };
     pusher
-        .send(zeromq::ZmqMessage::from(finish.encode_to_vec()))
+        .send(ZmqMessage::from(finish.encode_to_vec()))
         .await
         .expect("Failed to send finish feedback");
 }
