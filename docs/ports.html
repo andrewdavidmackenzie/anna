@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Autoscaling and Policy Engine - The &#x27;anna&#x27; book</title>
+        <title>Port Layout - The &#x27;anna&#x27; book</title>
 
 
         <!-- Custom HTML head -->
@@ -174,238 +174,176 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="autoscaling-and-policy-engine"><a class="header" href="#autoscaling-and-policy-engine">Autoscaling and Policy Engine</a></h1>
-<p>Anna includes autoscaling capabilities to adapt to changing workloads,
-automatically adjusting its deployment to balance cost, latency, and
-fault tolerance.</p>
-<h2 id="workload-challenges"><a class="header" href="#workload-challenges">Workload Challenges</a></h2>
-<p>Real-world workloads vary along three dimensions:</p>
+                        <h1 id="port-layout"><a class="header" href="#port-layout">Port Layout</a></h1>
+<p>Anna uses ZeroMQ TCP sockets for all inter-component communication. Every port
+in the system follows the formula:</p>
+<pre><code>actual_port = base_port + tid + base_offset
+</code></pre>
+<ul>
+<li><code>base_port</code>: a constant defined in <code>kvs_threads.hpp</code> or <code>threads.hpp</code></li>
+<li><code>tid</code>: the thread index (0 to N-1 for per-thread ports; omitted for singletons)</li>
+<li><code>base_offset</code>: a global offset from the YAML config (<code>ports.base_offset</code>),
+allowing multiple independent clusters on the same machine</li>
+</ul>
+<h2 id="port-map"><a class="header" href="#port-map">Port Map</a></h2>
+<h3 id="kvs-server-10-per-thread-ports"><a class="header" href="#kvs-server-10-per-thread-ports">KVS Server (10 per-thread ports)</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Dimension</th><th>Challenge</th><th>Anna’s Response</th></tr>
+<tr><th>Base Port</th><th>Constant</th><th>Purpose</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>Volume</strong></td><td>Overall load increases/decreases</td><td>Horizontal elasticity</td></tr>
-<tr><td><strong>Skewness</strong></td><td>Some keys are much hotter than others</td><td>Selective replication</td></tr>
-<tr><td><strong>Hotspot shifts</strong></td><td>Hottest keys change over time</td><td>Replication + tiering</td></tr>
+<tr><td>6000</td><td><code>kNodeJoinPort</code></td><td>Receive new node join announcements</td></tr>
+<tr><td>6050</td><td><code>kNodeDepartPort</code></td><td>Receive node departure notifications</td></tr>
+<tr><td>6100</td><td><code>kSelfDepartPort</code></td><td>Receive self-depart commands from monitor</td></tr>
+<tr><td>6150</td><td><code>kServerReplicationResponsePort</code></td><td>Receive replication factor query responses</td></tr>
+<tr><td>6200</td><td><code>kKeyRequestPort</code></td><td>Receive client GET/PUT/DELETE requests</td></tr>
+<tr><td>6250</td><td><code>kGossipPort</code></td><td>Receive gossip from peer KVS nodes</td></tr>
+<tr><td>6300</td><td><code>kServerReplicationChangePort</code></td><td>Receive replication factor changes from monitor</td></tr>
+<tr><td>7050</td><td><code>kCacheIpResponsePort</code></td><td>Receive cache IP lookup responses</td></tr>
+<tr><td>7100</td><td><code>kManagementNodeResponsePort</code></td><td>Receive management node responses (function node lists)</td></tr>
+<tr><td>7200</td><td><code>kCacheRegistrationPort</code></td><td>Receive cache registration messages from ValueChangeSubscriber clients</td></tr>
 </tbody>
 </table>
 </div>
-<h2 id="three-key-mechanisms"><a class="header" href="#three-key-mechanisms">Three Key Mechanisms</a></h2>
-<h3 id="1-horizontal-elasticity"><a class="header" href="#1-horizontal-elasticity">1. Horizontal Elasticity</a></h3>
-<p>Anna scales each storage tier independently by adding or removing nodes:</p>
-<ul>
-<li><strong>Scaling out</strong>: When storage or compute capacity is insufficient, the policy
-engine instructs the cluster manager to add nodes. Data is automatically
-repartitioned via consistent hashing.</li>
-<li><strong>Scaling in</strong>: When resources are underutilized, nodes are removed. The
-policy engine first checks that no key’s replication factor would exceed
-the remaining node count, adjusting replication factors if needed.</li>
-<li><strong>Grace period</strong>: After any resource change, a grace period prevents
-over-correction while data redistributes and access patterns stabilize.</li>
-</ul>
-<h3 id="2-multi-master-selective-replication"><a class="header" href="#2-multi-master-selective-replication">2. Multi-Master Selective Replication</a></h3>
-<p>When <code>policy.selective-rep</code> is enabled, Anna selectively replicates hot
-keys rather than replicating all keys uniformly:</p>
-<ul>
-<li>The policy engine classifies keys as “hot” if their access frequency
-exceeds H standard deviations above the mean</li>
-<li>Hot keys are first replicated across more threads within a node
-(intra-node replication), then across nodes (cross-node replication)</li>
-<li>Cold keys maintain the default replication factor</li>
-<li>Cross-node replication provides 4x throughput improvement per replica
-(due to network bandwidth scaling), vs 2x for intra-node</li>
-</ul>
-<h3 id="3-vertical-tiering"><a class="header" href="#3-vertical-tiering">3. Vertical Tiering</a></h3>
-<p>Anna supports multiple storage tiers with different cost-performance profiles:</p>
-<ul>
-<li><strong>Memory tier</strong>: Fast RAM-based storage (e.g., cloud VM instances)</li>
-<li><strong>Disk tier</strong>: Cheaper flash-based storage (e.g., disk volumes)</li>
-<li>Hot data is <strong>promoted</strong> from disk to memory when access frequency
-exceeds a threshold</li>
-<li>Cold data is <strong>demoted</strong> from memory to disk when access frequency drops</li>
-<li>Promotion and demotion are implemented by adjusting per-key replication
-vectors — gossip handles the actual data movement</li>
-</ul>
-<h2 id="service-level-objectives-slos"><a class="header" href="#service-level-objectives-slos">Service Level Objectives (SLOs)</a></h2>
-<p>Anna supports three types of SLOs:</p>
+<h3 id="routing-server-5-per-thread-ports"><a class="header" href="#routing-server-5-per-thread-ports">Routing Server (5 per-thread ports)</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>SLO</th><th>Description</th><th>Default</th></tr>
+<tr><th>Base Port</th><th>Constant</th><th>Purpose</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>Latency</strong> (L_obj)</td><td>Average request latency target</td><td>2.5ms</td></tr>
-<tr><td><strong>Budget</strong> (B)</td><td>Maximum cost per hour</td><td>User-specified</td></tr>
-<tr><td><strong>Fault Tolerance</strong> (k)</td><td>Number of replica failures to tolerate</td><td>2</td></tr>
+<tr><td>6350</td><td><code>kSeedPort</code></td><td>Cluster membership requests (REQ/REP, bootstrap)</td></tr>
+<tr><td>6400</td><td><code>kRoutingNotifyPort</code></td><td>Join/depart membership change notifications</td></tr>
+<tr><td>6450</td><td><code>kKeyAddressPort</code></td><td>Key-address lookup requests from clients</td></tr>
+<tr><td>6500</td><td><code>kRoutingReplicationResponsePort</code></td><td>Replication factor query responses</td></tr>
+<tr><td>6550</td><td><code>kRoutingReplicationChangePort</code></td><td>Replication factor change announcements from monitor</td></tr>
 </tbody>
 </table>
 </div>
-<p>The policy engine balances these potentially conflicting objectives. For example,
-lower latency requires more memory-tier replicas (higher cost), while lower cost
-means fewer replicas (higher latency, lower fault tolerance).</p>
-<h2 id="policy-engine-algorithm"><a class="header" href="#policy-engine-algorithm">Policy Engine Algorithm</a></h2>
-<p>The monitoring system periodically collects statistics and triggers the policy
-engine, which evaluates actions in this order:</p>
-<ol>
-<li><strong>Storage capacity check</strong>: If storage consumption exceeds thresholds,
-add or remove nodes</li>
-<li><strong>Cross-tier data movement</strong>: Promote hot data to memory, demote cold
-data to disk based on access frequency</li>
-<li><strong>Latency check</strong>: If latency exceeds the SLO, add memory nodes or
-replicate hot keys</li>
-<li><strong>Cost optimization</strong>: If latency is well below the SLO, check if nodes
-can be removed to save cost</li>
-</ol>
-<h3 id="policy-knobs"><a class="header" href="#policy-knobs">Policy Knobs</a></h3>
+<h3 id="monitor-4-singleton-ports-no-tid"><a class="header" href="#monitor-4-singleton-ports-no-tid">Monitor (4 singleton ports, no tid)</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Parameter</th><th>Meaning</th><th>Default</th></tr>
+<tr><th>Base Port</th><th>Constant</th><th>Purpose</th></tr>
 </thead>
 <tbody>
-<tr><td>T</td><td>Monitoring report period</td><td>15 seconds</td></tr>
-<tr><td>H</td><td>Key hotness threshold (std devs above mean)</td><td>3</td></tr>
-<tr><td>L</td><td>Key coldness threshold (mean access frequency)</td><td>Mean</td></tr>
-<tr><td>P</td><td>Key promotion threshold</td><td>2 accesses in 60s</td></tr>
-<tr><td>S_lower, S_upper</td><td>Storage consumption thresholds</td><td>Memory: 0.3-0.6, Disk: 0.5-0.75</td></tr>
-<tr><td>f_lower, f_upper</td><td>Latency thresholds (fraction of SLO)</td><td>0.5, 0.75</td></tr>
-<tr><td>C_lower, C_upper</td><td>Compute occupancy thresholds</td><td>0.05, 0.20</td></tr>
-<tr><td>c</td><td>Upper bound for latency ratio</td><td>1.5</td></tr>
+<tr><td>6600</td><td><code>kMonitoringNotifyPort</code></td><td>Cluster membership change notifications</td></tr>
+<tr><td>6650</td><td><code>kMonitoringResponsePort</code></td><td>KVS metadata/stats responses</td></tr>
+<tr><td>6700</td><td><code>kDepartDonePort</code></td><td>Depart-done confirmations from departing nodes</td></tr>
+<tr><td>6750</td><td><code>kFeedbackReportPort</code></td><td>Client latency/throughput feedback (LatencyReporter)</td></tr>
 </tbody>
 </table>
 </div>
-<p>Most policy knobs (storage thresholds, tier promotion/demotion, SLO
-targets, and node scaling limits) are configurable via the YAML config
-file. See the <a href="config.html">Configuration Reference</a> for the full list of
-config keys, defaults, and valid ranges.</p>
-<h2 id="port-configuration-for-multi-node-deployments"><a class="header" href="#port-configuration-for-multi-node-deployments">Port Configuration for Multi-Node Deployments</a></h2>
-<p>When a new node joins the cluster it contacts the routing tier’s seed
-port, announces itself, and begins accepting requests on the same set
-of well-known ports as every other node. Port conflicts between nodes
-are avoided because ZMQ sockets bind to each node’s specific IP address
-rather than <code>0.0.0.0</code>. In production each node has a distinct IP, so all
-nodes share the same port numbers.</p>
-<p>For local development with multiple nodes on one machine, use distinct
-loopback IPs (127.0.0.1, 127.0.0.2, …). Linux supports the full
-127.0.0.0/8 range by default. macOS requires adding aliases:</p>
+<h3 id="client-3-per-thread-ports"><a class="header" href="#client-3-per-thread-ports">Client (3 per-thread ports)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Base Port</th><th>Constant</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td>6800</td><td><code>kUserResponsePort</code></td><td>Receive GET/PUT responses from KVS</td></tr>
+<tr><td>6850</td><td><code>kUserKeyAddressPort</code></td><td>Receive key-address responses from routing</td></tr>
+<tr><td>7150</td><td><code>kCacheUpdatePort</code></td><td>Receive pushed key-value updates (ValueChangeSubscriber)</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="benchmark-1-per-thread-port"><a class="header" href="#benchmark-1-per-thread-port">Benchmark (1 per-thread port)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Base Port</th><th>Constant</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td>6900</td><td><code>kBenchmarkCommandPort</code></td><td>Receive benchmark trigger commands</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="management--external-system-3-singleton-ports-no-tid"><a class="header" href="#management--external-system-3-singleton-ports-no-tid">Management / External System (3 singleton ports, no tid)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Base Port</th><th>Constant</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td>7000</td><td><code>kManagementRestartCountPort</code></td><td>KVS queries restart count on startup</td></tr>
+<tr><td>7001</td><td><code>kScalingAlertPort</code></td><td>Monitor sends scaling alerts (add/remove nodes)</td></tr>
+<tr><td>7002</td><td><code>kManagementFuncNodesPort</code></td><td>KVS queries function/cache node lists</td></tr>
+</tbody>
+</table>
+</div>
+<p>These ports are on the external management system, not on Anna nodes. The
+management system is not part of this project. See
+<a href="autoscaling.html">Autoscaling</a> for details.</p>
+<h2 id="port-range-summary"><a class="header" href="#port-range-summary">Port Range Summary</a></h2>
+<p>With <code>base_offset=0</code> and 1 thread per component:</p>
+<ul>
+<li><strong>Minimum port</strong>: 6000 (<code>kNodeJoinPort</code>)</li>
+<li><strong>Maximum port</strong>: 7200 (<code>kCacheRegistrationPort</code>)</li>
+<li><strong>Total span</strong>: 1201 ports (but only 26 actually bound)</li>
+</ul>
+<p>The 50-port spacing between consecutive port groups (6000, 6050, 6100, …)
+allows up to <strong>50 threads</strong> per component before per-thread port ranges
+collide. This limit is implicit – there is no constant defining it and
+no runtime validation. Configuring more than 50 threads will cause silent
+port collisions.</p>
+<h3 id="why-the-range-is-1201-and-not-smaller"><a class="header" href="#why-the-range-is-1201-and-not-smaller">Why the range is 1201 and not smaller</a></h3>
+<p>The 26 port groups are not packed contiguously. The layout has gaps:</p>
+<ul>
+<li>Ports 6000-6900: 19 groups, mostly contiguous at 50-port spacing (950 span)</li>
+<li>Ports 7000-7002: 3 management singletons (3 span)</li>
+<li>Ports 7050-7200: 4 more groups at 50-port spacing (150 span)</li>
+</ul>
+<p>The 100-port gap between 6900 (benchmark) and 7000 (management) and the
+48-port gap between 7002 and 7050 waste 148 ports. Renumbering these groups
+to be contiguous would reduce the range from 1201 to approximately <strong>1053</strong>
+(21 per-thread groups x 50 spacing + 5 singletons).</p>
+<p>Further reduction would require reducing the inter-group spacing from 50,
+which limits the maximum thread count. With spacing of 10 (max 10 threads),
+the range shrinks to approximately <strong>260</strong>. With spacing of 4 (max 4
+threads), approximately <strong>104</strong>.</p>
+<h2 id="base_offset-for-multiple-clusters"><a class="header" href="#base_offset-for-multiple-clusters">base_offset for Multiple Clusters</a></h2>
+<p>The <code>ports.base_offset</code> config key shifts all ports by a fixed amount:</p>
+<pre><code class="language-yaml">ports:
+  base_offset: 0      # default: ports 6000-7200
+  # base_offset: 2000 # shifts to ports 8000-9200
+</code></pre>
+<p>This is used in tests to run multiple independent clusters on the same
+machine. Each cluster needs a <code>base_offset</code> at least 1201 apart (with 1
+thread) to avoid port conflicts.</p>
+<h2 id="multi-node-deployments"><a class="header" href="#multi-node-deployments">Multi-Node Deployments</a></h2>
+<p>In production, multiple KVS nodes on different machines use the <strong>same</strong>
+<code>base_offset</code> (typically 0). Port conflicts are avoided because ZMQ sockets
+bind to the node’s specific IP address, not <code>0.0.0.0</code>. Multiple nodes can
+coexist on the same LAN without port conflicts as long as each has a distinct
+IP.</p>
+<p>For local development with multiple nodes on <code>localhost</code>, the loopback range
+<code>127.0.0.0/8</code> provides 16 million distinct IPs. Linux supports this by
+default. macOS requires adding aliases:</p>
 <pre><code class="language-bash">sudo ifconfig lo0 alias 127.0.0.2
 </code></pre>
-<p>See <a href="ports.html">Port Layout</a> for the complete port map and the
-<code>ports.base_offset</code> mechanism for running multiple clusters on the same
-machine.</p>
-<h2 id="operators-guide-to-autoscaling"><a class="header" href="#operators-guide-to-autoscaling">Operator’s Guide to Autoscaling</a></h2>
-<p>Anna’s autoscaling is a split-responsibility architecture:</p>
+<h2 id="source-locations"><a class="header" href="#source-locations">Source Locations</a></h2>
+<p>Port constants are defined in:</p>
 <ul>
-<li><strong>Anna provides</strong>: metrics collection, cluster primitives (join, depart,
-replication changes), and a built-in policy engine</li>
-<li><strong>The operator provides</strong>: infrastructure lifecycle (provisioning and
-deprovisioning nodes) and optionally custom decision logic</li>
+<li><code>server/cpp/src/kvs/kvs_threads.hpp</code> – KVS, routing, monitoring, benchmark, management ports</li>
+<li><code>server/cpp/src/threads.hpp</code> – client ports, key-address port, scaling alert port</li>
+<li><code>clients/rust/src/lib/threads.rs</code> – Rust client port constants</li>
+<li><code>clients/go/annalib/threads.go</code> – Go client port constants</li>
+<li><code>clients/cpp/src/anna_client.hpp</code> – C++ client port constants</li>
+<li><code>clients/python/anna/common.py</code> – Python client port constants</li>
 </ul>
-<h3 id="reading-scaling-metrics-via-client-libraries"><a class="header" href="#reading-scaling-metrics-via-client-libraries">Reading Scaling Metrics via Client Libraries</a></h3>
-<p>All client libraries provide helper methods to read the metadata keys
-that the KVS server writes every <code>server_report_period</code> seconds:</p>
-<pre><code class="language-python"># Python example
-stats = client.get_storage_stats("10.0.0.1", "10.0.0.1", 0, "MEMORY")
-print(f"Storage: {stats.storage_consumption} KB")
-print(f"Occupancy: {stats.occupancy}")
-print(f"Access count: {stats.access_count}")
-
-access = client.get_key_access_stats("10.0.0.1", "10.0.0.1", 0, "MEMORY")
-for key_count in access.keys:
-    print(f"Key {key_count.key}: {key_count.access_count} accesses")
-
-sizes = client.get_key_size_stats("10.0.0.1", "10.0.0.1", 0, "MEMORY")
-for key_size in sizes.key_sizes:
-    print(f"Key {key_size.key}: {key_size.size} bytes")
-</code></pre>
-<p>Available in all four client libraries (Rust, Python, Go, C++):</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Method</th><th>Returns</th><th>Metadata Key</th></tr>
-</thead>
-<tbody>
-<tr><td><code>get_storage_stats(ip, ip, tid, tier)</code></td><td><code>ServerThreadStatistics</code></td><td><code>ANNA_METADATA|stats|...|...|tid|tier</code></td></tr>
-<tr><td><code>get_key_access_stats(ip, ip, tid, tier)</code></td><td><code>KeyAccessData</code></td><td><code>ANNA_METADATA|access|...|...|tid|tier</code></td></tr>
-<tr><td><code>get_key_size_stats(ip, ip, tid, tier)</code></td><td><code>KeySizeData</code></td><td><code>ANNA_METADATA|size|...|...|tid|tier</code></td></tr>
-<tr><td><code>put_replication_factor(key, mem_rep, local_rep)</code></td><td>—</td><td><code>ANNA_METADATA|replication|key</code></td></tr>
-<tr><td><code>get_cluster_topology()</code></td><td><code>ClusterTopology</code></td><td><code>ANNA_METADATA|cluster_topology</code></td></tr>
-<tr><td><code>get_monitoring_ips()</code></td><td>list of IPs</td><td><code>ANNA_METADATA|monitoring_ips</code></td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="scaling-actions"><a class="header" href="#scaling-actions">Scaling Actions</a></h3>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Action</th><th>How</th></tr>
-</thead>
-<tbody>
-<tr><td><strong>Scale out</strong></td><td>Start a new <code>anna-kvs</code> process with <code>seed_ip</code> pointing to an existing node. Data redistributes automatically via consistent hashing.</td></tr>
-<tr><td><strong>Scale in</strong></td><td>Send <code>SIGUSR1</code> to the node to trigger graceful self-departure. The node transfers its data to remaining nodes before exiting.</td></tr>
-<tr><td><strong>Hot-key replication</strong></td><td>Call <code>put_replication_factor(key, N, 1)</code> to increase the memory replication factor for a specific key.</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="example-simple-autoscaler"><a class="header" href="#example-simple-autoscaler">Example: Simple Autoscaler</a></h3>
-<pre><code class="language-python">import time
-
-CAPACITY_GB = 1  # per-node capacity from config
-SCALE_OUT_THRESHOLD = 0.6
-SCALE_IN_THRESHOLD = 0.05
-CHECK_INTERVAL = 30  # seconds
-
-while True:
-    stats = client.get_storage_stats(node_ip, node_ip, 0, "MEMORY")
-    consumption_pct = stats.storage_consumption / (CAPACITY_GB * 1_000_000)
-
-    if consumption_pct &gt; SCALE_OUT_THRESHOLD:
-        # Start a new anna-kvs pointing at the seed node
-        start_new_node(seed_ip)
-
-    if stats.occupancy &lt; SCALE_IN_THRESHOLD and node_count &gt; 1:
-        # Signal the least-busy node to depart
-        signal_depart(least_busy_node_pid)
-
-    time.sleep(CHECK_INTERVAL)
-</code></pre>
-<h3 id="scaling-alert-protocol"><a class="header" href="#scaling-alert-protocol">Scaling Alert Protocol</a></h3>
-<p>The built-in policy engine communicates scaling recommendations to an
-external system via ZMQ PUSH on the <code>scaling_alert</code> port (default 7001).
-Messages are serialized <code>ScalingAlert</code> protobuf messages (defined in
-<code>server/protobuf/metadata.proto</code>):</p>
-<ul>
-<li><strong>Scale up</strong>: <code>action=ADD</code>, <code>tier=MEMORY|DISK</code>, <code>count=N</code></li>
-<li><strong>Scale down</strong>: <code>action=REMOVE</code>, <code>tier=MEMORY|DISK</code>, <code>count=1</code>,
-<code>departed_node_ip=&lt;ip&gt;</code> (sent after a node has finished departing)</li>
-</ul>
-<p>The external system is not part of Anna — it’s the operator’s responsibility
-to implement infrastructure provisioning in response to these alerts.</p>
-<h2 id="performance-results"><a class="header" href="#performance-results">Performance Results</a></h2>
-<p>From the <a href="http://www.vikrams.io/papers/anna-vldb19.pdf">VLDB 2019 paper</a> evaluation:</p>
-<ul>
-<li>Anna outperforms ElastiCache and Masstree by up to 10x in
-cost-effectiveness under various contention levels</li>
-<li>Anna outperforms DynamoDB by 36x at low cost and up to 355x at higher costs</li>
-<li>Anna meets latency SLOs 97% of the time during dynamic workload changes</li>
-<li>Node failure recovery maintains 80%+ throughput (vs Redis dropping to 0
-during leader election)</li>
-<li>Hotspot adaptation achieves 99.5% memory-tier hit rate within 25 seconds</li>
-</ul>
+<p>Note: the Python client uses different port bases for its own sockets
+(6460 and 6760) compared to the other clients (6800 and 6850). This is a
+historical divergence from the upstream project.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../docs/lattices.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../docs/config.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../docs/feature-list.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
-                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -413,13 +351,10 @@ during leader election)</li>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../docs/lattices.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../docs/config.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../docs/feature-list.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
-                    </a>
             </nav>
 
         </div>
