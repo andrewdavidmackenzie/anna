@@ -102,27 +102,24 @@ config keys, defaults, and valid ranges.
 
 ## Port Configuration for Multi-Node Deployments
 
-Anna uses a range of ports (6000–7150) for inter-node communication.
-The YAML config supports a `ports.base_offset` setting that shifts all
-ports by a fixed amount, enabling multiple independent clusters on the
-same machine (e.g., for testing or CI).
+When a new node joins the cluster it contacts the routing tier's seed
+port, announces itself, and begins accepting requests on the same set
+of well-known ports as every other node. Port conflicts between nodes
+are avoided because ZMQ sockets bind to each node's specific IP address
+rather than `0.0.0.0`. In production each node has a distinct IP, so all
+nodes share the same port numbers.
 
-```yaml
-ports:
-  base_offset: 0    # default — ports 6000-7150
-  # base_offset: 2000  # shifts to ports 8000-9150
-```
+For local development with multiple nodes on one machine, use distinct
+loopback IPs (127.0.0.1, 127.0.0.2, ...). Linux supports the full
+127.0.0.0/8 range by default. macOS requires adding aliases:
 
-For multi-node testing on a single machine, each node uses a different
-IP on the loopback range (127.0.0.1, 127.0.0.2, …) while sharing the
-same port numbers. ZMQ sockets bind to the node's specific IP rather
-than `0.0.0.0`, so multiple nodes can coexist without port conflicts.
-
-On macOS, additional loopback addresses require explicit aliases:
 ```bash
 sudo ifconfig lo0 alias 127.0.0.2
 ```
-Linux supports the full 127.0.0.0/8 range by default.
+
+See [Port Layout](ports.md) for the complete port map and the
+`ports.base_offset` mechanism for running multiple clusters on the same
+machine.
 
 ## Operator's Guide to Autoscaling
 
