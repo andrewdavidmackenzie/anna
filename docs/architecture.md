@@ -92,6 +92,9 @@ Anna uses ZeroMQ for all communication:
 - **Client-to-routing**: PUSH/PULL sockets on port 6450
 - **Client-to-KVS**: PUSH/PULL sockets on configurable ports (6800/6850)
 
+See [Port Layout](ports.md) for the complete port map (26 port groups across
+6000-7200).
+
 ## Consistent Hashing
 
 Anna partitions keys across actors using consistent hashing with virtual nodes:
