@@ -21,7 +21,7 @@
 #include "zmq/socket_cache.hpp"
 #include "zmq/zmq_util.hpp"
 
-const unsigned kFeedbackReportPort = 6750;
+const unsigned kFeedbackReportPort = 6953;
 
 class LatencyReporter {
 public:

@@ -10,10 +10,10 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 // The port on which KVS servers listen for direct cache registration.
-const K_CACHE_REGISTRATION_PORT: usize = 7200;
+const K_CACHE_REGISTRATION_PORT: usize = 6900;
 
 // The port on which cache nodes receive updates from the KVS.
-const K_CACHE_UPDATE_PORT: usize = 7150;
+const K_CACHE_UPDATE_PORT: usize = 6850;
 
 /// Subscribes to value changes for specific keys via the KVS gossip mechanism.
 ///
@@ -291,12 +291,12 @@ mod tests {
 
     #[test]
     fn cache_registration_port_constant() {
-        assert_eq!(K_CACHE_REGISTRATION_PORT, 7200);
+        assert_eq!(K_CACHE_REGISTRATION_PORT, 6900);
     }
 
     #[test]
     fn cache_update_port_constant() {
-        assert_eq!(K_CACHE_UPDATE_PORT, 7150);
+        assert_eq!(K_CACHE_UPDATE_PORT, 6850);
     }
 
     #[test]

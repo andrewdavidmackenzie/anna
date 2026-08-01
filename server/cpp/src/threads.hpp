@@ -21,17 +21,17 @@
 const unsigned kKeyAddressPort = 6450;
 
 // The port on which clients receive responses from the KVS.
-const unsigned kUserResponsePort = 6800;
+const unsigned kUserResponsePort = 6600;
 
 // The port on which clients receive responses from the routing tier.
-const unsigned kUserKeyAddressPort = 6850;
+const unsigned kUserKeyAddressPort = 6650;
 
 // The port on which cache nodes listen for updates from the KVS.
-const unsigned kCacheUpdatePort = 7150;
+const unsigned kCacheUpdatePort = 6850;
 
 // The port on which the external system receives scaling alerts from the
 // monitor's policy engine.
-inline unsigned kScalingAlertPort = 7001;
+inline unsigned kScalingAlertPort = 6955;
 
 inline unsigned kBaseOffset = 0;
 

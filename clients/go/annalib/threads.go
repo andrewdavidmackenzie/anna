@@ -4,8 +4,8 @@ import "fmt"
 
 const (
 	kKeyAddressPort     = 6450
-	kUserResponsePort   = 6800
-	kUserKeyAddressPort = 6850
+	kUserResponsePort   = 6600
+	kUserKeyAddressPort = 6650
 	bindBase            = "tcp://0.0.0.0:"
 )
 

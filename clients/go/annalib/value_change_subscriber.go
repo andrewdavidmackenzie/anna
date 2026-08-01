@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	kCacheRegistrationPort = 7200
-	kCacheUpdatePort       = 7150
+	kCacheRegistrationPort = 6900
+	kCacheUpdatePort       = 6850
 )
 
 // ValueChangeSubscriber subscribes to value changes for specific keys via the KVS gossip mechanism.

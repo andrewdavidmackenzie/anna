@@ -114,8 +114,8 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
 
   // Request the restart count from the external management system.
   // The scaling_alert_ip serves as the address for all external
-  // management services (restart counts on port 7000, scaling alerts
-  // on port 7001, func-node lists on port 7002). When set to "NULL"
+  // management services (restart counts on port 6954, scaling alerts
+  // on port 6955, func-node lists on port 6956). When set to "NULL"
   // (standalone mode), skip the request and use count 0.
   string count_str;
 

@@ -16,8 +16,8 @@
 #include "value_change_subscriber.hpp"
 
 TEST(ValueChangeSubscriberTest, PortConstants) {
-  EXPECT_EQ(kClientCacheRegistrationPort, 7200u);
-  EXPECT_EQ(kClientCacheUpdatePort, 7150u);
+  EXPECT_EQ(kClientCacheRegistrationPort, 6900u);
+  EXPECT_EQ(kClientCacheUpdatePort, 6850u);
 }
 
 TEST(ValueChangeSubscriberTest, GetCachedMissing) {

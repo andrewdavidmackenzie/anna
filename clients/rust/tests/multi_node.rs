@@ -526,7 +526,7 @@ async fn multi_node_cluster_join_and_data_access() {
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
     let config = cluster.client_config();
-    let mut client = KVSClient::new(&config, Some(50)).await;
+    let mut client = KVSClient::new(&config, Some(1)).await;
 
     for i in 0..10 {
         let key = format!("multi_node_key_{}", i);
@@ -567,13 +567,13 @@ async fn multi_node_gossip_replication() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(1201);
+    let mut cluster = MultiNodeCluster::new(1057);
 
     cluster.start_full_node(NODE1_IP, 2);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
 
     let config = cluster.client_config();
-    let mut client = KVSClient::new(&config, Some(51)).await;
+    let mut client = KVSClient::new(&config, Some(2)).await;
 
     client
         .put("gossip_test_1", "alpha")
@@ -615,12 +615,12 @@ async fn multi_node_address_cache_invalidation() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(2402);
+    let mut cluster = MultiNodeCluster::new(2014);
 
     cluster.start_full_node(NODE1_IP, 1);
 
     let config = cluster.client_config();
-    let mut client = KVSClient::new(&config, Some(52)).await;
+    let mut client = KVSClient::new(&config, Some(3)).await;
 
     for i in 0..5 {
         client
@@ -667,13 +667,13 @@ async fn multi_node_fault_tolerance() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(3603);
+    let mut cluster = MultiNodeCluster::new(2971);
 
     cluster.start_full_node(NODE1_IP, 2);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
 
     let config = cluster.client_config();
-    let mut client = KVSClient::new(&config, Some(53)).await;
+    let mut client = KVSClient::new(&config, Some(4)).await;
 
     // PUT data and wait for gossip to replicate to both nodes
     client
@@ -693,7 +693,7 @@ async fn multi_node_fault_tolerance() {
     // addresses. Verify fault tolerance by reading each key individually
     // with a fresh client and short timeout. The client's retry logic
     // evicts the dead address on timeout and retries via the live node.
-    let mut reader = KVSClient::new(&config, Some(54)).await;
+    let mut reader = KVSClient::new(&config, Some(5)).await;
     reader.set_timeout(Duration::from_secs(2));
 
     let v1 = reader
@@ -722,11 +722,11 @@ async fn no_servers_error() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(4804);
+    let mut cluster = MultiNodeCluster::new(3928);
     cluster.start_routing_only(NODE1_IP);
 
     let config = cluster.client_config();
-    let mut client = KVSClient::new(&config, Some(55)).await;
+    let mut client = KVSClient::new(&config, Some(6)).await;
     client.set_timeout(Duration::from_secs(3));
 
     let result = client.put("no_servers_test", "value").await;
@@ -752,12 +752,12 @@ async fn virtual_nodes_key_distribution() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(6005);
+    let mut cluster = MultiNodeCluster::new(4885);
     cluster.start_full_node(NODE1_IP, 1);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
     let config = cluster.client_config();
-    let mut client = KVSClient::new(&config, Some(56)).await;
+    let mut client = KVSClient::new(&config, Some(7)).await;
 
     let mut node_counts: HashMap<String, usize> = HashMap::new();
     let num_keys = 100;
@@ -815,12 +815,12 @@ async fn multi_node_replica_survival() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(7206);
+    let mut cluster = MultiNodeCluster::new(5842);
     cluster.start_full_node(NODE1_IP, 2);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
 
     let config = cluster.client_config();
-    let mut client = KVSClient::new(&config, Some(57)).await;
+    let mut client = KVSClient::new(&config, Some(8)).await;
 
     client
         .put("depart_key_1", "data_1")
@@ -838,7 +838,7 @@ async fn multi_node_replica_survival() {
     cluster.kill_process("anna-kvs@127.0.0.2");
 
     // Data should survive on Node 1 via client retry
-    let mut reader = KVSClient::new(&config, Some(58)).await;
+    let mut reader = KVSClient::new(&config, Some(9)).await;
     reader.set_timeout(Duration::from_secs(2));
 
     let v1 = reader
@@ -869,7 +869,7 @@ async fn multi_node_rejoin() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(8407);
+    let mut cluster = MultiNodeCluster::new(7756);
     cluster.start_full_node(NODE1_IP, 2);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
 
@@ -882,7 +882,7 @@ async fn multi_node_rejoin() {
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
 
     // PUT data after rejoin — with replication=2, data goes to both nodes
-    let mut client = KVSClient::new(&config, Some(59)).await;
+    let mut client = KVSClient::new(&config, Some(10)).await;
     client
         .put("rejoin_proof", "on_both_nodes")
         .await
@@ -894,7 +894,7 @@ async fn multi_node_rejoin() {
 
     // Poll Node 2 — routing may still try the dead Node 1 first,
     // so retry until the client's address cache updates
-    let mut reader = KVSClient::new(&config, Some(60)).await;
+    let mut reader = KVSClient::new(&config, Some(11)).await;
     reader.set_timeout(Duration::from_secs(2));
 
     let deadline = Instant::now() + Duration::from_secs(15);
@@ -925,11 +925,11 @@ async fn stateless_routing_recovery() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(9608);
+    let mut cluster = MultiNodeCluster::new(9670);
     cluster.start_full_node(NODE1_IP, 1);
 
     let config = cluster.client_config();
-    let mut client = KVSClient::new(&config, Some(61)).await;
+    let mut client = KVSClient::new(&config, Some(12)).await;
 
     client
         .put("routing_recovery_key", "persistent")
@@ -958,7 +958,7 @@ async fn stateless_routing_recovery() {
     std::thread::sleep(Duration::from_secs(2));
 
     // KVS data is in-memory and lost on restart, so PUT again
-    let mut client2 = KVSClient::new(&config, Some(62)).await;
+    let mut client2 = KVSClient::new(&config, Some(13)).await;
     client2
         .put("post_recovery_key", "recovered")
         .await
@@ -984,15 +984,15 @@ async fn multi_threaded_routing() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(10809);
+    let mut cluster = MultiNodeCluster::new(10627);
     cluster.start_full_node_with_config(NodeConfig {
-        base_offset: 10809,
+        base_offset: 10627,
         routing_threads: 2,
         ..Default::default()
     });
 
     let config = cluster.client_config();
-    let mut client = KVSClient::new(&config, Some(63)).await;
+    let mut client = KVSClient::new(&config, Some(14)).await;
 
     for i in 0..10 {
         let key = format!("mt_route_key_{}", i);
@@ -1025,12 +1025,12 @@ async fn replication_aware_routing() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(12010);
+    let mut cluster = MultiNodeCluster::new(11584);
     cluster.start_full_node(NODE1_IP, 2);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
 
     let config = cluster.client_config();
-    let mut client = KVSClient::new(&config, Some(64)).await;
+    let mut client = KVSClient::new(&config, Some(15)).await;
 
     // PUT a key so routing resolves it
     client
@@ -1070,12 +1070,12 @@ async fn pending_request_queue() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(13211);
+    let mut cluster = MultiNodeCluster::new(12541);
     cluster.start_full_node(NODE1_IP, 1);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
     let config = cluster.client_config();
-    let mut client = KVSClient::new(&config, Some(65)).await;
+    let mut client = KVSClient::new(&config, Some(16)).await;
 
     // Rapidly PUT many new keys — each triggers a replication factor lookup
     // that goes through the pending request queue
@@ -1111,11 +1111,11 @@ async fn key_migration_during_join() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(14412);
+    let mut cluster = MultiNodeCluster::new(13498);
     cluster.start_full_node(NODE1_IP, 1);
 
     let config = cluster.client_config();
-    let mut client = KVSClient::new(&config, Some(66)).await;
+    let mut client = KVSClient::new(&config, Some(17)).await;
 
     // PUT initial data on single node
     for i in 0..10 {
@@ -1181,12 +1181,12 @@ async fn per_key_replication_metadata() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(15613);
+    let mut cluster = MultiNodeCluster::new(14455);
     cluster.start_full_node(NODE1_IP, 1);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
     let config = cluster.client_config();
-    let mut client = KVSClient::new(&config, Some(68)).await;
+    let mut client = KVSClient::new(&config, Some(18)).await;
 
     // PUT a regular key
     client
@@ -1231,11 +1231,11 @@ async fn self_depart_signal() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(16814);
+    let mut cluster = MultiNodeCluster::new(15412);
     cluster.start_full_node(NODE1_IP, 1);
 
     let config = cluster.client_config();
-    let mut client = KVSClient::new(&config, Some(69)).await;
+    let mut client = KVSClient::new(&config, Some(19)).await;
 
     client
         .put("sd_signal_key", "before_depart")
@@ -1278,13 +1278,13 @@ async fn disk_tier_basic() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(18015);
+    let mut cluster = MultiNodeCluster::new(16369);
 
     // Start cluster with both tiers. Disk-only (replication_memory: 0) is
     // not yet fully working — see #444 for the ongoing fix.
     cluster.start_full_node_with_config(NodeConfig {
         replication_disk: 1,
-        base_offset: 18015,
+        base_offset: 16369,
         ..Default::default()
     });
 
@@ -1421,10 +1421,10 @@ async fn memory_tier_preference() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(19216);
+    let mut cluster = MultiNodeCluster::new(17326);
     cluster.start_full_node_with_config(NodeConfig {
         replication_disk: 1,
-        base_offset: 19216,
+        base_offset: 17326,
         ..Default::default()
     });
     cluster.start_disk_kvs_node(NODE2_IP, NODE1_IP);
@@ -1462,13 +1462,13 @@ async fn cross_tier_gossip() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(20417);
+    let mut cluster = MultiNodeCluster::new(18283);
 
     // Start with replication on both tiers so data gossips across
     cluster.start_full_node_with_config(NodeConfig {
         replication_memory: 1,
         replication_disk: 1,
-        base_offset: 20417,
+        base_offset: 18283,
         ..Default::default()
     });
     cluster.start_disk_kvs_node(NODE2_IP, NODE1_IP);
@@ -1512,10 +1512,10 @@ async fn crash_detection_via_epoch() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(24020);
+    let mut cluster = MultiNodeCluster::new(21154);
     cluster.start_full_node_with_config(NodeConfig {
         replication_memory: 1,
-        base_offset: 24020,
+        base_offset: 21154,
         gossip_epoch: 2,
         ..Default::default()
     });
@@ -1580,7 +1580,7 @@ async fn replication_factor_change() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(21618);
+    let mut cluster = MultiNodeCluster::new(19240);
     cluster.start_full_node(NODE1_IP, 1);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
@@ -1629,7 +1629,7 @@ async fn gossip_after_replication_change() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(22819);
+    let mut cluster = MultiNodeCluster::new(20197);
     cluster.start_full_node(NODE1_IP, 1);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
@@ -1669,7 +1669,7 @@ async fn gossip_to_caches() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(25221);
+    let mut cluster = MultiNodeCluster::new(22111);
     cluster.start_full_node(NODE1_IP, 1);
 
     let config = cluster.client_config();
@@ -1742,14 +1742,14 @@ async fn slo_selective_replication() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(400);
+    let mut cluster = MultiNodeCluster::new(23068);
 
     // Start node 1 (full: monitor + route + kvs) with selective-rep enabled
     let cfg1 = NodeConfig {
         node_ip: NODE1_IP,
         seed_ip: NODE1_IP,
         replication_memory: 1,
-        base_offset: 400,
+        base_offset: 23068,
         selective_rep: true,
         ..Default::default()
     };
@@ -1759,7 +1759,7 @@ async fn slo_selective_replication() {
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
     let config = cluster.client_config();
-    let mut client = KVSClient::new(&config, Some(50)).await;
+    let mut client = KVSClient::new(&config, Some(1)).await;
 
     let hot_key = "slo_key_0";
 
@@ -1772,7 +1772,7 @@ async fn slo_selective_replication() {
     }
 
     // Connect to monitor feedback port using raw ZMQ
-    let feedback_addr = format!("tcp://{}:{}", NODE1_IP, 6750 + 400);
+    let feedback_addr = format!("tcp://{}:{}", NODE1_IP, 6953 + 23068);
     let ctx = Context::new();
     let feedback_pusher = ctx.socket(SocketType::Push, Options::default());
     feedback_pusher
@@ -1870,23 +1870,23 @@ async fn management_node_integration() {
     let ctx = Context::new();
 
     // Start mock management node BEFORE starting the cluster.
-    // Port 7000+offset: REP socket for "restart:<ip>" queries
+    // Port 6954+offset: REP socket for "restart:<ip>" queries
     let restart_count_rep = ctx.socket(SocketType::Rep, Options::default());
     restart_count_rep
         .bind(
-            format!("tcp://{}:{}", NODE1_IP, 7000 + base_offset)
+            format!("tcp://{}:{}", NODE1_IP, 6954 + base_offset)
                 .parse()
                 .unwrap(),
         )
         .await
         .expect("Failed to bind restart count REP");
 
-    // Port 7002+offset: PULL socket for func/cache node queries
+    // Port 6956+offset: PULL socket for func/cache node queries
     // (KVS sends via PUSH, so we receive via PULL)
     let func_nodes_pull = ctx.socket(SocketType::Pull, Options::default());
     func_nodes_pull
         .bind(
-            format!("tcp://{}:{}", NODE1_IP, 7002 + base_offset)
+            format!("tcp://{}:{}", NODE1_IP, 6956 + base_offset)
                 .parse()
                 .unwrap(),
         )
@@ -2039,7 +2039,7 @@ async fn elasticity_storage_policy() {
     let restart_rep = ctx.socket(SocketType::Rep, Options::default());
     restart_rep
         .bind(
-            format!("tcp://{}:{}", NODE1_IP, 7000 + base_offset)
+            format!("tcp://{}:{}", NODE1_IP, 6954 + base_offset)
                 .parse()
                 .unwrap(),
         )
@@ -2049,18 +2049,18 @@ async fn elasticity_storage_policy() {
     let func_pull = ctx.socket(SocketType::Pull, Options::default());
     func_pull
         .bind(
-            format!("tcp://{}:{}", NODE1_IP, 7002 + base_offset)
+            format!("tcp://{}:{}", NODE1_IP, 6956 + base_offset)
                 .parse()
                 .unwrap(),
         )
         .await
         .expect("bind func PULL failed");
 
-    // Port 7001+offset for add/remove messages from monitor
+    // Port 6955+offset for add/remove messages from monitor
     let add_node_pull = ctx.socket(SocketType::Pull, Options::default());
     add_node_pull
         .bind(
-            format!("tcp://{}:{}", NODE1_IP, 7001 + base_offset)
+            format!("tcp://{}:{}", NODE1_IP, 6955 + base_offset)
                 .parse()
                 .unwrap(),
         )
@@ -2224,7 +2224,7 @@ async fn underutilization_scale_in() {
     let restart_rep = ctx.socket(SocketType::Rep, Options::default());
     restart_rep
         .bind(
-            format!("tcp://{}:{}", NODE1_IP, 7000 + base_offset)
+            format!("tcp://{}:{}", NODE1_IP, 6954 + base_offset)
                 .parse()
                 .unwrap(),
         )
@@ -2234,18 +2234,18 @@ async fn underutilization_scale_in() {
     let func_pull = ctx.socket(SocketType::Pull, Options::default());
     func_pull
         .bind(
-            format!("tcp://{}:{}", NODE1_IP, 7002 + base_offset)
+            format!("tcp://{}:{}", NODE1_IP, 6956 + base_offset)
                 .parse()
                 .unwrap(),
         )
         .await
         .expect("bind func PULL failed");
 
-    // Port 7001+offset for add/remove messages from monitor
+    // Port 6955+offset for add/remove messages from monitor
     let mgmt_pull = ctx.socket(SocketType::Pull, Options::default());
     mgmt_pull
         .bind(
-            format!("tcp://{}:{}", NODE1_IP, 7001 + base_offset)
+            format!("tcp://{}:{}", NODE1_IP, 6955 + base_offset)
                 .parse()
                 .unwrap(),
         )
@@ -2411,7 +2411,7 @@ async fn tiering_movement_policy() {
         return;
     }
 
-    let base_offset: u32 = 7823;
+    let base_offset: u32 = 6799;
     let short_grace: u32 = 5;
 
     let mut cluster = MultiNodeCluster::new(base_offset);
@@ -2506,7 +2506,7 @@ async fn replication_response_wrong_thread() {
         return;
     }
 
-    let base_offset: u32 = 9224;
+    let base_offset: u32 = 8713;
     let mut cluster = MultiNodeCluster::new(base_offset);
 
     // Start 2-node cluster so keys are distributed
@@ -2612,9 +2612,9 @@ async fn tombstone_gc() {
         return;
     }
 
-    let mut cluster = MultiNodeCluster::new(26422);
+    let mut cluster = MultiNodeCluster::new(24025);
     cluster.start_full_node_with_config(NodeConfig {
-        base_offset: 26422,
+        base_offset: 24025,
         gossip_epoch: 2,
         server_report_period: 2,
         tombstone_gc_multiplier: 1, // TTL = 2s * 1 = 2s

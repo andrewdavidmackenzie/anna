@@ -16,30 +16,30 @@ func TestUserThreadAccessors(t *testing.T) {
 
 func TestUserThreadResponseAddresses(t *testing.T) {
 	ut := NewUserThread("127.0.0.1", 0)
-	if got := ut.ResponseBindAddress(); got != "tcp://0.0.0.0:6800" {
+	if got := ut.ResponseBindAddress(); got != "tcp://0.0.0.0:6600" {
 		t.Errorf("ResponseBindAddress: got %s", got)
 	}
-	if got := ut.ResponseConnectAddress(); got != "tcp://127.0.0.1:6800" {
+	if got := ut.ResponseConnectAddress(); got != "tcp://127.0.0.1:6600" {
 		t.Errorf("ResponseConnectAddress: got %s", got)
 	}
 }
 
 func TestUserThreadKeyAddressAddresses(t *testing.T) {
 	ut := NewUserThread("127.0.0.1", 0)
-	if got := ut.KeyAddressBindAddress(); got != "tcp://0.0.0.0:6850" {
+	if got := ut.KeyAddressBindAddress(); got != "tcp://0.0.0.0:6650" {
 		t.Errorf("KeyAddressBindAddress: got %s", got)
 	}
-	if got := ut.KeyAddressConnectAddress(); got != "tcp://127.0.0.1:6850" {
+	if got := ut.KeyAddressConnectAddress(); got != "tcp://127.0.0.1:6650" {
 		t.Errorf("KeyAddressConnectAddress: got %s", got)
 	}
 }
 
 func TestUserThreadWithTID(t *testing.T) {
 	ut := NewUserThread("10.0.0.1", 5)
-	if got := ut.ResponseBindAddress(); got != "tcp://0.0.0.0:6805" {
+	if got := ut.ResponseBindAddress(); got != "tcp://0.0.0.0:6605" {
 		t.Errorf("ResponseBindAddress with tid=5: got %s", got)
 	}
-	if got := ut.KeyAddressBindAddress(); got != "tcp://0.0.0.0:6855" {
+	if got := ut.KeyAddressBindAddress(); got != "tcp://0.0.0.0:6655" {
 		t.Errorf("KeyAddressBindAddress with tid=5: got %s", got)
 	}
 }

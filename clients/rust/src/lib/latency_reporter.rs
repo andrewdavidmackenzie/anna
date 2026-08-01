@@ -10,7 +10,7 @@ use prost::Message;
 use std::collections::HashMap;
 use std::time::Duration;
 
-const K_FEEDBACK_REPORT_PORT: usize = 6750;
+const K_FEEDBACK_REPORT_PORT: usize = 6953;
 const MONITORING_IPS_KEY: &str = "ANNA_METADATA|monitoring_ips";
 
 /// Reports client-observed latency to the anna monitor for SLO enforcement.
@@ -280,7 +280,7 @@ mod tests {
 
     #[tokio::test]
     async fn send_and_receive_feedback() {
-        let port = 6750 + 80;
+        let port = 6953 + 80;
         let ctx = Context::new();
         let puller = ctx.socket(SocketType::Pull, Options::default());
         puller
@@ -313,7 +313,7 @@ mod tests {
 
     #[tokio::test]
     async fn send_finish_signal() {
-        let port = 6750 + 81;
+        let port = 6953 + 81;
         let ctx = Context::new();
         let puller = ctx.socket(SocketType::Pull, Options::default());
         puller
@@ -339,7 +339,7 @@ mod tests {
 
     #[tokio::test]
     async fn connect_pre_establishes_sockets() {
-        let port = 6750 + 82;
+        let port = 6953 + 82;
         let ctx = Context::new();
         let puller = ctx.socket(SocketType::Pull, Options::default());
         puller

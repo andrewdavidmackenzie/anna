@@ -10,7 +10,7 @@ import (
 	benchpb "github.com/andrewdavidmackenzie/anna/clients/go/annalib/proto/benchmark"
 )
 
-const kMonitoringPort = 6750
+const kMonitoringPort = 6953
 
 // LatencyReporter sends UserFeedback to monitoring threads for SLO enforcement.
 type LatencyReporter struct {

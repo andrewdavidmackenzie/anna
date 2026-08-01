@@ -11,7 +11,7 @@ hashing:
   virtual_nodes_per_thread: 3000
 ports:
   base_offset: 0
-  scaling_alert: 7001
+  scaling_alert: 6955
 timings:
   server_report_period: 15
   key_monitoring_period: 60

@@ -21,8 +21,8 @@ import zmq
 from .kvs_pb2 import KeyResponse
 from .shared_pb2 import StringSet
 
-CACHE_REGISTRATION_PORT = 7200
-CACHE_UPDATE_PORT = 7150
+CACHE_REGISTRATION_PORT = 6900
+CACHE_UPDATE_PORT = 6850
 
 logger = logging.getLogger(__name__)
 

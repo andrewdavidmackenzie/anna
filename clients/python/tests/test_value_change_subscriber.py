@@ -25,10 +25,10 @@ from anna.value_change_subscriber import ValueChangeSubscriber, \
 
 class TestValueChangeSubscriberConstants(unittest.TestCase):
     def test_registration_port(self):
-        self.assertEqual(CACHE_REGISTRATION_PORT, 7200)
+        self.assertEqual(CACHE_REGISTRATION_PORT, 6900)
 
     def test_update_port(self):
-        self.assertEqual(CACHE_UPDATE_PORT, 7150)
+        self.assertEqual(CACHE_UPDATE_PORT, 6850)
 
 
 class TestValueChangeSubscriber(unittest.TestCase):
@@ -72,7 +72,7 @@ class TestValueChangeSubscriber(unittest.TestCase):
     def test_recv_update_receives_pushed_value(self):
         ctx = zmq.Context()
         pusher = ctx.socket(zmq.PUSH)
-        pusher.connect("tcp://127.0.0.1:27150")
+        pusher.connect("tcp://127.0.0.1:26850")
         time.sleep(0.1)
 
         response = KeyResponse()
@@ -94,7 +94,7 @@ class TestValueChangeSubscriber(unittest.TestCase):
     def test_recv_update_skips_empty_payload(self):
         ctx = zmq.Context()
         pusher = ctx.socket(zmq.PUSH)
-        pusher.connect("tcp://127.0.0.1:27150")
+        pusher.connect("tcp://127.0.0.1:26850")
         time.sleep(0.1)
 
         response = KeyResponse()
@@ -196,7 +196,7 @@ class TestCloseWithPushSockets(unittest.TestCase):
         )
         # Add a mock push socket
         mock_sock = MagicMock()
-        client.push_sockets["tcp://127.0.0.1:27200"] = mock_sock
+        client.push_sockets["tcp://127.0.0.1:26900"] = mock_sock
 
         client.close()
         self.assertEqual(client.push_sockets, {})
