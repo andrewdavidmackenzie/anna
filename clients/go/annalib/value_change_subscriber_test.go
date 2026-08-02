@@ -157,7 +157,7 @@ func TestWatchRegistersKeys(t *testing.T) {
 	offset := 20500
 
 	// Set up a PULL listener on the registration port so Watch() can connect.
-	regPort := 0 + kCacheRegistrationPort + offset // 27700
+	regPort := 0 + kCacheRegistrationPort + offset // 27400
 	regAddr := fmt.Sprintf("tcp://127.0.0.1:%d", regPort)
 	puller := zmq4.NewPull(context.Background())
 	if err := puller.Listen(regAddr); err != nil {
@@ -302,7 +302,7 @@ func TestRecvUpdateEmptyPayload(t *testing.T) {
 	}
 	defer cc.Close()
 
-	updatePort := 0 + kCacheUpdatePort + offset // 27950
+	updatePort := 0 + kCacheUpdatePort + offset // 27650
 	pusher := zmq4.NewPush(context.Background())
 	if err := pusher.Dial(fmt.Sprintf("tcp://127.0.0.1:%d", updatePort)); err != nil {
 		t.Fatalf("Dial failed: %v", err)

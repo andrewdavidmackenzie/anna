@@ -2518,7 +2518,7 @@ async fn replication_response_wrong_thread() {
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
     let config = cluster.client_config();
-    let mut client = KVSClient::new(&config, Some(100)).await;
+    let mut client = KVSClient::new(&config, Some(20)).await;
 
     // PUT keys across both nodes
     let deadline = Instant::now() + Duration::from_secs(15);
