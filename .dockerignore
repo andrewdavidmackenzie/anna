@@ -1,0 +1,23 @@
+# Build artifacts
+target/
+server/cpp/build/
+server/cpp/release-build/
+clients/cpp/build/
+clients/cpp/release-build/
+
+# Git
+.git/
+.github/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# IDE
+.vscode/
+.idea/
+
+# CI/tooling
+.claude/
+.opencode/
