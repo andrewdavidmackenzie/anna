@@ -43,6 +43,12 @@ struct KeyProperty {
   // When the key became a tombstone (size_ == 0). Only meaningful when
   // size_ == 0; used by tombstone GC to decide when to reap the key.
   std::chrono::time_point<std::chrono::system_clock> tombstone_time_;
+  // When this key expires (TTL). A default-constructed time_point (epoch)
+  // means no expiration. Set on PUT when ttl_seconds > 0.
+  std::chrono::time_point<std::chrono::system_clock> expiry_time_;
+  // The original TTL in seconds (preserved for gossip propagation).
+  // 0 means no TTL.
+  unsigned ttl_seconds_ = 0;
 };
 
 inline bool operator==(const KeyReplication &lhs, const KeyReplication &rhs) {

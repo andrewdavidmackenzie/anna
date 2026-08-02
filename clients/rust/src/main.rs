@@ -382,6 +382,14 @@ async fn execute_command(
             client.put_value(&key, &value).await?;
         }
         "DELETE" if split.len() == 2 => client.delete(split[1]).await?,
+        "PUT_TTL" if split.len() == 4 => {
+            let key = split[1];
+            let value = split[2];
+            let ttl: u32 = split[3]
+                .parse()
+                .map_err(|_| annalib::Error::Kvs("TTL must be a positive integer".into()))?;
+            client.put_with_ttl(key, value, ttl).await?;
+        }
         // Legacy aliases — map old commands to the unified GET/PUT.
         "GET_SET" if split.len() == 2 => {
             let value = client.get_value(split[1]).await?;
@@ -482,6 +490,7 @@ fn cli_usage() -> String {
     \n\tput priority {key} {pri} {val} \t- store with priority (lowest wins)\
     \n\tput causal {key} {value} \t- store with multi-key causal consistency\
     \n\tput single_causal {key} {value} \t- store with single-key causal consistency\
+    \n\tput_ttl {key} {value} {seconds} \t- store with TTL (auto-expires)\
     \n\tdelete {key} \t\t\t- delete a key from the KVS\
     \n\tbench [keys] [value_size] [duration] [workload] - run a benchmark\
     \n\tstart [component] \t\t- start anna processes (component: kvs, monitor, route; omit for all)\

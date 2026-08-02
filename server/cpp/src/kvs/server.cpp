@@ -595,10 +595,17 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
 
       vector<Key> keys_to_reap;
       for (const auto &kv : stored_key_map) {
+        // Reap tombstoned keys (explicit deletes).
         if (kv.second.size_ == 0 && !is_metadata(kv.first) &&
             kv.second.tombstone_time_.time_since_epoch().count() > 0 &&
             std::chrono::duration_cast<std::chrono::microseconds>(
                 now - kv.second.tombstone_time_) > gc_threshold) {
+          keys_to_reap.push_back(kv.first);
+        }
+        // Reap TTL-expired keys.
+        else if (!is_metadata(kv.first) &&
+                 kv.second.expiry_time_.time_since_epoch().count() > 0 &&
+                 now > kv.second.expiry_time_) {
           keys_to_reap.push_back(kv.first);
         }
       }

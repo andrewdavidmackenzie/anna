@@ -340,6 +340,18 @@ impl KVSClient {
         lattice_type: Option<i32>,
         payload: Option<Vec<u8>>,
     ) -> Option<KeyResponse> {
+        self.send_data_request_with_ttl(key, req_type, lattice_type, payload, 0)
+            .await
+    }
+
+    async fn send_data_request_with_ttl(
+        &mut self,
+        key: &str,
+        req_type: i32,
+        lattice_type: Option<i32>,
+        payload: Option<Vec<u8>>,
+        ttl_seconds: u32,
+    ) -> Option<KeyResponse> {
         const MAX_RETRIES: usize = 5;
 
         for attempt in 0..=MAX_RETRIES {
@@ -364,6 +376,9 @@ impl KVSClient {
             }
             if let Some(cache) = self.key_address_cache.get(key) {
                 tuple.address_cache_size = cache.len() as u32;
+            }
+            if ttl_seconds > 0 {
+                tuple.ttl_seconds = ttl_seconds;
             }
             request.tuples.push(tuple);
 
@@ -648,6 +663,44 @@ impl KVSClient {
         // Cache the written value for read-your-writes consistency.
         // This ensures a subsequent GET returns at least this value,
         // even if routed to a replica that hasn't received it via gossip.
+        self.lww_read_cache
+            .insert(key.as_ref().to_string(), (lww.timestamp, lww.value.clone()));
+        Ok(())
+    }
+
+    /// Store a key-value pair with a TTL (time-to-live) in seconds.
+    ///
+    /// The key will automatically expire after `ttl_seconds` and subsequent
+    /// GETs will return `KEY_DNE`. The TTL is propagated to all replicas
+    /// via gossip.
+    pub async fn put_with_ttl<K: AsRef<str> + Display>(
+        &mut self,
+        key: K,
+        value: &str,
+        ttl_seconds: u32,
+    ) -> Result<()> {
+        debug!("PUT_TTL: {} <- {} (ttl={}s)", key, value, ttl_seconds);
+        let ts = std::cmp::max(Self::generate_timestamp(), self.last_seen_ts + 1);
+        self.last_seen_ts = ts;
+        let lww = LwwValue {
+            timestamp: ts,
+            value: value.as_bytes().to_vec(),
+        };
+        let payload = lww.encode_to_vec();
+
+        let response = self
+            .send_data_request_with_ttl(
+                key.as_ref(),
+                RequestType::Put as i32,
+                Some(LatticeType::Lww as i32),
+                Some(payload),
+                ttl_seconds,
+            )
+            .await
+            .ok_or_else(|| Error::Kvs("PUT_TTL: request failed or timed out".into()))?;
+
+        Self::validate_response(&response, "PUT_TTL")?;
+
         self.lww_read_cache
             .insert(key.as_ref().to_string(), (lww.timestamp, lww.value.clone()));
         Ok(())

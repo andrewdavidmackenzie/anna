@@ -112,7 +112,8 @@ void replication_response_handler(
                   LatticeType_Name(stored_key_map[key].type_));
             } else {
               process_put(key, request.lattice_type_, request.payload_,
-                          serializers[request.lattice_type_], stored_key_map);
+                          serializers[request.lattice_type_], stored_key_map,
+                          request.ttl_seconds_);
               key_access_tracker[key].insert(now);
 
               access_count += 1;
@@ -157,7 +158,8 @@ void replication_response_handler(
                   LatticeType_Name(stored_key_map[key].type_));
             } else {
               process_put(key, request.lattice_type_, request.payload_,
-                          serializers[request.lattice_type_], stored_key_map);
+                          serializers[request.lattice_type_], stored_key_map,
+                          request.ttl_seconds_);
               tp->set_lattice_type(request.lattice_type_);
               local_changeset.insert(key);
             }

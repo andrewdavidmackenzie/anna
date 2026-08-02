@@ -55,11 +55,15 @@ inline void prepare_get_tuple(kvs::KeyRequest &req, Key key,
 }
 
 inline void prepare_put_tuple(kvs::KeyRequest &req, Key key,
-                              kvs::LatticeType lattice_type, string payload) {
+                              kvs::LatticeType lattice_type, string payload,
+                              unsigned ttl_seconds = 0) {
   kvs::KeyTuple *tp = req.add_tuples();
   tp->set_key(std::move(key));
   tp->set_lattice_type(std::move(lattice_type));
   tp->set_payload(std::move(payload));
+  if (ttl_seconds > 0) {
+    tp->set_ttl_seconds(ttl_seconds);
+  }
 }
 
 #endif // KVS_INCLUDE_KVS_COMMON_HPP_

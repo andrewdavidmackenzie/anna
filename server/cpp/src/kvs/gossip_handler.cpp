@@ -47,7 +47,8 @@ void gossip_handler(unsigned &seed, string &serialized,
                      kvs::LatticeType_Name(stored_key_map[key].type_));
         } else {
           process_put(tuple.key(), tuple.lattice_type(), tuple.payload(),
-                      serializers[tuple.lattice_type()], stored_key_map);
+                      serializers[tuple.lattice_type()], stored_key_map,
+                      tuple.ttl_seconds());
         }
       } else {
         if (is_metadata(key)) { // forward the gossip

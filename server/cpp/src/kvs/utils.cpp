@@ -37,7 +37,8 @@ void send_gossip(AddressKeysetMap &addr_keyset_map, SocketCache &pushers,
       auto res = process_get(key, serializers[type]);
 
       if (res.second == 0) {
-        prepare_put_tuple(gossip_map[address], key, type, res.first);
+        prepare_put_tuple(gossip_map[address], key, type, res.first,
+                          stored_key_map[key].ttl_seconds_);
       }
     }
   }
@@ -59,7 +60,8 @@ std::pair<string, kvs::AnnaError> process_get(const Key &key,
 
 bool process_put(const Key &key, kvs::LatticeType lattice_type,
                  const string &payload, Serializer *serializer,
-                 map<Key, KeyProperty> &stored_key_map) {
+                 map<Key, KeyProperty> &stored_key_map,
+                 unsigned ttl_seconds) {
   int result = serializer->put(key, payload);
   if (result < 0) {
     spdlog::error("Failed to put key {}", key);
@@ -81,6 +83,17 @@ bool process_put(const Key &key, kvs::LatticeType lattice_type,
   } else {
     // Key has a non-empty value — clear any tombstone timestamp.
     stored_key_map[key].tombstone_time_ = {};
+  }
+
+  // Set TTL expiry if specified.
+  if (ttl_seconds > 0) {
+    stored_key_map[key].expiry_time_ =
+        std::chrono::system_clock::now() + std::chrono::seconds(ttl_seconds);
+    stored_key_map[key].ttl_seconds_ = ttl_seconds;
+  } else if (ttl_seconds == 0 && stored_key_map[key].ttl_seconds_ > 0) {
+    // A PUT with ttl=0 on a key that previously had a TTL clears the expiry,
+    // but only from a direct client request (not from gossip, where ttl=0
+    // means "no TTL info in this gossip message").
   }
 
   return true;

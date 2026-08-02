@@ -72,7 +72,7 @@ void user_request_handler(
 
           pending_requests[key].push_back(
               PendingRequest(request_type, tuple.lattice_type(), payload,
-                             response_address, response_id));
+                             response_address, response_id, tuple.ttl_seconds()));
         }
       } else { // if we know the responsible threads, we process the request
         kvs::KeyTuple *tp = response.add_tuples();
@@ -83,6 +83,14 @@ void user_request_handler(
               stored_key_map[key].type_ == kvs::LatticeType::NONE) {
 
             tp->set_error(kvs::AnnaError::KEY_DNE);
+          } else if (stored_key_map[key].expiry_time_.time_since_epoch().count() > 0 &&
+                     std::chrono::system_clock::now() > stored_key_map[key].expiry_time_) {
+            // Key has expired — return KEY_DNE and mark for GC.
+            tp->set_error(kvs::AnnaError::KEY_DNE);
+            if (stored_key_map[key].tombstone_time_.time_since_epoch().count() == 0) {
+              stored_key_map[key].tombstone_time_ = std::chrono::system_clock::now();
+              stored_key_map[key].size_ = 0;
+            }
           } else {
             auto res = process_get(key, serializers[stored_key_map[key].type_]);
             tp->set_lattice_type(stored_key_map[key].type_);
@@ -103,7 +111,8 @@ void user_request_handler(
                  __FILE__, __LINE__);
            } else {
             process_put(key, tuple.lattice_type(), payload,
-                        serializers[tuple.lattice_type()], stored_key_map);
+                        serializers[tuple.lattice_type()], stored_key_map,
+                        tuple.ttl_seconds());
 
             local_changeset.insert(key);
             tp->set_lattice_type(tuple.lattice_type());
@@ -123,7 +132,7 @@ void user_request_handler(
     } else {
       pending_requests[key].push_back(
           PendingRequest(request_type, tuple.lattice_type(), payload,
-                         response_address, response_id));
+                         response_address, response_id, tuple.ttl_seconds()));
     }
   }
 
