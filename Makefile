@@ -222,7 +222,7 @@ else
 	@rm -f target/html/*.profraw target/html/client_log.txt target/html/log.txt target/html/log_0.txt target/html/*.info
 	@rm -f target/html/Makefile
 	@rm -f target/html/Cargo.toml target/html/Cargo.lock target/html/CMakeLists.txt
-	@rm -rf target/html/build target/html/conf target/html/dockerfiles
+	@rm -rf target/html/build target/html/conf
 	@rm -rf target/html/src target/html/tests target/html/protobuf
 	@rm -rf target/html/cli target/html/clients target/html/server
 	@rm -rf target/html/coverage target/html/venv
@@ -270,3 +270,11 @@ endif
 .PHONY: bench
 bench: bench-build
 	@scripts/bench.sh
+
+.PHONY: docker
+docker:
+	docker build -t anna .
+
+.PHONY: docker-run
+docker-run: docker
+	docker run --rm -p 6000-6956:6000-6956 anna
