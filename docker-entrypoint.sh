@@ -21,6 +21,15 @@ if [ "$1" = "anna-kvs" ] || [ "$1" = "anna-route" ] || [ "$1" = "anna-monitor" ]
     exec "$@"
 fi
 
+# Graceful shutdown: forward SIGTERM/SIGINT to child processes.
+shutdown() {
+    echo "Received shutdown signal, stopping Anna cluster..."
+    kill "$KVS_PID" "$ROUTE_PID" "$MONITOR_PID" 2>/dev/null || true
+    wait "$KVS_PID" "$ROUTE_PID" "$MONITOR_PID" 2>/dev/null || true
+    exit 0
+}
+trap shutdown SIGTERM SIGINT
+
 echo "Starting Anna cluster..."
 echo "Config: $CONFIG"
 

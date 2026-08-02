@@ -5,7 +5,7 @@
 #
 # Usage:
 #   docker build -t anna .
-#   docker run --rm -p 6000-6956:6000-6956 anna
+#   docker run --rm --network host anna  # Linux only (ZMQ binds 127.0.0.1)
 
 # ---------------------------------------------------------------------------
 # Build stage
@@ -58,8 +58,11 @@ COPY server/conf/anna-config.yml /etc/anna/anna-config.yml
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Data directory for disk-tier storage
-RUN mkdir -p /data
+# Run as non-root user
+RUN useradd --system --create-home anna \
+    && mkdir -p /data \
+    && chown anna:anna /data
+USER anna
 
 # Anna uses ports 6000-6956 (see docs/ports.md)
 EXPOSE 6000-6956

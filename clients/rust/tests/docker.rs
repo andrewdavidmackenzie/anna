@@ -105,6 +105,17 @@ async fn docker_put_get() {
         panic!("Docker build failed");
     }
 
+    // Verify port 6450 is free before starting -- with --network host,
+    // a pre-existing Anna process would satisfy the readiness check.
+    assert!(
+        std::net::TcpStream::connect_timeout(
+            &"127.0.0.1:6450".parse().unwrap(),
+            Duration::from_millis(200),
+        )
+        .is_err(),
+        "Port 6450 is already in use -- kill any existing Anna processes first"
+    );
+
     eprintln!("Starting container...");
     let _guard = DockerGuard::start("anna-docker-test");
 
@@ -167,17 +178,23 @@ async fn docker_put_get() {
         "overwrite did not take effect"
     );
 
-    // DELETE and verify the key is gone
+    // DELETE and verify the value is empty (Anna delete = PUT empty LWW)
     client.delete("docker_key_1").await.expect("DELETE failed");
-    let get_after_delete = client.get("docker_key_1").await;
-    assert!(
-        get_after_delete.is_err(),
-        "GET after DELETE should fail but returned: {:?}",
-        get_after_delete
+
+    // Use a fresh client to bypass the local read cache and confirm the
+    // delete reached the server.
+    let mut client2 = KVSClient::new(&config, Some(2)).await;
+    let val_after_delete = client2
+        .get("docker_key_1")
+        .await
+        .expect("GET after DELETE failed");
+    assert_eq!(
+        val_after_delete, "",
+        "deleted key should return empty value"
     );
 
     // Verify the other key is unaffected by the delete
-    let val2_still = client
+    let val2_still = client2
         .get("docker_key_2")
         .await
         .expect("GET docker_key_2 after delete failed");
