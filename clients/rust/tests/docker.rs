@@ -130,18 +130,61 @@ async fn docker_put_get() {
     let config = common::client_config(0);
     let mut client = KVSClient::new(&config, Some(1)).await;
 
-    // PUT
+    // PUT two independent keys
     client
-        .put("docker_key", "docker_value")
+        .put("docker_key_1", "value_one")
         .await
-        .expect("PUT failed");
+        .expect("PUT docker_key_1 failed");
+    client
+        .put("docker_key_2", "value_two")
+        .await
+        .expect("PUT docker_key_2 failed");
 
-    // GET
-    let val = client.get("docker_key").await.expect("GET failed");
-    assert_eq!(val, "docker_value");
+    // GET: verify each key returns the correct value (not swapped, not empty)
+    let val1 = client
+        .get("docker_key_1")
+        .await
+        .expect("GET docker_key_1 failed");
+    assert_eq!(val1, "value_one", "docker_key_1 returned wrong value");
 
-    // DELETE + verify
-    client.delete("docker_key").await.expect("DELETE failed");
+    let val2 = client
+        .get("docker_key_2")
+        .await
+        .expect("GET docker_key_2 failed");
+    assert_eq!(val2, "value_two", "docker_key_2 returned wrong value");
 
-    eprintln!("Docker PUT/GET/DELETE test passed!");
+    // Overwrite and verify the new value is returned
+    client
+        .put("docker_key_1", "updated_value")
+        .await
+        .expect("PUT overwrite failed");
+    let val1_updated = client
+        .get("docker_key_1")
+        .await
+        .expect("GET after overwrite failed");
+    assert_eq!(
+        val1_updated, "updated_value",
+        "overwrite did not take effect"
+    );
+
+    // DELETE and verify the key is gone
+    client.delete("docker_key_1").await.expect("DELETE failed");
+    let get_after_delete = client.get("docker_key_1").await;
+    assert!(
+        get_after_delete.is_err(),
+        "GET after DELETE should fail but returned: {:?}",
+        get_after_delete
+    );
+
+    // Verify the other key is unaffected by the delete
+    let val2_still = client
+        .get("docker_key_2")
+        .await
+        .expect("GET docker_key_2 after delete failed");
+    assert_eq!(
+        val2_still, "value_two",
+        "docker_key_2 was affected by deleting docker_key_1"
+    );
+
+    eprintln!("Docker integration test passed: PUT, GET, overwrite, DELETE all verified");
 }

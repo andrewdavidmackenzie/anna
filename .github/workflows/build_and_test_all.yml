@@ -78,6 +78,12 @@ jobs:
       if: matrix.os != 'windows-latest'
       run: make test
 
+    - name: docker-test
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        docker build -t anna-test .
+        cargo test --test docker -- --ignored --nocapture
+
     - name: test-rust (Windows)
       if: matrix.os == 'windows-latest'
       run: cargo test
