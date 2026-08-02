@@ -25,8 +25,8 @@
 #include <vector>
 #include <zmq.hpp>
 
-const unsigned kClientCacheRegistrationPort = 7200;
-const unsigned kClientCacheUpdatePort = 7150;
+const unsigned kClientCacheRegistrationPort = 6900;
+const unsigned kClientCacheUpdatePort = 6850;
 
 /// A cache client that receives key updates pushed from the KVS during gossip.
 ///

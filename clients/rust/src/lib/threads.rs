@@ -4,16 +4,16 @@ use crate::types::Address;
 const K_KEY_ADDRESS_PORT: usize = 6450;
 
 // The port on which clients receive responses from the KVS.
-const K_USER_RESPONSE_PORT: usize = 6800;
+const K_USER_RESPONSE_PORT: usize = 6600;
 
 // The port on which clients receive responses from the routing tier.
-const K_USER_KEY_ADDRESS_PORT: usize = 6850;
+const K_USER_KEY_ADDRESS_PORT: usize = 6650;
 
 // The port on which cache nodes listen for updates from the KVS.
-const K_CACHE_UPDATE_PORT: usize = 7150;
+const K_CACHE_UPDATE_PORT: usize = 6850;
 
 // The port on which KVS servers listen for direct cache registration messages.
-const K_CACHE_REGISTRATION_PORT: usize = 7200;
+const K_CACHE_REGISTRATION_PORT: usize = 6900;
 
 /// `Thread` is a base type for a number of other thread types
 pub struct Thread {
@@ -189,36 +189,36 @@ mod tests {
     #[test]
     fn user_thread_response_addresses() {
         let ut = UserThread::new(&"10.0.0.1".into(), 0);
-        assert_eq!(ut.response_bind_address(), "tcp://10.0.0.1:6800");
-        assert_eq!(ut.response_connect_address(), "tcp://10.0.0.1:6800");
+        assert_eq!(ut.response_bind_address(), "tcp://10.0.0.1:6600");
+        assert_eq!(ut.response_connect_address(), "tcp://10.0.0.1:6600");
     }
 
     #[test]
     fn user_thread_response_with_offset() {
         let ut = UserThread::new(&"10.0.0.1".into(), 2);
-        assert_eq!(ut.response_bind_address(), "tcp://10.0.0.1:6802");
-        assert_eq!(ut.response_connect_address(), "tcp://10.0.0.1:6802");
+        assert_eq!(ut.response_bind_address(), "tcp://10.0.0.1:6602");
+        assert_eq!(ut.response_connect_address(), "tcp://10.0.0.1:6602");
     }
 
     #[test]
     fn user_thread_key_addresses() {
         let ut = UserThread::new(&"10.0.0.1".into(), 0);
-        assert_eq!(ut.key_address_bind_address(), "tcp://10.0.0.1:6850");
-        assert_eq!(ut.key_address_connect_address(), "tcp://10.0.0.1:6850");
+        assert_eq!(ut.key_address_bind_address(), "tcp://10.0.0.1:6650");
+        assert_eq!(ut.key_address_connect_address(), "tcp://10.0.0.1:6650");
     }
 
     #[test]
     fn user_thread_key_addresses_with_offset() {
         let ut = UserThread::new(&"10.0.0.1".into(), 3);
-        assert_eq!(ut.key_address_bind_address(), "tcp://10.0.0.1:6853");
-        assert_eq!(ut.key_address_connect_address(), "tcp://10.0.0.1:6853");
+        assert_eq!(ut.key_address_bind_address(), "tcp://10.0.0.1:6653");
+        assert_eq!(ut.key_address_connect_address(), "tcp://10.0.0.1:6653");
     }
 
     #[test]
     fn user_thread_with_base_offset() {
         let ut = UserThread::with_offset(&"10.0.0.1".into(), 0, 1000);
-        assert_eq!(ut.response_bind_address(), "tcp://10.0.0.1:7800");
-        assert_eq!(ut.key_address_bind_address(), "tcp://10.0.0.1:7850");
+        assert_eq!(ut.response_bind_address(), "tcp://10.0.0.1:7600");
+        assert_eq!(ut.key_address_bind_address(), "tcp://10.0.0.1:7650");
     }
 
     #[test]
@@ -233,8 +233,8 @@ mod tests {
     #[test]
     fn cache_thread_update_addresses() {
         let ct = UserThread::new(&"10.0.0.1".into(), 1);
-        assert_eq!(ct.cache_update_bind_address(), "tcp://10.0.0.1:7151");
-        assert_eq!(ct.cache_update_connect_address(), "tcp://10.0.0.1:7151");
+        assert_eq!(ct.cache_update_bind_address(), "tcp://10.0.0.1:6851");
+        assert_eq!(ct.cache_update_connect_address(), "tcp://10.0.0.1:6851");
     }
 
     #[test]

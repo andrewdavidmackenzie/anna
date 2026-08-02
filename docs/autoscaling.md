@@ -198,7 +198,7 @@ while True:
 ### Scaling Alert Protocol
 
 The built-in policy engine communicates scaling recommendations to an
-external system via ZMQ PUSH on the `scaling_alert` port (default 7001).
+external system via ZMQ PUSH on the `scaling_alert` port (default 6955).
 Messages are serialized `ScalingAlert` protobuf messages (defined in
 `server/protobuf/metadata.proto`):
 

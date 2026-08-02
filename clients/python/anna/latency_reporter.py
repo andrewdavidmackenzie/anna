@@ -2,7 +2,7 @@ import zmq
 
 from . import benchmark_pb2
 
-K_FEEDBACK_REPORT_PORT = 6750
+K_FEEDBACK_REPORT_PORT = 6953
 
 
 class LatencyReporter:

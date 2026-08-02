@@ -14,6 +14,9 @@ actual_port = base_port + tid + base_offset
 
 ## Port Map
 
+All 26 port groups are packed contiguously: 19 per-thread groups at 50-port
+spacing (6000-6900), followed by 7 singleton ports (6950-6956).
+
 ### KVS Server (10 per-thread ports)
 
 | Base Port | Constant | Purpose |
@@ -25,9 +28,9 @@ actual_port = base_port + tid + base_offset
 | 6200 | `kKeyRequestPort` | Receive client GET/PUT/DELETE requests |
 | 6250 | `kGossipPort` | Receive gossip from peer KVS nodes |
 | 6300 | `kServerReplicationChangePort` | Receive replication factor changes from monitor |
-| 7050 | `kCacheIpResponsePort` | Receive cache IP lookup responses |
-| 7100 | `kManagementNodeResponsePort` | Receive management node responses (function node lists) |
-| 7200 | `kCacheRegistrationPort` | Receive cache registration messages from ValueChangeSubscriber clients |
+| 6750 | `kCacheIpResponsePort` | Receive cache IP lookup responses |
+| 6800 | `kManagementNodeResponsePort` | Receive management node responses (function node lists) |
+| 6900 | `kCacheRegistrationPort` | Receive cache registration messages from ValueChangeSubscriber clients |
 
 ### Routing Server (5 per-thread ports)
 
@@ -39,39 +42,34 @@ actual_port = base_port + tid + base_offset
 | 6500 | `kRoutingReplicationResponsePort` | Replication factor query responses |
 | 6550 | `kRoutingReplicationChangePort` | Replication factor change announcements from monitor |
 
-### Monitor (4 singleton ports, no tid)
+### Client (2 per-thread ports)
 
 | Base Port | Constant | Purpose |
 |-----------|----------|---------|
-| 6600 | `kMonitoringNotifyPort` | Cluster membership change notifications |
-| 6650 | `kMonitoringResponsePort` | KVS metadata/stats responses |
-| 6700 | `kDepartDonePort` | Depart-done confirmations from departing nodes |
-| 6750 | `kFeedbackReportPort` | Client latency/throughput feedback (LatencyReporter) |
+| 6600 | `kUserResponsePort` | Receive GET/PUT responses from KVS |
+| 6650 | `kUserKeyAddressPort` | Receive key-address responses from routing |
 
-### Client (3 per-thread ports)
+### Other per-thread ports
 
 | Base Port | Constant | Purpose |
 |-----------|----------|---------|
-| 6800 | `kUserResponsePort` | Receive GET/PUT responses from KVS |
-| 6850 | `kUserKeyAddressPort` | Receive key-address responses from routing |
-| 7150 | `kCacheUpdatePort` | Receive pushed key-value updates (ValueChangeSubscriber) |
+| 6700 | `kBenchmarkCommandPort` | Receive benchmark trigger commands |
+| 6850 | `kCacheUpdatePort` | Receive pushed key-value updates (ValueChangeSubscriber) |
 
-### Benchmark (1 per-thread port)
-
-| Base Port | Constant | Purpose |
-|-----------|----------|---------|
-| 6900 | `kBenchmarkCommandPort` | Receive benchmark trigger commands |
-
-### Management / External System (3 singleton ports, no tid)
+### Singleton ports (no tid, packed at end)
 
 | Base Port | Constant | Purpose |
 |-----------|----------|---------|
-| 7000 | `kManagementRestartCountPort` | KVS queries restart count on startup |
-| 7001 | `kScalingAlertPort` | Monitor sends scaling alerts (add/remove nodes) |
-| 7002 | `kManagementFuncNodesPort` | KVS queries function/cache node lists |
+| 6950 | `kMonitoringNotifyPort` | Cluster membership change notifications |
+| 6951 | `kMonitoringResponsePort` | KVS metadata/stats responses |
+| 6952 | `kDepartDonePort` | Depart-done confirmations from departing nodes |
+| 6953 | `kFeedbackReportPort` | Client latency/throughput feedback (LatencyReporter) |
+| 6954 | `kManagementRestartCountPort` | KVS queries restart count on startup |
+| 6955 | `kScalingAlertPort` | Monitor sends scaling alerts (add/remove nodes) |
+| 6956 | `kManagementFuncNodesPort` | KVS queries function/cache node lists |
 
-These ports are on the external management system, not on Anna nodes. The
-management system is not part of this project. See
+Management ports (6954-6956) are on the external management system, not on
+Anna nodes. The management system is not part of this project. See
 [Autoscaling](autoscaling.md) for details.
 
 ## Port Range Summary
@@ -79,32 +77,13 @@ management system is not part of this project. See
 With `base_offset=0` and 1 thread per component:
 
 - **Minimum port**: 6000 (`kNodeJoinPort`)
-- **Maximum port**: 7200 (`kCacheRegistrationPort`)
-- **Total span**: 1201 ports (but only 26 actually bound)
+- **Maximum port**: 6956 (`kManagementFuncNodesPort`)
+- **Total span**: 957 ports (but only 26 actually bound)
 
-The 50-port spacing between consecutive port groups (6000, 6050, 6100, ...)
-allows up to **50 threads** per component before per-thread port ranges
-collide. This limit is implicit -- there is no constant defining it and
-no runtime validation. Configuring more than 50 threads will cause silent
-port collisions.
-
-### Why the range is 1201 and not smaller
-
-The 26 port groups are not packed contiguously. The layout has gaps:
-
-- Ports 6000-6900: 19 groups, mostly contiguous at 50-port spacing (950 span)
-- Ports 7000-7002: 3 management singletons (3 span)
-- Ports 7050-7200: 4 more groups at 50-port spacing (150 span)
-
-The 100-port gap between 6900 (benchmark) and 7000 (management) and the
-48-port gap between 7002 and 7050 waste 148 ports. Renumbering these groups
-to be contiguous would reduce the range from 1201 to approximately **1053**
-(21 per-thread groups x 50 spacing + 5 singletons).
-
-Further reduction would require reducing the inter-group spacing from 50,
-which limits the maximum thread count. With spacing of 10 (max 10 threads),
-the range shrinks to approximately **260**. With spacing of 4 (max 4
-threads), approximately **104**.
+The 50-port spacing between consecutive per-thread port groups allows up to
+**50 threads** per component before port ranges collide. This limit is
+implicit -- there is no constant defining it and no runtime validation.
+Configuring more than 50 threads will cause silent port collisions.
 
 ## base_offset for Multiple Clusters
 
@@ -112,12 +91,12 @@ The `ports.base_offset` config key shifts all ports by a fixed amount:
 
 ```yaml
 ports:
-  base_offset: 0      # default: ports 6000-7200
-  # base_offset: 2000 # shifts to ports 8000-9200
+  base_offset: 0      # default: ports 6000-6956
+  # base_offset: 2000 # shifts to ports 8000-8956
 ```
 
 This is used in tests to run multiple independent clusters on the same
-machine. Each cluster needs a `base_offset` at least 1201 apart (with 1
+machine. Each cluster needs a `base_offset` at least 957 apart (with 1
 thread) to avoid port conflicts.
 
 ## Multi-Node Deployments
@@ -148,5 +127,5 @@ Port constants are defined in:
 - `clients/python/anna/common.py` -- Python client port constants
 
 Note: the Python client uses different port bases for its own sockets
-(6460 and 6760) compared to the other clients (6800 and 6850). This is a
+(6460 and 6760) compared to the other clients (6600 and 6650). This is a
 historical divergence from the upstream project.

@@ -43,11 +43,11 @@ const unsigned kServerReplicationChangePort = 6300;
 
 // The port on which KVS servers listen for responses to a request for listing
 // the keys cached at a function node.
-const unsigned kCacheIpResponsePort = 7050;
+const unsigned kCacheIpResponsePort = 6750;
 
 // The port on which KVS servers listen for responses from management node to a
 // request for the list of all existing function nodes.
-const unsigned kManagementNodeResponsePort = 7100;
+const unsigned kManagementNodeResponsePort = 6800;
 
 // The port on which routing servers listen for cluster membership requests.
 const unsigned kSeedPort = 6350;
@@ -64,33 +64,33 @@ const unsigned kRoutingReplicationChangePort = 6550;
 
 // The port on which the monitoring system listens for cluster membership
 // changes.
-const unsigned kMonitoringNotifyPort = 6600;
+const unsigned kMonitoringNotifyPort = 6950;
 
 // The port on which monitoring threads listen for KVS responses when
 // retrieving metadata.
-const unsigned kMonitoringResponsePort = 6650;
+const unsigned kMonitoringResponsePort = 6951;
 
 // The port on which the monitoring system waits for a response from KVS nodes
 // after they have finished departing.
-const unsigned kDepartDonePort = 6700;
+const unsigned kDepartDonePort = 6952;
 
 // The port on which the monitoring nodes listens for performance feedback from
 // clients.
-const unsigned kFeedbackReportPort = 6750;
+const unsigned kFeedbackReportPort = 6953;
 
 // The port on which benchmark nodes listen for triggers.
-const unsigned kBenchmarkCommandPort = 6900;
+const unsigned kBenchmarkCommandPort = 6700;
 
 // The port on which storage nodes retrieve their restart counts from the
 // external management system.
-const unsigned kManagementRestartCountPort = 7000;
+const unsigned kManagementRestartCountPort = 6954;
 
 // The port on which KVS servers listen for direct cache registration messages.
-const unsigned kCacheRegistrationPort = 7200;
+const unsigned kCacheRegistrationPort = 6900;
 
 // The port on which the external management system listens for requests
 // for executor/function node lists.
-const unsigned kManagementFuncNodesPort = 7002;
+const unsigned kManagementFuncNodesPort = 6956;
 
 class ServerThread {
   Address public_ip_;

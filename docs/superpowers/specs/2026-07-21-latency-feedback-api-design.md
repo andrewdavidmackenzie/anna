@@ -38,7 +38,7 @@ New client-side API for reporting latency feedback to the monitor, following the
 ```
 LatencyReporter::new(client: &mut KVSClient, tid: Option<usize>) -> Result<Self>
     // Discovers monitoring IPs via ANNA_METADATA|monitoring_ips
-    // Connects ZMQ PUSH sockets to each monitor's feedback port (6750 + offset)
+    // Connects ZMQ PUSH sockets to each monitor's feedback port (6953 + offset)
 
 report(latency_us: f64, throughput: f64, key_latencies: &[(String, f64)]) -> Result<()>
     // Builds UserFeedback protobuf, sends to all monitors
@@ -61,7 +61,7 @@ No protobuf changes needed.
 
 ### Socket pattern
 
-- ZMQ PUSH sockets to each monitor's feedback address (`tcp://<ip>:6750+offset`)
+- ZMQ PUSH sockets to each monitor's feedback address (`tcp://<ip>:6953+offset`)
 - Lazy connection with retry (same `get_or_connect` pattern as `ValueChangeSubscriber`)
 - Fan-out: every report goes to all monitoring threads
 

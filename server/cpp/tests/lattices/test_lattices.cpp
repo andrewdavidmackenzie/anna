@@ -1088,7 +1088,7 @@ TEST(CacheThreadTest, CacheUpdateAddresses) {
 // Verify thread port constants
 TEST(ThreadPortTest, Constants) {
   EXPECT_EQ(kKeyAddressPort, 6450u);
-  EXPECT_EQ(kUserResponsePort, 6800u);
-  EXPECT_EQ(kUserKeyAddressPort, 6850u);
-  EXPECT_EQ(kCacheUpdatePort, 7150u);
+  EXPECT_EQ(kUserResponsePort, 6600u);
+  EXPECT_EQ(kUserKeyAddressPort, 6650u);
+  EXPECT_EQ(kCacheUpdatePort, 6850u);
 }

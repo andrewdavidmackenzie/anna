@@ -90,7 +90,7 @@ Anna uses ZeroMQ for all communication:
 - **Inter-node** (between machines): ZeroMQ `tcp` transport with Protocol
   Buffer serialization
 - **Client-to-routing**: PUSH/PULL sockets on port 6450
-- **Client-to-KVS**: PUSH/PULL sockets on configurable ports (6800/6850)
+- **Client-to-KVS**: PUSH/PULL sockets on configurable ports (6600/6650)
 
 See [Port Layout](ports.md) for the complete port map (26 port groups across
 6000-7200).

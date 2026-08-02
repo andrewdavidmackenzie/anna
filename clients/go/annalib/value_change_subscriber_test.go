@@ -14,11 +14,11 @@ import (
 )
 
 func TestValueChangeSubscriberConstants(t *testing.T) {
-	if kCacheRegistrationPort != 7200 {
-		t.Errorf("expected registration port 7200, got %d", kCacheRegistrationPort)
+	if kCacheRegistrationPort != 6900 {
+		t.Errorf("expected registration port 6900, got %d", kCacheRegistrationPort)
 	}
-	if kCacheUpdatePort != 7150 {
-		t.Errorf("expected update port 7150, got %d", kCacheUpdatePort)
+	if kCacheUpdatePort != 6850 {
+		t.Errorf("expected update port 6850, got %d", kCacheUpdatePort)
 	}
 }
 
@@ -91,7 +91,7 @@ func TestRecvUpdateReceivesPushedValue(t *testing.T) {
 	defer cc.Close()
 
 	pusher := zmq4.NewPush(context.Background())
-	err = pusher.Dial("tcp://127.0.0.1:27350")
+	err = pusher.Dial("tcp://127.0.0.1:27050")
 	if err != nil {
 		t.Fatalf("Dial failed: %v", err)
 	}
@@ -152,12 +152,12 @@ func TestRecvUpdateTimeout(t *testing.T) {
 }
 
 func TestWatchRegistersKeys(t *testing.T) {
-	// offset=20500 → registration port: 0+7200+20500 = 27700
-	// update port: 0+7150+20500 = 27650 (all below 32768)
+	// offset=20500 → registration port: 0+6900+20500 = 27400
+	// update port: 0+6850+20500 = 27350 (all below 32768)
 	offset := 20500
 
 	// Set up a PULL listener on the registration port so Watch() can connect.
-	regPort := 0 + kCacheRegistrationPort + offset // 27700
+	regPort := 0 + kCacheRegistrationPort + offset // 27400
 	regAddr := fmt.Sprintf("tcp://127.0.0.1:%d", regPort)
 	puller := zmq4.NewPull(context.Background())
 	if err := puller.Listen(regAddr); err != nil {
@@ -211,7 +211,7 @@ func TestWatchRegistersKeys(t *testing.T) {
 }
 
 func TestWatchMultipleCalls(t *testing.T) {
-	// offset=20600 → registration port: 27800, update port: 27750
+	// offset=20600 → registration port: 27500, update port: 27450
 	offset := 20600
 
 	regPort := 0 + kCacheRegistrationPort + offset
@@ -254,7 +254,7 @@ func TestWatchMultipleCalls(t *testing.T) {
 }
 
 func TestCloseWithPushSockets(t *testing.T) {
-	// offset=20700 → registration port: 27900, update port: 27850
+	// offset=20700 → registration port: 27600, update port: 27550
 	offset := 20700
 
 	regPort := 0 + kCacheRegistrationPort + offset
@@ -293,7 +293,7 @@ func TestCloseWithPushSockets(t *testing.T) {
 }
 
 func TestRecvUpdateEmptyPayload(t *testing.T) {
-	// offset=20800 → update port: 0+7150+20800 = 27950
+	// offset=20800 → update port: 0+6850+20800 = 27650
 	offset := 20800
 
 	cc, err := NewValueChangeSubscriber("127.0.0.1", "127.0.0.1", 1, offset, 0)
@@ -302,7 +302,7 @@ func TestRecvUpdateEmptyPayload(t *testing.T) {
 	}
 	defer cc.Close()
 
-	updatePort := 0 + kCacheUpdatePort + offset // 27950
+	updatePort := 0 + kCacheUpdatePort + offset // 27650
 	pusher := zmq4.NewPush(context.Background())
 	if err := pusher.Dial(fmt.Sprintf("tcp://127.0.0.1:%d", updatePort)); err != nil {
 		t.Fatalf("Dial failed: %v", err)
@@ -336,7 +336,7 @@ func TestRecvUpdateEmptyPayload(t *testing.T) {
 
 func TestNewValueChangeSubscriberBindError(t *testing.T) {
 	// Bind the update port first, then try to create a subscriber on the same port.
-	// offset=20900 → update port: 0+7150+20900 = 28050
+	// offset=20900 → update port: 0+6850+20900 = 27750
 	offset := 20900
 	updatePort := 0 + kCacheUpdatePort + offset
 	updateAddr := fmt.Sprintf("tcp://127.0.0.1:%d", updatePort)

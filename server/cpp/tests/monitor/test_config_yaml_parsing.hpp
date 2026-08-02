@@ -455,7 +455,7 @@ TEST_F(ConfigYamlParsingTest, EmptyConfigLeavesDefaults) {
   EXPECT_DOUBLE_EQ(kMaxMemoryNodeConsumption, 0.6);
   EXPECT_EQ(kVirtualThreadNum, 3000u);
   EXPECT_EQ(kSloWorst, 3000u);
-  EXPECT_EQ(kScalingAlertPort, 7001u);
+  EXPECT_EQ(kScalingAlertPort, 6955u);
   EXPECT_EQ(kGarbageCollectThreshold, 10000000u);
   EXPECT_EQ(kMetadataReplicationFactor, 1u);
 

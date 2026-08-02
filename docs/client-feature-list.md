@@ -8,9 +8,9 @@ Features implemented per client. Each client wraps the Anna KVS protocol
 All four clients provide a value change subscription API — a pub-sub
 mechanism for receiving notifications when specific keys are updated
 (including deletes). The subscriber registers interest in keys with the
-KVS server threads via a dedicated registration port (7200). During each
+KVS server threads via a dedicated registration port (6900). During each
 gossip epoch, when a watched key changes, the KVS pushes the new value
-to the subscriber on port 7150.
+to the subscriber on port 6850.
 
 Applications can use this for caching, event-driven updates, replication
 to external systems, or any pattern that needs to react to key changes.

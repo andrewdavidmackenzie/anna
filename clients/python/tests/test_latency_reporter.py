@@ -12,7 +12,7 @@ TEST_PORT = K_FEEDBACK_REPORT_PORT + TEST_OFFSET
 
 class TestLatencyReporterConstants(unittest.TestCase):
     def test_feedback_report_port(self):
-        self.assertEqual(K_FEEDBACK_REPORT_PORT, 6750)
+        self.assertEqual(K_FEEDBACK_REPORT_PORT, 6953)
 
 
 class TestLatencyReporterConstruction(unittest.TestCase):

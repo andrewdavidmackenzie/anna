@@ -596,7 +596,7 @@ async fn latency_feedback_ingestion() {
     std::thread::sleep(Duration::from_secs(REPORT_PERIOD as u64 + 1));
 
     // Send UserFeedback to the monitor's feedback port
-    let feedback_addr = format!("tcp://{}:{}", NODE_IP, 6750 + 6300);
+    let feedback_addr = format!("tcp://{}:{}", NODE_IP, 6953 + 6300);
     let ctx = Context::new();
     let pusher = ctx.socket(SocketType::Push, Options::default());
     pusher

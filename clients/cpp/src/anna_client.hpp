@@ -50,8 +50,8 @@ using Key = string;
 #define INCLUDE_THREADS_HPP_
 
 const unsigned kKeyAddressPort = 6450;
-const unsigned kUserResponsePort = 6800;
-const unsigned kUserKeyAddressPort = 6850;
+const unsigned kUserResponsePort = 6600;
+const unsigned kUserKeyAddressPort = 6650;
 
 inline unsigned kBaseOffset = 0;
 

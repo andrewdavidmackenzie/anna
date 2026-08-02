@@ -121,7 +121,7 @@ TEST(ConfigDefaults, GarbageCollectThresholdDefault) {
 // --- threads.hpp defaults ---
 
 TEST(ConfigDefaults, ScalingAlertPortDefault) {
-  EXPECT_EQ(kScalingAlertPort, 7001u);
+  EXPECT_EQ(kScalingAlertPort, 6955u);
 }
 
 TEST(ConfigDefaults, BaseOffsetDefault) {

@@ -196,7 +196,7 @@ async fn system_test_kvs_client() {
     let config_path = generate_config(MEMORY_BASE_OFFSET);
     let _guard = ServerGuard::start(&config_path, MEMORY_BASE_OFFSET);
     let config = client_config(MEMORY_BASE_OFFSET);
-    let mut client = KVSClient::new(&config, Some(50)).await;
+    let mut client = KVSClient::new(&config, Some(5)).await;
 
     test_all_lattice_types(&mut client, "mem").await;
     test_memory_extras(&mut client).await;
@@ -211,7 +211,7 @@ async fn disk_tier_lattice_types() {
     let config_path = generate_disk_config(DISK_BASE_OFFSET);
     let _guard = ServerGuard::start_disk(&config_path, DISK_BASE_OFFSET);
     let config = client_config(DISK_BASE_OFFSET);
-    let mut client = KVSClient::new(&config, Some(51)).await;
+    let mut client = KVSClient::new(&config, Some(6)).await;
 
     test_all_lattice_types(&mut client, "disk").await;
 }
