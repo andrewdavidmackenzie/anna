@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 # Entrypoint for the Anna Docker container.
 #

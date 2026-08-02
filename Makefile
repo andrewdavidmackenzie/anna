@@ -277,4 +277,10 @@ docker:
 
 .PHONY: docker-run
 docker-run: docker
-	docker run --rm -p 6000-6956:6000-6956 anna
+ifeq ($(UNAME), Linux)
+	docker run --rm --network host anna
+else
+	@echo "Note: On macOS/Windows, use --network host on a Linux host or provide a custom config."
+	@echo "Docker Desktop's VM networking prevents ZMQ from working with port mapping."
+	@echo "Run: docker run --rm --network host anna  (Linux only)"
+endif
