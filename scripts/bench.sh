@@ -13,6 +13,14 @@
 
 set -euo pipefail
 
+# Kill any leftover anna server processes from previous runs to avoid port
+# conflicts. Uses exact binary name matching to avoid killing unrelated
+# processes that happen to contain these strings in their arguments.
+for proc in anna-kvs anna-route anna-monitor; do
+  pkill -x "$proc" 2>/dev/null || true
+done
+sleep 1
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BENCH_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/anna_bench.XXXXXX")"
 BENCH_DATA="${BENCH_ROOT}/data"

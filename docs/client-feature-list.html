@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d844dd32.js";
+            window.path_to_searchindex_js = "../searchindex-d6c00298.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-73b27c84.js"></script>
@@ -181,9 +181,9 @@
 <p>All four clients provide a value change subscription API — a pub-sub
 mechanism for receiving notifications when specific keys are updated
 (including deletes). The subscriber registers interest in keys with the
-KVS server threads via a dedicated registration port (7200). During each
+KVS server threads via a dedicated registration port (6900). During each
 gossip epoch, when a watched key changes, the KVS pushes the new value
-to the subscriber on port 7150.</p>
+to the subscriber on port 6850.</p>
 <p>Applications can use this for caching, event-driven updates, replication
 to external systems, or any pattern that needs to react to key changes.</p>
 <h3 id="api-per-language"><a class="header" href="#api-per-language">API (per language)</a></h3>
