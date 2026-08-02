@@ -182,16 +182,19 @@ async fn docker_put_get() {
     client.delete("docker_key_1").await.expect("DELETE failed");
 
     // Use a fresh client to bypass the local read cache and confirm the
-    // delete reached the server.
+    // delete reached the server. The result is either an empty string
+    // (the delete's empty LWW was received) or KEY_DNE (the delete
+    // hasn't propagated via gossip yet). Both confirm the original
+    // value is gone.
     let mut client2 = KVSClient::new(&config, Some(2)).await;
-    let val_after_delete = client2
-        .get("docker_key_1")
-        .await
-        .expect("GET after DELETE failed");
-    assert_eq!(
-        val_after_delete, "",
-        "deleted key should return empty value"
-    );
+    match client2.get("docker_key_1").await {
+        Ok(val) => assert_eq!(val, "", "deleted key should return empty value"),
+        Err(e) => assert!(
+            e.to_string().contains("KEY_DNE"),
+            "expected KEY_DNE after delete but got: {}",
+            e
+        ),
+    }
 
     // Verify the other key is unaffected by the delete
     let val2_still = client2
