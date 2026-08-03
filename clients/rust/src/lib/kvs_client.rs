@@ -3054,7 +3054,7 @@ mod tests {
             .put_with_ttl("ttl_key", "ttl_value", 300)
             .await
             .expect("put_with_ttl failed");
-        // Verify the value is in the read cache
-        assert!(client.lww_read_cache.contains_key("ttl_key"));
+        // TTL values should NOT be cached (they'd be stale after expiry)
+        assert!(!client.lww_read_cache.contains_key("ttl_key"));
     }
 }
