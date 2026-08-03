@@ -3163,4 +3163,61 @@ mod tests {
         // TTL values should NOT be cached (they'd be stale after expiry)
         assert!(!client.lww_read_cache.contains_key("ttl_key"));
     }
+
+    fn make_counter_response(key: &str, inc_val: u64) -> Vec<u8> {
+        let mut cv = crate::proto::kvs::CounterValue::default();
+        cv.increments.insert("test:0".to_string(), inc_val);
+        let response = KeyResponse {
+            r#type: RequestType::Get as i32,
+            tuples: vec![KeyTuple {
+                key: key.to_string(),
+                lattice_type: LatticeType::Counter as i32,
+                payload: cv.encode_to_vec(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        response.encode_to_vec()
+    }
+
+    #[tokio::test]
+    async fn increment_tracks_locally() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(233);
+        // First increment
+        client.push_mock_response(true, Some(make_routing_response("cnt", worker)));
+        client.push_mock_response(false, Some(make_put_response("cnt")));
+        client.increment("cnt").await.expect("increment 1 failed");
+
+        // Second increment
+        client.push_mock_response(true, Some(make_routing_response("cnt", worker)));
+        client.push_mock_response(false, Some(make_put_response("cnt")));
+        client.increment("cnt").await.expect("increment 2 failed");
+
+        // Local state should be (2, 0)
+        assert_eq!(client.counter_state.get("cnt"), Some(&(2, 0)));
+    }
+
+    #[tokio::test]
+    async fn decrement_tracks_locally() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(234);
+        client.push_mock_response(true, Some(make_routing_response("cnt", worker)));
+        client.push_mock_response(false, Some(make_put_response("cnt")));
+        client
+            .decrement_by("cnt", 5)
+            .await
+            .expect("decrement failed");
+        assert_eq!(client.counter_state.get("cnt"), Some(&(0, 5)));
+    }
+
+    #[tokio::test]
+    async fn get_counter_returns_value() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(235);
+        client.push_mock_response(true, Some(make_routing_response("cnt", worker)));
+        client.push_mock_response(false, Some(make_counter_response("cnt", 42)));
+        let val = client.get_counter("cnt").await.expect("get_counter failed");
+        assert_eq!(val, 42);
+    }
 }
