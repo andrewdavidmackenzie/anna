@@ -1787,6 +1787,121 @@ impl KVSClient {
         Ok(results)
     }
 
+    /// Batch PUT multiple LWW key-value pairs in a single request per worker.
+    ///
+    /// Groups keys by responsible worker and sends one `KeyRequest` with
+    /// multiple tuples to each worker. This is more efficient than calling
+    /// `put()` in a loop because it reduces the number of network round-trips.
+    ///
+    /// Returns `Ok(())` if all keys were written successfully. On
+    /// `WRONG_THREAD` errors, retries up to 3 times with refreshed routing.
+    pub async fn put_multi(&mut self, keys_values: &[(&str, &str)]) -> Result<()> {
+        if keys_values.is_empty() {
+            return Ok(());
+        }
+
+        const MAX_RETRIES: usize = 3;
+        let mut pending: Vec<(String, String)> = keys_values
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+
+        for attempt in 0..=MAX_RETRIES {
+            if pending.is_empty() {
+                break;
+            }
+
+            // Group by worker address.
+            let mut worker_kvs: HashMap<Address, Vec<(String, String)>> = HashMap::new();
+            for (key, value) in &pending {
+                if let Some(worker) = self.get_worker_address(key).await {
+                    worker_kvs
+                        .entry(worker)
+                        .or_default()
+                        .push((key.clone(), value.clone()));
+                } else {
+                    return Err(Error::Kvs(format!(
+                        "PUT_MULTI: failed to resolve address for key {}",
+                        key
+                    )));
+                }
+            }
+
+            let mut retry_keys = Vec::new();
+
+            for (worker, batch) in &worker_kvs {
+                let mut request = KeyRequest {
+                    request_id: self.get_request_id(),
+                    response_address: self.ut.response_connect_address(),
+                    r#type: RequestType::Put as i32,
+                    ..Default::default()
+                };
+
+                for (key, value) in batch {
+                    let ts = std::cmp::max(Self::generate_timestamp(), self.last_seen_ts + 1);
+                    self.last_seen_ts = ts;
+                    let lww = LwwValue {
+                        timestamp: ts,
+                        value: value.as_bytes().to_vec(),
+                    };
+                    let payload = lww.encode_to_vec();
+
+                    let mut tuple = KeyTuple {
+                        key: key.clone(),
+                        lattice_type: LatticeType::Lww as i32,
+                        payload,
+                        ..Default::default()
+                    };
+                    if let Some(cache) = self.key_address_cache.get(key) {
+                        tuple.address_cache_size = cache.len() as u32;
+                    }
+                    request.tuples.push(tuple);
+
+                    // Cache for read-your-writes.
+                    self.lww_read_cache
+                        .insert(key.clone(), (lww.timestamp, lww.value.clone()));
+                }
+
+                let encoded = request.encode_to_vec();
+                self.send_request(&encoded, worker).await?;
+
+                match self.recv_response(false).await {
+                    Some(data) => {
+                        let response = KeyResponse::decode(data.as_slice())
+                            .map_err(|e| Error::Kvs(format!("PUT_MULTI: decode error: {}", e)))?;
+
+                        for tuple in &response.tuples {
+                            if tuple.invalidate {
+                                self.key_address_cache.remove(&tuple.key);
+                            }
+                            if tuple.error == AnnaError::WrongThread as i32 {
+                                self.key_address_cache.remove(&tuple.key);
+                                if attempt < MAX_RETRIES {
+                                    // Find the original value to retry.
+                                    if let Some((_, v)) =
+                                        batch.iter().find(|(k, _)| k == &tuple.key)
+                                    {
+                                        retry_keys.push((tuple.key.clone(), v.clone()));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    None => {
+                        for (key, _) in batch {
+                            self.key_address_cache.remove(key);
+                        }
+                        return Err(Error::Kvs("PUT_MULTI: request timed out".into()));
+                    }
+                }
+            }
+
+            pending = retry_keys;
+        }
+
+        Ok(())
+    }
+
     /// Set the per-key replication factor by writing to the metadata key.
     ///
     /// The replication metadata is stored as an LWW value containing a
@@ -3162,6 +3277,44 @@ mod tests {
             .expect("put_with_ttl failed");
         // TTL values should NOT be cached (they'd be stale after expiry)
         assert!(!client.lww_read_cache.contains_key("ttl_key"));
+    }
+
+    #[tokio::test]
+    async fn put_multi_batches_keys() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(236);
+        // Two keys routed to the same worker -> one batched request.
+        client.push_mock_response(true, Some(make_routing_response("mk1", worker)));
+        client.push_mock_response(true, Some(make_routing_response("mk2", worker)));
+        // One response for the batch.
+        let batch_response = KeyResponse {
+            r#type: RequestType::Put as i32,
+            tuples: vec![
+                KeyTuple {
+                    key: "mk1".into(),
+                    ..Default::default()
+                },
+                KeyTuple {
+                    key: "mk2".into(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        client.push_mock_response(false, Some(batch_response.encode_to_vec()));
+        client
+            .put_multi(&[("mk1", "v1"), ("mk2", "v2")])
+            .await
+            .expect("put_multi failed");
+        // Both should be in read cache.
+        assert!(client.lww_read_cache.contains_key("mk1"));
+        assert!(client.lww_read_cache.contains_key("mk2"));
+    }
+
+    #[tokio::test]
+    async fn put_multi_empty_is_ok() {
+        let mut client = mock_client(237);
+        client.put_multi(&[]).await.expect("empty put_multi failed");
     }
 
     fn make_counter_response(key: &str, inc_val: u64) -> Vec<u8> {

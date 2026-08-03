@@ -382,6 +382,10 @@ async fn execute_command(
             client.put_value(&key, &value).await?;
         }
         "DELETE" if split.len() == 2 => client.delete(split[1]).await?,
+        "PUT_MULTI" if split.len() >= 3 && (split.len() - 1) % 2 == 0 => {
+            let pairs: Vec<(&str, &str)> = split[1..].chunks(2).map(|c| (c[0], c[1])).collect();
+            client.put_multi(&pairs).await?;
+        }
         "INCREMENT" if split.len() == 2 => {
             client.increment(split[1]).await?;
         }
@@ -512,6 +516,7 @@ fn cli_usage() -> String {
     \n\tput priority {key} {pri} {val} \t- store with priority (lowest wins)\
     \n\tput causal {key} {value} \t- store with multi-key causal consistency\
     \n\tput single_causal {key} {value} \t- store with single-key causal consistency\
+    \n\tput_multi {k1} {v1} {k2} {v2} ... \t- batch PUT multiple keys\
     \n\tput_ttl {key} {value} {seconds} \t- store with TTL (auto-expires)\
     \n\tincrement {key} [amount] \t- increment a counter (default +1)\
     \n\tdecrement {key} [amount] \t- decrement a counter (default -1)\

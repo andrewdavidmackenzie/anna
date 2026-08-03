@@ -216,6 +216,38 @@ async fn disk_tier_lattice_types() {
     test_all_lattice_types(&mut client, "disk").await;
 }
 
+const BATCH_PUT_OFFSET: u16 = 207;
+
+/// Test put_multi: batch PUT multiple keys, verify all readable.
+#[tokio::test]
+#[cfg(unix)]
+async fn batch_put_and_get() {
+    let config_path = generate_config(BATCH_PUT_OFFSET);
+    let _guard = ServerGuard::start(&config_path, BATCH_PUT_OFFSET);
+    let config = client_config(BATCH_PUT_OFFSET);
+    let mut client = KVSClient::new(&config, Some(7)).await;
+
+    let pairs: Vec<(&str, &str)> = (0..10)
+        .map(|i| {
+            // Leak strings to get &str with 'static lifetime for the vec
+            let k: &str = Box::leak(format!("batch_key_{}", i).into_boxed_str());
+            let v: &str = Box::leak(format!("batch_val_{}", i).into_boxed_str());
+            (k, v)
+        })
+        .collect();
+
+    client.put_multi(&pairs).await.expect("put_multi failed");
+
+    // Verify all keys are readable.
+    for i in 0..10 {
+        let val = client
+            .get(&format!("batch_key_{}", i))
+            .await
+            .unwrap_or_else(|e| panic!("GET batch_key_{} failed: {}", i, e));
+        assert_eq!(val, format!("batch_val_{}", i));
+    }
+}
+
 const COUNTER_BASIC_OFFSET: u16 = 208;
 const COUNTER_DNE_OFFSET: u16 = 209;
 

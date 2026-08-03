@@ -35,6 +35,7 @@ mocks.
 | GET_COUNTER {key}          | Get counter value (sum of increments - decrements)           | Yes           |
 | Address cache invalidation | Server signals client to refresh address cache               | Yes           |
 | Multi-key GET              | Retrieve multiple keys in one request                        | Yes           |
+| Multi-key PUT (put_multi)  | Batch PUT multiple keys in one request per worker            | Yes           |
 
 Legacy commands (`GET_SET`, `PUT_SET`, `GET_CAUSAL`, `PUT_CAUSAL`, etc.) are
 still supported as aliases for backward compatibility.
