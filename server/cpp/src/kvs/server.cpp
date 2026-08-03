@@ -374,15 +374,20 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
   // enter event loop
   while (!shutdown_requested.load()) {
    try {
-    if (self_depart_requested.load() && !monitoring_ips.empty()) {
-      string depart_done_addr =
-          MonitoringThread(monitoring_ips[0]).depart_done_connect_address();
-      self_depart_handler(thread_id, seed, public_ip, private_ip, log,
-                          depart_done_addr, global_hash_rings, local_hash_rings,
-                          stored_key_map, key_replication_map, routing_ips,
-                          monitoring_ips, wt, pushers, serializers);
-      // Allow ZMQ to deliver depart notifications before process exits
-      std::this_thread::sleep_for(std::chrono::seconds(2));
+    if (self_depart_requested.load()) {
+      if (!monitoring_ips.empty()) {
+        string depart_done_addr =
+            MonitoringThread(monitoring_ips[0]).depart_done_connect_address();
+        self_depart_handler(thread_id, seed, public_ip, private_ip, log,
+                            depart_done_addr, global_hash_rings, local_hash_rings,
+                            stored_key_map, key_replication_map, routing_ips,
+                            monitoring_ips, wt, pushers, serializers);
+        // Allow ZMQ to deliver depart notifications before process exits
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+      } else {
+        log->info("Self-depart requested but no monitoring IPs configured; "
+                   "exiting without depart handshake.");
+      }
       return;
     }
 

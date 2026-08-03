@@ -912,7 +912,7 @@ class DiskOrSetSerializer : public Serializer {
         original_value.tombstones().begin(),
         original_value.tombstones().end());
     for (const auto &t : input_value.tombstones()) {
-      if (existing_tombstones.find(t) == existing_tombstones.end()) {
+      if (existing_tombstones.insert(t).second) {
         original_value.add_tombstones(t);
       }
     }
