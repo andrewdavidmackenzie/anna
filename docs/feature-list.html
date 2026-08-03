@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d6c00298.js";
+            window.path_to_searchindex_js = "../searchindex-06521303.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-73b27c84.js"></script>
@@ -205,6 +205,7 @@ mocks.</p>
 <tr><td>PUT causal {key} {value}</td><td>Store with multi-key causal consistency</td><td>Yes</td></tr>
 <tr><td>PUT single_causal {key} {value}</td><td>Store with single-key causal consistency</td><td>Yes</td></tr>
 <tr><td>DELETE {key}</td><td>Remove a key (PUT with empty value and dominating timestamp)</td><td>Yes</td></tr>
+<tr><td>PUT_TTL {key} {val} {secs}</td><td>Store with TTL (auto-expires after N seconds)</td><td>Yes</td></tr>
 <tr><td>Address cache invalidation</td><td>Server signals client to refresh address cache</td><td>Yes</td></tr>
 <tr><td>Multi-key GET</td><td>Retrieve multiple keys in one request</td><td>Yes</td></tr>
 </tbody>
