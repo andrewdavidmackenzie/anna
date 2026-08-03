@@ -3042,4 +3042,18 @@ mod tests {
             .await
             .expect("put_value failed");
     }
+
+    #[tokio::test]
+    async fn put_with_ttl_sends_request() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(232);
+        client.push_mock_response(true, Some(make_routing_response("ttl_key", worker)));
+        client.push_mock_response(false, Some(make_put_response("ttl_key")));
+        client
+            .put_with_ttl("ttl_key", "ttl_value", 300)
+            .await
+            .expect("put_with_ttl failed");
+        // Verify the value is in the read cache
+        assert!(client.lww_read_cache.contains_key("ttl_key"));
+    }
 }
