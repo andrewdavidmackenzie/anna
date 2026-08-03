@@ -868,9 +868,12 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
       }
     }
    } catch (const zmq::error_t &e) {
-     if (e.num() == EINTR && shutdown_requested.load()) {
-       // ZMQ interrupted by SIGTERM — exit cleanly so gcov data is flushed.
-       break;
+     if (e.num() == EINTR &&
+         (shutdown_requested.load() || self_depart_requested.load())) {
+       // ZMQ interrupted by signal — continue the loop so the signal
+       // handler at the top of the loop can process the request.
+       if (shutdown_requested.load()) break;
+       continue;  // Let self_depart_requested be handled at top of loop.
      }
      throw;  // Re-throw unexpected ZMQ errors.
    }
