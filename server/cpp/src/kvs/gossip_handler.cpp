@@ -60,7 +60,8 @@ void gossip_handler(unsigned &seed, string &serialized,
             }
 
             prepare_put_tuple(gossip_map[thread.gossip_connect_address()], key,
-                              tuple.lattice_type(), tuple.payload());
+                              tuple.lattice_type(), tuple.payload(),
+                              tuple.expiry_epoch_ms());
           }
         } else {
           kHashRingUtil->issue_replication_factor_request(
@@ -69,12 +70,14 @@ void gossip_handler(unsigned &seed, string &serialized,
               pushers, seed);
 
           pending_gossip[key].push_back(
-              PendingGossip(tuple.lattice_type(), tuple.payload()));
+              PendingGossip(tuple.lattice_type(), tuple.payload(),
+                            tuple.expiry_epoch_ms()));
         }
       }
     } else {
       pending_gossip[key].push_back(
-          PendingGossip(tuple.lattice_type(), tuple.payload()));
+          PendingGossip(tuple.lattice_type(), tuple.payload(),
+                        tuple.expiry_epoch_ms()));
     }
   }
 

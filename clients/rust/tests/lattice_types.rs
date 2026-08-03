@@ -399,10 +399,9 @@ async fn ttl_stress_many_keys() {
             expired_count += 1;
         }
     }
-    assert!(
-        expired_count >= key_count / 2,
-        "at least half the keys should have expired, but only {}/{} did",
-        expired_count,
-        key_count
+    assert_eq!(
+        expired_count, key_count,
+        "all keys should have expired, but only {}/{} did",
+        expired_count, key_count
     );
 }

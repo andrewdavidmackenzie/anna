@@ -711,8 +711,9 @@ impl KVSClient {
 
         Self::validate_response(&response, "PUT_TTL")?;
 
-        self.lww_read_cache
-            .insert(key.as_ref().to_string(), (lww.timestamp, lww.value.clone()));
+        // Do not cache TTL values in lww_read_cache -- the cached value
+        // would be returned after the server-side TTL expires, giving
+        // stale reads. TTL keys always go to the server for freshness.
         Ok(())
     }
 

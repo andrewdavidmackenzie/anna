@@ -387,7 +387,7 @@ async fn execute_command(
             let value = split[2];
             let ttl: u32 = split[3]
                 .parse()
-                .map_err(|_| annalib::Error::Kvs("TTL must be a positive integer".into()))?;
+                .map_err(|_| annalib::Error::Kvs("TTL must be a non-negative integer".into()))?;
             client.put_with_ttl(key, value, ttl).await?;
         }
         // Legacy aliases — map old commands to the unified GET/PUT.

@@ -198,7 +198,8 @@ void replication_response_handler(
                        LatticeType_Name(stored_key_map[key].type()));
           } else {
             process_put(key, gossip.lattice_type_, gossip.payload_,
-                        serializers[gossip.lattice_type_], stored_key_map);
+                        serializers[gossip.lattice_type_], stored_key_map,
+                        gossip.expiry_epoch_ms_);
           }
         }
       } else {
@@ -211,7 +212,8 @@ void replication_response_handler(
 
           for (const PendingGossip &gossip : pending_gossip[key]) {
             prepare_put_tuple(gossip_map[thread.gossip_connect_address()], key,
-                              gossip.lattice_type_, gossip.payload_);
+                              gossip.lattice_type_, gossip.payload_,
+                              gossip.expiry_epoch_ms_);
           }
         }
 

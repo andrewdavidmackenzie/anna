@@ -786,10 +786,13 @@ struct PendingRequest {
 
 struct PendingGossip {
   PendingGossip() {}
-  PendingGossip(kvs::LatticeType lattice_type, string payload)
-      : lattice_type_(std::move(lattice_type)), payload_(std::move(payload)) {}
+  PendingGossip(kvs::LatticeType lattice_type, string payload,
+                uint64_t expiry_epoch_ms = 0)
+      : lattice_type_(std::move(lattice_type)), payload_(std::move(payload)),
+        expiry_epoch_ms_(expiry_epoch_ms) {}
   kvs::LatticeType lattice_type_;
   string payload_;
+  uint64_t expiry_epoch_ms_ = 0;
 };
 
 #endif // INCLUDE_KVS_SERVER_UTILS_HPP_

@@ -81,10 +81,14 @@ bool process_put(const Key &key, kvs::LatticeType lattice_type,
         static_cast<uint32_t>(expiry_epoch_ms / 1000);
   } else if (result == 0 && kTombstoneGcMultiplier > 0) {
     // Tombstone (delete = PUT of empty value): expire after gc_threshold.
-    // Only set if not already set, to avoid resetting the clock on re-gossip.
-    if (stored_key_map[key].expiry_epoch_s_ == 0) {
-      unsigned gc_threshold_s = (kGossipPeriod / 1000000) * kTombstoneGcMultiplier;
-      stored_key_map[key].expiry_epoch_s_ = now_epoch_s() + gc_threshold_s;
+    // Always set (overrides any previous TTL expiry), but don't reset if
+    // already a tombstone (re-gossip of same delete).
+    unsigned gc_threshold_s = (kGossipPeriod / 1000000) * kTombstoneGcMultiplier;
+    uint32_t tombstone_expiry = now_epoch_s() + gc_threshold_s;
+    if (stored_key_map[key].expiry_epoch_s_ == 0 ||
+        stored_key_map[key].size() > 0) {
+      // First tombstone or transition from non-empty: set expiry.
+      stored_key_map[key].expiry_epoch_s_ = tombstone_expiry;
     }
   } else if (result > 0 && expiry_epoch_ms == 0) {
     // Non-empty value with no expiry: clear any previous expiry.
