@@ -605,6 +605,105 @@ TEST_F(ServerHandlerTest, UserGetExpiredKeyReturnsDNE) {
   EXPECT_EQ(response.tuples(0).error(), kvs::AnnaError::KEY_DNE);
 }
 
+// Test PUT/GET for Counter lattice type.
+TEST_F(ServerHandlerTest, UserPutGetCounter) {
+  Key key = "counter_key";
+
+  // Build a CounterValue with one increment
+  kvs::CounterValue cv;
+  (*cv.mutable_increments())["node1"] = 5;
+  string payload;
+  cv.SerializeToString(&payload);
+
+  string put_counter =
+      put_key_request(key, kvs::LatticeType::COUNTER, payload, ip);
+
+  unsigned access_count = 0;
+  unsigned seed = 0;
+
+  user_request_handler(access_count, seed, put_counter, log_, global_hash_rings,
+                       local_hash_rings, pending_requests, key_access_tracker,
+                       stored_key_map, key_replication_map, local_changeset, wt,
+                       serializers, pushers);
+
+  EXPECT_EQ(local_changeset.size(), 1);
+  EXPECT_EQ(stored_key_map[key].type(), kvs::LatticeType::COUNTER);
+
+  // GET should return the counter value
+  string get_req = get_key_request(key, ip);
+  size_t msg_count_before = mock_zmq_util.sent_messages.size();
+  user_request_handler(access_count, seed, get_req, log_, global_hash_rings,
+                       local_hash_rings, pending_requests, key_access_tracker,
+                       stored_key_map, key_replication_map, local_changeset, wt,
+                       serializers, pushers);
+
+  ASSERT_GT(mock_zmq_util.sent_messages.size(), msg_count_before);
+  kvs::KeyResponse response;
+  response.ParseFromString(mock_zmq_util.sent_messages.back());
+  EXPECT_EQ(response.tuples(0).error(), kvs::AnnaError::NO_ERROR);
+  EXPECT_EQ(response.tuples(0).lattice_type(), kvs::LatticeType::COUNTER);
+
+  // Verify the payload contains our increment
+  kvs::CounterValue result;
+  result.ParseFromString(response.tuples(0).payload());
+  EXPECT_EQ(result.increments().at("node1"), 5);
+}
+
+// Test Counter merge: two PUTs from different nodes merge via per-node max.
+TEST_F(ServerHandlerTest, UserCounterMerge) {
+  Key key = "merge_counter";
+
+  // First PUT: node1 increments 3
+  kvs::CounterValue cv1;
+  (*cv1.mutable_increments())["node1"] = 3;
+  string payload1;
+  cv1.SerializeToString(&payload1);
+
+  string put1 =
+      put_key_request(key, kvs::LatticeType::COUNTER, payload1, ip);
+
+  unsigned access_count = 0;
+  unsigned seed = 0;
+
+  user_request_handler(access_count, seed, put1, log_, global_hash_rings,
+                       local_hash_rings, pending_requests, key_access_tracker,
+                       stored_key_map, key_replication_map, local_changeset, wt,
+                       serializers, pushers);
+
+  // Second PUT: node2 increments 7, node1 increments 2 (stale, should not override 3)
+  kvs::CounterValue cv2;
+  (*cv2.mutable_increments())["node2"] = 7;
+  (*cv2.mutable_increments())["node1"] = 2;
+  string payload2;
+  cv2.SerializeToString(&payload2);
+
+  string put2 =
+      put_key_request(key, kvs::LatticeType::COUNTER, payload2, ip);
+
+  local_changeset.clear();
+  user_request_handler(access_count, seed, put2, log_, global_hash_rings,
+                       local_hash_rings, pending_requests, key_access_tracker,
+                       stored_key_map, key_replication_map, local_changeset, wt,
+                       serializers, pushers);
+
+  // GET and verify merge: node1=max(3,2)=3, node2=7
+  string get_req = get_key_request(key, ip);
+  size_t msg_count_before = mock_zmq_util.sent_messages.size();
+  user_request_handler(access_count, seed, get_req, log_, global_hash_rings,
+                       local_hash_rings, pending_requests, key_access_tracker,
+                       stored_key_map, key_replication_map, local_changeset, wt,
+                       serializers, pushers);
+
+  ASSERT_GT(mock_zmq_util.sent_messages.size(), msg_count_before);
+  kvs::KeyResponse response;
+  response.ParseFromString(mock_zmq_util.sent_messages.back());
+
+  kvs::CounterValue result;
+  result.ParseFromString(response.tuples(0).payload());
+  EXPECT_EQ(result.increments().at("node1"), 3);  // max(3, 2) = 3
+  EXPECT_EQ(result.increments().at("node2"), 7);
+}
+
 // TODO: Test key address cache invalidation
 // TODO: Test replication factor request and making the request pending
 // TODO: Test metadata operations -- does this matter?
