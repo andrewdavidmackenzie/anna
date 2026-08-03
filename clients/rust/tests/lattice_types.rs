@@ -216,6 +216,89 @@ async fn disk_tier_lattice_types() {
     test_all_lattice_types(&mut client, "disk").await;
 }
 
+const COUNTER_BASIC_OFFSET: u16 = 208;
+const COUNTER_DNE_OFFSET: u16 = 209;
+
+/// Test PN-Counter: increment, decrement, get_counter.
+#[tokio::test]
+#[cfg(unix)]
+async fn counter_basic() {
+    let config_path = generate_config(COUNTER_BASIC_OFFSET);
+    let _guard = ServerGuard::start(&config_path, COUNTER_BASIC_OFFSET);
+    let config = client_config(COUNTER_BASIC_OFFSET);
+    let mut client = KVSClient::new(&config, Some(7)).await;
+
+    // Increment 3 times
+    client
+        .increment("counter_key")
+        .await
+        .expect("increment 1 failed");
+    client
+        .increment("counter_key")
+        .await
+        .expect("increment 2 failed");
+    client
+        .increment("counter_key")
+        .await
+        .expect("increment 3 failed");
+
+    // Get counter value
+    let val = client
+        .get_counter("counter_key")
+        .await
+        .expect("get_counter failed");
+    assert_eq!(val, 3, "counter should be 3 after 3 increments");
+
+    // Increment by 10
+    client
+        .increment_by("counter_key", 10)
+        .await
+        .expect("increment_by failed");
+    let val = client
+        .get_counter("counter_key")
+        .await
+        .expect("get_counter failed");
+    assert_eq!(val, 13, "counter should be 13");
+
+    // Decrement by 5
+    client
+        .decrement_by("counter_key", 5)
+        .await
+        .expect("decrement_by failed");
+    let val = client
+        .get_counter("counter_key")
+        .await
+        .expect("get_counter failed");
+    assert_eq!(val, 8, "counter should be 8 after decrementing 5 from 13");
+
+    // Decrement by 1
+    client
+        .decrement("counter_key")
+        .await
+        .expect("decrement failed");
+    let val = client
+        .get_counter("counter_key")
+        .await
+        .expect("get_counter failed");
+    assert_eq!(val, 7, "counter should be 7");
+}
+
+/// Test that a counter that doesn't exist returns KEY_DNE.
+#[tokio::test]
+#[cfg(unix)]
+async fn counter_nonexistent_key() {
+    let config_path = generate_config(COUNTER_DNE_OFFSET);
+    let _guard = ServerGuard::start(&config_path, COUNTER_DNE_OFFSET);
+    let config = client_config(COUNTER_DNE_OFFSET);
+    let mut client = KVSClient::new(&config, Some(7)).await;
+
+    let result = client.get_counter("nonexistent_counter").await;
+    assert!(
+        result.is_err(),
+        "get_counter on nonexistent key should fail"
+    );
+}
+
 const TTL_EXPIRE_OFFSET: u16 = 210;
 const TTL_PERSIST_OFFSET: u16 = 220;
 const TTL_STRESS_OFFSET: u16 = 230;

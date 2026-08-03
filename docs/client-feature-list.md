@@ -81,6 +81,7 @@ See [autoscaling.md](autoscaling.md) for the full operator's guide.
 | Cluster topology discovery (get_cluster_topology) | Yes |
 | Monitoring IP discovery (get_monitoring_ips) | Yes |
 | Per-key TTL (put_with_ttl) | Yes    |
+| PN-Counter (increment/decrement/get_counter) | Yes |
 
 ## C++ Client (`clients/cpp`)
 

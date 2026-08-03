@@ -30,6 +30,9 @@ mocks.
 | PUT single_causal {key} {value} | Store with single-key causal consistency               | Yes           |
 | DELETE {key}               | Remove a key (PUT with empty value and dominating timestamp) | Yes           |
 | PUT_TTL {key} {val} {secs} | Store with TTL (auto-expires after N seconds)                | Yes           |
+| INCREMENT {key} [amount]   | Increment a PN-Counter (default +1)                          | Yes           |
+| DECREMENT {key} [amount]   | Decrement a PN-Counter (default -1)                          | Yes           |
+| GET_COUNTER {key}          | Get counter value (sum of increments - decrements)           | Yes           |
 | Address cache invalidation | Server signals client to refresh address cache               | Yes           |
 | Multi-key GET              | Retrieve multiple keys in one request                        | Yes           |
 
@@ -46,6 +49,7 @@ still supported as aliases for backward compatibility.
 | SINGLE_CAUSAL          | Single-key causal with vector clock                 | Yes           |
 | MULTI_CAUSAL           | Multi-key causal with vector clock and dependencies | Yes           |
 | PRIORITY               | Priority-value pair, lowest priority wins           | Yes           |
+| COUNTER                | PN-Counter CRDT (increment/decrement, per-node max) | Yes           |
 
 ## Single-Node Features
 

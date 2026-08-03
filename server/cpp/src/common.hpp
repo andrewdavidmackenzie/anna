@@ -19,6 +19,7 @@
 #include <sstream>
 
 #include "kvs.pb.h"
+#include "lattices/counter_lattice.hpp"
 #include "lattices/lww_pair_lattice.hpp"
 #include "lattices/multi_key_causal_lattice.hpp"
 #include "lattices/priority_lattice.hpp"
@@ -250,6 +251,32 @@ inline PriorityLattice<double, string> deserialize_priority(const string& serial
   pv.ParseFromString(serialized);
   return PriorityLattice<double, string>(
       PriorityValuePair<double, string>(pv.priority(), pv.value()));
+}
+
+inline string serialize(const CounterLattice& l) {
+  kvs::CounterValue cv;
+  for (const auto& p : l.reveal().increments) {
+    (*cv.mutable_increments())[p.first] = p.second;
+  }
+  for (const auto& p : l.reveal().decrements) {
+    (*cv.mutable_decrements())[p.first] = p.second;
+  }
+  string serialized;
+  cv.SerializeToString(&serialized);
+  return serialized;
+}
+
+inline CounterLattice deserialize_counter(const string& serialized) {
+  kvs::CounterValue cv;
+  cv.ParseFromString(serialized);
+  PNCounterState state;
+  for (const auto& p : cv.increments()) {
+    state.increments[p.first] = p.second;
+  }
+  for (const auto& p : cv.decrements()) {
+    state.decrements[p.first] = p.second;
+  }
+  return CounterLattice(state);
 }
 
 inline VectorClockValuePair<SetLattice<string>> to_vector_clock_value_pair(

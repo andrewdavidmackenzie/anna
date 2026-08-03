@@ -717,6 +717,150 @@ impl KVSClient {
         Ok(())
     }
 
+    /// Increment a counter key by the given amount.
+    ///
+    /// Uses the PN-Counter CRDT lattice. Each client tracks its own
+    /// cumulative increment count keyed by `client_ip:tid`. Concurrent
+    /// increments from different clients are all preserved.
+    pub async fn increment_by<K: AsRef<str> + Display>(
+        &mut self,
+        key: K,
+        amount: u64,
+    ) -> Result<()> {
+        debug!("INCREMENT: {} += {}", key, amount);
+        let node_id = format!("{}:{}", self.ut.ip(), self.ut.tid());
+
+        // GET current state to learn our slot value, then increment.
+        let current = self.get_counter_state(key.as_ref()).await;
+        let new_inc = current
+            .as_ref()
+            .and_then(|s| s.get(&node_id))
+            .copied()
+            .unwrap_or(0)
+            + amount;
+
+        let mut cv = crate::proto::kvs::CounterValue::default();
+        cv.increments.insert(node_id, new_inc);
+
+        // Preserve existing state from other nodes.
+        if let Some(state) = &current {
+            for (k, v) in state {
+                cv.increments.entry(k.clone()).or_insert(*v);
+            }
+        }
+
+        let payload = cv.encode_to_vec();
+        let response = self
+            .send_data_request(
+                key.as_ref(),
+                RequestType::Put as i32,
+                Some(LatticeType::Counter as i32),
+                Some(payload),
+            )
+            .await
+            .ok_or_else(|| Error::Kvs("INCREMENT: request failed or timed out".into()))?;
+
+        Self::validate_response(&response, "INCREMENT")?;
+        Ok(())
+    }
+
+    /// Increment a counter key by 1.
+    pub async fn increment<K: AsRef<str> + Display>(&mut self, key: K) -> Result<()> {
+        self.increment_by(key, 1).await
+    }
+
+    /// Decrement a counter key by the given amount.
+    pub async fn decrement_by<K: AsRef<str> + Display>(
+        &mut self,
+        key: K,
+        amount: u64,
+    ) -> Result<()> {
+        debug!("DECREMENT: {} -= {}", key, amount);
+        let node_id = format!("{}:{}", self.ut.ip(), self.ut.tid());
+
+        // GET current decrement state.
+        let current = self.get_counter_dec_state(key.as_ref()).await;
+        let new_dec = current
+            .as_ref()
+            .and_then(|s| s.get(&node_id))
+            .copied()
+            .unwrap_or(0)
+            + amount;
+
+        let mut cv = crate::proto::kvs::CounterValue::default();
+        cv.decrements.insert(node_id, new_dec);
+
+        // Preserve existing decrement state from other nodes.
+        if let Some(state) = &current {
+            for (k, v) in state {
+                cv.decrements.entry(k.clone()).or_insert(*v);
+            }
+        }
+
+        let payload = cv.encode_to_vec();
+        let response = self
+            .send_data_request(
+                key.as_ref(),
+                RequestType::Put as i32,
+                Some(LatticeType::Counter as i32),
+                Some(payload),
+            )
+            .await
+            .ok_or_else(|| Error::Kvs("DECREMENT: request failed or timed out".into()))?;
+
+        Self::validate_response(&response, "DECREMENT")?;
+        Ok(())
+    }
+
+    /// Decrement a counter key by 1.
+    pub async fn decrement<K: AsRef<str> + Display>(&mut self, key: K) -> Result<()> {
+        self.decrement_by(key, 1).await
+    }
+
+    /// Get the current counter value (sum of increments - sum of decrements).
+    pub async fn get_counter<K: AsRef<str> + Display>(&mut self, key: K) -> Result<i64> {
+        debug!("GET_COUNTER: {}", key);
+        let response = self
+            .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
+            .await
+            .ok_or_else(|| Error::Kvs("GET_COUNTER: request failed or timed out".into()))?;
+
+        let tuple = Self::validate_response(&response, "GET_COUNTER")?;
+
+        let cv = crate::proto::kvs::CounterValue::decode(tuple.payload.as_slice())
+            .map_err(|e| Error::Kvs(format!("GET_COUNTER: failed to decode: {}", e)))?;
+
+        let pos: u64 = cv.increments.values().sum();
+        let neg: u64 = cv.decrements.values().sum();
+        Ok(pos as i64 - neg as i64)
+    }
+
+    // Helper: get current increment state for this counter from the server.
+    async fn get_counter_state(&mut self, key: &str) -> Option<HashMap<String, u64>> {
+        let response = self
+            .send_data_request(key, RequestType::Get as i32, None, None)
+            .await?;
+        if response.tuples.is_empty() || response.tuples[0].error != 0 {
+            return None;
+        }
+        let cv =
+            crate::proto::kvs::CounterValue::decode(response.tuples[0].payload.as_slice()).ok()?;
+        Some(cv.increments)
+    }
+
+    // Helper: get current decrement state for this counter from the server.
+    async fn get_counter_dec_state(&mut self, key: &str) -> Option<HashMap<String, u64>> {
+        let response = self
+            .send_data_request(key, RequestType::Get as i32, None, None)
+            .await?;
+        if response.tuples.is_empty() || response.tuples[0].error != 0 {
+            return None;
+        }
+        let cv =
+            crate::proto::kvs::CounterValue::decode(response.tuples[0].payload.as_slice()).ok()?;
+        Some(cv.decrements)
+    }
+
     /// Retrieve a set of values by key (Set lattice).
     ///
     /// ```rust

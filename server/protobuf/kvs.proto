@@ -89,6 +89,11 @@ enum LatticeType {
 
   // Multi-key causal ordered set: like MULTI_CAUSAL_SET but ordered.
   MULTI_CAUSAL_ORDERED_SET = 15;
+
+  // PN-Counter: conflict-free increment/decrement counter.
+  // Each node tracks its own cumulative increments and decrements.
+  // The merge is per-node max. The counter value is sum(increments) - sum(decrements).
+  COUNTER = 16;
 }
 
 enum AnnaError {
@@ -247,6 +252,16 @@ message MultiKeyCausalValue {
   
   // The set of potentially causally concurrent values for this key.
   repeated bytes values = 3;
+}
+
+// Serialization of PN-Counter lattices. Each node tracks its own cumulative
+// increments and decrements. The merge takes the max per node. The counter
+// value is sum(all increments) - sum(all decrements).
+message CounterValue {
+  // Per-node cumulative positive counts (monotonically increasing).
+  map<string, uint64> increments = 1;
+  // Per-node cumulative negative counts (monotonically increasing).
+  map<string, uint64> decrements = 2;
 }
 
 // Serialization of lowest-priority-wins lattices.
