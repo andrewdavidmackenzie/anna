@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-06521303.js";
+            window.path_to_searchindex_js = "searchindex-c170b1de.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-73b27c84.js"></script>
@@ -1111,6 +1111,9 @@ mocks.</p>
 <tr><td>PUT single_causal {key} {value}</td><td>Store with single-key causal consistency</td><td>Yes</td></tr>
 <tr><td>DELETE {key}</td><td>Remove a key (PUT with empty value and dominating timestamp)</td><td>Yes</td></tr>
 <tr><td>PUT_TTL {key} {val} {secs}</td><td>Store with TTL (auto-expires after N seconds)</td><td>Yes</td></tr>
+<tr><td>INCREMENT {key} [amount]</td><td>Increment a PN-Counter (default +1)</td><td>Yes</td></tr>
+<tr><td>DECREMENT {key} [amount]</td><td>Decrement a PN-Counter (default -1)</td><td>Yes</td></tr>
+<tr><td>GET_COUNTER {key}</td><td>Get counter value (sum of increments - decrements)</td><td>Yes</td></tr>
 <tr><td>Address cache invalidation</td><td>Server signals client to refresh address cache</td><td>Yes</td></tr>
 <tr><td>Multi-key GET</td><td>Retrieve multiple keys in one request</td><td>Yes</td></tr>
 </tbody>
@@ -1131,6 +1134,7 @@ still supported as aliases for backward compatibility.</p>
 <tr><td>SINGLE_CAUSAL</td><td>Single-key causal with vector clock</td><td>Yes</td></tr>
 <tr><td>MULTI_CAUSAL</td><td>Multi-key causal with vector clock and dependencies</td><td>Yes</td></tr>
 <tr><td>PRIORITY</td><td>Priority-value pair, lowest priority wins</td><td>Yes</td></tr>
+<tr><td>COUNTER</td><td>PN-Counter CRDT (increment/decrement, per-node max)</td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
@@ -1483,6 +1487,7 @@ managing replication factors, enabling operator-driven autoscaling.</p>
 <tr><td>Cluster topology discovery (get_cluster_topology)</td><td>Yes</td></tr>
 <tr><td>Monitoring IP discovery (get_monitoring_ips)</td><td>Yes</td></tr>
 <tr><td>Per-key TTL (put_with_ttl)</td><td>Yes</td></tr>
+<tr><td>PN-Counter (increment/decrement/get_counter)</td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
