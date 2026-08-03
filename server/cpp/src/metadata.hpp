@@ -40,15 +40,11 @@ struct KeyReplication {
 struct KeyProperty {
   unsigned size_;
   kvs::LatticeType type_;
-  // When the key became a tombstone (size_ == 0). Only meaningful when
-  // size_ == 0; used by tombstone GC to decide when to reap the key.
-  std::chrono::time_point<std::chrono::system_clock> tombstone_time_;
-  // When this key expires (TTL). A default-constructed time_point (epoch)
-  // means no expiration. Set on PUT when ttl_seconds > 0.
-  std::chrono::time_point<std::chrono::system_clock> expiry_time_;
-  // The original TTL in seconds (preserved for gossip propagation).
-  // 0 means no TTL.
-  unsigned ttl_seconds_ = 0;
+  // When this key should be reaped, as seconds since Unix epoch.
+  // Used for both TTL expiration (from client) and tombstone GC
+  // (computed as now + gc_threshold on delete). 0 means no expiration.
+  // uint32_t gives 1-second resolution until year 2106.
+  uint32_t expiry_epoch_s_ = 0;
 };
 
 inline bool operator==(const KeyReplication &lhs, const KeyReplication &rhs) {

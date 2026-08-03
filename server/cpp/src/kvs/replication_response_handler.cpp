@@ -113,7 +113,7 @@ void replication_response_handler(
             } else {
               process_put(key, request.lattice_type_, request.payload_,
                           serializers[request.lattice_type_], stored_key_map,
-                          request.ttl_seconds_);
+                          request.expiry_epoch_ms_);
               key_access_tracker[key].insert(now);
 
               access_count += 1;
@@ -159,7 +159,7 @@ void replication_response_handler(
             } else {
               process_put(key, request.lattice_type_, request.payload_,
                           serializers[request.lattice_type_], stored_key_map,
-                          request.ttl_seconds_);
+                          request.expiry_epoch_ms_);
               tp->set_lattice_type(request.lattice_type_);
               local_changeset.insert(key);
             }

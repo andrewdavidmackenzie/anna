@@ -352,6 +352,16 @@ impl KVSClient {
         payload: Option<Vec<u8>>,
         ttl_seconds: u32,
     ) -> Option<KeyResponse> {
+        // Compute absolute expiry from relative TTL.
+        let expiry_epoch_ms = if ttl_seconds > 0 {
+            let now_ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or(Duration::from_secs(0))
+                .as_millis() as u64;
+            now_ms + (ttl_seconds as u64) * 1000
+        } else {
+            0
+        };
         const MAX_RETRIES: usize = 5;
 
         for attempt in 0..=MAX_RETRIES {
@@ -377,8 +387,8 @@ impl KVSClient {
             if let Some(cache) = self.key_address_cache.get(key) {
                 tuple.address_cache_size = cache.len() as u32;
             }
-            if ttl_seconds > 0 {
-                tuple.ttl_seconds = ttl_seconds;
+            if expiry_epoch_ms > 0 {
+                tuple.expiry_epoch_ms = expiry_epoch_ms;
             }
             request.tuples.push(tuple);
 

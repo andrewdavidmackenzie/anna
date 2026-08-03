@@ -29,11 +29,13 @@
 // Gossip period in microseconds (default 10 seconds)
 inline unsigned kGossipPeriod = 10000000;
 
-// Tombstone GC: multiplier of the gossip period. Tombstoned keys (size_ == 0)
-// are reaped after gossip_epoch * tombstone_gc_multiplier seconds. This must
-// be long enough for all replicas to receive the tombstone via gossip.
+// Tombstone GC: multiplier of the gossip period. Deleted keys are reaped
+// after gossip_epoch * tombstone_gc_multiplier microseconds. This must be
+// long enough for all replicas to receive the deletion via gossip.
 // Default 30 means 30 * 10s = 5 minutes with the default gossip epoch.
-// Set to 0 to disable tombstone GC.
+// Also used to compute the expiry_time_ for tombstones (deleted keys).
+// Keys with client-specified TTL use their own expiry, independent of this.
+// Set to 0 to disable tombstone GC (TTL expiry still works).
 inline unsigned kTombstoneGcMultiplier = 30;
 
 // Max keys redistributed per gossip batch
@@ -769,17 +771,17 @@ using SerializerMap =
 struct PendingRequest {
   PendingRequest() {}
   PendingRequest(kvs::RequestType type, kvs::LatticeType lattice_type, string payload,
-                 Address addr, string response_id, unsigned ttl_seconds = 0)
+                 Address addr, string response_id, uint64_t expiry_epoch_ms = 0)
       : type_(type), lattice_type_(std::move(lattice_type)),
         payload_(std::move(payload)), addr_(addr), response_id_(response_id),
-        ttl_seconds_(ttl_seconds) {}
+        expiry_epoch_ms_(expiry_epoch_ms) {}
 
   kvs::RequestType type_;
   kvs::LatticeType lattice_type_;
   string payload_;
   Address addr_;
   string response_id_;
-  unsigned ttl_seconds_ = 0;
+  uint64_t expiry_epoch_ms_ = 0;
 };
 
 struct PendingGossip {

@@ -48,7 +48,7 @@ void gossip_handler(unsigned &seed, string &serialized,
         } else {
           process_put(tuple.key(), tuple.lattice_type(), tuple.payload(),
                       serializers[tuple.lattice_type()], stored_key_map,
-                      tuple.ttl_seconds());
+                      tuple.expiry_epoch_ms());
         }
       } else {
         if (is_metadata(key)) { // forward the gossip

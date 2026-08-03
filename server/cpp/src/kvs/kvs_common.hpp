@@ -15,8 +15,18 @@
 #ifndef KVS_INCLUDE_KVS_COMMON_HPP_
 #define KVS_INCLUDE_KVS_COMMON_HPP_
 
+#include <chrono>
+
 #include "kvs/kvs_types.hpp"
 #include "metadata.pb.h"
+
+// Current time as seconds since Unix epoch.
+inline uint32_t now_epoch_s() {
+  return static_cast<uint32_t>(
+      std::chrono::duration_cast<std::chrono::seconds>(
+          std::chrono::system_clock::now().time_since_epoch())
+          .count());
+}
 
 inline unsigned kMetadataReplicationFactor = 1;
 inline unsigned kMetadataLocalReplicationFactor = 1;
@@ -56,13 +66,13 @@ inline void prepare_get_tuple(kvs::KeyRequest &req, Key key,
 
 inline void prepare_put_tuple(kvs::KeyRequest &req, Key key,
                               kvs::LatticeType lattice_type, string payload,
-                              unsigned ttl_seconds = 0) {
+                              uint64_t expiry_epoch_ms = 0) {
   kvs::KeyTuple *tp = req.add_tuples();
   tp->set_key(std::move(key));
   tp->set_lattice_type(std::move(lattice_type));
   tp->set_payload(std::move(payload));
-  if (ttl_seconds > 0) {
-    tp->set_ttl_seconds(ttl_seconds);
+  if (expiry_epoch_ms > 0) {
+    tp->set_expiry_epoch_ms(expiry_epoch_ms);
   }
 }
 

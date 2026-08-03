@@ -583,29 +583,21 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
       working_time_map[10] += time_elapsed;
     }
 
-    // Tombstone GC: reap deleted keys whose tombstone has expired.
-    // Runs on the same cadence as gossip to avoid continuous scanning.
-    if (kTombstoneGcMultiplier > 0 &&
-        std::chrono::duration_cast<std::chrono::microseconds>(
+    // Key expiry GC: reap keys whose expiry_time_ has passed.
+    // This handles both TTL-expired keys and tombstoned (deleted) keys,
+    // which both use the same expiry_time_ field.
+    if (std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::system_clock::now() - gc_start)
                 .count() >= kGossipPeriod) {
-      auto gc_threshold =
-          std::chrono::microseconds(kGossipPeriod) * kTombstoneGcMultiplier;
       auto now = std::chrono::system_clock::now();
+
+      uint32_t now_s = now_epoch_s();
 
       vector<Key> keys_to_reap;
       for (const auto &kv : stored_key_map) {
-        // Reap tombstoned keys (explicit deletes).
-        if (kv.second.size_ == 0 && !is_metadata(kv.first) &&
-            kv.second.tombstone_time_.time_since_epoch().count() > 0 &&
-            std::chrono::duration_cast<std::chrono::microseconds>(
-                now - kv.second.tombstone_time_) > gc_threshold) {
-          keys_to_reap.push_back(kv.first);
-        }
-        // Reap TTL-expired keys.
-        else if (!is_metadata(kv.first) &&
-                 kv.second.expiry_time_.time_since_epoch().count() > 0 &&
-                 now > kv.second.expiry_time_) {
+        if (!is_metadata(kv.first) &&
+            kv.second.expiry_epoch_s_ > 0 &&
+            now_s > kv.second.expiry_epoch_s_) {
           keys_to_reap.push_back(kv.first);
         }
       }
@@ -613,9 +605,9 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
       for (const Key &key : keys_to_reap) {
         if (serializers[stored_key_map[key].type_]->remove(key)) {
           stored_key_map.erase(key);
-          log->info("Tombstone GC: reaped key {}", key);
+          log->info("Key expiry GC: reaped key {}", key);
         } else {
-          log->error("Tombstone GC: failed to remove key {}", key);
+          log->error("Key expiry GC: failed to remove key {}", key);
         }
       }
 
