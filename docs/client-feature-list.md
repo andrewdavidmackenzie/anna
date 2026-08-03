@@ -80,6 +80,7 @@ See [autoscaling.md](autoscaling.md) for the full operator's guide.
 | Replication factor management (put_replication_factor) | Yes |
 | Cluster topology discovery (get_cluster_topology) | Yes |
 | Monitoring IP discovery (get_monitoring_ips) | Yes |
+| Per-key TTL (put_with_ttl) | Yes    |
 
 ## C++ Client (`clients/cpp`)
 

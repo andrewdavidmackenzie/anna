@@ -41,13 +41,14 @@ void gossip_handler(unsigned &seed, string &serialized,
           threads.end()) { // this means this worker thread is one of the
                            // responsible threads
         if (stored_key_map.find(key) != stored_key_map.end() &&
-            stored_key_map[key].type_ != tuple.lattice_type()) {
+            stored_key_map[key].type() != tuple.lattice_type()) {
           log->error("Lattice type mismatch: {} from query but {} expected.",
                      LatticeType_Name(tuple.lattice_type()),
-                     kvs::LatticeType_Name(stored_key_map[key].type_));
+                     kvs::LatticeType_Name(stored_key_map[key].type()));
         } else {
           process_put(tuple.key(), tuple.lattice_type(), tuple.payload(),
-                      serializers[tuple.lattice_type()], stored_key_map);
+                      serializers[tuple.lattice_type()], stored_key_map,
+                      tuple.expiry_epoch_ms());
         }
       } else {
         if (is_metadata(key)) { // forward the gossip
@@ -59,7 +60,8 @@ void gossip_handler(unsigned &seed, string &serialized,
             }
 
             prepare_put_tuple(gossip_map[thread.gossip_connect_address()], key,
-                              tuple.lattice_type(), tuple.payload());
+                              tuple.lattice_type(), tuple.payload(),
+                              tuple.expiry_epoch_ms());
           }
         } else {
           kHashRingUtil->issue_replication_factor_request(
@@ -68,12 +70,14 @@ void gossip_handler(unsigned &seed, string &serialized,
               pushers, seed);
 
           pending_gossip[key].push_back(
-              PendingGossip(tuple.lattice_type(), tuple.payload()));
+              PendingGossip(tuple.lattice_type(), tuple.payload(),
+                            tuple.expiry_epoch_ms()));
         }
       }
     } else {
       pending_gossip[key].push_back(
-          PendingGossip(tuple.lattice_type(), tuple.payload()));
+          PendingGossip(tuple.lattice_type(), tuple.payload(),
+                        tuple.expiry_epoch_ms()));
     }
   }
 

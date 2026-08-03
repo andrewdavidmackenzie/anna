@@ -363,6 +363,7 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
 
   // enter event loop
   while (!shutdown_requested.load()) {
+   try {
     if (self_depart_requested.load() && !monitoring_ips.empty()) {
       string depart_done_addr =
           MonitoringThread(monitoring_ips[0]).depart_done_connect_address();
@@ -583,32 +584,31 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
       working_time_map[10] += time_elapsed;
     }
 
-    // Tombstone GC: reap deleted keys whose tombstone has expired.
-    // Runs on the same cadence as gossip to avoid continuous scanning.
-    if (kTombstoneGcMultiplier > 0 &&
-        std::chrono::duration_cast<std::chrono::microseconds>(
+    // Key expiry GC: reap keys whose expiry_time_ has passed.
+    // This handles both TTL-expired keys and tombstoned (deleted) keys,
+    // which both use the same expiry_time_ field.
+    if (std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::system_clock::now() - gc_start)
                 .count() >= kGossipPeriod) {
-      auto gc_threshold =
-          std::chrono::microseconds(kGossipPeriod) * kTombstoneGcMultiplier;
       auto now = std::chrono::system_clock::now();
+
+      uint32_t now_s = now_epoch_s();
 
       vector<Key> keys_to_reap;
       for (const auto &kv : stored_key_map) {
-        if (kv.second.size_ == 0 && !is_metadata(kv.first) &&
-            kv.second.tombstone_time_.time_since_epoch().count() > 0 &&
-            std::chrono::duration_cast<std::chrono::microseconds>(
-                now - kv.second.tombstone_time_) > gc_threshold) {
+        if (!is_metadata(kv.first) &&
+            kv.second.expiry_epoch_s_ > 0 &&
+            now_s > kv.second.expiry_epoch_s_) {
           keys_to_reap.push_back(kv.first);
         }
       }
 
       for (const Key &key : keys_to_reap) {
-        if (serializers[stored_key_map[key].type_]->remove(key)) {
+        if (serializers[stored_key_map[key].type()]->remove(key)) {
           stored_key_map.erase(key);
-          log->info("Tombstone GC: reaped key {}", key);
+          log->info("Key expiry GC: reaped key {}", key);
         } else {
-          log->error("Tombstone GC: failed to remove key {}", key);
+          log->error("Key expiry GC: failed to remove key {}", key);
         }
       }
 
@@ -633,7 +633,7 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
       // compute total storage consumption
       unsigned long long consumption = 0;
       for (const auto &key_pair : stored_key_map) {
-        consumption += key_pair.second.size_;
+        consumption += key_pair.second.size();
       }
 
       int index = 0;
@@ -721,7 +721,7 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
                                global_hash_rings, local_hash_rings, wt)) {
           KeySizeData_KeySize *ks = primary_key_size.add_key_sizes();
           ks->set_key(key_pair.first);
-          ks->set_size(key_pair.second.size_);
+          ks->set_size(key_pair.second.size());
         }
       }
 
@@ -845,7 +845,7 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
       if (join_gossip_map.size() == 0) {
         set<Key> failed_removals;
         for (const string &key : join_remove_set) {
-          if (!serializers[stored_key_map[key].type_]->remove(key)) {
+          if (!serializers[stored_key_map[key].type()]->remove(key)) {
             log->error("Failed to remove key {} during join cleanup.", key);
             failed_removals.insert(key);
           } else {
@@ -857,6 +857,13 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
         join_remove_set = std::move(failed_removals);
       }
     }
+   } catch (const zmq::error_t &e) {
+     if (e.num() == EINTR && shutdown_requested.load()) {
+       // ZMQ interrupted by SIGTERM — exit cleanly so gcov data is flushed.
+       break;
+     }
+     throw;  // Re-throw unexpected ZMQ errors.
+   }
   }
 }
 

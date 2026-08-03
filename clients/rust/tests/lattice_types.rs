@@ -215,3 +215,193 @@ async fn disk_tier_lattice_types() {
 
     test_all_lattice_types(&mut client, "disk").await;
 }
+
+const TTL_EXPIRE_OFFSET: u16 = 210;
+const TTL_PERSIST_OFFSET: u16 = 220;
+const TTL_STRESS_OFFSET: u16 = 230;
+
+/// Generate a config with aggressive TTL GC settings for testing.
+/// Uses gossip_epoch=1s and tombstone_gc_multiplier=1 so TTL-expired
+/// keys are reaped within ~2 seconds.
+fn generate_ttl_config(base_offset: u16) -> String {
+    let config_dir = std::env::temp_dir().join(format!(
+        "anna_ttl_test_{}_{}",
+        std::process::id(),
+        base_offset
+    ));
+    std::fs::create_dir_all(&config_dir).expect("create dir");
+    let config_path = config_dir.join("config.yml");
+    let disk_dir = config_dir.join("disk");
+    std::fs::create_dir_all(&disk_dir).expect("create disk dir");
+    let ip = "127.0.0.1";
+    let content = format!(
+        r#"monitoring:
+  scaling_alert_ip: {ip}
+  ip: {ip}
+routing:
+  monitoring:
+    - {ip}
+  ip: {ip}
+user:
+  monitoring:
+    - {ip}
+  routing:
+    - {ip}
+  ip: {ip}
+server:
+  monitoring:
+    - {ip}
+  routing:
+    - {ip}
+  seed_ip: {ip}
+  public_ip: {ip}
+  private_ip: {ip}
+  scaling_alert_ip: "NULL"
+policy:
+  elasticity: false
+  selective-rep: false
+  tiering: false
+disk: {disk_path}
+capacities:
+  memory-cap: 1
+  disk-cap: 0
+threads:
+  memory: 1
+  disk: 1
+  routing: 1
+replication:
+  memory: 1
+  disk: 0
+  minimum: 1
+  local: 1
+ports:
+  base_offset: {base_offset}
+timings:
+  gossip_epoch: 1
+  tombstone_gc_multiplier: 1
+  server_report_period: 15
+  key_monitoring_period: 60
+  monitoring_timeout: 30
+  data_redistribute_batch: 50
+  grace_period: 120
+  monitoring_response_timeout_ms: 10000
+"#,
+        ip = ip,
+        base_offset = base_offset,
+        disk_path = disk_dir.to_string_lossy(),
+    );
+    std::fs::write(&config_path, content).expect("write config");
+    config_path.to_string_lossy().to_string()
+}
+
+/// Test TTL: PUT with a short TTL, verify GET works before expiry,
+/// then verify GET returns KEY_DNE after expiry.
+#[tokio::test]
+#[cfg(unix)]
+async fn ttl_key_expires() {
+    let config_path = generate_ttl_config(TTL_EXPIRE_OFFSET);
+    let _guard = ServerGuard::start(&config_path, TTL_EXPIRE_OFFSET);
+    let config = client_config(TTL_EXPIRE_OFFSET);
+    let mut client = KVSClient::new(&config, Some(7)).await;
+
+    // PUT with 2-second TTL
+    client
+        .put_with_ttl("ttl_key", "ttl_value", 2)
+        .await
+        .expect("PUT_TTL failed");
+
+    // GET immediately — should succeed
+    let val = client
+        .get("ttl_key")
+        .await
+        .expect("GET before expiry failed");
+    assert_eq!(
+        val, "ttl_value",
+        "value should be readable before TTL expires"
+    );
+
+    // Wait for TTL to expire + GC cycle (gossip_epoch=1s, gc_multiplier=1)
+    tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+
+    // GET after expiry — should fail with KEY_DNE.
+    // Use a fresh client to avoid the read cache.
+    let mut client2 = KVSClient::new(&config, Some(8)).await;
+    let result = client2.get("ttl_key").await;
+    assert!(
+        result.is_err(),
+        "GET after TTL expiry should return error but got: {:?}",
+        result
+    );
+}
+
+/// Test that a key without TTL does not expire.
+#[tokio::test]
+#[cfg(unix)]
+async fn no_ttl_key_persists() {
+    let config_path = generate_ttl_config(TTL_PERSIST_OFFSET);
+    let _guard = ServerGuard::start(&config_path, TTL_PERSIST_OFFSET);
+    let config = client_config(TTL_PERSIST_OFFSET);
+    let mut client = KVSClient::new(&config, Some(7)).await;
+
+    // PUT without TTL
+    client
+        .put("persist_key", "persist_value")
+        .await
+        .expect("PUT failed");
+
+    // Wait longer than the TTL test
+    tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+
+    // GET — should still succeed
+    let val = client
+        .get("persist_key")
+        .await
+        .expect("GET should succeed for non-TTL key");
+    assert_eq!(val, "persist_value");
+}
+
+/// Stress test: PUT many keys with short TTLs, verify they all expire.
+#[tokio::test]
+#[cfg(unix)]
+async fn ttl_stress_many_keys() {
+    let config_path = generate_ttl_config(TTL_STRESS_OFFSET);
+    let _guard = ServerGuard::start(&config_path, TTL_STRESS_OFFSET);
+    let config = client_config(TTL_STRESS_OFFSET);
+    let mut client = KVSClient::new(&config, Some(7)).await;
+
+    let key_count = 50;
+
+    // PUT many keys with 2-second TTL
+    for i in 0..key_count {
+        client
+            .put_with_ttl(&format!("stress_{}", i), &format!("val_{}", i), 2)
+            .await
+            .unwrap_or_else(|e| panic!("PUT_TTL stress_{} failed: {}", i, e));
+    }
+
+    // Verify all readable immediately
+    for i in 0..key_count {
+        let val = client
+            .get(&format!("stress_{}", i))
+            .await
+            .unwrap_or_else(|e| panic!("GET stress_{} failed: {}", i, e));
+        assert_eq!(val, format!("val_{}", i));
+    }
+
+    // Wait for expiry
+    tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+
+    // Fresh client — verify all expired
+    let mut client2 = KVSClient::new(&config, Some(8)).await;
+    let mut expired_count = 0;
+    for i in 0..key_count {
+        if client2.get(&format!("stress_{}", i)).await.is_err() {
+            expired_count += 1;
+        }
+    }
+    assert_eq!(
+        expired_count, key_count,
+        "all keys should have expired, but only {}/{} did",
+        expired_count, key_count
+    );
+}

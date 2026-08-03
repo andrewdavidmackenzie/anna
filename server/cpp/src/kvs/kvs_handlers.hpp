@@ -111,7 +111,8 @@ std::pair<string, kvs::AnnaError> process_get(const Key &key,
 
 bool process_put(const Key &key, kvs::LatticeType lattice_type,
                  const string &payload, Serializer *serializer,
-                 map<Key, KeyProperty> &stored_key_map);
+                 map<Key, KeyProperty> &stored_key_map,
+                 uint64_t expiry_epoch_ms = 0);
 
 bool is_primary_replica(const Key &key,
                         map<Key, KeyReplication> &key_replication_map,

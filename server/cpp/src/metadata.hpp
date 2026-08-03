@@ -38,11 +38,22 @@ struct KeyReplication {
 };
 
 struct KeyProperty {
-  unsigned size_;
-  kvs::LatticeType type_;
-  // When the key became a tombstone (size_ == 0). Only meaningful when
-  // size_ == 0; used by tombstone GC to decide when to reap the key.
-  std::chrono::time_point<std::chrono::system_clock> tombstone_time_;
+  // size (24 bits, max 16MB) and type (8 bits, max 256 types) packed
+  // into a single uint32_t to avoid struct padding.
+  uint32_t size_and_type_ = 0;
+  uint32_t expiry_epoch_s_ = 0;
+
+  unsigned size() const { return size_and_type_ >> 8; }
+  void set_size(unsigned s) {
+    size_and_type_ = (s << 8) | (size_and_type_ & 0xFF);
+  }
+
+  kvs::LatticeType type() const {
+    return static_cast<kvs::LatticeType>(size_and_type_ & 0xFF);
+  }
+  void set_type(kvs::LatticeType t) {
+    size_and_type_ = (size_and_type_ & 0xFFFFFF00) | (static_cast<uint8_t>(t));
+  }
 };
 
 inline bool operator==(const KeyReplication &lhs, const KeyReplication &rhs) {

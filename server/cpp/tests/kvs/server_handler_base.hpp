@@ -127,7 +127,7 @@ public:
   }
 
   string put_key_request(Key key, kvs::LatticeType lattice_type, string payload,
-                         string ip) {
+                         string ip, uint64_t expiry_epoch_ms = 0) {
     kvs::KeyRequest request;
     request.set_type(kvs::RequestType::PUT);
     request.set_response_address(UserThread(ip, 0).response_connect_address());
@@ -137,6 +137,9 @@ public:
     tp->set_key(std::move(key));
     tp->set_lattice_type(std::move(lattice_type));
     tp->set_payload(std::move(payload));
+    if (expiry_epoch_ms > 0) {
+      tp->set_expiry_epoch_ms(expiry_epoch_ms);
+    }
 
     string request_str;
     request.SerializeToString(&request_str);

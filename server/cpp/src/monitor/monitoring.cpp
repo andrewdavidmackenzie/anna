@@ -300,6 +300,7 @@ int main(int argc, char *argv[]) {
   unsigned rid = 0;
 
   while (!shutdown_requested.load()) {
+   try {
     kZmqUtil->poll(&pollitems, std::chrono::milliseconds{0});
 
     if (pollitems[0].revents & ZMQ_POLLIN) {
@@ -464,5 +465,11 @@ int main(int argc, char *argv[]) {
 
       report_start = std::chrono::system_clock::now();
     }
+   } catch (const zmq::error_t &e) {
+     if (e.num() == EINTR && shutdown_requested.load()) {
+       break;
+     }
+     throw;
+   }
   }
 }

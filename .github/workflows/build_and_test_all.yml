@@ -125,20 +125,11 @@ jobs:
         token: ${{ secrets.CODECOV_TOKEN }}
         fail_ci_if_error: true
 
-    - name: Upload server system test coverage
+    - name: Upload server coverage (unit + system tests merged)
       if: matrix.os == 'macos-latest'
       uses: codecov/codecov-action@v6
       with:
-        files: server/cpp/build/server-system.info
-        flags: server-system-tests
-        token: ${{ secrets.CODECOV_TOKEN }}
-        fail_ci_if_error: true
-
-    - name: Upload server unit test coverage
-      if: matrix.os == 'macos-latest'
-      uses: codecov/codecov-action@v6
-      with:
-        files: server/cpp/build/server-unit.info
-        flags: server-unit-tests
+        files: server/cpp/build/server.info
+        flags: server-unit-tests,server-system-tests
         token: ${{ secrets.CODECOV_TOKEN }}
         fail_ci_if_error: true

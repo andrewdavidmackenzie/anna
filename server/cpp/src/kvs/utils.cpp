@@ -31,13 +31,16 @@ void send_gossip(AddressKeysetMap &addr_keyset_map, SocketCache &pushers,
         // we don't have this key stored, so skip
         continue;
       } else {
-        type = stored_key_map[key].type_;
+        type = stored_key_map[key].type();
       }
 
       auto res = process_get(key, serializers[type]);
 
       if (res.second == 0) {
-        prepare_put_tuple(gossip_map[address], key, type, res.first);
+        uint64_t expiry_ms = stored_key_map[key].expiry_epoch_s_ > 0
+            ? static_cast<uint64_t>(stored_key_map[key].expiry_epoch_s_) * 1000
+            : 0;
+        prepare_put_tuple(gossip_map[address], key, type, res.first, expiry_ms);
       }
     }
   }
@@ -57,30 +60,39 @@ std::pair<string, kvs::AnnaError> process_get(const Key &key,
   return std::pair<string, kvs::AnnaError>(std::move(res), error);
 }
 
+
+
 bool process_put(const Key &key, kvs::LatticeType lattice_type,
                  const string &payload, Serializer *serializer,
-                 map<Key, KeyProperty> &stored_key_map) {
+                 map<Key, KeyProperty> &stored_key_map,
+                 uint64_t expiry_epoch_ms) {
   int result = serializer->put(key, payload);
   if (result < 0) {
     spdlog::error("Failed to put key {}", key);
     return false;
   }
-  stored_key_map[key].size_ = static_cast<unsigned>(result);
-  stored_key_map[key].type_ = std::move(lattice_type);
+  stored_key_map[key].set_size(static_cast<unsigned>(result));
+  stored_key_map[key].set_type(lattice_type);
 
-  // Track when a key becomes a tombstone (empty value after a delete).
-  // Set the timestamp whenever the result is zero-length, so both new
-  // tombstones and transitions from non-zero get a correct timestamp.
-  if (result == 0) {
-    // Only update the timestamp if it hasn't been set yet (epoch value),
-    // or if this is a fresh transition to empty. This avoids resetting
-    // the clock when a tombstone is re-gossiped.
-    if (stored_key_map[key].tombstone_time_.time_since_epoch().count() == 0) {
-      stored_key_map[key].tombstone_time_ = std::chrono::system_clock::now();
+  // Set expiry based on client TTL or tombstone.
+  if (expiry_epoch_ms > 0) {
+    // Client-specified absolute expiry (milliseconds -> seconds).
+    stored_key_map[key].expiry_epoch_s_ =
+        static_cast<uint32_t>(expiry_epoch_ms / 1000);
+  } else if (result == 0 && kTombstoneGcMultiplier > 0) {
+    // Tombstone (delete = PUT of empty value): expire after gc_threshold.
+    // Always set (overrides any previous TTL expiry), but don't reset if
+    // already a tombstone (re-gossip of same delete).
+    unsigned gc_threshold_s = (kGossipPeriod / 1000000) * kTombstoneGcMultiplier;
+    uint32_t tombstone_expiry = now_epoch_s() + gc_threshold_s;
+    if (stored_key_map[key].expiry_epoch_s_ == 0 ||
+        stored_key_map[key].size() > 0) {
+      // First tombstone or transition from non-empty: set expiry.
+      stored_key_map[key].expiry_epoch_s_ = tombstone_expiry;
     }
-  } else {
-    // Key has a non-empty value — clear any tombstone timestamp.
-    stored_key_map[key].tombstone_time_ = {};
+  } else if (result > 0 && expiry_epoch_ms == 0) {
+    // Non-empty value with no expiry: clear any previous expiry.
+    stored_key_map[key].expiry_epoch_s_ = 0;
   }
 
   return true;

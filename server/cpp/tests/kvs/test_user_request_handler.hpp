@@ -18,7 +18,7 @@ TEST_F(ServerHandlerTest, UserGetLWWTest) {
   Key key = "key";
   string value = "value";
   serializers[kvs::LatticeType::LWW]->put(key, serialize(0, value));
-  stored_key_map[key].type_ = kvs::LatticeType::LWW;
+  stored_key_map[key].set_type(kvs::LatticeType::LWW);
 
   string get_request = get_key_request(key, ip);
 
@@ -59,7 +59,7 @@ TEST_F(ServerHandlerTest, UserGetSetTest) {
   s.emplace("value2");
   s.emplace("value3");
   serializers[kvs::LatticeType::SET]->put(key, serialize(SetLattice<string>(s)));
-  stored_key_map[key].type_ = kvs::LatticeType::SET;
+  stored_key_map[key].set_type(kvs::LatticeType::SET);
 
   string get_request = get_key_request(key, ip);
 
@@ -101,7 +101,7 @@ TEST_F(ServerHandlerTest, UserGetOrderedSetTest) {
   s.emplace("value3");
   serializers[kvs::LatticeType::ORDERED_SET]->put(
       key, serialize(OrderedSetLattice<string>(s)));
-  stored_key_map[key].type_ = kvs::LatticeType::ORDERED_SET;
+  stored_key_map[key].set_type(kvs::LatticeType::ORDERED_SET);
 
   string get_request = get_key_request(key, ip);
 
@@ -146,7 +146,7 @@ TEST_F(ServerHandlerTest, UserGetCausalTest) {
 
   serializers[kvs::LatticeType::SINGLE_CAUSAL]->put(
       key, serialize(SingleKeyCausalLattice<SetLattice<string>>(p)));
-  stored_key_map[key].type_ = kvs::LatticeType::SINGLE_CAUSAL;
+  stored_key_map[key].set_type(kvs::LatticeType::SINGLE_CAUSAL);
 
   string get_request = get_key_request(key, ip);
 
@@ -526,7 +526,7 @@ TEST_F(ServerHandlerTest, UserPutLatticeMismatchTest) {
                        serializers, pushers);
 
   EXPECT_EQ(local_changeset.size(), 1);
-  EXPECT_EQ(stored_key_map[key].type_, kvs::LatticeType::LWW);
+  EXPECT_EQ(stored_key_map[key].type(), kvs::LatticeType::LWW);
 
   // Second PUT with SET type on the same key — lattice mismatch.
   set<string> s = {"a"};
@@ -541,7 +541,68 @@ TEST_F(ServerHandlerTest, UserPutLatticeMismatchTest) {
 
   // The mismatched PUT should be silently skipped.
   EXPECT_EQ(local_changeset.size(), 0);
-  EXPECT_EQ(stored_key_map[key].type_, kvs::LatticeType::LWW);
+  EXPECT_EQ(stored_key_map[key].type(), kvs::LatticeType::LWW);
+}
+
+// Test PUT with TTL sets expiry_epoch_s_ on the stored key.
+TEST_F(ServerHandlerTest, UserPutWithTTLSetsExpiry) {
+  Key key = "ttl_key";
+  string value = "ttl_value";
+
+  // Use an absolute expiry 300 seconds from now (in milliseconds).
+  uint64_t expiry_ms = static_cast<uint64_t>(now_epoch_s() + 300) * 1000;
+  string put_lww =
+      put_key_request(key, kvs::LatticeType::LWW, serialize(0, value), ip,
+                      expiry_ms);
+
+  unsigned access_count = 0;
+  unsigned seed = 0;
+
+  user_request_handler(access_count, seed, put_lww, log_, global_hash_rings,
+                       local_hash_rings, pending_requests, key_access_tracker,
+                       stored_key_map, key_replication_map, local_changeset, wt,
+                       serializers, pushers);
+
+  EXPECT_EQ(stored_key_map[key].type(), kvs::LatticeType::LWW);
+  // Expiry should be set (non-zero) and approximately 300 seconds from now.
+  EXPECT_GT(stored_key_map[key].expiry_epoch_s_, 0u);
+  EXPECT_NEAR(stored_key_map[key].expiry_epoch_s_, now_epoch_s() + 300, 2);
+}
+
+// Test GET on an expired key returns KEY_DNE.
+TEST_F(ServerHandlerTest, UserGetExpiredKeyReturnsDNE) {
+  Key key = "expired_key";
+  string value = "expired_value";
+
+  // PUT with an expiry in the past (already expired).
+  uint64_t expiry_ms = static_cast<uint64_t>(now_epoch_s() - 10) * 1000;
+  string put_lww =
+      put_key_request(key, kvs::LatticeType::LWW, serialize(0, value), ip,
+                      expiry_ms);
+
+  unsigned access_count = 0;
+  unsigned seed = 0;
+
+  user_request_handler(access_count, seed, put_lww, log_, global_hash_rings,
+                       local_hash_rings, pending_requests, key_access_tracker,
+                       stored_key_map, key_replication_map, local_changeset, wt,
+                       serializers, pushers);
+
+  // Key should exist but be expired.
+  EXPECT_GT(stored_key_map[key].expiry_epoch_s_, 0u);
+
+  // GET should return KEY_DNE.
+  string get_req = get_key_request(key, ip);
+  size_t msg_count_before = mock_zmq_util.sent_messages.size();
+  user_request_handler(access_count, seed, get_req, log_, global_hash_rings,
+                       local_hash_rings, pending_requests, key_access_tracker,
+                       stored_key_map, key_replication_map, local_changeset, wt,
+                       serializers, pushers);
+
+  ASSERT_GT(mock_zmq_util.sent_messages.size(), msg_count_before);
+  kvs::KeyResponse response;
+  response.ParseFromString(mock_zmq_util.sent_messages.back());
+  EXPECT_EQ(response.tuples(0).error(), kvs::AnnaError::KEY_DNE);
 }
 
 // TODO: Test key address cache invalidation

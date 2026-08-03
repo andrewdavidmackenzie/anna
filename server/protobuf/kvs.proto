@@ -134,6 +134,12 @@ message KeyTuple {
   // A boolean set by the server if the client's address_cache_size does not
   // match the metadata stored by the server.
   bool invalidate = 6;
+
+  // Absolute expiry time as milliseconds since Unix epoch. When set on a PUT,
+  // the key automatically expires at this time. A value of 0 means no
+  // expiration (default). Clients compute this from their local clock:
+  // expiry_epoch_ms = now_ms + ttl_seconds * 1000.
+  uint64 expiry_epoch_ms = 7;
 }
 
 // An individual GET or PUT request; each request can batch multiple keys.

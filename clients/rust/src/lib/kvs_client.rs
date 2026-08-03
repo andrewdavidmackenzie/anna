@@ -340,6 +340,28 @@ impl KVSClient {
         lattice_type: Option<i32>,
         payload: Option<Vec<u8>>,
     ) -> Option<KeyResponse> {
+        self.send_data_request_with_ttl(key, req_type, lattice_type, payload, 0)
+            .await
+    }
+
+    async fn send_data_request_with_ttl(
+        &mut self,
+        key: &str,
+        req_type: i32,
+        lattice_type: Option<i32>,
+        payload: Option<Vec<u8>>,
+        ttl_seconds: u32,
+    ) -> Option<KeyResponse> {
+        // Compute absolute expiry from relative TTL.
+        let expiry_epoch_ms = if ttl_seconds > 0 {
+            let now_ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or(Duration::from_secs(0))
+                .as_millis() as u64;
+            now_ms + (ttl_seconds as u64) * 1000
+        } else {
+            0
+        };
         const MAX_RETRIES: usize = 5;
 
         for attempt in 0..=MAX_RETRIES {
@@ -364,6 +386,9 @@ impl KVSClient {
             }
             if let Some(cache) = self.key_address_cache.get(key) {
                 tuple.address_cache_size = cache.len() as u32;
+            }
+            if expiry_epoch_ms > 0 {
+                tuple.expiry_epoch_ms = expiry_epoch_ms;
             }
             request.tuples.push(tuple);
 
@@ -650,6 +675,45 @@ impl KVSClient {
         // even if routed to a replica that hasn't received it via gossip.
         self.lww_read_cache
             .insert(key.as_ref().to_string(), (lww.timestamp, lww.value.clone()));
+        Ok(())
+    }
+
+    /// Store a key-value pair with a TTL (time-to-live) in seconds.
+    ///
+    /// The key will automatically expire after `ttl_seconds` and subsequent
+    /// GETs will return `KEY_DNE`. The TTL is propagated to all replicas
+    /// via gossip.
+    pub async fn put_with_ttl<K: AsRef<str> + Display>(
+        &mut self,
+        key: K,
+        value: &str,
+        ttl_seconds: u32,
+    ) -> Result<()> {
+        debug!("PUT_TTL: {} <- {} (ttl={}s)", key, value, ttl_seconds);
+        let ts = std::cmp::max(Self::generate_timestamp(), self.last_seen_ts + 1);
+        self.last_seen_ts = ts;
+        let lww = LwwValue {
+            timestamp: ts,
+            value: value.as_bytes().to_vec(),
+        };
+        let payload = lww.encode_to_vec();
+
+        let response = self
+            .send_data_request_with_ttl(
+                key.as_ref(),
+                RequestType::Put as i32,
+                Some(LatticeType::Lww as i32),
+                Some(payload),
+                ttl_seconds,
+            )
+            .await
+            .ok_or_else(|| Error::Kvs("PUT_TTL: request failed or timed out".into()))?;
+
+        Self::validate_response(&response, "PUT_TTL")?;
+
+        // Do not cache TTL values in lww_read_cache -- the cached value
+        // would be returned after the server-side TTL expires, giving
+        // stale reads. TTL keys always go to the server for freshness.
         Ok(())
     }
 
@@ -2978,5 +3042,19 @@ mod tests {
             .put_value("mcosp", &val)
             .await
             .expect("put_value failed");
+    }
+
+    #[tokio::test]
+    async fn put_with_ttl_sends_request() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(232);
+        client.push_mock_response(true, Some(make_routing_response("ttl_key", worker)));
+        client.push_mock_response(false, Some(make_put_response("ttl_key")));
+        client
+            .put_with_ttl("ttl_key", "ttl_value", 300)
+            .await
+            .expect("put_with_ttl failed");
+        // TTL values should NOT be cached (they'd be stale after expiry)
+        assert!(!client.lww_read_cache.contains_key("ttl_key"));
     }
 }
