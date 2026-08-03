@@ -603,7 +603,7 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
       }
 
       for (const Key &key : keys_to_reap) {
-        if (serializers[stored_key_map[key].type_]->remove(key)) {
+        if (serializers[stored_key_map[key].type()]->remove(key)) {
           stored_key_map.erase(key);
           log->info("Key expiry GC: reaped key {}", key);
         } else {
@@ -632,7 +632,7 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
       // compute total storage consumption
       unsigned long long consumption = 0;
       for (const auto &key_pair : stored_key_map) {
-        consumption += key_pair.second.size_;
+        consumption += key_pair.second.size();
       }
 
       int index = 0;
@@ -720,7 +720,7 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
                                global_hash_rings, local_hash_rings, wt)) {
           KeySizeData_KeySize *ks = primary_key_size.add_key_sizes();
           ks->set_key(key_pair.first);
-          ks->set_size(key_pair.second.size_);
+          ks->set_size(key_pair.second.size());
         }
       }
 
@@ -844,7 +844,7 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
       if (join_gossip_map.size() == 0) {
         set<Key> failed_removals;
         for (const string &key : join_remove_set) {
-          if (!serializers[stored_key_map[key].type_]->remove(key)) {
+          if (!serializers[stored_key_map[key].type()]->remove(key)) {
             log->error("Failed to remove key {} during join cleanup.", key);
             failed_removals.insert(key);
           } else {

@@ -80,7 +80,7 @@ void user_request_handler(
 
         if (request_type == kvs::RequestType::GET) {
           if (stored_key_map.find(key) == stored_key_map.end() ||
-              stored_key_map[key].type_ == kvs::LatticeType::NONE) {
+              stored_key_map[key].type() == kvs::LatticeType::NONE) {
 
             tp->set_error(kvs::AnnaError::KEY_DNE);
           } else if (stored_key_map[key].expiry_epoch_s_ > 0 &&
@@ -88,8 +88,8 @@ void user_request_handler(
             // Key has expired (TTL or tombstone) — return KEY_DNE.
             tp->set_error(kvs::AnnaError::KEY_DNE);
           } else {
-            auto res = process_get(key, serializers[stored_key_map[key].type_]);
-            tp->set_lattice_type(stored_key_map[key].type_);
+            auto res = process_get(key, serializers[stored_key_map[key].type()]);
+            tp->set_lattice_type(stored_key_map[key].type());
             tp->set_payload(res.first);
             tp->set_error(res.second);
           }
@@ -97,13 +97,13 @@ void user_request_handler(
           if (tuple.lattice_type() == kvs::LatticeType::NONE) {
              log->error("PUT request missing lattice type. [{}:{}]", __FILE__, __LINE__);
           } else if (stored_key_map.find(key) != stored_key_map.end() &&
-                     stored_key_map[key].type_ != kvs::LatticeType::NONE &&
-                     stored_key_map[key].type_ != tuple.lattice_type()) {
+                     stored_key_map[key].type() != kvs::LatticeType::NONE &&
+                     stored_key_map[key].type() != tuple.lattice_type()) {
              log->error(
                  "Lattice type mismatch for key {}: query is {} but we expect "
                  "{}. [{}:{}]",
                  key, LatticeType_Name(tuple.lattice_type()),
-                 LatticeType_Name(stored_key_map[key].type_),
+                 LatticeType_Name(stored_key_map[key].type()),
                  __FILE__, __LINE__);
            } else {
             process_put(key, tuple.lattice_type(), payload,

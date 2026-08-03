@@ -18,7 +18,7 @@ TEST_F(ServerHandlerTest, UserGetLWWTest) {
   Key key = "key";
   string value = "value";
   serializers[kvs::LatticeType::LWW]->put(key, serialize(0, value));
-  stored_key_map[key].type_ = kvs::LatticeType::LWW;
+  stored_key_map[key].set_type(kvs::LatticeType::LWW);
 
   string get_request = get_key_request(key, ip);
 
@@ -59,7 +59,7 @@ TEST_F(ServerHandlerTest, UserGetSetTest) {
   s.emplace("value2");
   s.emplace("value3");
   serializers[kvs::LatticeType::SET]->put(key, serialize(SetLattice<string>(s)));
-  stored_key_map[key].type_ = kvs::LatticeType::SET;
+  stored_key_map[key].set_type(kvs::LatticeType::SET);
 
   string get_request = get_key_request(key, ip);
 
@@ -101,7 +101,7 @@ TEST_F(ServerHandlerTest, UserGetOrderedSetTest) {
   s.emplace("value3");
   serializers[kvs::LatticeType::ORDERED_SET]->put(
       key, serialize(OrderedSetLattice<string>(s)));
-  stored_key_map[key].type_ = kvs::LatticeType::ORDERED_SET;
+  stored_key_map[key].set_type(kvs::LatticeType::ORDERED_SET);
 
   string get_request = get_key_request(key, ip);
 
@@ -146,7 +146,7 @@ TEST_F(ServerHandlerTest, UserGetCausalTest) {
 
   serializers[kvs::LatticeType::SINGLE_CAUSAL]->put(
       key, serialize(SingleKeyCausalLattice<SetLattice<string>>(p)));
-  stored_key_map[key].type_ = kvs::LatticeType::SINGLE_CAUSAL;
+  stored_key_map[key].set_type(kvs::LatticeType::SINGLE_CAUSAL);
 
   string get_request = get_key_request(key, ip);
 
@@ -526,7 +526,7 @@ TEST_F(ServerHandlerTest, UserPutLatticeMismatchTest) {
                        serializers, pushers);
 
   EXPECT_EQ(local_changeset.size(), 1);
-  EXPECT_EQ(stored_key_map[key].type_, kvs::LatticeType::LWW);
+  EXPECT_EQ(stored_key_map[key].type(), kvs::LatticeType::LWW);
 
   // Second PUT with SET type on the same key — lattice mismatch.
   set<string> s = {"a"};
@@ -541,7 +541,7 @@ TEST_F(ServerHandlerTest, UserPutLatticeMismatchTest) {
 
   // The mismatched PUT should be silently skipped.
   EXPECT_EQ(local_changeset.size(), 0);
-  EXPECT_EQ(stored_key_map[key].type_, kvs::LatticeType::LWW);
+  EXPECT_EQ(stored_key_map[key].type(), kvs::LatticeType::LWW);
 }
 
 // TODO: Test key address cache invalidation

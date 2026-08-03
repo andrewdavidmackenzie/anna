@@ -41,10 +41,10 @@ void gossip_handler(unsigned &seed, string &serialized,
           threads.end()) { // this means this worker thread is one of the
                            // responsible threads
         if (stored_key_map.find(key) != stored_key_map.end() &&
-            stored_key_map[key].type_ != tuple.lattice_type()) {
+            stored_key_map[key].type() != tuple.lattice_type()) {
           log->error("Lattice type mismatch: {} from query but {} expected.",
                      LatticeType_Name(tuple.lattice_type()),
-                     kvs::LatticeType_Name(stored_key_map[key].type_));
+                     kvs::LatticeType_Name(stored_key_map[key].type()));
         } else {
           process_put(tuple.key(), tuple.lattice_type(), tuple.payload(),
                       serializers[tuple.lattice_type()], stored_key_map,

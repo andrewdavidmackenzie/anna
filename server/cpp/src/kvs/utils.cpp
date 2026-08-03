@@ -31,7 +31,7 @@ void send_gossip(AddressKeysetMap &addr_keyset_map, SocketCache &pushers,
         // we don't have this key stored, so skip
         continue;
       } else {
-        type = stored_key_map[key].type_;
+        type = stored_key_map[key].type();
       }
 
       auto res = process_get(key, serializers[type]);
@@ -71,8 +71,8 @@ bool process_put(const Key &key, kvs::LatticeType lattice_type,
     spdlog::error("Failed to put key {}", key);
     return false;
   }
-  stored_key_map[key].size_ = static_cast<unsigned>(result);
-  stored_key_map[key].type_ = std::move(lattice_type);
+  stored_key_map[key].set_size(static_cast<unsigned>(result));
+  stored_key_map[key].set_type(lattice_type);
 
   // Set expiry based on client TTL or tombstone.
   if (expiry_epoch_ms > 0) {

@@ -102,14 +102,14 @@ void replication_response_handler(
             if (request.lattice_type_ == kvs::LatticeType::NONE) {
               log->error("PUT request missing lattice type.");
             } else if (stored_key_map.find(key) != stored_key_map.end() &&
-                       stored_key_map[key].type_ != kvs::LatticeType::NONE &&
-                       stored_key_map[key].type_ != request.lattice_type_) {
+                       stored_key_map[key].type() != kvs::LatticeType::NONE &&
+                       stored_key_map[key].type() != request.lattice_type_) {
 
               log->error(
                   "Lattice type mismatch for key {}: query is {} but we expect "
                   "{}.",
                   key, LatticeType_Name(request.lattice_type_),
-                  LatticeType_Name(stored_key_map[key].type_));
+                  LatticeType_Name(stored_key_map[key].type()));
             } else {
               process_put(key, request.lattice_type_, request.payload_,
                           serializers[request.lattice_type_], stored_key_map,
@@ -136,12 +136,12 @@ void replication_response_handler(
 
           if (request.type_ == kvs::RequestType::GET) {
             if (stored_key_map.find(key) == stored_key_map.end() ||
-                stored_key_map[key].type_ == kvs::LatticeType::NONE) {
+                stored_key_map[key].type() == kvs::LatticeType::NONE) {
               tp->set_error(kvs::AnnaError::KEY_DNE);
             } else {
               auto res =
-                  process_get(key, serializers[stored_key_map[key].type_]);
-              tp->set_lattice_type(stored_key_map[key].type_);
+                  process_get(key, serializers[stored_key_map[key].type()]);
+              tp->set_lattice_type(stored_key_map[key].type());
               tp->set_payload(res.first);
               tp->set_error(res.second);
             }
@@ -149,13 +149,13 @@ void replication_response_handler(
             if (request.lattice_type_ == kvs::LatticeType::NONE) {
               log->error("PUT request missing lattice type.");
             } else if (stored_key_map.find(key) != stored_key_map.end() &&
-                       stored_key_map[key].type_ != kvs::LatticeType::NONE &&
-                       stored_key_map[key].type_ != request.lattice_type_) {
+                       stored_key_map[key].type() != kvs::LatticeType::NONE &&
+                       stored_key_map[key].type() != request.lattice_type_) {
               log->error(
                   "Lattice type mismatch for key {}: {} from query but {} "
                   "expected.",
                   key, LatticeType_Name(request.lattice_type_),
-                  LatticeType_Name(stored_key_map[key].type_));
+                  LatticeType_Name(stored_key_map[key].type()));
             } else {
               process_put(key, request.lattice_type_, request.payload_,
                           serializers[request.lattice_type_], stored_key_map,
@@ -190,12 +190,12 @@ void replication_response_handler(
       if (std::find(threads.begin(), threads.end(), wt) != threads.end()) {
         for (const PendingGossip &gossip : pending_gossip[key]) {
           if (stored_key_map.find(key) != stored_key_map.end() &&
-              stored_key_map[key].type_ != kvs::LatticeType::NONE &&
-              stored_key_map[key].type_ != gossip.lattice_type_) {
+              stored_key_map[key].type() != kvs::LatticeType::NONE &&
+              stored_key_map[key].type() != gossip.lattice_type_) {
             log->error("Lattice type mismatch for key {}: {} from query but {} "
                        "expected.",
                        key, LatticeType_Name(gossip.lattice_type_),
-                       LatticeType_Name(stored_key_map[key].type_));
+                       LatticeType_Name(stored_key_map[key].type()));
           } else {
             process_put(key, gossip.lattice_type_, gossip.payload_,
                         serializers[gossip.lattice_type_], stored_key_map);
