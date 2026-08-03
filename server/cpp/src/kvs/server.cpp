@@ -363,6 +363,7 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
 
   // enter event loop
   while (!shutdown_requested.load()) {
+   try {
     if (self_depart_requested.load() && !monitoring_ips.empty()) {
       string depart_done_addr =
           MonitoringThread(monitoring_ips[0]).depart_done_connect_address();
@@ -856,6 +857,13 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
         join_remove_set = std::move(failed_removals);
       }
     }
+   } catch (const zmq::error_t &e) {
+     if (e.num() == EINTR && shutdown_requested.load()) {
+       // ZMQ interrupted by SIGTERM — exit cleanly so gcov data is flushed.
+       break;
+     }
+     throw;  // Re-throw unexpected ZMQ errors.
+   }
   }
 }
 

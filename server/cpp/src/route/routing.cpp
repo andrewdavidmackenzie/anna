@@ -104,6 +104,7 @@ void run(unsigned thread_id, Address ip, vector<Address> monitoring_ips) {
       {static_cast<void *>(key_address_puller), 0, ZMQ_POLLIN, 0}};
 
   while (!shutdown_requested.load()) {
+   try {
     kZmqUtil->poll(&pollitems, std::chrono::milliseconds{100});
 
     // only relevant for the seed node
@@ -140,6 +141,12 @@ void run(unsigned thread_id, Address ip, vector<Address> monitoring_ips) {
                       local_hash_rings, key_replication_map, pending_requests,
                       seed);
     }
+   } catch (const zmq::error_t &e) {
+     if (e.num() == EINTR && shutdown_requested.load()) {
+       break;
+     }
+     throw;
+   }
   }
 }
 
