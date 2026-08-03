@@ -65,6 +65,10 @@ pub struct KVSClient {
     /// guaranteeing monotonic reads and read-your-writes.
     #[doc(hidden)]
     pub lww_read_cache: HashMap<Key, (u64, Vec<u8>)>,
+    /// Local PN-Counter state: per-key cumulative (increments, decrements)
+    /// for this client's node ID. Avoids read-modify-write races by tracking
+    /// locally rather than reading from the server.
+    counter_state: HashMap<Key, (u64, u64)>,
     /// High-water mark of timestamps seen by this client (reads and writes).
     /// Ensures each PUT uses a timestamp strictly greater than any previously
     /// seen timestamp, providing the Writes Follow Reads guarantee.
@@ -140,6 +144,7 @@ impl KVSClient {
                 key_address_puller,
                 response_puller,
             },
+            counter_state: HashMap::new(),
             lww_read_cache: HashMap::new(),
             last_seen_ts: 0,
         }
@@ -160,6 +165,7 @@ impl KVSClient {
             transport: Transport::Mock {
                 responses: std::collections::VecDeque::new(),
             },
+            counter_state: HashMap::new(),
             lww_read_cache: HashMap::new(),
             last_seen_ts: 0,
         }
@@ -715,6 +721,106 @@ impl KVSClient {
         // would be returned after the server-side TTL expires, giving
         // stale reads. TTL keys always go to the server for freshness.
         Ok(())
+    }
+
+    /// Increment a counter key by the given amount.
+    ///
+    /// Uses the PN-Counter CRDT lattice. Each client tracks its own
+    /// cumulative increment count keyed by `client_ip:tid`. Concurrent
+    /// increments from different clients are all preserved.
+    pub async fn increment_by<K: AsRef<str> + Display>(
+        &mut self,
+        key: K,
+        amount: u64,
+    ) -> Result<()> {
+        debug!("INCREMENT: {} += {}", key, amount);
+        let node_id = format!("{}:{}", self.ut.ip(), self.ut.tid());
+        let key_str = key.as_ref().to_string();
+
+        // Track cumulative increment locally to avoid read-modify-write races.
+        let (inc, dec) = self.counter_state.entry(key_str.clone()).or_insert((0, 0));
+        *inc += amount;
+
+        let mut cv = crate::proto::kvs::CounterValue::default();
+        cv.increments.insert(node_id, *inc);
+        cv.decrements
+            .insert(format!("{}:{}", self.ut.ip(), self.ut.tid()), *dec);
+
+        let payload = cv.encode_to_vec();
+        let response = self
+            .send_data_request(
+                key.as_ref(),
+                RequestType::Put as i32,
+                Some(LatticeType::Counter as i32),
+                Some(payload),
+            )
+            .await
+            .ok_or_else(|| Error::Kvs("INCREMENT: request failed or timed out".into()))?;
+
+        Self::validate_response(&response, "INCREMENT")?;
+        Ok(())
+    }
+
+    /// Increment a counter key by 1.
+    pub async fn increment<K: AsRef<str> + Display>(&mut self, key: K) -> Result<()> {
+        self.increment_by(key, 1).await
+    }
+
+    /// Decrement a counter key by the given amount.
+    pub async fn decrement_by<K: AsRef<str> + Display>(
+        &mut self,
+        key: K,
+        amount: u64,
+    ) -> Result<()> {
+        debug!("DECREMENT: {} -= {}", key, amount);
+        let node_id = format!("{}:{}", self.ut.ip(), self.ut.tid());
+        let key_str = key.as_ref().to_string();
+
+        // Track cumulative decrement locally to avoid read-modify-write races.
+        let (inc, dec) = self.counter_state.entry(key_str.clone()).or_insert((0, 0));
+        *dec += amount;
+
+        let mut cv = crate::proto::kvs::CounterValue::default();
+        cv.increments
+            .insert(format!("{}:{}", self.ut.ip(), self.ut.tid()), *inc);
+        cv.decrements.insert(node_id, *dec);
+
+        let payload = cv.encode_to_vec();
+        let response = self
+            .send_data_request(
+                key.as_ref(),
+                RequestType::Put as i32,
+                Some(LatticeType::Counter as i32),
+                Some(payload),
+            )
+            .await
+            .ok_or_else(|| Error::Kvs("DECREMENT: request failed or timed out".into()))?;
+
+        Self::validate_response(&response, "DECREMENT")?;
+        Ok(())
+    }
+
+    /// Decrement a counter key by 1.
+    pub async fn decrement<K: AsRef<str> + Display>(&mut self, key: K) -> Result<()> {
+        self.decrement_by(key, 1).await
+    }
+
+    /// Get the current counter value (sum of increments - sum of decrements).
+    pub async fn get_counter<K: AsRef<str> + Display>(&mut self, key: K) -> Result<i64> {
+        debug!("GET_COUNTER: {}", key);
+        let response = self
+            .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
+            .await
+            .ok_or_else(|| Error::Kvs("GET_COUNTER: request failed or timed out".into()))?;
+
+        let tuple = Self::validate_response(&response, "GET_COUNTER")?;
+
+        let cv = crate::proto::kvs::CounterValue::decode(tuple.payload.as_slice())
+            .map_err(|e| Error::Kvs(format!("GET_COUNTER: failed to decode: {}", e)))?;
+
+        let pos: u64 = cv.increments.values().sum();
+        let neg: u64 = cv.decrements.values().sum();
+        Ok(pos as i64 - neg as i64)
     }
 
     /// Retrieve a set of values by key (Set lattice).
@@ -3056,5 +3162,62 @@ mod tests {
             .expect("put_with_ttl failed");
         // TTL values should NOT be cached (they'd be stale after expiry)
         assert!(!client.lww_read_cache.contains_key("ttl_key"));
+    }
+
+    fn make_counter_response(key: &str, inc_val: u64) -> Vec<u8> {
+        let mut cv = crate::proto::kvs::CounterValue::default();
+        cv.increments.insert("test:0".to_string(), inc_val);
+        let response = KeyResponse {
+            r#type: RequestType::Get as i32,
+            tuples: vec![KeyTuple {
+                key: key.to_string(),
+                lattice_type: LatticeType::Counter as i32,
+                payload: cv.encode_to_vec(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        response.encode_to_vec()
+    }
+
+    #[tokio::test]
+    async fn increment_tracks_locally() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(233);
+        // First increment
+        client.push_mock_response(true, Some(make_routing_response("cnt", worker)));
+        client.push_mock_response(false, Some(make_put_response("cnt")));
+        client.increment("cnt").await.expect("increment 1 failed");
+
+        // Second increment
+        client.push_mock_response(true, Some(make_routing_response("cnt", worker)));
+        client.push_mock_response(false, Some(make_put_response("cnt")));
+        client.increment("cnt").await.expect("increment 2 failed");
+
+        // Local state should be (2, 0)
+        assert_eq!(client.counter_state.get("cnt"), Some(&(2, 0)));
+    }
+
+    #[tokio::test]
+    async fn decrement_tracks_locally() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(234);
+        client.push_mock_response(true, Some(make_routing_response("cnt", worker)));
+        client.push_mock_response(false, Some(make_put_response("cnt")));
+        client
+            .decrement_by("cnt", 5)
+            .await
+            .expect("decrement failed");
+        assert_eq!(client.counter_state.get("cnt"), Some(&(0, 5)));
+    }
+
+    #[tokio::test]
+    async fn get_counter_returns_value() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(235);
+        client.push_mock_response(true, Some(make_routing_response("cnt", worker)));
+        client.push_mock_response(false, Some(make_counter_response("cnt", 42)));
+        let val = client.get_counter("cnt").await.expect("get_counter failed");
+        assert_eq!(val, 42);
     }
 }

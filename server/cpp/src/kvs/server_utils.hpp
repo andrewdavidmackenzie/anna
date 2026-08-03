@@ -52,6 +52,7 @@ typedef KVStore<Key, SingleKeyCausalLattice<SetLattice<string>>>
 typedef KVStore<Key, MultiKeyCausalLattice<SetLattice<string>>>
     MemoryMultiKeyCausalKVS;
 typedef KVStore<Key, PriorityLattice<double, string>> MemoryPriorityKVS;
+typedef KVStore<Key, CounterLattice> MemoryCounterKVS;
 
 // a map that represents which keys should be sent to which IP-port combinations
 typedef map<Address, set<Key>> AddressKeysetMap;
@@ -762,6 +763,83 @@ public:
 
   bool remove(const Key &key) override {
     return disk_remove(fname(key));
+  }
+};
+
+class MemoryCounterSerializer : public Serializer {
+  MemoryCounterKVS *kvs_;
+
+ public:
+  MemoryCounterSerializer(MemoryCounterKVS *kvs) : kvs_(kvs) {}
+
+  string get(const Key &key, kvs::AnnaError &error) override {
+    auto val = kvs_->get(key, error);
+    if (val.reveal().increments.empty() && val.reveal().decrements.empty()) {
+      error = kvs::AnnaError::KEY_DNE;
+    }
+    return serialize(val);
+  }
+
+  int put(const Key &key, const string &serialized) override {
+    CounterLattice val = deserialize_counter(serialized);
+    kvs_->put(key, val);
+    return static_cast<int>(kvs_->size(key));
+  }
+
+  bool remove(const Key &key) override {
+    kvs_->remove(key);
+    return true;
+  }
+};
+
+class DiskCounterSerializer : public Serializer {
+  unsigned tid_;
+  string disk_root_;
+
+ public:
+  DiskCounterSerializer(unsigned tid, const string &disk_root)
+      : tid_(tid), disk_root_(disk_root) {}
+
+  string get(const Key &key, kvs::AnnaError &error) override {
+    kvs::CounterValue value;
+    if (disk_read(disk_fname(disk_root_, tid_, key), value, error)) {
+      if (value.increments().empty() && value.decrements().empty()) {
+        error = kvs::AnnaError::KEY_DNE;
+      }
+      string serialized;
+      value.SerializeToString(&serialized);
+      return serialized;
+    }
+    return "";
+  }
+
+  int put(const Key &key, const string &serialized) override {
+    kvs::CounterValue input_value;
+    input_value.ParseFromString(serialized);
+
+    string path = disk_fname(disk_root_, tid_, key);
+    kvs::AnnaError error;
+    kvs::CounterValue original_value;
+
+    if (!disk_read(path, original_value, error)) {
+      return disk_write(path, input_value);
+    }
+
+    // Merge: per-node max for both increments and decrements.
+    for (const auto &p : input_value.increments()) {
+      auto &local = (*original_value.mutable_increments())[p.first];
+      if (p.second > local) local = p.second;
+    }
+    for (const auto &p : input_value.decrements()) {
+      auto &local = (*original_value.mutable_decrements())[p.first];
+      if (p.second > local) local = p.second;
+    }
+
+    return disk_write(path, original_value);
+  }
+
+  bool remove(const Key &key) override {
+    return disk_remove(disk_fname(disk_root_, tid_, key));
   }
 };
 

@@ -382,6 +382,28 @@ async fn execute_command(
             client.put_value(&key, &value).await?;
         }
         "DELETE" if split.len() == 2 => client.delete(split[1]).await?,
+        "INCREMENT" if split.len() == 2 => {
+            client.increment(split[1]).await?;
+        }
+        "INCREMENT" if split.len() == 3 => {
+            let amount: u64 = split[2]
+                .parse()
+                .map_err(|_| annalib::Error::Kvs("amount must be a positive integer".into()))?;
+            client.increment_by(split[1], amount).await?;
+        }
+        "DECREMENT" if split.len() == 2 => {
+            client.decrement(split[1]).await?;
+        }
+        "DECREMENT" if split.len() == 3 => {
+            let amount: u64 = split[2]
+                .parse()
+                .map_err(|_| annalib::Error::Kvs("amount must be a positive integer".into()))?;
+            client.decrement_by(split[1], amount).await?;
+        }
+        "GET_COUNTER" if split.len() == 2 => {
+            let val = client.get_counter(split[1]).await?;
+            println!("{}", val);
+        }
         "PUT_TTL" if split.len() == 4 => {
             let key = split[1];
             let value = split[2];
@@ -491,6 +513,9 @@ fn cli_usage() -> String {
     \n\tput causal {key} {value} \t- store with multi-key causal consistency\
     \n\tput single_causal {key} {value} \t- store with single-key causal consistency\
     \n\tput_ttl {key} {value} {seconds} \t- store with TTL (auto-expires)\
+    \n\tincrement {key} [amount] \t- increment a counter (default +1)\
+    \n\tdecrement {key} [amount] \t- decrement a counter (default -1)\
+    \n\tget_counter {key} \t\t- get counter value\
     \n\tdelete {key} \t\t\t- delete a key from the KVS\
     \n\tbench [keys] [value_size] [duration] [workload] - run a benchmark\
     \n\tstart [component] \t\t- start anna processes (component: kvs, monitor, route; omit for all)\
