@@ -56,6 +56,8 @@ protected:
   MemoryPriorityKVS *priority_kvs;
   Serializer *counter_serializer;
   MemoryCounterKVS *counter_kvs;
+  Serializer *or_set_serializer;
+  MemoryOrSetKVS *or_set_kvs;
 
   ServerHandlerTest() {
     lww_kvs = new MemoryLWWKVS();
@@ -83,6 +85,10 @@ protected:
     serializers[kvs::LatticeType::PRIORITY] = priority_serializer;
     serializers[kvs::LatticeType::COUNTER] = counter_serializer;
 
+    or_set_kvs = new MemoryOrSetKVS();
+    or_set_serializer = new MemoryOrSetSerializer(or_set_kvs);
+    serializers[kvs::LatticeType::OR_SET] = or_set_serializer;
+
     wt = ServerThread(ip, ip, thread_id);
     global_hash_rings[Tier::MEMORY].insert(ip, ip, 0, thread_id);
   }
@@ -99,6 +105,8 @@ protected:
     delete serializers[kvs::LatticeType::PRIORITY];
     delete counter_kvs;
     delete serializers[kvs::LatticeType::COUNTER];
+    delete or_set_kvs;
+    delete serializers[kvs::LatticeType::OR_SET];
   }
 
 public:

@@ -21,6 +21,7 @@
 #include "kvs.pb.h"
 #include "lattices/counter_lattice.hpp"
 #include "lattices/lww_pair_lattice.hpp"
+#include "lattices/or_set_lattice.hpp"
 #include "lattices/multi_key_causal_lattice.hpp"
 #include "lattices/priority_lattice.hpp"
 #include "lattices/single_key_causal_lattice.hpp"
@@ -277,6 +278,32 @@ inline CounterLattice deserialize_counter(const string& serialized) {
     state.decrements[p.first] = p.second;
   }
   return CounterLattice(state);
+}
+
+inline string serialize(const OrSetLattice& l) {
+  kvs::OrSetValue osv;
+  for (const auto& p : l.reveal().elements) {
+    (*osv.mutable_elements())[p.first] = p.second;
+  }
+  for (const auto& t : l.reveal().tombstones) {
+    osv.add_tombstones(t);
+  }
+  string serialized;
+  osv.SerializeToString(&serialized);
+  return serialized;
+}
+
+inline OrSetLattice deserialize_or_set(const string& serialized) {
+  kvs::OrSetValue osv;
+  osv.ParseFromString(serialized);
+  OrSetState state;
+  for (const auto& p : osv.elements()) {
+    state.elements[p.first] = p.second;
+  }
+  for (const auto& t : osv.tombstones()) {
+    state.tombstones.insert(t);
+  }
+  return OrSetLattice(state);
 }
 
 inline VectorClockValuePair<SetLattice<string>> to_vector_clock_value_pair(

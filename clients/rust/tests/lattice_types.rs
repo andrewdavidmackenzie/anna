@@ -216,6 +216,57 @@ async fn disk_tier_lattice_types() {
     test_all_lattice_types(&mut client, "disk").await;
 }
 
+const OR_SET_OFFSET: u16 = 206;
+
+/// Test OR-Set: add, remove, get, add-wins-over-concurrent-remove.
+#[tokio::test]
+#[cfg(unix)]
+async fn or_set_add_remove_get() {
+    let config_path = generate_config(OR_SET_OFFSET);
+    let _guard = ServerGuard::start(&config_path, OR_SET_OFFSET);
+    let config = client_config(OR_SET_OFFSET);
+    let mut client = KVSClient::new(&config, Some(7)).await;
+
+    // Add elements
+    client.or_set_add("oset", "apple").await.expect("add apple");
+    client
+        .or_set_add("oset", "banana")
+        .await
+        .expect("add banana");
+    client
+        .or_set_add("oset", "cherry")
+        .await
+        .expect("add cherry");
+
+    // Get should return all 3
+    let vals = client.get_or_set("oset").await.expect("get_or_set");
+    assert_eq!(vals, vec!["apple", "banana", "cherry"]);
+
+    // Remove banana
+    client
+        .or_set_remove("oset", "banana")
+        .await
+        .expect("remove banana");
+
+    // Get should return apple and cherry
+    let vals = client
+        .get_or_set("oset")
+        .await
+        .expect("get_or_set after remove");
+    assert_eq!(vals, vec!["apple", "cherry"]);
+
+    // Re-add banana (add wins over previous remove)
+    client
+        .or_set_add("oset", "banana")
+        .await
+        .expect("re-add banana");
+    let vals = client
+        .get_or_set("oset")
+        .await
+        .expect("get_or_set after re-add");
+    assert_eq!(vals, vec!["apple", "banana", "cherry"]);
+}
+
 const BATCH_PUT_OFFSET: u16 = 207;
 
 /// Test put_multi: batch PUT multiple keys, verify all readable.

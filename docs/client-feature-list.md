@@ -83,6 +83,7 @@ See [autoscaling.md](autoscaling.md) for the full operator's guide.
 | Per-key TTL (put_with_ttl) | Yes    |
 | PN-Counter (increment/decrement/get_counter) | Yes |
 | Batch PUT (put_multi)    | Yes    |
+| OR-Set (set_add/set_remove/get_or_set) | Yes |
 
 ## C++ Client (`clients/cpp`)
 

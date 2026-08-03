@@ -53,6 +53,7 @@ typedef KVStore<Key, MultiKeyCausalLattice<SetLattice<string>>>
     MemoryMultiKeyCausalKVS;
 typedef KVStore<Key, PriorityLattice<double, string>> MemoryPriorityKVS;
 typedef KVStore<Key, CounterLattice> MemoryCounterKVS;
+typedef KVStore<Key, OrSetLattice> MemoryOrSetKVS;
 
 // a map that represents which keys should be sent to which IP-port combinations
 typedef map<Address, set<Key>> AddressKeysetMap;
@@ -833,6 +834,81 @@ class DiskCounterSerializer : public Serializer {
     for (const auto &p : input_value.decrements()) {
       auto &local = (*original_value.mutable_decrements())[p.first];
       if (p.second > local) local = p.second;
+    }
+
+    return disk_write(path, original_value);
+  }
+
+  bool remove(const Key &key) override {
+    return disk_remove(disk_fname(disk_root_, tid_, key));
+  }
+};
+
+class MemoryOrSetSerializer : public Serializer {
+  MemoryOrSetKVS *kvs_;
+
+ public:
+  MemoryOrSetSerializer(MemoryOrSetKVS *kvs) : kvs_(kvs) {}
+
+  string get(const Key &key, kvs::AnnaError &error) override {
+    auto val = kvs_->get(key, error);
+    if (val.reveal().elements.empty() && val.reveal().tombstones.empty()) {
+      error = kvs::AnnaError::KEY_DNE;
+    }
+    return serialize(val);
+  }
+
+  int put(const Key &key, const string &serialized) override {
+    OrSetLattice val = deserialize_or_set(serialized);
+    kvs_->put(key, val);
+    return static_cast<int>(kvs_->size(key));
+  }
+
+  bool remove(const Key &key) override {
+    kvs_->remove(key);
+    return true;
+  }
+};
+
+class DiskOrSetSerializer : public Serializer {
+  unsigned tid_;
+  string disk_root_;
+
+ public:
+  DiskOrSetSerializer(unsigned tid, const string &disk_root)
+      : tid_(tid), disk_root_(disk_root) {}
+
+  string get(const Key &key, kvs::AnnaError &error) override {
+    kvs::OrSetValue value;
+    if (disk_read(disk_fname(disk_root_, tid_, key), value, error)) {
+      if (value.elements().empty() && value.tombstones().empty()) {
+        error = kvs::AnnaError::KEY_DNE;
+      }
+      string serialized;
+      value.SerializeToString(&serialized);
+      return serialized;
+    }
+    return "";
+  }
+
+  int put(const Key &key, const string &serialized) override {
+    kvs::OrSetValue input_value;
+    input_value.ParseFromString(serialized);
+
+    string path = disk_fname(disk_root_, tid_, key);
+    kvs::AnnaError error;
+    kvs::OrSetValue original_value;
+
+    if (!disk_read(path, original_value, error)) {
+      return disk_write(path, input_value);
+    }
+
+    // Merge: union of elements and tombstones.
+    for (const auto &p : input_value.elements()) {
+      (*original_value.mutable_elements())[p.first] = p.second;
+    }
+    for (const auto &t : input_value.tombstones()) {
+      original_value.add_tombstones(t);
     }
 
     return disk_write(path, original_value);
