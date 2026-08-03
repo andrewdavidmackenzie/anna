@@ -65,6 +65,10 @@ pub struct KVSClient {
     /// guaranteeing monotonic reads and read-your-writes.
     #[doc(hidden)]
     pub lww_read_cache: HashMap<Key, (u64, Vec<u8>)>,
+    /// Local PN-Counter state: per-key cumulative (increments, decrements)
+    /// for this client's node ID. Avoids read-modify-write races by tracking
+    /// locally rather than reading from the server.
+    counter_state: HashMap<Key, (u64, u64)>,
     /// High-water mark of timestamps seen by this client (reads and writes).
     /// Ensures each PUT uses a timestamp strictly greater than any previously
     /// seen timestamp, providing the Writes Follow Reads guarantee.
@@ -140,6 +144,7 @@ impl KVSClient {
                 key_address_puller,
                 response_puller,
             },
+            counter_state: HashMap::new(),
             lww_read_cache: HashMap::new(),
             last_seen_ts: 0,
         }
@@ -160,6 +165,7 @@ impl KVSClient {
             transport: Transport::Mock {
                 responses: std::collections::VecDeque::new(),
             },
+            counter_state: HashMap::new(),
             lww_read_cache: HashMap::new(),
             last_seen_ts: 0,
         }
@@ -729,25 +735,16 @@ impl KVSClient {
     ) -> Result<()> {
         debug!("INCREMENT: {} += {}", key, amount);
         let node_id = format!("{}:{}", self.ut.ip(), self.ut.tid());
+        let key_str = key.as_ref().to_string();
 
-        // GET current state to learn our slot value, then increment.
-        let current = self.get_counter_state(key.as_ref()).await;
-        let new_inc = current
-            .as_ref()
-            .and_then(|s| s.get(&node_id))
-            .copied()
-            .unwrap_or(0)
-            + amount;
+        // Track cumulative increment locally to avoid read-modify-write races.
+        let (inc, dec) = self.counter_state.entry(key_str.clone()).or_insert((0, 0));
+        *inc += amount;
 
         let mut cv = crate::proto::kvs::CounterValue::default();
-        cv.increments.insert(node_id, new_inc);
-
-        // Preserve existing state from other nodes.
-        if let Some(state) = &current {
-            for (k, v) in state {
-                cv.increments.entry(k.clone()).or_insert(*v);
-            }
-        }
+        cv.increments.insert(node_id, *inc);
+        cv.decrements
+            .insert(format!("{}:{}", self.ut.ip(), self.ut.tid()), *dec);
 
         let payload = cv.encode_to_vec();
         let response = self
@@ -777,25 +774,16 @@ impl KVSClient {
     ) -> Result<()> {
         debug!("DECREMENT: {} -= {}", key, amount);
         let node_id = format!("{}:{}", self.ut.ip(), self.ut.tid());
+        let key_str = key.as_ref().to_string();
 
-        // GET current decrement state.
-        let current = self.get_counter_dec_state(key.as_ref()).await;
-        let new_dec = current
-            .as_ref()
-            .and_then(|s| s.get(&node_id))
-            .copied()
-            .unwrap_or(0)
-            + amount;
+        // Track cumulative decrement locally to avoid read-modify-write races.
+        let (inc, dec) = self.counter_state.entry(key_str.clone()).or_insert((0, 0));
+        *dec += amount;
 
         let mut cv = crate::proto::kvs::CounterValue::default();
-        cv.decrements.insert(node_id, new_dec);
-
-        // Preserve existing decrement state from other nodes.
-        if let Some(state) = &current {
-            for (k, v) in state {
-                cv.decrements.entry(k.clone()).or_insert(*v);
-            }
-        }
+        cv.increments
+            .insert(format!("{}:{}", self.ut.ip(), self.ut.tid()), *inc);
+        cv.decrements.insert(node_id, *dec);
 
         let payload = cv.encode_to_vec();
         let response = self
@@ -833,32 +821,6 @@ impl KVSClient {
         let pos: u64 = cv.increments.values().sum();
         let neg: u64 = cv.decrements.values().sum();
         Ok(pos as i64 - neg as i64)
-    }
-
-    // Helper: get current increment state for this counter from the server.
-    async fn get_counter_state(&mut self, key: &str) -> Option<HashMap<String, u64>> {
-        let response = self
-            .send_data_request(key, RequestType::Get as i32, None, None)
-            .await?;
-        if response.tuples.is_empty() || response.tuples[0].error != 0 {
-            return None;
-        }
-        let cv =
-            crate::proto::kvs::CounterValue::decode(response.tuples[0].payload.as_slice()).ok()?;
-        Some(cv.increments)
-    }
-
-    // Helper: get current decrement state for this counter from the server.
-    async fn get_counter_dec_state(&mut self, key: &str) -> Option<HashMap<String, u64>> {
-        let response = self
-            .send_data_request(key, RequestType::Get as i32, None, None)
-            .await?;
-        if response.tuples.is_empty() || response.tuples[0].error != 0 {
-            return None;
-        }
-        let cv =
-            crate::proto::kvs::CounterValue::decode(response.tuples[0].payload.as_slice()).ok()?;
-        Some(cv.decrements)
     }
 
     /// Retrieve a set of values by key (Set lattice).
