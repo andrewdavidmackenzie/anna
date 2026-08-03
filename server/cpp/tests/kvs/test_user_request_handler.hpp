@@ -544,6 +544,67 @@ TEST_F(ServerHandlerTest, UserPutLatticeMismatchTest) {
   EXPECT_EQ(stored_key_map[key].type(), kvs::LatticeType::LWW);
 }
 
+// Test PUT with TTL sets expiry_epoch_s_ on the stored key.
+TEST_F(ServerHandlerTest, UserPutWithTTLSetsExpiry) {
+  Key key = "ttl_key";
+  string value = "ttl_value";
+
+  // Use an absolute expiry 300 seconds from now (in milliseconds).
+  uint64_t expiry_ms = static_cast<uint64_t>(now_epoch_s() + 300) * 1000;
+  string put_lww =
+      put_key_request(key, kvs::LatticeType::LWW, serialize(0, value), ip,
+                      expiry_ms);
+
+  unsigned access_count = 0;
+  unsigned seed = 0;
+
+  user_request_handler(access_count, seed, put_lww, log_, global_hash_rings,
+                       local_hash_rings, pending_requests, key_access_tracker,
+                       stored_key_map, key_replication_map, local_changeset, wt,
+                       serializers, pushers);
+
+  EXPECT_EQ(stored_key_map[key].type(), kvs::LatticeType::LWW);
+  // Expiry should be set (non-zero) and approximately 300 seconds from now.
+  EXPECT_GT(stored_key_map[key].expiry_epoch_s_, 0u);
+  EXPECT_NEAR(stored_key_map[key].expiry_epoch_s_, now_epoch_s() + 300, 2);
+}
+
+// Test GET on an expired key returns KEY_DNE.
+TEST_F(ServerHandlerTest, UserGetExpiredKeyReturnsDNE) {
+  Key key = "expired_key";
+  string value = "expired_value";
+
+  // PUT with an expiry in the past (already expired).
+  uint64_t expiry_ms = static_cast<uint64_t>(now_epoch_s() - 10) * 1000;
+  string put_lww =
+      put_key_request(key, kvs::LatticeType::LWW, serialize(0, value), ip,
+                      expiry_ms);
+
+  unsigned access_count = 0;
+  unsigned seed = 0;
+
+  user_request_handler(access_count, seed, put_lww, log_, global_hash_rings,
+                       local_hash_rings, pending_requests, key_access_tracker,
+                       stored_key_map, key_replication_map, local_changeset, wt,
+                       serializers, pushers);
+
+  // Key should exist but be expired.
+  EXPECT_GT(stored_key_map[key].expiry_epoch_s_, 0u);
+
+  // GET should return KEY_DNE.
+  string get_req = get_key_request(key, ip);
+  size_t msg_count_before = mock_zmq_util.sent_messages.size();
+  user_request_handler(access_count, seed, get_req, log_, global_hash_rings,
+                       local_hash_rings, pending_requests, key_access_tracker,
+                       stored_key_map, key_replication_map, local_changeset, wt,
+                       serializers, pushers);
+
+  ASSERT_GT(mock_zmq_util.sent_messages.size(), msg_count_before);
+  kvs::KeyResponse response;
+  response.ParseFromString(mock_zmq_util.sent_messages.back());
+  EXPECT_EQ(response.tuples(0).error(), kvs::AnnaError::KEY_DNE);
+}
+
 // TODO: Test key address cache invalidation
 // TODO: Test replication factor request and making the request pending
 // TODO: Test metadata operations -- does this matter?
