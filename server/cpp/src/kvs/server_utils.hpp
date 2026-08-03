@@ -907,8 +907,14 @@ class DiskOrSetSerializer : public Serializer {
     for (const auto &p : input_value.elements()) {
       (*original_value.mutable_elements())[p.first] = p.second;
     }
+    // Deduplicate tombstones during merge.
+    std::set<std::string> existing_tombstones(
+        original_value.tombstones().begin(),
+        original_value.tombstones().end());
     for (const auto &t : input_value.tombstones()) {
-      original_value.add_tombstones(t);
+      if (existing_tombstones.find(t) == existing_tombstones.end()) {
+        original_value.add_tombstones(t);
+      }
     }
 
     return disk_write(path, original_value);

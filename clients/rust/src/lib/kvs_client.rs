@@ -834,8 +834,11 @@ impl KVSClient {
         element: &str,
     ) -> Result<()> {
         debug!("OR_SET_ADD: {} += {}", key, element);
-        self.last_seen_ts += 1;
-        let tag = format!("{}:{}:{}", self.ut.ip(), self.ut.tid(), self.last_seen_ts);
+        let tag_seq = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or(Duration::from_secs(0))
+            .as_nanos();
+        let tag = format!("{}:{}:{}", self.ut.ip(), self.ut.tid(), tag_seq);
 
         let mut osv = crate::proto::kvs::OrSetValue::default();
         osv.elements.insert(tag, element.as_bytes().to_vec());
@@ -873,7 +876,16 @@ impl KVSClient {
             .await
             .ok_or_else(|| Error::Kvs("OR_SET_REMOVE: GET failed".into()))?;
 
-        let tuple = Self::validate_response(&response, "OR_SET_REMOVE")?;
+        let tuple = match Self::validate_response(&response, "OR_SET_REMOVE") {
+            Ok(t) => t,
+            Err(e) => {
+                // KEY_DNE means the set doesn't exist -- nothing to remove.
+                if e.to_string().contains("KEY_DNE") {
+                    return Ok(());
+                }
+                return Err(e);
+            }
+        };
         let osv = crate::proto::kvs::OrSetValue::decode(tuple.payload.as_slice())
             .map_err(|e| Error::Kvs(format!("OR_SET_REMOVE: decode failed: {}", e)))?;
 
