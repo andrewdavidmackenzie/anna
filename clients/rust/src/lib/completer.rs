@@ -220,4 +220,26 @@ mod tests {
         let results = complete("PUT set ");
         assert!(results.is_empty());
     }
+
+    #[test]
+    fn new_commands_present_in_anna_commands() {
+        let expected = [
+            "DEL",
+            "MGET",
+            "MSET",
+            "SADD",
+            "SREM",
+            "SMEMBERS",
+            "INCR",
+            "DECR",
+            "EXPIRE",
+            "SUBSCRIBE",
+        ];
+        for cmd in &expected {
+            assert!(
+                ANNA_COMMANDS.contains(cmd),
+                "{cmd} should be in ANNA_COMMANDS"
+            );
+        }
+    }
 }

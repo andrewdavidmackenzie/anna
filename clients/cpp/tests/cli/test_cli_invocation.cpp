@@ -240,6 +240,42 @@ TEST_F(CliInvocationTest, BenchHelpIncludesBenchCommand) {
   EXPECT_NE(r.stdout_str.find("bench"), std::string::npos);
 }
 
+TEST_F(CliInvocationTest, CliFileWithSaddStub) {
+  std::string cmd_file = "cli_test_sadd.txt";
+  {
+    std::ofstream f(cmd_file);
+    f << "SADD myset elem\n";
+  }
+  auto r = run_command(cli_binary + " --routing 127.0.0.1 --client-ip 127.0.0.1 cli " + cmd_file);
+  EXPECT_EQ(r.exit_code, 0);
+  EXPECT_NE(r.stderr_str.find("not yet implemented"), std::string::npos);
+  std::remove(cmd_file.c_str());
+}
+
+TEST_F(CliInvocationTest, CliFileWithSremStub) {
+  std::string cmd_file = "cli_test_srem.txt";
+  {
+    std::ofstream f(cmd_file);
+    f << "SREM myset elem\n";
+  }
+  auto r = run_command(cli_binary + " --routing 127.0.0.1 --client-ip 127.0.0.1 cli " + cmd_file);
+  EXPECT_EQ(r.exit_code, 0);
+  EXPECT_NE(r.stderr_str.find("not yet implemented"), std::string::npos);
+  std::remove(cmd_file.c_str());
+}
+
+TEST_F(CliInvocationTest, CliFileWithSmembersStub) {
+  std::string cmd_file = "cli_test_smembers.txt";
+  {
+    std::ofstream f(cmd_file);
+    f << "SMEMBERS myset\n";
+  }
+  auto r = run_command(cli_binary + " --routing 127.0.0.1 --client-ip 127.0.0.1 cli " + cmd_file);
+  EXPECT_EQ(r.exit_code, 0);
+  EXPECT_NE(r.stderr_str.find("not yet implemented"), std::string::npos);
+  std::remove(cmd_file.c_str());
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

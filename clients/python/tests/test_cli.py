@@ -884,6 +884,82 @@ class TestUnifiedPutSyntax:
         client.put.assert_called_once()
 
 
+class TestMgetCommand:
+    def test_mget_returns_values(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        from anna.lattices import LWWPairLattice
+
+        client = MagicMock()
+        client.get_all.return_value = {
+            "key1": LWWPairLattice(1, b"val1"),
+            "key2": LWWPairLattice(2, b"val2"),
+        }
+
+        result = execute_command(client, None, "MGET key1 key2")
+        assert result is True
+        out = capsys.readouterr().out
+        assert "key1: val1" in out
+        assert "key2: val2" in out
+
+    def test_mget_missing_args(self, capsys):
+        from anna.cli import execute_command
+        result = execute_command(None, None, "MGET")
+        assert result is True
+        assert "Usage" in capsys.readouterr().out
+
+
+class TestDelAlias:
+    def test_del_calls_delete(self):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.delete.return_value = {"mykey": True}
+
+        result = execute_command(client, None, "DEL mykey")
+        assert result is True
+        client.delete.assert_called_once_with("mykey")
+
+
+class TestGetNil:
+    def test_get_returns_nil(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+
+        client = MagicMock()
+        client.get.return_value = {"nonexistent": None}
+
+        execute_command(client, None, "GET nonexistent")
+        assert "(nil)" in capsys.readouterr().out
+
+
+class TestSetCommandStubs:
+    def test_sadd_stub(self, capsys):
+        from anna.cli import execute_command
+        result = execute_command(None, None, "SADD myset elem")
+        assert result is True
+        out = capsys.readouterr().out
+        assert "not yet implemented" in out
+        assert "Rust CLI" in out
+
+    def test_srem_stub(self, capsys):
+        from anna.cli import execute_command
+        result = execute_command(None, None, "SREM myset elem")
+        assert result is True
+        out = capsys.readouterr().out
+        assert "not yet implemented" in out
+        assert "Rust CLI" in out
+
+    def test_smembers_stub(self, capsys):
+        from anna.cli import execute_command
+        result = execute_command(None, None, "SMEMBERS myset")
+        assert result is True
+        out = capsys.readouterr().out
+        assert "not yet implemented" in out
+        assert "Rust CLI" in out
+
+
 class TestArityValidation:
     """Tests for argument count validation."""
 
