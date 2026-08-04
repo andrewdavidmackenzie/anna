@@ -1,6 +1,6 @@
 # API Comparison: Anna vs. Major KV Stores
 
-### What Anna has that's unique
+## What Anna has that's unique
 
 Anna's lattice type system (17 types with CRDT-style merge semantics) is genuinely distinctive. No other major KV store offers built-in conflict-free replicated data types at the storage layer:
 
@@ -8,13 +8,13 @@ Anna's lattice type system (17 types with CRDT-style merge semantics) is genuine
 - **Gossip-based replication with automatic conflict resolution** -- no other store in this list does this natively
 - **Per-key replication factor control** -- DynamoDB has table-level, Cassandra has keyspace-level, but per-key is rare
 
-### Feature comparison vs. competitors
+## Feature comparison vs. competitors
 
 | Capability | Anna | Redis | etcd | TiKV | DynamoDB | Cassandra | FoundationDB |
 |---|---|---|---|---|---|---|---|
 | **TTL/Expiration** | EXPIRE (per-key, server-enforced) | Per-key | Per-lease | RawKV only | Per-item | Per-value | No |
 | **Key scan/list** | SCAN (prefix filter, paginated) | SCAN/KEYS | Range | scan() | Scan/Query | SELECT | get_range() |
-| **Watch/subscribe** | SUBSCRIBE (gossip-based, all 4 clients) | Pub/Sub + Streams | Watch API | CDC | Streams | CDC | watch(key) |
+| **Watch/subscribe** | SUBSCRIBE (gossip-based; CLI: Rust only, library: all 4) | Pub/Sub + Streams | Watch API | CDC | Streams | CDC | watch(key) |
 | **Atomic CAS** | No | WATCH+MULTI | Txn if/then | CAS (RawKV) | ConditionExpression | LWT (IF) | Native (all txns) |
 | **Batch read/write** | MGET + MSET | MGET/MSET, pipeline | Range + Txn | batch_get/batch_put/scan | BatchGetItem/BatchWriteItem | SELECT IN + BATCH | get_range + Txn |
 | **Counters/Incr** | INCR/DECR (PN-Counter CRDT) | INCR/DECR | No | No | Atomic counters | Counter type | add() atomic |
@@ -22,7 +22,7 @@ Anna's lattice type system (17 types with CRDT-style merge semantics) is genuine
 | **Secondary indexes** | No | Sorted sets | No | No | GSI/LSI | Secondary indexes | Layer (manual) |
 | **Range queries** | No | ZRANGEBYSCORE | Range | scan(start,end) | Query (sort key) | Clustering cols | get_range() |
 
-### Anna's current API surface (4 clients: Rust, C++, Python, Go)
+## Anna's current API surface (4 clients: Rust, C++, Python, Go)
 
 | Category | Operations |
 |---|---|
@@ -30,7 +30,7 @@ Anna's lattice type system (17 types with CRDT-style merge semantics) is genuine
 | **Batch** | MGET, MSET — get_multi, put_multi (groups by worker for efficiency) |
 | **17 lattice types** | LWW, Set, OrderedSet, SingleCausal, MultiCausal, Priority, LwwSet, LwwOrderedSet, UnionScalar, PrioritySet, PriorityOrderedSet, CausalSet, CausalOrderedSet, MultiCausalSet, MultiCausalOrderedSet, Counter, OrSet |
 | **Transactions** | begin/put/get/commit/rollback (client-side buffering, read-committed + repeatable-read isolation) |
-| **Watch/subscribe** | SUBSCRIBE — ValueChangeSubscriber: watch(keys), recv_update(timeout), get_cached(key) -- all 4 clients |
+| **Watch/subscribe** | SUBSCRIBE — ValueChangeSubscriber: watch(keys), recv_update(timeout), get_cached(key) — library: all 4 clients; CLI: Rust only |
 | **TTL/Expiration** | EXPIRE — put_with_ttl(key, value, ttl_seconds); per-key, server-enforced |
 | **Counter** | INCR, DECR, GET_COUNTER — increment(key, amount), decrement(key, amount), get_counter(key) |
 | **OR-Set** | SADD, SREM, SMEMBERS — or_set_add(key, element), or_set_remove(key, element), get_or_set(key) |
@@ -39,17 +39,17 @@ Anna's lattice type system (17 types with CRDT-style merge semantics) is genuine
 | **Stats/monitoring** | get_storage_stats, get_key_access_stats, get_key_size_stats, LatencyReporter |
 | **Key scan/list** | SCAN — scan(prefix), fans out to all threads, cursor-paginated, returns key + type + size + expiry |
 
-### Remaining gaps to close
+## Remaining gaps to close
 
 No actionable gaps remain. All items from the original comparison have been implemented or classified as architecture mismatches (below).
 
-### Hardest to emulate (architecture mismatch)
+## Hardest to emulate (architecture mismatch)
 
 - **Conditional writes / CAS**: Anna's eventual consistency model conflicts with strong CAS. The causal lattice types provide partial ordering but not compare-and-swap semantics.
 - **Range queries**: Anna uses hash-based key distribution (consistent hashing). Range queries require sequential key layout, which would need a fundamentally different routing strategy.
 - **Secondary indexes**: Would require a server-side index maintenance layer that doesn't exist.
 
-### Which store's API is closest to Anna?
+## Which store's API is closest to Anna?
 
 **Redis** is the closest match in spirit -- both are in-memory, both support multiple data types (sets, sorted sets), both have pub/sub. If Anna wanted to emulate one API, a subset of the Redis command protocol (RESP) would be the most natural fit:
 
@@ -67,7 +67,7 @@ No actionable gaps remain. All items from the original comparison have been impl
 | `DECR`/`DECRBY` | `DECR key` / `DECRBY key decrement` | `DECR {key} [amount]` | `decrement(key)` / `decrement_by(key, n)` | PN-Counter CRDT |
 | (no equivalent) | — | `GET_COUNTER {key}` | `get_counter(key)` | Returns net counter value (incr - decr) |
 | `SETEX` | `SETEX key seconds value` | `EXPIRE {key} {value} {seconds}` | `put_with_ttl(key, value, ttl)` | Server-enforced per-key TTL |
-| `SUBSCRIBE` | `SUBSCRIBE channel [channel...]` | `SUBSCRIBE {key1} [key2 ...]` | `ValueChangeSubscriber::watch(keys)` | Gossip-based, receives on value change |
+| `SUBSCRIBE` | `SUBSCRIBE channel [channel...]` | `SUBSCRIBE {key1} [key2 ...]` | `ValueChangeSubscriber::watch(keys)` | Gossip-based; CLI: Rust only, library: all 4 |
 | `SCAN` | `SCAN cursor [MATCH pattern] [COUNT count]` | `SCAN [prefix]` | `scan(prefix)` | Fans out to all KVS threads |
 
 **Differences from Redis**: Anna's `SADD`/`SREM` use OR-Set (tombstone-based CRDT) rather than Redis's simple in-memory set. Anna's `INCR`/`DECR` use a PN-Counter CRDT that converges across replicas. Anna's `SUBSCRIBE` is gossip-based (eventual delivery) rather than Redis's synchronous pub/sub. Anna's `SCAN` fans out to all KVS threads since keys are hash-distributed, while Redis scans a single hash table.
