@@ -132,3 +132,29 @@ bool is_primary_replica(const Key &key,
     return false;
   }
 }
+
+unsigned gc_reap_expired_keys(map<Key, KeyProperty> &stored_key_map,
+                              SerializerMap &serializers, logger log) {
+  uint32_t now_s = now_epoch_s();
+  vector<Key> keys_to_reap;
+
+  for (const auto &kv : stored_key_map) {
+    if (!is_metadata(kv.first) && kv.second.expiry_epoch_s_ > 0 &&
+        now_s >= kv.second.expiry_epoch_s_) {
+      keys_to_reap.push_back(kv.first);
+    }
+  }
+
+  unsigned reaped = 0;
+  for (const Key &key : keys_to_reap) {
+    if (serializers[stored_key_map[key].type()]->remove(key)) {
+      stored_key_map.erase(key);
+      log->info("Key expiry GC: reaped key {}", key);
+      reaped++;
+    } else {
+      log->error("Key expiry GC: failed to remove key {}", key);
+    }
+  }
+
+  return reaped;
+}

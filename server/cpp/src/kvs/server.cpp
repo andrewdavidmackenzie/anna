@@ -609,33 +609,10 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
     }
 
     // Key expiry GC: reap keys whose expiry_time_ has passed.
-    // This handles both TTL-expired keys and tombstoned (deleted) keys,
-    // which both use the same expiry_time_ field.
     if (std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::system_clock::now() - gc_start)
                 .count() >= kGossipPeriod) {
-      auto now = std::chrono::system_clock::now();
-
-      uint32_t now_s = now_epoch_s();
-
-      vector<Key> keys_to_reap;
-      for (const auto &kv : stored_key_map) {
-        if (!is_metadata(kv.first) &&
-            kv.second.expiry_epoch_s_ > 0 &&
-            now_s > kv.second.expiry_epoch_s_) {
-          keys_to_reap.push_back(kv.first);
-        }
-      }
-
-      for (const Key &key : keys_to_reap) {
-        if (serializers[stored_key_map[key].type()]->remove(key)) {
-          stored_key_map.erase(key);
-          log->info("Key expiry GC: reaped key {}", key);
-        } else {
-          log->error("Key expiry GC: failed to remove key {}", key);
-        }
-      }
-
+      gc_reap_expired_keys(stored_key_map, serializers, log);
       gc_start = std::chrono::system_clock::now();
     }
 
@@ -881,16 +858,17 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
         join_remove_set = std::move(failed_removals);
       }
     }
-   } catch (const zmq::error_t &e) {
+   } catch (const zmq::error_t &e) { // LCOV_EXCL_START
+     // Signal-interrupted ZMQ operations — safety net only triggered when
+     // a signal arrives during a recv/send syscall. Cannot be triggered
+     // deterministically in unit tests.
      if (e.num() == EINTR &&
          (shutdown_requested.load() || self_depart_requested.load())) {
-       // ZMQ interrupted by signal — continue the loop so the signal
-       // handler at the top of the loop can process the request.
        if (shutdown_requested.load()) break;
-       continue;  // Let self_depart_requested be handled at top of loop.
+       continue;
      }
-     throw;  // Re-throw unexpected ZMQ errors.
-   }
+     throw;
+   } // LCOV_EXCL_STOP
   }
 }
 

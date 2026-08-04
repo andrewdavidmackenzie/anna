@@ -116,6 +116,10 @@ public:
     kSelfTier = Tier::MEMORY;
     kThreadNum = 1;
     kSelfTierIdVector = {kSelfTier};
+
+    // reset mock overrides
+    mock_hash_ring_util.thread_overrides.clear();
+    mock_hash_ring_util.succeed_overrides.clear();
   }
 
   void TearDown() {

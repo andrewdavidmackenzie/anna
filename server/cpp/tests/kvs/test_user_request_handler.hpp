@@ -970,6 +970,57 @@ TEST_F(ServerHandlerTest, ScanCountClamped) {
   EXPECT_EQ(resp.scan_keys_size(), 3);  // Only 3 keys exist.
 }
 
+// ── GC tests ────────────────────────────────────────────────────────────
+
+TEST_F(ServerHandlerTest, GcReapsExpiredKeys) {
+  // Insert a key with expiry in the past.
+  serializers[kvs::LatticeType::LWW]->put("expired_key", serialize(1, string("v")));
+  stored_key_map["expired_key"].set_type(kvs::LatticeType::LWW);
+  stored_key_map["expired_key"].set_size(1);
+  stored_key_map["expired_key"].expiry_epoch_s_ = 1;  // epoch second 1 = long past
+
+  // Insert a key with no expiry.
+  serializers[kvs::LatticeType::LWW]->put("alive_key", serialize(2, string("v")));
+  stored_key_map["alive_key"].set_type(kvs::LatticeType::LWW);
+  stored_key_map["alive_key"].set_size(1);
+  stored_key_map["alive_key"].expiry_epoch_s_ = 0;
+
+  // Insert a key with expiry far in the future.
+  serializers[kvs::LatticeType::LWW]->put("future_key", serialize(3, string("v")));
+  stored_key_map["future_key"].set_type(kvs::LatticeType::LWW);
+  stored_key_map["future_key"].set_size(1);
+  stored_key_map["future_key"].expiry_epoch_s_ = 4000000000;  // ~2096
+
+  EXPECT_EQ(stored_key_map.size(), 3);
+
+  unsigned reaped = gc_reap_expired_keys(stored_key_map, serializers, log_);
+
+  EXPECT_EQ(reaped, 1);
+  EXPECT_EQ(stored_key_map.size(), 2);
+  EXPECT_EQ(stored_key_map.count("expired_key"), 0);
+  EXPECT_EQ(stored_key_map.count("alive_key"), 1);
+  EXPECT_EQ(stored_key_map.count("future_key"), 1);
+}
+
+TEST_F(ServerHandlerTest, GcSkipsMetadataKeys) {
+  // Metadata keys with expiry should NOT be reaped.
+  string meta_key = "ANNA_METADATA|test";
+  serializers[kvs::LatticeType::LWW]->put(meta_key, serialize(1, string("v")));
+  stored_key_map[meta_key].set_type(kvs::LatticeType::LWW);
+  stored_key_map[meta_key].set_size(1);
+  stored_key_map[meta_key].expiry_epoch_s_ = 1;  // long past
+
+  unsigned reaped = gc_reap_expired_keys(stored_key_map, serializers, log_);
+
+  EXPECT_EQ(reaped, 0);
+  EXPECT_EQ(stored_key_map.count(meta_key), 1);
+}
+
+TEST_F(ServerHandlerTest, GcEmptyMap) {
+  unsigned reaped = gc_reap_expired_keys(stored_key_map, serializers, log_);
+  EXPECT_EQ(reaped, 0);
+}
+
 // TODO: Test key address cache invalidation
 // TODO: Test replication factor request and making the request pending
 // TODO: Test metadata operations -- does this matter?
