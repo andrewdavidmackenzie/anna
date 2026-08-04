@@ -34,7 +34,7 @@ def cli_usage():
             "  SADD {key} {member} [member...] - add members to an OR-Set (not yet implemented)\n"
             "  SREM {key} {member} [member...] - remove members from an OR-Set (not yet implemented)\n"
             "  SMEMBERS {key}                  - list members of an OR-Set (not yet implemented)\n"
-            "  SUBSCRIBE {key1} [key2...]      - subscribe to value changes on keys\n"
+            "  SUBSCRIBE {key1} [key2...]      - subscribe to value changes on keys (not available in Python CLI, use Rust CLI or library API)\n"
             "  BENCH [keys] [value_size] [duration] [workload] - run a benchmark\n"
             "  START, STOP, STATUS, HELP, EXIT")
 
@@ -397,19 +397,19 @@ def execute_command(client, config_path, line):
         if len(parts) < 3:
             print("Usage: SADD <key> <member> [member ...]")
         else:
-            print("Error: SADD is not yet implemented (requires OR-Set add support in Python client library)")
+            print("Error: SADD is not yet implemented (requires OR-Set add support in Python client library). Use the Rust CLI (anna) for this command.")
     elif cmd == "SREM":
         # TODO: requires or_set_remove in Python client library
         if len(parts) < 3:
             print("Usage: SREM <key> <member> [member ...]")
         else:
-            print("Error: SREM is not yet implemented (requires OR-Set remove support in Python client library)")
+            print("Error: SREM is not yet implemented (requires OR-Set remove support in Python client library). Use the Rust CLI (anna) for this command.")
     elif cmd == "SMEMBERS":
         # TODO: requires or_set_get in Python client library
         if len(parts) < 2:
             print("Usage: SMEMBERS <key>")
         else:
-            print("Error: SMEMBERS is not yet implemented (requires OR-Set get support in Python client library)")
+            print("Error: SMEMBERS is not yet implemented (requires OR-Set get support in Python client library). Use the Rust CLI (anna) for this command.")
     elif cmd == "SUBSCRIBE":
         if len(parts) < 2:
             print("Usage: SUBSCRIBE <key1> [key2 ...]")

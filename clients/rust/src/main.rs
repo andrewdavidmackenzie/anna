@@ -402,8 +402,12 @@ async fn execute_command(
         "MGET" if split.len() >= 2 => {
             let keys: Vec<&str> = split[1..].to_vec();
             let results = client.get_multi(&keys).await?;
-            for (key, val) in results {
-                println!("{}: {}", key, val);
+            for key in &keys {
+                if let Some(val) = results.get(*key) {
+                    println!("{}: {}", key, val);
+                } else {
+                    println!("{}: (not found)", key);
+                }
             }
         }
         "MSET" if split.len() >= 3 && (split.len() - 1) % 2 == 0 => {

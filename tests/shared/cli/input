@@ -31,4 +31,7 @@ PUT union mylog entry2
 GET mylog
 PUT g deleteme
 GET g
-DELETE g
+DEL g
+PUT h mget1
+PUT i mget2
+MGET h i

@@ -92,7 +92,7 @@ string cli_usage() {
          "  SADD {key} {member} [member...] - add members to an OR-Set (not yet implemented)\n"
          "  SREM {key} {member} [member...] - remove members from an OR-Set (not yet implemented)\n"
          "  SMEMBERS {key}                  - list members of an OR-Set (not yet implemented)\n"
-         "  SUBSCRIBE {key1} [key2...]      - subscribe to value changes on keys\n"
+         "  SUBSCRIBE {key1} [key2...]      - subscribe to value changes on keys (not available in C++ CLI, use Rust CLI or library API)\n"
          "  BENCH [keys] [value_size] [duration] [workload] - run a benchmark\n"
          "  START, STOP, STATUS, HELP, EXIT";
 }
@@ -158,21 +158,21 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
     if (v.size() < 3) {
       std::cerr << "Usage: SADD <key> <member> [member ...]" << std::endl;
     } else {
-      std::cerr << "Error: SADD is not yet implemented (requires OR-Set add support in C++ client library)" << std::endl;
+      std::cerr << "Error: SADD is not yet implemented (requires OR-Set add support in C++ client library). Use the Rust CLI (anna) for this command." << std::endl;
     }
   } else if (command == "SREM") {
     // TODO: requires or_set_remove in C++ client library
     if (v.size() < 3) {
       std::cerr << "Usage: SREM <key> <member> [member ...]" << std::endl;
     } else {
-      std::cerr << "Error: SREM is not yet implemented (requires OR-Set remove support in C++ client library)" << std::endl;
+      std::cerr << "Error: SREM is not yet implemented (requires OR-Set remove support in C++ client library). Use the Rust CLI (anna) for this command." << std::endl;
     }
   } else if (command == "SMEMBERS") {
     // TODO: requires or_set_get / get_set in C++ client library
     if (v.size() < 2) {
       std::cerr << "Usage: SMEMBERS <key>" << std::endl;
     } else {
-      std::cerr << "Error: SMEMBERS is not yet implemented (requires OR-Set get support in C++ client library)" << std::endl;
+      std::cerr << "Error: SMEMBERS is not yet implemented (requires OR-Set get support in C++ client library). Use the Rust CLI (anna) for this command." << std::endl;
     }
   } else if (command == "SUBSCRIBE") {
     if (v.size() < 2) {

@@ -498,21 +498,21 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 		if len(parts) < 3 {
 			return false, fmt.Errorf("usage: SADD <key> <member> [member ...]")
 		}
-		fmt.Fprintln(os.Stderr, "Error: SADD is not yet implemented (requires OR-Set add support in Go client library)")
+		fmt.Fprintln(os.Stderr, "Error: SADD is not yet implemented (requires OR-Set add support in Go client library). Use the Rust CLI (anna) for this command.")
 
 	case "SREM":
 		// TODO: requires or_set_remove in Go client library
 		if len(parts) < 3 {
 			return false, fmt.Errorf("usage: SREM <key> <member> [member ...]")
 		}
-		fmt.Fprintln(os.Stderr, "Error: SREM is not yet implemented (requires OR-Set remove support in Go client library)")
+		fmt.Fprintln(os.Stderr, "Error: SREM is not yet implemented (requires OR-Set remove support in Go client library). Use the Rust CLI (anna) for this command.")
 
 	case "SMEMBERS":
 		// TODO: requires or_set_get in Go client library
 		if len(parts) < 2 {
 			return false, fmt.Errorf("usage: SMEMBERS <key>")
 		}
-		fmt.Fprintln(os.Stderr, "Error: SMEMBERS is not yet implemented (requires OR-Set get support in Go client library)")
+		fmt.Fprintln(os.Stderr, "Error: SMEMBERS is not yet implemented (requires OR-Set get support in Go client library). Use the Rust CLI (anna) for this command.")
 
 	case "SUBSCRIBE":
 		if len(parts) < 2 {
@@ -576,7 +576,7 @@ func cliUsage() string {
 	sadd {key} {member} [member...]              - add members to an OR-Set (not yet implemented)
 	srem {key} {member} [member...]              - remove members from an OR-Set (not yet implemented)
 	smembers {key}                               - list members of an OR-Set (not yet implemented)
-	subscribe {key1} [key2...]                   - subscribe to value changes on keys
+	subscribe {key1} [key2...]                   - subscribe to value changes on keys (not available in Go CLI, use Rust CLI or library API)
 	bench [keys] [value_size] [duration] [workload] - run a benchmark
 	start                                        - start anna processes
 	stop                                         - stop running anna processes
