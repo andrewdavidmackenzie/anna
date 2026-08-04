@@ -32,6 +32,7 @@ GET mylog
 PUT g deleteme
 GET g
 DEL g
+GET g
 PUT h mget1
 PUT i mget2
 MGET h i

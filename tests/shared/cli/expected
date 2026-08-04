@@ -19,6 +19,7 @@ important
 entry1
 entry2
 deleteme
+(nil)
 h: mget1
 i: mget2
 

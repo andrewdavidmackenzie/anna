@@ -376,10 +376,11 @@ async fn execute_command(
     let split = line.trim().split(' ').collect::<Vec<&str>>();
 
     match split[0].to_ascii_uppercase().as_str() {
-        "GET" if split.len() == 2 => {
-            let value = client.get_value(split[1]).await?;
-            println!("{}", value);
-        }
+        "GET" if split.len() == 2 => match client.get_value(split[1]).await {
+            Ok(value) => println!("{}", value),
+            Err(e) if e.to_string().contains("KEY_DNE") => println!("(nil)"),
+            Err(e) => return Err(e.into()),
+        },
         "PUT" if split.len() >= 3 => {
             let (key, value) = parse_put_args(&split)?;
             client.put_value(&key, &value).await?;

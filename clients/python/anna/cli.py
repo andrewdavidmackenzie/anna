@@ -72,7 +72,7 @@ def execute_command(client, config_path, line):
                 for v in values:
                     print(v.decode("utf-8") if isinstance(v, bytes) else str(v))
             else:
-                print("Key not found")
+                print("(nil)")
         elif cmd == "GET_SINGLE_CAUSAL":
             val = client.get_single_causal(key)
             if val is not None:
@@ -82,7 +82,7 @@ def execute_command(client, config_path, line):
                 for v in values:
                     print(v.decode("utf-8") if isinstance(v, bytes) else str(v))
             else:
-                print("Key not found")
+                print("(nil)")
         elif cmd == "GET_PRIORITY":
             val = client.get_priority(key)
             if val is not None:
@@ -90,7 +90,7 @@ def execute_command(client, config_path, line):
                 value = val.value
                 print(value.decode("utf-8") if isinstance(value, bytes) else str(value))
             else:
-                print("Key not found")
+                print("(nil)")
         elif cmd == "GET_ORDERED_SET":
             val = client.get_ordered_set(key)
             if val is not None:
@@ -98,7 +98,7 @@ def execute_command(client, config_path, line):
                          for v in val.reveal()]
                 print("[ " + " ".join(items) + " ]")
             else:
-                print("Key not found")
+                print("(nil)")
         elif cmd == "GET_SET":
             result = client.get(key)
             val = result.get(key)
@@ -107,7 +107,7 @@ def execute_command(client, config_path, line):
                                for v in val.reveal())
                 print("{ " + " ".join(items) + " }")
             else:
-                print("Key not found")
+                print("(nil)")
         else:
             # Unified GET: uses client.get() which returns LWW or Set
             # lattice objects. For other types (causal, priority, etc.),
@@ -129,7 +129,7 @@ def execute_command(client, config_path, line):
                 else:
                     print(revealed)
             else:
-                print("Key not found")
+                print("(nil)")
     elif cmd == "PUT":
         if len(parts) < 3:
             print("Usage: PUT [type] <key> <value(s)>")

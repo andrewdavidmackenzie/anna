@@ -237,7 +237,7 @@ class TestExecuteCommand:
         client.get.return_value = {"mykey": None}
 
         execute_command(client, None, "GET mykey")
-        assert "Key not found" in capsys.readouterr().out
+        assert "(nil)" in capsys.readouterr().out
 
     def test_put_with_mock_client(self, capsys):
         from unittest.mock import MagicMock
@@ -321,7 +321,7 @@ class TestOrderedSetFormatting:
         client.get_ordered_set.return_value = None
 
         execute_command(client, "/dev/null", "GET_ORDERED_SET mykey")
-        assert "Key not found" in capsys.readouterr().out
+        assert "(nil)" in capsys.readouterr().out
 
     def test_put_ordered_set(self):
         from unittest.mock import MagicMock
@@ -380,7 +380,7 @@ class TestSingleCausalFormatting:
         client.get_single_causal.return_value = None
 
         execute_command(client, "/dev/null", "GET_SINGLE_CAUSAL mykey")
-        assert "Key not found" in capsys.readouterr().out
+        assert "(nil)" in capsys.readouterr().out
 
     def test_put_single_causal(self):
         from unittest.mock import MagicMock
@@ -437,7 +437,7 @@ class TestPriorityFormatting:
         client.get_priority.return_value = None
 
         execute_command(client, "/dev/null", "GET_PRIORITY mykey")
-        assert "Key not found" in capsys.readouterr().out
+        assert "(nil)" in capsys.readouterr().out
 
     def test_put_priority(self):
         from unittest.mock import MagicMock
@@ -518,7 +518,7 @@ class TestCausalFormatting:
         client.get_causal.return_value = None
 
         execute_command(client, "/dev/null", "GET_CAUSAL mykey")
-        assert "Key not found" in capsys.readouterr().out
+        assert "(nil)" in capsys.readouterr().out
 
     def test_put_causal_failure(self, capsys):
         from unittest.mock import MagicMock
@@ -563,7 +563,7 @@ class TestGetSetNotFound:
         client.get.return_value = {"myset": None}
 
         execute_command(client, None, "GET_SET myset")
-        assert "Key not found" in capsys.readouterr().out
+        assert "(nil)" in capsys.readouterr().out
 
 
 class TestPutSetFailure:

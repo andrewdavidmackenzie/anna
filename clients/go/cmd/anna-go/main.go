@@ -284,9 +284,14 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 		default: // "GET"
 			val, err := client.Get(parts[1])
 			if err != nil {
-				return false, err
+				if strings.Contains(err.Error(), "KEY_DNE") {
+					fmt.Println("(nil)")
+				} else {
+					return false, err
+				}
+			} else {
+				fmt.Println(val)
 			}
-			fmt.Println(val)
 		}
 
 	// Unified PUT: optional type prefix.

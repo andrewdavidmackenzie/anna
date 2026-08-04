@@ -130,7 +130,15 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
     if (v.size() < 2) {
       std::cerr << "Usage: GET <key>" << std::endl;
     } else {
-      std::cout << annalib::get_any(client, v[1]) << std::endl;
+      try {
+        std::cout << annalib::get_any(client, v[1]) << std::endl;
+      } catch (const std::runtime_error &e) {
+        if (string(e.what()).find("KEY_DNE") != string::npos) {
+          std::cout << "(nil)" << std::endl;
+        } else {
+          throw;
+        }
+      }
     }
   } else if (command == "DEL" || command == "DELETE") {
     if (v.size() < 2) {
