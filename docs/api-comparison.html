@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Client Feature List - The &#x27;anna&#x27; book</title>
+        <title>API Comparison vs. Other KV Stores - The &#x27;anna&#x27; book</title>
 
 
         <!-- Custom HTML head -->
@@ -174,196 +174,99 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="client-feature-list"><a class="header" href="#client-feature-list">Client Feature List</a></h1>
-<p>Features implemented per client. Each client wraps the Anna KVS protocol
-(protobuf over ZeroMQ) with a language-native API.</p>
-<h2 id="value-change-subscription"><a class="header" href="#value-change-subscription">Value Change Subscription</a></h2>
-<p>All four clients provide a value change subscription API — a pub-sub
-mechanism for receiving notifications when specific keys are updated
-(including deletes). The subscriber registers interest in keys with the
-KVS server threads via a dedicated registration port (6900). During each
-gossip epoch, when a watched key changes, the KVS pushes the new value
-to the subscriber on port 6850.</p>
-<p>Applications can use this for caching, event-driven updates, replication
-to external systems, or any pattern that needs to react to key changes.</p>
-<h3 id="api-per-language"><a class="header" href="#api-per-language">API (per language)</a></h3>
+                        <h1 id="api-comparison-anna-vs-major-kv-stores"><a class="header" href="#api-comparison-anna-vs-major-kv-stores">API Comparison: Anna vs. Major KV Stores</a></h1>
+<h2 id="what-anna-has-thats-unique"><a class="header" href="#what-anna-has-thats-unique">What Anna has that’s unique</a></h2>
+<p>Anna’s lattice type system (17 types with CRDT-style merge semantics) is genuinely distinctive. Among the stores compared in this document, Anna is the only one with built-in conflict-free replicated data types at the storage layer:</p>
+<ul>
+<li><strong>LWW, Set, OrderedSet, Priority, Causal variants, Counter, OR-Set</strong> – merge-able without coordination</li>
+<li><strong>Gossip-based replication with automatic conflict resolution</strong> – no other store in this list does this natively</li>
+<li><strong>Per-key replication factor control</strong> – DynamoDB has table-level, Cassandra has keyspace-level, but per-key is rare</li>
+</ul>
+<h2 id="feature-comparison-vs-competitors"><a class="header" href="#feature-comparison-vs-competitors">Feature comparison vs. competitors</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Operation</th><th>Description</th></tr>
+<tr><th>Capability</th><th>Anna</th><th>Redis</th><th>etcd</th><th>TiKV</th><th>DynamoDB</th><th>Cassandra</th><th>FoundationDB</th></tr>
 </thead>
 <tbody>
-<tr><td>Create subscriber</td><td>Connect to the KVS and bind the update listener</td></tr>
-<tr><td><code>watch(keys)</code></td><td>Register interest in one or more keys</td></tr>
-<tr><td><code>recv_update(timeout)</code></td><td>Block for next pushed update from gossip</td></tr>
-<tr><td><code>get_cached(key)</code></td><td>Read the latest received value locally</td></tr>
+<tr><td><strong>TTL/Expiration</strong></td><td>EXPIRE (per-key, server-enforced)</td><td>Per-key</td><td>Per-lease</td><td>RawKV only</td><td>Per-item</td><td>Per-value</td><td>No</td></tr>
+<tr><td><strong>Key scan/list</strong></td><td>SCAN (prefix filter, paginated)</td><td>SCAN/KEYS</td><td>Range</td><td>scan()</td><td>Scan/Query</td><td>SELECT</td><td>get_range()</td></tr>
+<tr><td><strong>Watch/subscribe</strong></td><td>SUBSCRIBE (gossip-based; CLI: Rust only, library: all 4)</td><td>Pub/Sub + Streams</td><td>Watch API</td><td>CDC</td><td>Streams</td><td>CDC</td><td>watch(key)</td></tr>
+<tr><td><strong>Atomic CAS</strong></td><td>No</td><td>WATCH+MULTI</td><td>Txn if/then</td><td>CAS (RawKV)</td><td>ConditionExpression</td><td>LWT (IF)</td><td>Native (all txns)</td></tr>
+<tr><td><strong>Batch read/write</strong></td><td>MGET + MSET</td><td>MGET/MSET, pipeline</td><td>Range + Txn</td><td>batch_get/batch_put/scan</td><td>BatchGetItem/BatchWriteItem</td><td>SELECT IN + BATCH</td><td>get_range + Txn</td></tr>
+<tr><td><strong>Counters/Incr</strong></td><td>INCR/DECR (PN-Counter CRDT)</td><td>INCR/DECR</td><td>No</td><td>No</td><td>Atomic counters</td><td>Counter type</td><td>add() atomic</td></tr>
+<tr><td><strong>OR-Set</strong></td><td>SADD/SREM/SMEMBERS (add-wins CRDT)</td><td>SADD/SREM</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td><strong>Secondary indexes</strong></td><td>No</td><td>Sorted sets</td><td>No</td><td>No</td><td>GSI/LSI</td><td>Secondary indexes</td><td>Layer (manual)</td></tr>
+<tr><td><strong>Range queries</strong></td><td>No</td><td>ZRANGEBYSCORE</td><td>Range</td><td>scan(start,end)</td><td>Query (sort key)</td><td>Clustering cols</td><td>get_range()</td></tr>
 </tbody>
 </table>
 </div>
-<p>This feature replaces the original Cloudburst management-node-based cache
-registration with direct client-to-server registration, enabling
-subscribers in standalone mode (<code>scaling_alert_ip: "NULL"</code>).</p>
-<h2 id="latency-feedback-latencyreporter"><a class="header" href="#latency-feedback-latencyreporter">Latency Feedback (LatencyReporter)</a></h2>
-<p>All four clients provide a <code>LatencyReporter</code> API for sending latency
-feedback to the monitoring system, enabling SLO enforcement (selective
-replication of hot keys when latency exceeds 3ms).</p>
+<h2 id="annas-current-api-surface-4-clients-rust-c-python-go"><a class="header" href="#annas-current-api-surface-4-clients-rust-c-python-go">Anna’s current API surface (4 clients: Rust, C++, Python, Go)</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Operation</th><th>Description</th></tr>
+<tr><th>Category</th><th>Operations</th></tr>
 </thead>
 <tbody>
-<tr><td>Create reporter</td><td>Connect to monitoring threads (explicit IPs or metadata discovery)</td></tr>
-<tr><td><code>report(latency, throughput, key_latencies)</code></td><td>Send <code>UserFeedback</code> protobuf to all monitors</td></tr>
-<tr><td><code>set_warmup(bool)</code></td><td>Toggle warmup flag (monitor ignores policy during warmup)</td></tr>
-<tr><td><code>finish()</code></td><td>Signal that this client is done reporting</td></tr>
+<tr><td><strong>Core KV</strong></td><td>GET, PUT, DEL — get, get_bytes, get_value (auto-detect type), put, put_value (type-tagged), delete</td></tr>
+<tr><td><strong>Batch</strong></td><td>MGET, MSET — get_multi, put_multi (groups by worker for efficiency)</td></tr>
+<tr><td><strong>17 lattice types</strong></td><td>LWW, Set, OrderedSet, SingleCausal, MultiCausal, Priority, LwwSet, LwwOrderedSet, UnionScalar, PrioritySet, PriorityOrderedSet, CausalSet, CausalOrderedSet, MultiCausalSet, MultiCausalOrderedSet, Counter, OrSet</td></tr>
+<tr><td><strong>Transactions</strong></td><td>begin/put/get/commit/rollback (client-side buffering, read-committed + repeatable-read isolation)</td></tr>
+<tr><td><strong>Watch/subscribe</strong></td><td>SUBSCRIBE — ValueChangeSubscriber: watch(keys), recv_update(timeout), get_cached(key) — library: all 4 clients; CLI: Rust only</td></tr>
+<tr><td><strong>TTL/Expiration</strong></td><td>EXPIRE — put_with_ttl(key, value, ttl_seconds); per-key, server-enforced</td></tr>
+<tr><td><strong>Counter</strong></td><td>INCR, DECR, GET_COUNTER — increment(key, amount), decrement(key, amount), get_counter(key)</td></tr>
+<tr><td><strong>OR-Set</strong></td><td>SADD, SREM, SMEMBERS — or_set_add(key, element), or_set_remove(key, element), get_or_set(key)</td></tr>
+<tr><td><strong>Cluster introspection</strong></td><td>get_cluster_topology, get_monitoring_ips, get_key_addresses</td></tr>
+<tr><td><strong>Replication control</strong></td><td>put_replication_factor(key, memory_rep, local_rep)</td></tr>
+<tr><td><strong>Stats/monitoring</strong></td><td>get_storage_stats, get_key_access_stats, get_key_size_stats, LatencyReporter</td></tr>
+<tr><td><strong>Key scan/list</strong></td><td>SCAN — scan(prefix), fans out to all threads, cursor-paginated, returns key + type + size + expiry</td></tr>
 </tbody>
 </table>
 </div>
-<h2 id="monitoring-and-autoscaling-helpers"><a class="header" href="#monitoring-and-autoscaling-helpers">Monitoring and Autoscaling Helpers</a></h2>
-<p>All four clients provide helper methods for reading cluster metrics and
-managing replication factors, enabling operator-driven autoscaling.</p>
+<h2 id="remaining-gaps-to-close"><a class="header" href="#remaining-gaps-to-close">Remaining gaps to close</a></h2>
+<p>All items from the original comparison have been implemented or classified as architecture mismatches (below). The remaining items (CAS, range queries, secondary indexes) are fundamental architecture mismatches that cannot be addressed without changing Anna’s core design.</p>
+<h2 id="hardest-to-emulate-architecture-mismatch"><a class="header" href="#hardest-to-emulate-architecture-mismatch">Hardest to emulate (architecture mismatch)</a></h2>
+<ul>
+<li><strong>Conditional writes / CAS</strong>: Anna’s eventual consistency model conflicts with strong CAS. The causal lattice types provide partial ordering but not compare-and-swap semantics.</li>
+<li><strong>Range queries</strong>: Anna uses hash-based key distribution (consistent hashing). Range queries require sequential key layout, which would need a fundamentally different routing strategy.</li>
+<li><strong>Secondary indexes</strong>: Would require a server-side index maintenance layer that doesn’t exist.</li>
+</ul>
+<h2 id="which-stores-api-is-closest-to-anna"><a class="header" href="#which-stores-api-is-closest-to-anna">Which store’s API is closest to Anna?</a></h2>
+<p><strong>Redis</strong> is the closest match in spirit – both are in-memory, both support multiple data types (sets, sorted sets), both have pub/sub. If Anna wanted to emulate one API, a subset of the Redis command protocol (RESP) would be the most natural fit:</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Operation</th><th>Description</th></tr>
+<tr><th>Redis command</th><th>Redis args</th><th>Anna CLI</th><th>Rust API</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>get_storage_stats(ip, ip, tid, tier)</code></td><td>Read <code>ServerThreadStatistics</code> (consumption, occupancy, epoch)</td></tr>
-<tr><td><code>get_key_access_stats(ip, ip, tid, tier)</code></td><td>Read <code>KeyAccessData</code> (per-key access counts)</td></tr>
-<tr><td><code>get_key_size_stats(ip, ip, tid, tier)</code></td><td>Read <code>KeySizeData</code> (per-key sizes)</td></tr>
-<tr><td><code>put_replication_factor(key, mem_rep, local_rep)</code></td><td>Set per-key replication factor</td></tr>
-<tr><td><code>get_cluster_topology()</code></td><td>Read <code>ClusterTopology</code> (thread counts)</td></tr>
-<tr><td><code>get_monitoring_ips()</code></td><td>Read monitoring node IP addresses</td></tr>
+<tr><td><code>GET</code></td><td><code>GET key</code></td><td><code>GET {key}</code></td><td><code>get(key)</code> / <code>get_value(key)</code></td><td>Auto-detects lattice type</td></tr>
+<tr><td><code>SET</code></td><td><code>SET key value</code></td><td><code>PUT {key} {value}</code></td><td><code>put(key, value)</code></td><td>LWW (last-writer-wins)</td></tr>
+<tr><td><code>DEL</code></td><td><code>DEL key [key...]</code></td><td><code>DEL {key}</code></td><td><code>delete(key)</code></td><td>Single key per call</td></tr>
+<tr><td><code>MGET</code></td><td><code>MGET key [key...]</code></td><td><code>MGET {k1} {k2} ...</code></td><td><code>get_multi(keys)</code></td><td>Returns all values</td></tr>
+<tr><td><code>MSET</code></td><td><code>MSET key value [key value...]</code></td><td><code>MSET {k1} {v1} {k2} {v2} ...</code></td><td><code>put_multi(pairs)</code></td><td>Groups by worker for efficiency</td></tr>
+<tr><td><code>SADD</code></td><td><code>SADD key member [member...]</code></td><td><code>SADD {key} {m1} [m2 ...]</code></td><td><code>or_set_add(key, element)</code></td><td>OR-Set with add-wins semantics</td></tr>
+<tr><td><code>SREM</code></td><td><code>SREM key member [member...]</code></td><td><code>SREM {key} {m1} [m2 ...]</code></td><td><code>or_set_remove(key, element)</code></td><td>Tombstone-based removal</td></tr>
+<tr><td><code>SMEMBERS</code></td><td><code>SMEMBERS key</code></td><td><code>SMEMBERS {key}</code></td><td><code>get_or_set(key)</code></td><td>Returns live elements (not tombstoned)</td></tr>
+<tr><td><code>INCR</code>/<code>INCRBY</code></td><td><code>INCR key</code> / <code>INCRBY key increment</code></td><td><code>INCR {key} [amount]</code></td><td><code>increment(key)</code> / <code>increment_by(key, n)</code></td><td>PN-Counter CRDT</td></tr>
+<tr><td><code>DECR</code>/<code>DECRBY</code></td><td><code>DECR key</code> / <code>DECRBY key decrement</code></td><td><code>DECR {key} [amount]</code></td><td><code>decrement(key)</code> / <code>decrement_by(key, n)</code></td><td>PN-Counter CRDT</td></tr>
+<tr><td>(no equivalent)</td><td>—</td><td><code>GET_COUNTER {key}</code></td><td><code>get_counter(key)</code></td><td>Returns net counter value (incr - decr)</td></tr>
+<tr><td><code>SETEX</code></td><td><code>SETEX key seconds value</code></td><td><code>EXPIRE {key} {value} {seconds}</code></td><td><code>put_with_ttl(key, value, ttl)</code></td><td>Server-enforced per-key TTL</td></tr>
+<tr><td><code>SUBSCRIBE</code></td><td><code>SUBSCRIBE channel [channel...]</code></td><td><code>SUBSCRIBE {key1} [key2 ...]</code></td><td><code>ValueChangeSubscriber::watch(keys)</code></td><td>Gossip-based; CLI: Rust only, library: all 4</td></tr>
+<tr><td><code>SCAN</code></td><td><code>SCAN cursor [MATCH pattern] [COUNT count]</code></td><td><code>SCAN [prefix]</code></td><td><code>scan(prefix)</code></td><td>Fans out to all KVS threads</td></tr>
 </tbody>
 </table>
 </div>
-<p>See <a href="autoscaling.html">autoscaling.md</a> for the full operator’s guide.</p>
-<h2 id="rust-client-clientsrust"><a class="header" href="#rust-client-clientsrust">Rust Client (<code>clients/rust</code>)</a></h2>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Feature</th><th>Tested</th></tr>
-</thead>
-<tbody>
-<tr><td>Unified GET (auto-detect type)</td><td>Yes</td></tr>
-<tr><td>Unified PUT (type prefix)</td><td>Yes</td></tr>
-<tr><td>DELETE</td><td>Yes</td></tr>
-<tr><td>Value enum (get_value/put_value)</td><td>Yes</td></tr>
-<tr><td>GET_BYTES (raw LWW value)</td><td>Yes</td></tr>
-<tr><td>Multi-key GET (get_multi)</td><td>Yes</td></tr>
-<tr><td>Address cache invalidation</td><td>Yes</td></tr>
-<tr><td>WRONG_THREAD retry</td><td>Yes</td></tr>
-<tr><td>Timeout retry</td><td>Yes</td></tr>
-<tr><td>Dead-address eviction</td><td>Yes</td></tr>
-<tr><td>Configurable timeout</td><td>Yes</td></tr>
-<tr><td>Port base_offset support</td><td>Yes</td></tr>
-<tr><td>Process management (start/stop/status)</td><td>Yes</td></tr>
-<tr><td>Value change subscription (watch/recv/get_cached)</td><td>Yes</td></tr>
-<tr><td>Latency feedback (LatencyReporter)</td><td>Yes</td></tr>
-<tr><td>Monitoring stats helpers (get_storage_stats etc.)</td><td>Yes</td></tr>
-<tr><td>Replication factor management (put_replication_factor)</td><td>Yes</td></tr>
-<tr><td>Cluster topology discovery (get_cluster_topology)</td><td>Yes</td></tr>
-<tr><td>Monitoring IP discovery (get_monitoring_ips)</td><td>Yes</td></tr>
-<tr><td>Per-key TTL (EXPIRE / put_with_ttl)</td><td>Yes</td></tr>
-<tr><td>PN-Counter (INCR/DECR/GET_COUNTER)</td><td>Yes</td></tr>
-<tr><td>Batch PUT (MSET / put_multi)</td><td>Yes</td></tr>
-<tr><td>Batch GET (MGET / get_multi)</td><td>Yes</td></tr>
-<tr><td>OR-Set (SADD/SREM/SMEMBERS)</td><td>Yes</td></tr>
-<tr><td>Key scanning (SCAN)</td><td>Yes</td></tr>
-<tr><td>Value change subscription (SUBSCRIBE)</td><td>Yes</td></tr>
-</tbody>
-</table>
-</div>
-<h2 id="c-client-clientscpp"><a class="header" href="#c-client-clientscpp">C++ Client (<code>clients/cpp</code>)</a></h2>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Feature</th><th>Tested</th></tr>
-</thead>
-<tbody>
-<tr><td>Unified GET (get_any, auto-detect type)</td><td>Yes</td></tr>
-<tr><td>Unified PUT (type prefix)</td><td>Yes</td></tr>
-<tr><td>DELETE</td><td>Yes</td></tr>
-<tr><td>GET_BYTES (raw LWW value)</td><td>Yes</td></tr>
-<tr><td>Multi-key GET (get_multi)</td><td>Yes</td></tr>
-<tr><td>Address cache invalidation</td><td>Yes</td></tr>
-<tr><td>WRONG_THREAD auto-retry</td><td>Yes</td></tr>
-<tr><td>Configurable timeout</td><td>Yes</td></tr>
-<tr><td>Process management (start/stop/status)</td><td>Yes</td></tr>
-<tr><td>Value change subscription (watch/recv/get_cached)</td><td>Yes</td></tr>
-<tr><td>Latency feedback (LatencyReporter)</td><td>Yes</td></tr>
-<tr><td>Monitoring stats helpers (get_storage_stats etc.)</td><td>Yes</td></tr>
-<tr><td>Replication factor management (put_replication_factor)</td><td>Yes</td></tr>
-<tr><td>Cluster topology discovery (get_cluster_topology)</td><td>Yes</td></tr>
-<tr><td>Monitoring IP discovery (get_monitoring_ips)</td><td>Yes</td></tr>
-</tbody>
-</table>
-</div>
-<h2 id="go-client-clientsgo"><a class="header" href="#go-client-clientsgo">Go Client (<code>clients/go</code>)</a></h2>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Feature</th><th>Tested</th></tr>
-</thead>
-<tbody>
-<tr><td>Unified GET (legacy dispatch by type)</td><td>Yes</td></tr>
-<tr><td>Unified PUT (type prefix)</td><td>Yes</td></tr>
-<tr><td>DELETE</td><td>Yes</td></tr>
-<tr><td>GET_BYTES (raw LWW value)</td><td>Yes</td></tr>
-<tr><td>Multi-key GET (GetMulti)</td><td>Yes</td></tr>
-<tr><td>Address cache invalidation</td><td>Yes</td></tr>
-<tr><td>WRONG_THREAD auto-retry</td><td>Yes</td></tr>
-<tr><td>Dead-address eviction</td><td>Yes</td></tr>
-<tr><td>Configurable timeout</td><td>Yes</td></tr>
-<tr><td>Timeout with retry</td><td>Yes</td></tr>
-<tr><td>Process management (start/stop/status)</td><td>Yes</td></tr>
-<tr><td>Value change subscription (watch/recv/get_cached)</td><td>Yes</td></tr>
-<tr><td>Latency feedback (LatencyReporter)</td><td>Yes</td></tr>
-<tr><td>Monitoring stats helpers (get_storage_stats etc.)</td><td>Yes</td></tr>
-<tr><td>Replication factor management (put_replication_factor)</td><td>Yes</td></tr>
-<tr><td>Cluster topology discovery (GetClusterTopology)</td><td>Yes</td></tr>
-<tr><td>Monitoring IP discovery (GetMonitoringIPs)</td><td>Yes</td></tr>
-</tbody>
-</table>
-</div>
-<h2 id="python-client-clientspython"><a class="header" href="#python-client-clientspython">Python Client (<code>clients/python</code>)</a></h2>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Feature</th><th>Tested</th></tr>
-</thead>
-<tbody>
-<tr><td>Unified GET (LWW/Set auto-detect, legacy dispatch for others)</td><td>Yes</td></tr>
-<tr><td>Unified PUT (type prefix)</td><td>Yes</td></tr>
-<tr><td>DELETE</td><td>Yes</td></tr>
-<tr><td>GET_BYTES (raw LWW value)</td><td>Yes</td></tr>
-<tr><td>Multi-key GET (get_multi)</td><td>Yes</td></tr>
-<tr><td>Address cache invalidation</td><td>Yes</td></tr>
-<tr><td>WRONG_THREAD auto-retry</td><td>Yes</td></tr>
-<tr><td>Dead-address eviction</td><td>Yes</td></tr>
-<tr><td>Configurable timeout</td><td>Yes</td></tr>
-<tr><td>Port base_offset support</td><td>Yes</td></tr>
-<tr><td>Process management (start/stop)</td><td>Yes</td></tr>
-<tr><td>Value change subscription (watch/recv/get_cached)</td><td>Yes</td></tr>
-<tr><td>Latency feedback (LatencyReporter)</td><td>Yes</td></tr>
-<tr><td>Monitoring stats helpers (get_storage_stats etc.)</td><td>Yes</td></tr>
-<tr><td>Replication factor management (put_replication_factor)</td><td>Yes</td></tr>
-<tr><td>Cluster topology discovery (get_cluster_topology)</td><td>Yes</td></tr>
-<tr><td>Monitoring IP discovery (get_monitoring_ips)</td><td>Yes</td></tr>
-</tbody>
-</table>
-</div>
+<p><strong>Differences from Redis</strong>: Anna’s <code>SADD</code>/<code>SREM</code> use OR-Set (tombstone-based CRDT) rather than Redis’s simple in-memory set. Anna’s <code>INCR</code>/<code>DECR</code> use a PN-Counter CRDT that converges across replicas. Anna’s <code>SUBSCRIBE</code> is gossip-based (eventual delivery) rather than Redis’s synchronous pub/sub. Anna’s <code>SCAN</code> fans out to all KVS threads since keys are hash-distributed, while Redis scans a single hash table.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../docs/feature-list.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../docs/client-feature-list.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../docs/api-comparison.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../docs/building-anna.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -373,11 +276,11 @@ managing replication factors, enabling operator-driven autoscaling.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../docs/feature-list.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../docs/client-feature-list.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../docs/api-comparison.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../docs/building-anna.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
