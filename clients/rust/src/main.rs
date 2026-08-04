@@ -556,6 +556,7 @@ fn cli_usage() -> String {
     \n\tincrement {key} [amount] \t- increment a counter (default +1)\
     \n\tdecrement {key} [amount] \t- decrement a counter (default -1)\
     \n\tget_counter {key} \t\t- get counter value\
+    \n\tscan [prefix] \t\t\t- list keys matching prefix (all keys if omitted)\
     \n\tdelete {key} \t\t\t- delete a key from the KVS\
     \n\tbench [keys] [value_size] [duration] [workload] - run a benchmark\
     \n\tstart [component] \t\t- start anna processes (component: kvs, monitor, route; omit for all)\

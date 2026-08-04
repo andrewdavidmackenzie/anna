@@ -944,6 +944,32 @@ TEST_F(ServerHandlerTest, ScanSkipsMetadata) {
   EXPECT_EQ(response.scan_keys(0).key(), "user_key");
 }
 
+TEST_F(ServerHandlerTest, ScanCountClamped) {
+  // Insert more keys than kDefaultScanCount to verify count=0 default
+  // and that very large counts are clamped.
+  for (int i = 0; i < 3; i++) {
+    string key = "clamp" + std::to_string(i);
+    serializers[kvs::LatticeType::LWW]->put(key, serialize(i, string("v")));
+    stored_key_map[key].set_type(kvs::LatticeType::LWW);
+    stored_key_map[key].set_size(1);
+  }
+
+  // count=0 should use default (100), returning all 3 keys.
+  string scan_req = scan_key_request("", 0, 0, ip);
+  scan_handler(scan_req, log_, stored_key_map, pushers);
+
+  kvs::KeyResponse resp;
+  resp.ParseFromString(mock_zmq_util.sent_messages.back());
+  EXPECT_EQ(resp.scan_keys_size(), 3);
+
+  // Very large count should be clamped but still work.
+  scan_req = scan_key_request("", 0, 999999999, ip);
+  scan_handler(scan_req, log_, stored_key_map, pushers);
+
+  resp.ParseFromString(mock_zmq_util.sent_messages.back());
+  EXPECT_EQ(resp.scan_keys_size(), 3);  // Only 3 keys exist.
+}
+
 // TODO: Test key address cache invalidation
 // TODO: Test replication factor request and making the request pending
 // TODO: Test metadata operations -- does this matter?

@@ -15,6 +15,7 @@
 #include "kvs/kvs_handlers.hpp"
 
 static const unsigned kDefaultScanCount = 100;
+static const unsigned kMaxScanCount = 10000;
 
 void scan_handler(string &serialized, logger log,
                   map<Key, KeyProperty> &stored_key_map,
@@ -30,6 +31,7 @@ void scan_handler(string &serialized, logger log,
   uint64_t cursor = request.scan_cursor();
   unsigned count = request.scan_count();
   if (count == 0) count = kDefaultScanCount;
+  if (count > kMaxScanCount) count = kMaxScanCount;
 
   response.set_scan_total_keys(stored_key_map.size());
 

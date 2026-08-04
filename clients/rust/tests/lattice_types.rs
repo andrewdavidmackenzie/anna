@@ -574,6 +574,7 @@ async fn ttl_stress_many_keys() {
 
 /// SCAN: list keys matching a prefix across all KVS threads.
 #[tokio::test]
+#[cfg(unix)]
 async fn scan_keys() {
     let config_path = generate_config(221);
     let _guard = ServerGuard::start(&config_path, 221);

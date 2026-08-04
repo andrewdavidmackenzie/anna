@@ -2161,6 +2161,7 @@ impl KVSClient {
         let base = self.base_offset();
         let mut all_entries = Vec::new();
         let mut seen_keys = HashSet::new();
+        let mut failed_threads = 0usize;
 
         for tid in 0..thread_count {
             let port = tid + crate::threads::K_KEY_REQUEST_PORT + base;
@@ -2205,19 +2206,26 @@ impl KVSClient {
                         }
                         Err(e) => {
                             warn!("SCAN: failed to decode response from {}: {}", addr, e);
+                            failed_threads += 1;
                             break;
                         }
                     },
                     Ok(Err(e)) => {
                         warn!("SCAN: request to {} failed: {}", addr, e);
+                        failed_threads += 1;
                         break;
                     }
                     Err(_) => {
                         warn!("SCAN: request to {} timed out", addr);
+                        failed_threads += 1;
                         break;
                     }
                 }
             }
+        }
+
+        if failed_threads == thread_count {
+            return Err(Error::Kvs("SCAN: all threads failed".into()));
         }
 
         Ok(all_entries)
