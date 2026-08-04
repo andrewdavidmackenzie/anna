@@ -468,13 +468,57 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 		}
 		runBench(client, numKeys, valSize, dur, 2, wlArg)
 
-	case "DELETE":
+	case "DEL", "DELETE":
 		if len(parts) != 2 {
-			return false, fmt.Errorf("usage: DELETE <key>")
+			return false, fmt.Errorf("usage: DEL <key>")
 		}
 		if err := client.Delete(parts[1]); err != nil {
 			return false, err
 		}
+
+	case "MGET":
+		if len(parts) < 2 {
+			return false, fmt.Errorf("usage: MGET <key1> [key2 ...]")
+		}
+		keys := parts[1:]
+		results, err := client.GetMulti(keys)
+		if err != nil {
+			return false, err
+		}
+		for _, key := range keys {
+			if val, ok := results[key]; ok {
+				fmt.Printf("%s: %s\n", key, val)
+			} else {
+				fmt.Printf("%s: (not found)\n", key)
+			}
+		}
+
+	case "SADD":
+		// TODO: requires or_set_add in Go client library
+		if len(parts) < 3 {
+			return false, fmt.Errorf("usage: SADD <key> <member> [member ...]")
+		}
+		fmt.Fprintln(os.Stderr, "Error: SADD is not yet implemented (requires OR-Set add support in Go client library)")
+
+	case "SREM":
+		// TODO: requires or_set_remove in Go client library
+		if len(parts) < 3 {
+			return false, fmt.Errorf("usage: SREM <key> <member> [member ...]")
+		}
+		fmt.Fprintln(os.Stderr, "Error: SREM is not yet implemented (requires OR-Set remove support in Go client library)")
+
+	case "SMEMBERS":
+		// TODO: requires or_set_get in Go client library
+		if len(parts) < 2 {
+			return false, fmt.Errorf("usage: SMEMBERS <key>")
+		}
+		fmt.Fprintln(os.Stderr, "Error: SMEMBERS is not yet implemented (requires OR-Set get support in Go client library)")
+
+	case "SUBSCRIBE":
+		if len(parts) < 2 {
+			return false, fmt.Errorf("usage: SUBSCRIBE <key1> [key2 ...]")
+		}
+		fmt.Fprintln(os.Stderr, "Error: SUBSCRIBE requires server IP and cache IP configuration (use ValueChangeSubscriber directly from the Go client library)")
 
 	case "START":
 		if configFilePath == "" {
@@ -512,6 +556,7 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 func cliUsage() string {
 	return `Valid commands are:
 	get {key}                                    - get the value of any key (auto-detects type)
+	mget {key1} {key2} ...                       - get multiple keys at once
 	put {key} {value}                            - store a value (LWW, default)
 	put set {key} {vals...}                      - store a set (union merge)
 	put ordered_set {key} {vals...}              - store an ordered set
@@ -527,7 +572,11 @@ func cliUsage() string {
 	put causal_ordered_set {key} {vals...}       - store an ordered set with single-key causal
 	put multi_causal_set {key} {vals...}         - store a set with multi-key causal consistency
 	put multi_causal_ordered_set {key} {vals...} - store an ordered set with multi-key causal
-	delete {key}                                 - delete a key from the KVS
+	del {key}                                    - delete a key from the KVS (alias: delete)
+	sadd {key} {member} [member...]              - add members to an OR-Set (not yet implemented)
+	srem {key} {member} [member...]              - remove members from an OR-Set (not yet implemented)
+	smembers {key}                               - list members of an OR-Set (not yet implemented)
+	subscribe {key1} [key2...]                   - subscribe to value changes on keys
 	bench [keys] [value_size] [duration] [workload] - run a benchmark
 	start                                        - start anna processes
 	stop                                         - stop running anna processes

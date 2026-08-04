@@ -14,6 +14,7 @@ _TYPE_NAMES = {"lww", "set", "ordered_set", "lww_set", "lww_ordered_set",
 def cli_usage():
     return ("Valid commands are:\n"
             "  GET {key}                       - get the value of any key (auto-detects type)\n"
+            "  MGET {key1} {key2} ...          - get multiple keys at once\n"
             "  PUT {key} {value}               - store a value (LWW, default)\n"
             "  PUT set {key} {vals...}         - store a set (union merge)\n"
             "  PUT ordered_set {key} {vals...} - store an ordered set\n"
@@ -29,7 +30,11 @@ def cli_usage():
             "  PUT priority {key} {pri} {val}  - store with priority (lowest wins)\n"
             "  PUT causal {key} {value}        - store with multi-key causal consistency\n"
             "  PUT single_causal {key} {value} - store with single-key causal consistency\n"
-            "  DELETE {key}                    - delete a key\n"
+            "  DEL {key}                       - delete a key (alias: DELETE)\n"
+            "  SADD {key} {member} [member...] - add members to an OR-Set (not yet implemented)\n"
+            "  SREM {key} {member} [member...] - remove members from an OR-Set (not yet implemented)\n"
+            "  SMEMBERS {key}                  - list members of an OR-Set (not yet implemented)\n"
+            "  SUBSCRIBE {key1} [key2...]      - subscribe to value changes on keys\n"
             "  BENCH [keys] [value_size] [duration] [workload] - run a benchmark\n"
             "  START, STOP, STATUS, HELP, EXIT")
 
@@ -356,13 +361,61 @@ def execute_command(client, config_path, line):
             result = client.put(parts[1], val)
             if not result.get(parts[1], False):
                 print("Failure!")
-    elif cmd == "DELETE":
+    elif cmd in ("DEL", "DELETE"):
         if len(parts) < 2:
-            print("Usage: DELETE <key>")
+            print("Usage: DEL <key>")
             return True
         result = client.delete(parts[1])
         if not result.get(parts[1], False):
             print("Failure!")
+    elif cmd == "MGET":
+        if len(parts) < 2:
+            print("Usage: MGET <key1> [key2 ...]")
+            return True
+        keys = parts[1:]
+        results = client.get_all(keys)
+        for key in keys:
+            val = results.get(key)
+            if val is not None:
+                revealed = val.reveal()
+                if isinstance(revealed, bytes):
+                    print(f"{key}: {revealed.decode('utf-8', errors='replace')}")
+                elif isinstance(revealed, (set, frozenset)):
+                    items = sorted(v.decode("utf-8", errors="replace") if isinstance(v, bytes) else str(v)
+                                   for v in revealed)
+                    print(f"{key}: {{ {' '.join(items)} }}")
+                elif isinstance(revealed, list):
+                    items = [v.decode("utf-8", errors="replace") if isinstance(v, bytes) else str(v)
+                             for v in revealed]
+                    print(f"{key}: [ {' '.join(items)} ]")
+                else:
+                    print(f"{key}: {revealed}")
+            else:
+                print(f"{key}: (not found)")
+    elif cmd == "SADD":
+        # TODO: requires or_set_add in Python client library
+        if len(parts) < 3:
+            print("Usage: SADD <key> <member> [member ...]")
+        else:
+            print("Error: SADD is not yet implemented (requires OR-Set add support in Python client library)")
+    elif cmd == "SREM":
+        # TODO: requires or_set_remove in Python client library
+        if len(parts) < 3:
+            print("Usage: SREM <key> <member> [member ...]")
+        else:
+            print("Error: SREM is not yet implemented (requires OR-Set remove support in Python client library)")
+    elif cmd == "SMEMBERS":
+        # TODO: requires or_set_get in Python client library
+        if len(parts) < 2:
+            print("Usage: SMEMBERS <key>")
+        else:
+            print("Error: SMEMBERS is not yet implemented (requires OR-Set get support in Python client library)")
+    elif cmd == "SUBSCRIBE":
+        if len(parts) < 2:
+            print("Usage: SUBSCRIBE <key1> [key2 ...]")
+        else:
+            print("Error: SUBSCRIBE requires server IP and cache IP configuration "
+                  "(use ValueChangeSubscriber directly from the Python client library)")
     elif cmd in ("PUT_SET", "PUT_ORDERED_SET", "PUT_CAUSAL",
                  "PUT_SINGLE_CAUSAL", "PUT_PRIORITY"):
         # Legacy PUT_* aliases: remap to the unified PUT handler.

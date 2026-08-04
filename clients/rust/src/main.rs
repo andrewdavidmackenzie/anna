@@ -171,8 +171,10 @@ async fn run() -> Result<String> {
                 .get_one::<String>("command_file")
                 .map(|s| s.as_str())
             {
-                None => cli_loop_interactive(client, server_config_path).await?,
-                Some(filename) => cli_loop_file(client, filename, server_config_path).await?,
+                None => cli_loop_interactive(client, config, server_config_path).await?,
+                Some(filename) => {
+                    cli_loop_file(client, filename, config, server_config_path).await?
+                }
             }
             .into())
         }
@@ -368,6 +370,7 @@ fn parse_put_args(split: &[&str]) -> Result<(String, annalib::value::Value)> {
 async fn execute_command(
     client: &mut KVSClient,
     line: &str,
+    client_config: &ClientConfig,
     config_file_path: &Path,
 ) -> Result<bool> {
     let split = line.trim().split(' ').collect::<Vec<&str>>();
@@ -381,7 +384,80 @@ async fn execute_command(
             let (key, value) = parse_put_args(&split)?;
             client.put_value(&key, &value).await?;
         }
-        "DELETE" if split.len() == 2 => client.delete(split[1]).await?,
+        "DEL" | "DELETE" if split.len() == 2 => client.delete(split[1]).await?,
+        "SADD" if split.len() >= 3 => {
+            for element in &split[2..] {
+                client.or_set_add(split[1], element).await?;
+            }
+        }
+        "SREM" if split.len() >= 3 => {
+            for element in &split[2..] {
+                client.or_set_remove(split[1], element).await?;
+            }
+        }
+        "SMEMBERS" if split.len() == 2 => {
+            let vals = client.get_or_set(split[1]).await?;
+            println!("{}", vals.join(", "));
+        }
+        "MGET" if split.len() >= 2 => {
+            let keys: Vec<&str> = split[1..].to_vec();
+            let results = client.get_multi(&keys).await?;
+            for (key, val) in results {
+                println!("{}: {}", key, val);
+            }
+        }
+        "MSET" if split.len() >= 3 && (split.len() - 1) % 2 == 0 => {
+            let pairs: Vec<(&str, &str)> = split[1..].chunks(2).map(|c| (c[0], c[1])).collect();
+            client.put_multi(&pairs).await?;
+        }
+        "INCR" if split.len() == 2 => {
+            client.increment(split[1]).await?;
+        }
+        "INCR" if split.len() == 3 => {
+            let amount: u64 = split[2]
+                .parse()
+                .map_err(|_| annalib::Error::Kvs("amount must be a positive integer".into()))?;
+            client.increment_by(split[1], amount).await?;
+        }
+        "DECR" if split.len() == 2 => {
+            client.decrement(split[1]).await?;
+        }
+        "DECR" if split.len() == 3 => {
+            let amount: u64 = split[2]
+                .parse()
+                .map_err(|_| annalib::Error::Kvs("amount must be a positive integer".into()))?;
+            client.decrement_by(split[1], amount).await?;
+        }
+        "GET_COUNTER" if split.len() == 2 => {
+            let val = client.get_counter(split[1]).await?;
+            println!("{}", val);
+        }
+        "SUBSCRIBE" if split.len() >= 2 => {
+            use annalib::value_change_subscriber::ValueChangeSubscriber;
+            let keys: Vec<String> = split[1..].iter().map(|s| s.to_string()).collect();
+            let mut sub = ValueChangeSubscriber::new(client_config, None).await?;
+            sub.watch(&keys).await?;
+            println!("Subscribed to: {}", keys.join(", "));
+            println!("Waiting for updates (Ctrl+C to stop)...");
+            loop {
+                match sub.recv_update(std::time::Duration::from_secs(1)).await {
+                    Ok(Some((key, payload))) => {
+                        let display = match ValueChangeSubscriber::decode_lww_value(&payload) {
+                            Ok(bytes) => String::from_utf8(bytes)
+                                .unwrap_or_else(|_| format!("({} raw bytes)", payload.len())),
+                            Err(_) => format!("({} raw bytes)", payload.len()),
+                        };
+                        println!("{}: {}", key, display);
+                    }
+                    Ok(None) => continue,
+                    Err(e) => {
+                        error!("SUBSCRIBE error: {}", e);
+                        break;
+                    }
+                }
+            }
+        }
+        // Legacy aliases for renamed commands.
         "SET_ADD" if split.len() == 3 => {
             client.or_set_add(split[1], split[2]).await?;
         }
@@ -414,10 +490,6 @@ async fn execute_command(
                 .map_err(|_| annalib::Error::Kvs("amount must be a positive integer".into()))?;
             client.decrement_by(split[1], amount).await?;
         }
-        "GET_COUNTER" if split.len() == 2 => {
-            let val = client.get_counter(split[1]).await?;
-            println!("{}", val);
-        }
         "SCAN" => {
             let prefix = if split.len() >= 2 { split[1] } else { "" };
             let entries = client.scan(prefix).await?;
@@ -440,7 +512,7 @@ async fn execute_command(
                 println!("({} keys)", entries.len());
             }
         }
-        "PUT_TTL" if split.len() == 4 => {
+        "EXPIRE" | "PUT_TTL" if split.len() == 4 => {
             let key = split[1];
             let value = split[2];
             let ttl: u32 = split[3]
@@ -531,9 +603,22 @@ async fn execute_command(
 }
 
 fn cli_usage() -> String {
-    "Valid commands are:\
+    "Redis-style commands:\
     \n\tget {key} \t\t\t- get the value of any key (auto-detects type)\
     \n\tput {key} {value} \t\t- store a value (LWW, default)\
+    \n\tdel {key} \t\t\t- delete a key from the KVS\
+    \n\tmget {key1} {key2} ... \t\t- get multiple keys at once\
+    \n\tmset {k1} {v1} {k2} {v2} ... \t- batch PUT multiple keys\
+    \n\tsadd {key} {m1} [m2 ...] \t- add member(s) to an OR-Set\
+    \n\tsrem {key} {m1} [m2 ...] \t- remove member(s) from an OR-Set\
+    \n\tsmembers {key} \t\t\t- get all members of an OR-Set\
+    \n\tincr {key} [amount] \t\t- increment a counter (default +1)\
+    \n\tdecr {key} [amount] \t\t- decrement a counter (default -1)\
+    \n\tget_counter {key} \t\t- get counter value\
+    \n\texpire {key} {value} {seconds} \t- store with TTL (auto-expires)\
+    \n\tscan [prefix] \t\t\t- list keys matching prefix (all keys if omitted)\
+    \n\tsubscribe {key1} [key2 ...] \t- watch keys for changes (Ctrl+C to stop)\
+    \n\nAnna-specific PUT variants:\
     \n\tput set {key} {vals...} \t\t- store a set (union merge)\
     \n\tput ordered_set {key} {vals...} \t- store an ordered set\
     \n\tput lww_set {key} {vals...} \t- store a set (LWW, replaces on write)\
@@ -548,16 +633,7 @@ fn cli_usage() -> String {
     \n\tput priority {key} {pri} {val} \t- store with priority (lowest wins)\
     \n\tput causal {key} {value} \t- store with multi-key causal consistency\
     \n\tput single_causal {key} {value} \t- store with single-key causal consistency\
-    \n\tset_add {key} {element} \t\t- add element to OR-Set\
-    \n\tset_remove {key} {element} \t\t- remove element from OR-Set\
-    \n\tget_or_set {key} \t\t\t- get OR-Set elements\
-    \n\tput_multi {k1} {v1} {k2} {v2} ... \t- batch PUT multiple keys\
-    \n\tput_ttl {key} {value} {seconds} \t- store with TTL (auto-expires)\
-    \n\tincrement {key} [amount] \t- increment a counter (default +1)\
-    \n\tdecrement {key} [amount] \t- decrement a counter (default -1)\
-    \n\tget_counter {key} \t\t- get counter value\
-    \n\tscan [prefix] \t\t\t- list keys matching prefix (all keys if omitted)\
-    \n\tdelete {key} \t\t\t- delete a key from the KVS\
+    \n\nOther:\
     \n\tbench [keys] [value_size] [duration] [workload] - run a benchmark\
     \n\tstart [component] \t\t- start anna processes (component: kvs, monitor, route; omit for all)\
     \n\tstop [component] \t\t- stop running anna processes\
@@ -569,6 +645,7 @@ fn cli_usage() -> String {
 
 async fn cli_loop_interactive(
     mut client: KVSClient,
+    client_config: ClientConfig,
     config_file_path: PathBuf,
 ) -> Result<&'static str> {
     let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(1);
@@ -594,7 +671,7 @@ async fn cli_loop_interactive(
     });
 
     while let Some(line) = rx.recv().await {
-        match execute_command(&mut client, &line, &config_file_path).await {
+        match execute_command(&mut client, &line, &client_config, &config_file_path).await {
             Ok(true) => break,
             Err(e) => error!("{}", e),
             _ => {}
@@ -607,6 +684,7 @@ async fn cli_loop_interactive(
 async fn cli_loop_file(
     mut client: KVSClient,
     filename: &str,
+    client_config: ClientConfig,
     config_file_path: PathBuf,
 ) -> Result<&'static str> {
     let file = File::open(filename).map_err(|e| {
@@ -615,7 +693,7 @@ async fn cli_loop_file(
     let reader = BufReader::new(file);
 
     for line in reader.lines().map_while(|l| l.ok()) {
-        match execute_command(&mut client, &line, &config_file_path).await {
+        match execute_command(&mut client, &line, &client_config, &config_file_path).await {
             Ok(true) => break,
             Err(e) => error!("Error while executing command line: '{}'\n{}", line, e),
             _ => {}

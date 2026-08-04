@@ -9,7 +9,26 @@ use rustyline::{Context, Helper};
 
 /// Commands available in the anna interactive CLI.
 pub const ANNA_COMMANDS: &[&str] = &[
-    "GET", "PUT", "DELETE", "SCAN", "BENCH", "START", "STOP", "STATUS", "HELP", "EXIT",
+    "GET",
+    "PUT",
+    "DEL",
+    "MGET",
+    "MSET",
+    "SADD",
+    "SREM",
+    "SMEMBERS",
+    "INCR",
+    "DECR",
+    "GET_COUNTER",
+    "EXPIRE",
+    "SCAN",
+    "SUBSCRIBE",
+    "BENCH",
+    "START",
+    "STOP",
+    "STATUS",
+    "HELP",
+    "EXIT",
 ];
 
 /// Commands that accept an optional component name argument.

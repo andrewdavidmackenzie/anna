@@ -80,11 +80,13 @@ See [autoscaling.md](autoscaling.md) for the full operator's guide.
 | Replication factor management (put_replication_factor) | Yes |
 | Cluster topology discovery (get_cluster_topology) | Yes |
 | Monitoring IP discovery (get_monitoring_ips) | Yes |
-| Per-key TTL (put_with_ttl) | Yes    |
-| PN-Counter (increment/decrement/get_counter) | Yes |
-| Batch PUT (put_multi)    | Yes    |
-| OR-Set (set_add/set_remove/get_or_set) | Yes |
-| Key scanning (scan)      | Yes    |
+| Per-key TTL (EXPIRE / put_with_ttl) | Yes    |
+| PN-Counter (INCR/DECR/GET_COUNTER) | Yes |
+| Batch PUT (MSET / put_multi)    | Yes    |
+| Batch GET (MGET / get_multi)    | Yes    |
+| OR-Set (SADD/SREM/SMEMBERS) | Yes |
+| Key scanning (SCAN)      | Yes    |
+| Value change subscription (SUBSCRIBE) | Yes |
 
 ## C++ Client (`clients/cpp`)
 
