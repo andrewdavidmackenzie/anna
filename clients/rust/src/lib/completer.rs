@@ -9,7 +9,26 @@ use rustyline::{Context, Helper};
 
 /// Commands available in the anna interactive CLI.
 pub const ANNA_COMMANDS: &[&str] = &[
-    "GET", "PUT", "DELETE", "SCAN", "BENCH", "START", "STOP", "STATUS", "HELP", "EXIT",
+    "GET",
+    "PUT",
+    "DEL",
+    "MGET",
+    "MSET",
+    "SADD",
+    "SREM",
+    "SMEMBERS",
+    "INCR",
+    "DECR",
+    "GET_COUNTER",
+    "EXPIRE",
+    "SCAN",
+    "SUBSCRIBE",
+    "BENCH",
+    "START",
+    "STOP",
+    "STATUS",
+    "HELP",
+    "EXIT",
 ];
 
 /// Commands that accept an optional component name argument.
@@ -200,5 +219,27 @@ mod tests {
     fn put_no_type_completion_after_second_space() {
         let results = complete("PUT set ");
         assert!(results.is_empty());
+    }
+
+    #[test]
+    fn new_commands_present_in_anna_commands() {
+        let expected = [
+            "DEL",
+            "MGET",
+            "MSET",
+            "SADD",
+            "SREM",
+            "SMEMBERS",
+            "INCR",
+            "DECR",
+            "EXPIRE",
+            "SUBSCRIBE",
+        ];
+        for cmd in &expected {
+            assert!(
+                ANNA_COMMANDS.contains(cmd),
+                "{cmd} should be in ANNA_COMMANDS"
+            );
+        }
     }
 }

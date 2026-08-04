@@ -28,21 +28,23 @@ mocks.
 | PUT priority {key} {p} {v} | Store with priority (lowest wins)                            | Yes           |
 | PUT causal {key} {value}   | Store with multi-key causal consistency                      | Yes           |
 | PUT single_causal {key} {value} | Store with single-key causal consistency               | Yes           |
-| DELETE {key}               | Remove a key (PUT with empty value and dominating timestamp) | Yes           |
-| PUT_TTL {key} {val} {secs} | Store with TTL (auto-expires after N seconds)                | Yes           |
-| INCREMENT {key} [amount]   | Increment a PN-Counter (default +1)                          | Yes           |
-| DECREMENT {key} [amount]   | Decrement a PN-Counter (default -1)                          | Yes           |
+| DEL {key}                  | Remove a key (PUT with empty value and dominating timestamp) | Yes           |
+| EXPIRE {key} {val} {secs}  | Store with TTL (auto-expires after N seconds)                | Yes           |
+| MGET {key1} {key2} ...     | Retrieve multiple keys at once                               | Yes           |
+| MSET {k1} {v1} {k2} {v2}  | Batch PUT multiple LWW key-value pairs                       | Yes           |
+| SADD {key} {m1} [m2 ...]   | Add member(s) to an OR-Set                                   | Yes           |
+| SREM {key} {m1} [m2 ...]   | Remove member(s) from an OR-Set                              | Yes           |
+| SMEMBERS {key}             | Get all members of an OR-Set                                 | Yes           |
+| INCR {key} [amount]        | Increment a PN-Counter (default +1)                          | Yes           |
+| DECR {key} [amount]        | Decrement a PN-Counter (default -1)                          | Yes           |
 | GET_COUNTER {key}          | Get counter value (sum of increments - decrements)           | Yes           |
-| SET_ADD {key} {element}    | Add element to OR-Set                                        | Yes           |
-| SET_REMOVE {key} {element} | Remove element from OR-Set                                   | Yes           |
-| GET_OR_SET {key}           | Get live elements of OR-Set                                  | Yes           |
-| Address cache invalidation | Server signals client to refresh address cache               | Yes           |
-| Multi-key GET              | Retrieve multiple keys in one request                        | Yes           |
-| Multi-key PUT (put_multi)  | Batch PUT multiple keys in one request per worker            | Yes           |
 | SCAN [prefix]              | List keys matching prefix (fans out to all threads)          | Yes           |
+| SUBSCRIBE {key1} [key2 ...]| Watch keys for value changes (Ctrl+C to stop)                | Yes           |
+| Address cache invalidation | Server signals client to refresh address cache               | Yes           |
 
-Legacy commands (`GET_SET`, `PUT_SET`, `GET_CAUSAL`, `PUT_CAUSAL`, etc.) are
-still supported as aliases for backward compatibility.
+Legacy commands (`DELETE`, `PUT_TTL`, `INCREMENT`, `DECREMENT`, `SET_ADD`,
+`SET_REMOVE`, `GET_OR_SET`, `PUT_MULTI`, `GET_SET`, `PUT_SET`, `GET_CAUSAL`,
+`PUT_CAUSAL`, etc.) are still supported as aliases for backward compatibility.
 
 ## Lattice Types
 

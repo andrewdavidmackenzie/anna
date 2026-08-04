@@ -9,6 +9,7 @@
 - [Autoscaling and Policy Engine](docs/autoscaling.md)
 - [Feature List](docs/feature-list.md)
   - [Client Feature List](docs/client-feature-list.md)
+- [API Comparison vs. Other KV Stores](docs/api-comparison.md)
 
 # Building and Running
 - [Building anna](docs/building-anna.md)

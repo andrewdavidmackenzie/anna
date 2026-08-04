@@ -285,12 +285,12 @@ class AnnaTcpClient(BaseAnnaClient):
         for key in keys:
             kv_pairs[key] = None
 
+        req_ids = []
         for key in keys:
             if worker_addresses[key]:
                 req, _ = self._prepare_data_request(key)
                 req.type = GET
 
-                req_ids = []
                 for address in worker_addresses[key]:
                     req.request_id = self._get_request_id()
 

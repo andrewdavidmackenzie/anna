@@ -72,6 +72,7 @@ void print_priority_value(const annalib::PriorityResult& result) {
 string cli_usage() {
   return "Valid commands are:\n"
          "  GET {key}                       - get the value of any key (auto-detects type)\n"
+         "  MGET {key1} {key2} ...          - get multiple keys at once\n"
          "  PUT {key} {value}               - store a value (LWW, default)\n"
          "  PUT set {key} {vals...}         - store a set (union merge)\n"
          "  PUT ordered_set {key} {vals...} - store an ordered set\n"
@@ -87,7 +88,11 @@ string cli_usage() {
          "  PUT causal_ordered_set {key} {vals...} - store an ordered set with single-key causal\n"
          "  PUT multi_causal_set {key} {vals...} - store a set with multi-key causal consistency\n"
          "  PUT multi_causal_ordered_set {key} {vals...} - store an ordered set with multi-key causal\n"
-         "  DELETE {key}                    - delete a key\n"
+         "  DEL {key}                       - delete a key (alias: DELETE)\n"
+         "  SADD {key} {member} [member...] - add members to an OR-Set (not yet implemented)\n"
+         "  SREM {key} {member} [member...] - remove members from an OR-Set (not yet implemented)\n"
+         "  SMEMBERS {key}                  - list members of an OR-Set (not yet implemented)\n"
+         "  SUBSCRIBE {key1} [key2...]      - subscribe to value changes on keys (not available in C++ CLI, use Rust CLI or library API)\n"
          "  BENCH [keys] [value_size] [duration] [workload] - run a benchmark\n"
          "  START, STOP, STATUS, HELP, EXIT";
 }
@@ -125,13 +130,64 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
     if (v.size() < 2) {
       std::cerr << "Usage: GET <key>" << std::endl;
     } else {
-      std::cout << annalib::get_any(client, v[1]) << std::endl;
+      try {
+        std::cout << annalib::get_any(client, v[1]) << std::endl;
+      } catch (const std::runtime_error &e) {
+        if (string(e.what()).find("KEY_DNE") != string::npos) {
+          std::cout << "(nil)" << std::endl;
+        } else {
+          throw;
+        }
+      }
     }
-  } else if (command == "DELETE") {
+  } else if (command == "DEL" || command == "DELETE") {
     if (v.size() < 2) {
-      std::cerr << "Usage: DELETE <key>" << std::endl;
+      std::cerr << "Usage: DEL <key>" << std::endl;
     } else if (!annalib::del(client, v[1]).succeeded()) {
-      std::cerr << "Error: DELETE failed" << std::endl;
+      std::cerr << "Error: DEL failed" << std::endl;
+    }
+  } else if (command == "MGET") {
+    if (v.size() < 2) {
+      std::cerr << "Usage: MGET <key1> [key2 ...]" << std::endl;
+    } else {
+      vector<string> keys(v.begin() + 1, v.end());
+      auto results = annalib::get_multi(client, keys);
+      for (const auto& key : keys) {
+        auto it = results.find(key);
+        if (it != results.end()) {
+          std::cout << key << ": " << it->second << std::endl;
+        } else {
+          std::cout << key << ": (not found)" << std::endl;
+        }
+      }
+    }
+  } else if (command == "SADD") {
+    // TODO: requires or_set_add in C++ client library
+    if (v.size() < 3) {
+      std::cerr << "Usage: SADD <key> <member> [member ...]" << std::endl;
+    } else {
+      std::cerr << "Error: SADD is not yet implemented (requires OR-Set add support in C++ client library). Use the Rust CLI (anna) for this command." << std::endl;
+    }
+  } else if (command == "SREM") {
+    // TODO: requires or_set_remove in C++ client library
+    if (v.size() < 3) {
+      std::cerr << "Usage: SREM <key> <member> [member ...]" << std::endl;
+    } else {
+      std::cerr << "Error: SREM is not yet implemented (requires OR-Set remove support in C++ client library). Use the Rust CLI (anna) for this command." << std::endl;
+    }
+  } else if (command == "SMEMBERS") {
+    // TODO: requires or_set_get / get_set in C++ client library
+    if (v.size() < 2) {
+      std::cerr << "Usage: SMEMBERS <key>" << std::endl;
+    } else {
+      std::cerr << "Error: SMEMBERS is not yet implemented (requires OR-Set get support in C++ client library). Use the Rust CLI (anna) for this command." << std::endl;
+    }
+  } else if (command == "SUBSCRIBE") {
+    if (v.size() < 2) {
+      std::cerr << "Usage: SUBSCRIBE <key1> [key2 ...]" << std::endl;
+    } else {
+      std::cerr << "Error: SUBSCRIBE requires server IP and cache IP configuration "
+                << "(use ValueChangeSubscriber directly from the C++ client library)" << std::endl;
     }
   } else if (command == "PUT" || command == "PUT_SET" ||
              command == "PUT_ORDERED_SET" || command == "PUT_CAUSAL" ||
