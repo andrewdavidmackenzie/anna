@@ -94,6 +94,12 @@ enum LatticeType {
   // Each node tracks its own cumulative increments and decrements.
   // The merge is per-node max. The counter value is sum(increments) - sum(decrements).
   COUNTER = 16;
+
+  // OR-Set (Observed-Remove Set): supports both add and remove of elements.
+  // Each element is tagged with a unique ID on add. Remove records the tags
+  // as tombstones. Merge is union of both elements and tombstones.
+  // Add wins over concurrent remove (new tag not in tombstone set).
+  OR_SET = 17;
 }
 
 enum AnnaError {
@@ -262,6 +268,17 @@ message CounterValue {
   map<string, uint64> increments = 1;
   // Per-node cumulative negative counts (monotonically increasing).
   map<string, uint64> decrements = 2;
+}
+
+// Serialization of OR-Set (Observed-Remove Set) lattices. Each element is
+// tagged with a unique ID on add. Remove tombstones specific tags. The value
+// is elements whose tags are NOT tombstoned.
+message OrSetValue {
+  // Elements with their unique tags: tag -> element_bytes.
+  // Tag format: "node_id:sequence_number".
+  map<string, bytes> elements = 1;
+  // Tombstoned tags (removed elements).
+  repeated string tombstones = 2;
 }
 
 // Serialization of lowest-priority-wins lattices.

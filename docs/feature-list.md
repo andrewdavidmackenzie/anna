@@ -33,6 +33,9 @@ mocks.
 | INCREMENT {key} [amount]   | Increment a PN-Counter (default +1)                          | Yes           |
 | DECREMENT {key} [amount]   | Decrement a PN-Counter (default -1)                          | Yes           |
 | GET_COUNTER {key}          | Get counter value (sum of increments - decrements)           | Yes           |
+| SET_ADD {key} {element}    | Add element to OR-Set                                        | Yes           |
+| SET_REMOVE {key} {element} | Remove element from OR-Set                                   | Yes           |
+| GET_OR_SET {key}           | Get live elements of OR-Set                                  | Yes           |
 | Address cache invalidation | Server signals client to refresh address cache               | Yes           |
 | Multi-key GET              | Retrieve multiple keys in one request                        | Yes           |
 | Multi-key PUT (put_multi)  | Batch PUT multiple keys in one request per worker            | Yes           |
@@ -51,6 +54,7 @@ still supported as aliases for backward compatibility.
 | MULTI_CAUSAL           | Multi-key causal with vector clock and dependencies | Yes           |
 | PRIORITY               | Priority-value pair, lowest priority wins           | Yes           |
 | COUNTER                | PN-Counter CRDT (increment/decrement, per-node max) | Yes           |
+| OR_SET                 | OR-Set CRDT (add/remove elements, add-wins)         | Yes           |
 
 ## Single-Node Features
 

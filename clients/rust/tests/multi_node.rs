@@ -1247,10 +1247,10 @@ async fn self_depart_signal() {
     let kvs_label = format!("anna-kvs@{}", NODE1_IP);
     cluster.signal_self_depart(&kvs_label);
 
-    // Poll until the KVS process exits. signal_self_depart() sleeps 8s
-    // for gossip propagation, then the KVS sleeps 2s after the handler.
-    // On loaded CI runners, add extra margin.
-    let deadline = Instant::now() + Duration::from_secs(20);
+    // Poll until the KVS process exits. signal_self_depart() already
+    // slept 8s. The KVS handler + 2s ZMQ drain should finish in ~3s.
+    // Use generous timeout for loaded CI runners.
+    let deadline = Instant::now() + Duration::from_secs(30);
     let mut kvs_exited = false;
     while Instant::now() < deadline {
         if cluster

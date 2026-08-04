@@ -823,6 +823,134 @@ impl KVSClient {
         Ok(pos as i64 - neg as i64)
     }
 
+    /// Add an element to an OR-Set key.
+    ///
+    /// Uses the OR-Set CRDT lattice. Each add tags the element with a unique
+    /// ID (`client_ip:tid:seq`). Concurrent adds from different clients are
+    /// all preserved. Add wins over concurrent remove.
+    pub async fn or_set_add<K: AsRef<str> + Display>(
+        &mut self,
+        key: K,
+        element: &str,
+    ) -> Result<()> {
+        debug!("OR_SET_ADD: {} += {}", key, element);
+        let tag_seq = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or(Duration::from_secs(0))
+            .as_nanos();
+        let tag = format!("{}:{}:{}", self.ut.ip(), self.ut.tid(), tag_seq);
+
+        let mut osv = crate::proto::kvs::OrSetValue::default();
+        osv.elements.insert(tag, element.as_bytes().to_vec());
+
+        let payload = osv.encode_to_vec();
+        let response = self
+            .send_data_request(
+                key.as_ref(),
+                RequestType::Put as i32,
+                Some(LatticeType::OrSet as i32),
+                Some(payload),
+            )
+            .await
+            .ok_or_else(|| Error::Kvs("OR_SET_ADD: request failed or timed out".into()))?;
+
+        Self::validate_response(&response, "OR_SET_ADD")?;
+        Ok(())
+    }
+
+    /// Remove an element from an OR-Set key.
+    ///
+    /// Tombstones all tags currently associated with the element.
+    /// Requires a GET to discover the tags, then a PUT with those tags
+    /// in the tombstone set.
+    pub async fn or_set_remove<K: AsRef<str> + Display>(
+        &mut self,
+        key: K,
+        element: &str,
+    ) -> Result<()> {
+        debug!("OR_SET_REMOVE: {} -= {}", key, element);
+
+        // GET current state to find tags for this element.
+        let response = self
+            .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
+            .await
+            .ok_or_else(|| Error::Kvs("OR_SET_REMOVE: GET failed".into()))?;
+
+        let tuple = match Self::validate_response(&response, "OR_SET_REMOVE") {
+            Ok(t) => t,
+            Err(e) => {
+                // KEY_DNE means the set doesn't exist -- nothing to remove.
+                if e.to_string().contains("KEY_DNE") {
+                    return Ok(());
+                }
+                return Err(e);
+            }
+        };
+        let osv = crate::proto::kvs::OrSetValue::decode(tuple.payload.as_slice())
+            .map_err(|e| Error::Kvs(format!("OR_SET_REMOVE: decode failed: {}", e)))?;
+
+        // Find all tags for this element.
+        let element_bytes = element.as_bytes().to_vec();
+        let tags_to_remove: Vec<String> = osv
+            .elements
+            .iter()
+            .filter(|(_, v)| **v == element_bytes)
+            .map(|(tag, _)| tag.clone())
+            .collect();
+
+        if tags_to_remove.is_empty() {
+            return Ok(()); // Element not in set, nothing to remove.
+        }
+
+        // PUT with tombstones for those tags.
+        let remove_osv = crate::proto::kvs::OrSetValue {
+            tombstones: tags_to_remove,
+            ..Default::default()
+        };
+
+        let payload = remove_osv.encode_to_vec();
+        let response = self
+            .send_data_request(
+                key.as_ref(),
+                RequestType::Put as i32,
+                Some(LatticeType::OrSet as i32),
+                Some(payload),
+            )
+            .await
+            .ok_or_else(|| Error::Kvs("OR_SET_REMOVE: PUT failed".into()))?;
+
+        Self::validate_response(&response, "OR_SET_REMOVE")?;
+        Ok(())
+    }
+
+    /// Get the current elements of an OR-Set key.
+    ///
+    /// Returns the live set (elements whose tags are not tombstoned).
+    pub async fn get_or_set<K: AsRef<str> + Display>(&mut self, key: K) -> Result<Vec<String>> {
+        debug!("GET_OR_SET: {}", key);
+        let response = self
+            .send_data_request(key.as_ref(), RequestType::Get as i32, None, None)
+            .await
+            .ok_or_else(|| Error::Kvs("GET_OR_SET: request failed or timed out".into()))?;
+
+        let tuple = Self::validate_response(&response, "GET_OR_SET")?;
+        let osv = crate::proto::kvs::OrSetValue::decode(tuple.payload.as_slice())
+            .map_err(|e| Error::Kvs(format!("GET_OR_SET: decode failed: {}", e)))?;
+
+        // Compute live set: elements whose tags are not tombstoned.
+        let tombstones: std::collections::HashSet<&str> =
+            osv.tombstones.iter().map(|s| s.as_str()).collect();
+        let mut result: Vec<String> = osv
+            .elements
+            .iter()
+            .filter(|(tag, _)| !tombstones.contains(tag.as_str()))
+            .map(|(_, v)| String::from_utf8_lossy(v).to_string())
+            .collect();
+        result.sort();
+        result.dedup();
+        Ok(result)
+    }
+
     /// Retrieve a set of values by key (Set lattice).
     ///
     /// ```rust
@@ -3309,6 +3437,73 @@ mod tests {
         // Both should be in read cache.
         assert!(client.lww_read_cache.contains_key("mk1"));
         assert!(client.lww_read_cache.contains_key("mk2"));
+    }
+
+    #[tokio::test]
+    async fn or_set_add_sends_request() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(238);
+        client.push_mock_response(true, Some(make_routing_response("oset", worker)));
+        client.push_mock_response(false, Some(make_put_response("oset")));
+        client
+            .or_set_add("oset", "apple")
+            .await
+            .expect("or_set_add failed");
+    }
+
+    #[tokio::test]
+    async fn or_set_remove_sends_tombstone() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(239);
+        // First: GET to discover tags
+        let mut osv = crate::proto::kvs::OrSetValue::default();
+        osv.elements
+            .insert("tag1".into(), "apple".as_bytes().to_vec());
+        let get_response = KeyResponse {
+            r#type: RequestType::Get as i32,
+            tuples: vec![KeyTuple {
+                key: "oset".into(),
+                lattice_type: LatticeType::OrSet as i32,
+                payload: osv.encode_to_vec(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        client.push_mock_response(true, Some(make_routing_response("oset", worker)));
+        client.push_mock_response(false, Some(get_response.encode_to_vec()));
+        // Second: PUT with tombstone
+        client.push_mock_response(true, Some(make_routing_response("oset", worker)));
+        client.push_mock_response(false, Some(make_put_response("oset")));
+        client
+            .or_set_remove("oset", "apple")
+            .await
+            .expect("or_set_remove failed");
+    }
+
+    #[tokio::test]
+    async fn get_or_set_returns_live_elements() {
+        let worker = "tcp://127.0.0.1:6200";
+        let mut client = mock_client(240);
+        let mut osv = crate::proto::kvs::OrSetValue::default();
+        osv.elements
+            .insert("tag1".into(), "apple".as_bytes().to_vec());
+        osv.elements
+            .insert("tag2".into(), "banana".as_bytes().to_vec());
+        osv.tombstones.push("tag1".into()); // apple is tombstoned
+        let get_response = KeyResponse {
+            r#type: RequestType::Get as i32,
+            tuples: vec![KeyTuple {
+                key: "oset".into(),
+                lattice_type: LatticeType::OrSet as i32,
+                payload: osv.encode_to_vec(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        client.push_mock_response(true, Some(make_routing_response("oset", worker)));
+        client.push_mock_response(false, Some(get_response.encode_to_vec()));
+        let vals = client.get_or_set("oset").await.expect("get_or_set failed");
+        assert_eq!(vals, vec!["banana"]); // apple tombstoned, only banana live
     }
 
     #[tokio::test]

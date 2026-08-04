@@ -200,6 +200,7 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
   Serializer *multi_causal_set_serializer;
   Serializer *multi_causal_ordered_set_serializer;
   Serializer *counter_serializer;
+  Serializer *or_set_serializer;
 
   if (kSelfTier == Tier::MEMORY) {
     MemoryLWWKVS *lww_kvs = new MemoryLWWKVS();
@@ -252,6 +253,8 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
     multi_causal_ordered_set_serializer = new MemoryMultiKeyCausalSerializer(multi_causal_ordered_set_kvs);
     MemoryCounterKVS *counter_kvs = new MemoryCounterKVS();
     counter_serializer = new MemoryCounterSerializer(counter_kvs);
+    MemoryOrSetKVS *or_set_kvs = new MemoryOrSetKVS();
+    or_set_serializer = new MemoryOrSetSerializer(or_set_kvs);
   } else if (kSelfTier == Tier::DISK) {
     lww_serializer = new DiskLWWSerializer(thread_id, disk_root);
     set_serializer = new DiskSetSerializer(thread_id, disk_root);
@@ -269,6 +272,7 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
     multi_causal_set_serializer = new DiskMultiKeyCausalSerializer(thread_id, disk_root);
     multi_causal_ordered_set_serializer = new DiskMultiKeyCausalSerializer(thread_id, disk_root);
     counter_serializer = new DiskCounterSerializer(thread_id, disk_root);
+    or_set_serializer = new DiskOrSetSerializer(thread_id, disk_root);
   } else {
     log->info("Invalid node type");
     exit(1);
@@ -290,6 +294,7 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
   serializers[kvs::LatticeType::MULTI_CAUSAL_SET] = multi_causal_set_serializer;
   serializers[kvs::LatticeType::MULTI_CAUSAL_ORDERED_SET] = multi_causal_ordered_set_serializer;
   serializers[kvs::LatticeType::COUNTER] = counter_serializer;
+  serializers[kvs::LatticeType::OR_SET] = or_set_serializer;
 
   // the set of changes made on this thread since the last round of gossip
   set<Key> local_changeset;
@@ -369,15 +374,20 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
   // enter event loop
   while (!shutdown_requested.load()) {
    try {
-    if (self_depart_requested.load() && !monitoring_ips.empty()) {
-      string depart_done_addr =
-          MonitoringThread(monitoring_ips[0]).depart_done_connect_address();
-      self_depart_handler(thread_id, seed, public_ip, private_ip, log,
-                          depart_done_addr, global_hash_rings, local_hash_rings,
-                          stored_key_map, key_replication_map, routing_ips,
-                          monitoring_ips, wt, pushers, serializers);
-      // Allow ZMQ to deliver depart notifications before process exits
-      std::this_thread::sleep_for(std::chrono::seconds(2));
+    if (self_depart_requested.load()) {
+      if (!monitoring_ips.empty()) {
+        string depart_done_addr =
+            MonitoringThread(monitoring_ips[0]).depart_done_connect_address();
+        self_depart_handler(thread_id, seed, public_ip, private_ip, log,
+                            depart_done_addr, global_hash_rings, local_hash_rings,
+                            stored_key_map, key_replication_map, routing_ips,
+                            monitoring_ips, wt, pushers, serializers);
+        // Allow ZMQ to deliver depart notifications before process exits
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+      } else {
+        log->info("Self-depart requested but no monitoring IPs configured; "
+                   "exiting without depart handshake.");
+      }
       return;
     }
 
@@ -863,9 +873,12 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
       }
     }
    } catch (const zmq::error_t &e) {
-     if (e.num() == EINTR && shutdown_requested.load()) {
-       // ZMQ interrupted by SIGTERM — exit cleanly so gcov data is flushed.
-       break;
+     if (e.num() == EINTR &&
+         (shutdown_requested.load() || self_depart_requested.load())) {
+       // ZMQ interrupted by signal — continue the loop so the signal
+       // handler at the top of the loop can process the request.
+       if (shutdown_requested.load()) break;
+       continue;  // Let self_depart_requested be handled at top of loop.
      }
      throw;  // Re-throw unexpected ZMQ errors.
    }

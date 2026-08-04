@@ -704,6 +704,103 @@ TEST_F(ServerHandlerTest, UserCounterMerge) {
   EXPECT_EQ(result.increments().at("node2"), 7);
 }
 
+// Test PUT/GET for OR-Set lattice type.
+TEST_F(ServerHandlerTest, UserPutGetOrSet) {
+  Key key = "or_set_key";
+
+  // Build an OrSetValue with one element
+  kvs::OrSetValue osv;
+  (*osv.mutable_elements())["tag1"] = "apple";
+  string payload;
+  osv.SerializeToString(&payload);
+
+  string put_or_set =
+      put_key_request(key, kvs::LatticeType::OR_SET, payload, ip);
+
+  unsigned access_count = 0;
+  unsigned seed = 0;
+
+  user_request_handler(access_count, seed, put_or_set, log_, global_hash_rings,
+                       local_hash_rings, pending_requests, key_access_tracker,
+                       stored_key_map, key_replication_map, local_changeset, wt,
+                       serializers, pushers);
+
+  EXPECT_EQ(stored_key_map[key].type(), kvs::LatticeType::OR_SET);
+
+  // GET should return the element
+  string get_req = get_key_request(key, ip);
+  size_t msg_count_before = mock_zmq_util.sent_messages.size();
+  user_request_handler(access_count, seed, get_req, log_, global_hash_rings,
+                       local_hash_rings, pending_requests, key_access_tracker,
+                       stored_key_map, key_replication_map, local_changeset, wt,
+                       serializers, pushers);
+
+  ASSERT_GT(mock_zmq_util.sent_messages.size(), msg_count_before);
+  kvs::KeyResponse response;
+  response.ParseFromString(mock_zmq_util.sent_messages.back());
+  EXPECT_EQ(response.tuples(0).error(), kvs::AnnaError::NO_ERROR);
+
+  kvs::OrSetValue result;
+  result.ParseFromString(response.tuples(0).payload());
+  EXPECT_EQ(result.elements().at("tag1"), "apple");
+}
+
+// Test OR-Set merge: add + tombstone merge correctly.
+TEST_F(ServerHandlerTest, UserOrSetMergeWithTombstone) {
+  Key key = "or_set_merge";
+
+  // First PUT: add two elements
+  kvs::OrSetValue osv1;
+  (*osv1.mutable_elements())["tag1"] = "apple";
+  (*osv1.mutable_elements())["tag2"] = "banana";
+  string payload1;
+  osv1.SerializeToString(&payload1);
+
+  string put1 = put_key_request(key, kvs::LatticeType::OR_SET, payload1, ip);
+
+  unsigned access_count = 0;
+  unsigned seed = 0;
+
+  user_request_handler(access_count, seed, put1, log_, global_hash_rings,
+                       local_hash_rings, pending_requests, key_access_tracker,
+                       stored_key_map, key_replication_map, local_changeset, wt,
+                       serializers, pushers);
+
+  // Second PUT: tombstone tag1 (remove apple)
+  kvs::OrSetValue osv2;
+  osv2.add_tombstones("tag1");
+  string payload2;
+  osv2.SerializeToString(&payload2);
+
+  string put2 = put_key_request(key, kvs::LatticeType::OR_SET, payload2, ip);
+
+  local_changeset.clear();
+  user_request_handler(access_count, seed, put2, log_, global_hash_rings,
+                       local_hash_rings, pending_requests, key_access_tracker,
+                       stored_key_map, key_replication_map, local_changeset, wt,
+                       serializers, pushers);
+
+  // GET and verify: tag1 should be tombstoned, only tag2 (banana) live
+  string get_req = get_key_request(key, ip);
+  size_t msg_count_before = mock_zmq_util.sent_messages.size();
+  user_request_handler(access_count, seed, get_req, log_, global_hash_rings,
+                       local_hash_rings, pending_requests, key_access_tracker,
+                       stored_key_map, key_replication_map, local_changeset, wt,
+                       serializers, pushers);
+
+  ASSERT_GT(mock_zmq_util.sent_messages.size(), msg_count_before);
+  kvs::KeyResponse response;
+  response.ParseFromString(mock_zmq_util.sent_messages.back());
+
+  kvs::OrSetValue result;
+  result.ParseFromString(response.tuples(0).payload());
+  // Both elements should be in the payload (server stores all)
+  EXPECT_EQ(result.elements().size(), 2);
+  // But tag1 should be tombstoned
+  EXPECT_EQ(result.tombstones_size(), 1);
+  EXPECT_EQ(result.tombstones(0), "tag1");
+}
+
 // TODO: Test key address cache invalidation
 // TODO: Test replication factor request and making the request pending
 // TODO: Test metadata operations -- does this matter?

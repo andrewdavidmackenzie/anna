@@ -101,9 +101,8 @@ This compositional approach means:
 
 ### Implemented
 
-Anna provides six lattice types with full implementations (lattice code,
-protobuf types, server handlers, serializers, and client APIs in all
-four languages):
+Anna provides eight lattice types with full implementations (lattice code,
+protobuf types, server handlers, serializers, and client APIs):
 
 | Consistency Level       | Lattice Type     | Description                                       |
 |-------------------------|------------------|---------------------------------------------------|
@@ -113,6 +112,8 @@ four languages):
 | **Single-key causal**   | `SINGLE_CAUSAL`   | Vector clocks track causal ordering per key      |
 | **Multi-key causal**    | `MULTI_CAUSAL`    | Causal ordering with cross-key dependency tracking |
 | **Priority**            | `PRIORITY`        | Lowest priority value wins                       |
+| **PN-Counter**          | `COUNTER`         | Increment/decrement counter, converges to sum of all updates |
+| **OR-Set**              | `OR_SET`          | Observed-remove set; concurrent adds win over removes (tombstone-based CRDT) |
 
 ### Theoretical (not yet implemented)
 
