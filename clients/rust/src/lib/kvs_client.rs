@@ -2128,6 +2128,108 @@ impl KVSClient {
     pub fn set_timeout(&mut self, timeout: Duration) {
         self.timeout = timeout;
     }
+
+    // ── Scan / key listing ──────────────────────────────────────────
+
+    /// Scan keys across all KVS threads, returning entries matching `prefix`.
+    ///
+    /// Discovers the cluster topology, constructs addresses for every KVS
+    /// memory thread, and issues paginated SCAN requests to each. Results
+    /// are merged and deduplicated (keys may be replicated across threads).
+    ///
+    /// Pass an empty string for `prefix` to list all keys.
+    pub async fn scan(&mut self, prefix: &str) -> Result<Vec<crate::proto::kvs::ScanEntry>> {
+        use std::collections::HashSet;
+
+        let thread_count = match self.get_cluster_topology().await {
+            Some(t) if t.memory_thread_count > 0 => t.memory_thread_count as usize,
+            _ => 1, // Default to 1 thread if topology not yet published.
+        };
+
+        // Derive KVS IP from routing address (same host in typical deployments).
+        let kvs_ip = self
+            .routing_threads
+            .first()
+            .and_then(|rt| {
+                let addr = rt.key_address_connect_address();
+                addr.split("://")
+                    .nth(1)
+                    .and_then(|hp| hp.rsplit_once(':').map(|(h, _)| h.to_string()))
+            })
+            .ok_or_else(|| Error::Kvs("SCAN: no routing address configured".into()))?;
+
+        let base = self.base_offset();
+        let mut all_entries = Vec::new();
+        let mut seen_keys = HashSet::new();
+        let mut failed_threads = 0usize;
+
+        for tid in 0..thread_count {
+            let port = tid + crate::threads::K_KEY_REQUEST_PORT + base;
+            let addr = format!("tcp://{}:{}", kvs_ip, port);
+
+            let mut cursor: u64 = 0;
+            loop {
+                let request = KeyRequest {
+                    request_id: self.get_request_id(),
+                    response_address: self.ut.response_connect_address(),
+                    r#type: RequestType::Scan as i32,
+                    scan_prefix: prefix.to_string(),
+                    scan_cursor: cursor,
+                    scan_count: 100,
+                    ..Default::default()
+                };
+
+                let encoded = request.encode_to_vec();
+
+                let result = tokio::time::timeout(self.timeout, async {
+                    self.send_request(&encoded, &addr).await?;
+                    match self.recv_response(false).await {
+                        Some(data) => Ok(data),
+                        None => Err(Error::Kvs("SCAN: recv timed out".into())),
+                    }
+                })
+                .await;
+
+                match result {
+                    Ok(Ok(data)) => match KeyResponse::decode(data.as_slice()) {
+                        Ok(response) => {
+                            for entry in &response.scan_keys {
+                                if seen_keys.insert(entry.key.clone()) {
+                                    all_entries.push(entry.clone());
+                                }
+                            }
+                            let next = response.scan_next_cursor;
+                            if next == 0 || response.scan_keys.is_empty() {
+                                break; // Done with this thread.
+                            }
+                            cursor = next;
+                        }
+                        Err(e) => {
+                            warn!("SCAN: failed to decode response from {}: {}", addr, e);
+                            failed_threads += 1;
+                            break;
+                        }
+                    },
+                    Ok(Err(e)) => {
+                        warn!("SCAN: request to {} failed: {}", addr, e);
+                        failed_threads += 1;
+                        break;
+                    }
+                    Err(_) => {
+                        warn!("SCAN: request to {} timed out", addr);
+                        failed_threads += 1;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if failed_threads == thread_count {
+            return Err(Error::Kvs("SCAN: all threads failed".into()));
+        }
+
+        Ok(all_entries)
+    }
 }
 
 #[cfg(test)]

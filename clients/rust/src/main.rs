@@ -418,6 +418,28 @@ async fn execute_command(
             let val = client.get_counter(split[1]).await?;
             println!("{}", val);
         }
+        "SCAN" => {
+            let prefix = if split.len() >= 2 { split[1] } else { "" };
+            let entries = client.scan(prefix).await?;
+            if entries.is_empty() {
+                println!("(no keys found)");
+            } else {
+                for entry in &entries {
+                    let type_name = annalib::proto::kvs::LatticeType::try_from(entry.lattice_type)
+                        .map(|t| format!("{:?}", t))
+                        .unwrap_or_else(|_| format!("?{}", entry.lattice_type));
+                    if entry.expiry_epoch_s > 0 {
+                        println!(
+                            "  {} [type={}, size={}, expiry={}]",
+                            entry.key, type_name, entry.size, entry.expiry_epoch_s
+                        );
+                    } else {
+                        println!("  {} [type={}, size={}]", entry.key, type_name, entry.size);
+                    }
+                }
+                println!("({} keys)", entries.len());
+            }
+        }
         "PUT_TTL" if split.len() == 4 => {
             let key = split[1];
             let value = split[2];
@@ -534,6 +556,7 @@ fn cli_usage() -> String {
     \n\tincrement {key} [amount] \t- increment a counter (default +1)\
     \n\tdecrement {key} [amount] \t- decrement a counter (default -1)\
     \n\tget_counter {key} \t\t- get counter value\
+    \n\tscan [prefix] \t\t\t- list keys matching prefix (all keys if omitted)\
     \n\tdelete {key} \t\t\t- delete a key from the KVS\
     \n\tbench [keys] [value_size] [duration] [workload] - run a benchmark\
     \n\tstart [component] \t\t- start anna processes (component: kvs, monitor, route; omit for all)\

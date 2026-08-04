@@ -26,6 +26,7 @@ SET(KVS_SOURCE
   cache_ip_response_handler.cpp
   cache_registration_handler.cpp
   management_node_response_handler.cpp
+  scan_handler.cpp
   utils.cpp)
 
 ADD_EXECUTABLE(anna-kvs ${KVS_SOURCE})

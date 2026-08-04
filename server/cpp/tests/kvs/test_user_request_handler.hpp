@@ -801,6 +801,175 @@ TEST_F(ServerHandlerTest, UserOrSetMergeWithTombstone) {
   EXPECT_EQ(result.tombstones(0), "tag1");
 }
 
+// ── SCAN tests ──────────────────────────────────────────────────────────
+
+TEST_F(ServerHandlerTest, ScanAllKeys) {
+  // Insert several keys.
+  serializers[kvs::LatticeType::LWW]->put("alpha", serialize(1, string("v1")));
+  stored_key_map["alpha"].set_type(kvs::LatticeType::LWW);
+  stored_key_map["alpha"].set_size(2);
+
+  serializers[kvs::LatticeType::LWW]->put("beta", serialize(2, string("v2")));
+  stored_key_map["beta"].set_type(kvs::LatticeType::LWW);
+  stored_key_map["beta"].set_size(2);
+
+  serializers[kvs::LatticeType::LWW]->put("gamma", serialize(3, string("v3")));
+  stored_key_map["gamma"].set_type(kvs::LatticeType::LWW);
+  stored_key_map["gamma"].set_size(2);
+
+  string scan_req = scan_key_request("", 0, 100, ip);
+  scan_handler(scan_req, log_, stored_key_map, pushers);
+
+  ASSERT_GT(mock_zmq_util.sent_messages.size(), 0);
+  kvs::KeyResponse response;
+  response.ParseFromString(mock_zmq_util.sent_messages.back());
+
+  EXPECT_EQ(response.type(), kvs::RequestType::SCAN);
+  EXPECT_EQ(response.scan_keys_size(), 3);
+  EXPECT_EQ(response.scan_total_keys(), 3);
+  EXPECT_EQ(response.scan_next_cursor(), 0);  // All keys returned.
+
+  // Verify all key names are present.
+  std::set<string> keys;
+  for (const auto &entry : response.scan_keys()) {
+    keys.insert(entry.key());
+    EXPECT_EQ(entry.lattice_type(), kvs::LatticeType::LWW);
+    EXPECT_EQ(entry.size(), 2);
+  }
+  EXPECT_TRUE(keys.count("alpha"));
+  EXPECT_TRUE(keys.count("beta"));
+  EXPECT_TRUE(keys.count("gamma"));
+}
+
+TEST_F(ServerHandlerTest, ScanWithPrefix) {
+  serializers[kvs::LatticeType::LWW]->put("app:user1", serialize(1, string("u1")));
+  stored_key_map["app:user1"].set_type(kvs::LatticeType::LWW);
+  stored_key_map["app:user1"].set_size(2);
+
+  serializers[kvs::LatticeType::LWW]->put("app:user2", serialize(2, string("u2")));
+  stored_key_map["app:user2"].set_type(kvs::LatticeType::LWW);
+  stored_key_map["app:user2"].set_size(2);
+
+  serializers[kvs::LatticeType::LWW]->put("other:key", serialize(3, string("o")));
+  stored_key_map["other:key"].set_type(kvs::LatticeType::LWW);
+  stored_key_map["other:key"].set_size(1);
+
+  string scan_req = scan_key_request("app:", 0, 100, ip);
+  scan_handler(scan_req, log_, stored_key_map, pushers);
+
+  kvs::KeyResponse response;
+  response.ParseFromString(mock_zmq_util.sent_messages.back());
+
+  EXPECT_EQ(response.scan_keys_size(), 2);
+  for (const auto &entry : response.scan_keys()) {
+    EXPECT_TRUE(entry.key().substr(0, 4) == "app:");
+  }
+}
+
+TEST_F(ServerHandlerTest, ScanPagination) {
+  // Insert 5 keys.
+  for (int i = 0; i < 5; i++) {
+    string key = "k" + std::to_string(i);
+    serializers[kvs::LatticeType::LWW]->put(key, serialize(i, string("v")));
+    stored_key_map[key].set_type(kvs::LatticeType::LWW);
+    stored_key_map[key].set_size(1);
+  }
+
+  // Page 1: get first 2 keys.
+  string scan_req = scan_key_request("", 0, 2, ip);
+  scan_handler(scan_req, log_, stored_key_map, pushers);
+
+  kvs::KeyResponse page1;
+  page1.ParseFromString(mock_zmq_util.sent_messages.back());
+  EXPECT_EQ(page1.scan_keys_size(), 2);
+  EXPECT_GT(page1.scan_next_cursor(), 0);
+
+  // Page 2: get next 2 keys from cursor.
+  scan_req = scan_key_request("", page1.scan_next_cursor(), 2, ip);
+  scan_handler(scan_req, log_, stored_key_map, pushers);
+
+  kvs::KeyResponse page2;
+  page2.ParseFromString(mock_zmq_util.sent_messages.back());
+  EXPECT_EQ(page2.scan_keys_size(), 2);
+  EXPECT_GT(page2.scan_next_cursor(), 0);
+
+  // Page 3: get remaining key.
+  scan_req = scan_key_request("", page2.scan_next_cursor(), 2, ip);
+  scan_handler(scan_req, log_, stored_key_map, pushers);
+
+  kvs::KeyResponse page3;
+  page3.ParseFromString(mock_zmq_util.sent_messages.back());
+  EXPECT_EQ(page3.scan_keys_size(), 1);
+  EXPECT_EQ(page3.scan_next_cursor(), 0);  // Done.
+
+  // Verify total = 5 unique keys across all pages.
+  std::set<string> all_keys;
+  for (const auto &e : page1.scan_keys()) all_keys.insert(e.key());
+  for (const auto &e : page2.scan_keys()) all_keys.insert(e.key());
+  for (const auto &e : page3.scan_keys()) all_keys.insert(e.key());
+  EXPECT_EQ(all_keys.size(), 5);
+}
+
+TEST_F(ServerHandlerTest, ScanEmptyStore) {
+  string scan_req = scan_key_request("", 0, 100, ip);
+  scan_handler(scan_req, log_, stored_key_map, pushers);
+
+  kvs::KeyResponse response;
+  response.ParseFromString(mock_zmq_util.sent_messages.back());
+
+  EXPECT_EQ(response.scan_keys_size(), 0);
+  EXPECT_EQ(response.scan_next_cursor(), 0);
+  EXPECT_EQ(response.scan_total_keys(), 0);
+}
+
+TEST_F(ServerHandlerTest, ScanSkipsMetadata) {
+  // Insert a metadata key and a regular key.
+  string meta_key = "ANNA_METADATA|replication|mykey";
+  serializers[kvs::LatticeType::LWW]->put(meta_key, serialize(1, string("rep")));
+  stored_key_map[meta_key].set_type(kvs::LatticeType::LWW);
+  stored_key_map[meta_key].set_size(3);
+
+  serializers[kvs::LatticeType::LWW]->put("user_key", serialize(2, string("v")));
+  stored_key_map["user_key"].set_type(kvs::LatticeType::LWW);
+  stored_key_map["user_key"].set_size(1);
+
+  string scan_req = scan_key_request("", 0, 100, ip);
+  scan_handler(scan_req, log_, stored_key_map, pushers);
+
+  kvs::KeyResponse response;
+  response.ParseFromString(mock_zmq_util.sent_messages.back());
+
+  // Only the user key should be returned; metadata is excluded.
+  EXPECT_EQ(response.scan_keys_size(), 1);
+  EXPECT_EQ(response.scan_keys(0).key(), "user_key");
+}
+
+TEST_F(ServerHandlerTest, ScanCountClamped) {
+  // Insert more keys than kDefaultScanCount to verify count=0 default
+  // and that very large counts are clamped.
+  for (int i = 0; i < 3; i++) {
+    string key = "clamp" + std::to_string(i);
+    serializers[kvs::LatticeType::LWW]->put(key, serialize(i, string("v")));
+    stored_key_map[key].set_type(kvs::LatticeType::LWW);
+    stored_key_map[key].set_size(1);
+  }
+
+  // count=0 should use default (100), returning all 3 keys.
+  string scan_req = scan_key_request("", 0, 0, ip);
+  scan_handler(scan_req, log_, stored_key_map, pushers);
+
+  kvs::KeyResponse resp;
+  resp.ParseFromString(mock_zmq_util.sent_messages.back());
+  EXPECT_EQ(resp.scan_keys_size(), 3);
+
+  // Very large count should be clamped but still work.
+  scan_req = scan_key_request("", 0, 999999999, ip);
+  scan_handler(scan_req, log_, stored_key_map, pushers);
+
+  resp.ParseFromString(mock_zmq_util.sent_messages.back());
+  EXPECT_EQ(resp.scan_keys_size(), 3);  // Only 3 keys exist.
+}
+
 // TODO: Test key address cache invalidation
 // TODO: Test replication factor request and making the request pending
 // TODO: Test metadata operations -- does this matter?

@@ -102,6 +102,10 @@ void management_node_response_handler(string &serialized,
                                       SocketCache &pushers, ServerThread &wt,
                                       unsigned &rid);
 
+void scan_handler(string &serialized, logger log,
+                  map<Key, KeyProperty> &stored_key_map,
+                  SocketCache &pushers);
+
 void send_gossip(AddressKeysetMap &addr_keyset_map, SocketCache &pushers,
                  SerializerMap &serializers,
                  map<Key, KeyProperty> &stored_key_map);

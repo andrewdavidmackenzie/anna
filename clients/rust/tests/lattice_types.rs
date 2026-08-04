@@ -571,3 +571,45 @@ async fn ttl_stress_many_keys() {
         expired_count, key_count
     );
 }
+
+/// SCAN: list keys matching a prefix across all KVS threads.
+#[tokio::test]
+#[cfg(unix)]
+async fn scan_keys() {
+    let config_path = generate_config(221);
+    let _guard = ServerGuard::start(&config_path, 221);
+    let config = client_config(221);
+    let mut client = KVSClient::new(&config, Some(15)).await;
+
+    // Insert some keys with different prefixes.
+    client.put("scan_a1", "v1").await.expect("PUT failed");
+    client.put("scan_a2", "v2").await.expect("PUT failed");
+    client.put("scan_b1", "v3").await.expect("PUT failed");
+    client.put("other_x", "v4").await.expect("PUT failed");
+
+    // Scan all keys.
+    let all = client.scan("").await.expect("SCAN all failed");
+    assert!(
+        all.len() >= 4,
+        "expected at least 4 keys, got {}",
+        all.len()
+    );
+
+    // Scan with prefix filter.
+    let scan_a = client.scan("scan_a").await.expect("SCAN prefix failed");
+    assert_eq!(scan_a.len(), 2, "expected 2 keys with prefix 'scan_a'");
+    for entry in &scan_a {
+        assert!(
+            entry.key.starts_with("scan_a"),
+            "key '{}' should start with 'scan_a'",
+            entry.key
+        );
+    }
+
+    // Scan with non-existent prefix.
+    let none = client
+        .scan("nonexistent_prefix_")
+        .await
+        .expect("SCAN empty failed");
+    assert!(none.is_empty(), "expected 0 keys for non-existent prefix");
+}

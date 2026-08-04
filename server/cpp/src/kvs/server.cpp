@@ -438,11 +438,20 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
       auto work_start = std::chrono::system_clock::now();
 
       string serialized = kZmqUtil->recv_string(&request_puller);
-      user_request_handler(access_count, seed, serialized, log,
-                           global_hash_rings, local_hash_rings,
-                           pending_requests, key_access_tracker, stored_key_map,
-                           key_replication_map, local_changeset, wt,
-                           serializers, pushers);
+
+      // Peek at the request type to dispatch SCAN separately.
+      kvs::KeyRequest peek;
+      peek.ParseFromString(serialized);
+
+      if (peek.type() == kvs::RequestType::SCAN) {
+        scan_handler(serialized, log, stored_key_map, pushers);
+      } else {
+        user_request_handler(access_count, seed, serialized, log,
+                             global_hash_rings, local_hash_rings,
+                             pending_requests, key_access_tracker,
+                             stored_key_map, key_replication_map,
+                             local_changeset, wt, serializers, pushers);
+      }
 
       auto time_elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
                               std::chrono::system_clock::now() - work_start)
