@@ -2,7 +2,7 @@
 
 ## What Anna has that's unique
 
-Anna's lattice type system (17 types with CRDT-style merge semantics) is genuinely distinctive. No other major KV store offers built-in conflict-free replicated data types at the storage layer:
+Anna's lattice type system (17 types with CRDT-style merge semantics) is genuinely distinctive. Among the stores compared in this document, Anna is the only one with built-in conflict-free replicated data types at the storage layer:
 
 - **LWW, Set, OrderedSet, Priority, Causal variants, Counter, OR-Set** -- merge-able without coordination
 - **Gossip-based replication with automatic conflict resolution** -- no other store in this list does this natively
@@ -41,7 +41,7 @@ Anna's lattice type system (17 types with CRDT-style merge semantics) is genuine
 
 ## Remaining gaps to close
 
-No actionable gaps remain. All items from the original comparison have been implemented or classified as architecture mismatches (below).
+All items from the original comparison have been implemented or classified as architecture mismatches (below). The remaining items (CAS, range queries, secondary indexes) are fundamental architecture mismatches that cannot be addressed without changing Anna's core design.
 
 ## Hardest to emulate (architecture mismatch)
 
