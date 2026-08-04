@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9ca9b705.js";
+            window.path_to_searchindex_js = "../searchindex-c3e5ec4b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-73b27c84.js"></script>
@@ -254,9 +254,8 @@ value types. The merge operator of <code>MapLattice</code>:</p>
 </ul>
 <h2 id="consistency-levels"><a class="header" href="#consistency-levels">Consistency Levels</a></h2>
 <h3 id="implemented"><a class="header" href="#implemented">Implemented</a></h3>
-<p>Anna provides six lattice types with full implementations (lattice code,
-protobuf types, server handlers, serializers, and client APIs in all
-four languages):</p>
+<p>Anna provides eight lattice types with full implementations (lattice code,
+protobuf types, server handlers, serializers, and client APIs):</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -269,6 +268,8 @@ four languages):</p>
 <tr><td><strong>Single-key causal</strong></td><td><code>SINGLE_CAUSAL</code></td><td>Vector clocks track causal ordering per key</td></tr>
 <tr><td><strong>Multi-key causal</strong></td><td><code>MULTI_CAUSAL</code></td><td>Causal ordering with cross-key dependency tracking</td></tr>
 <tr><td><strong>Priority</strong></td><td><code>PRIORITY</code></td><td>Lowest priority value wins</td></tr>
+<tr><td><strong>PN-Counter</strong></td><td><code>COUNTER</code></td><td>Increment/decrement counter, converges to sum of all updates</td></tr>
+<tr><td><strong>OR-Set</strong></td><td><code>OR_SET</code></td><td>Observed-remove set; concurrent adds win over removes (tombstone-based CRDT)</td></tr>
 </tbody>
 </table>
 </div>
