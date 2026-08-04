@@ -28,6 +28,9 @@ enum RequestType {
 
   // A request to put data into the KVS.
   PUT = 2;
+
+  // A request to scan/list keys on this thread.
+  SCAN = 3;
 }
 
 enum LatticeType { 
@@ -166,6 +169,19 @@ message KeyRequest {
 
   // A client-specific ID used to match asynchronous requests with responses.
   string request_id = 4;
+
+  // --- SCAN-specific fields (only used when type = SCAN) ---
+
+  // Key prefix filter. Empty string matches all keys.
+  string scan_prefix = 5;
+
+  // Offset cursor: start returning keys from this index.
+  // 0 for the first page.
+  uint64 scan_cursor = 6;
+
+  // Maximum number of keys to return per page.
+  // 0 means server default (100).
+  uint32 scan_count = 7;
 }
 
 // A response to a KeyRequest. 
@@ -184,6 +200,32 @@ message KeyResponse {
   // captured in the corresponding KeyTuple. This will only be set if the whole
   // request times out.
   AnnaError error = 4;
+
+  // --- SCAN-specific response fields (only set when type = SCAN) ---
+
+  // Keys matching the scan request.
+  repeated ScanEntry scan_keys = 5;
+
+  // Next cursor offset. 0 means scan is complete for this thread.
+  uint64 scan_next_cursor = 6;
+
+  // Total number of keys on this thread (for progress reporting).
+  uint64 scan_total_keys = 7;
+}
+
+// A single key entry returned by a SCAN request.
+message ScanEntry {
+  // The key name.
+  string key = 1;
+
+  // The lattice type of the stored value.
+  LatticeType lattice_type = 2;
+
+  // The size of the stored value in bytes.
+  uint32 size = 3;
+
+  // Absolute expiry time as epoch seconds. 0 = no expiry.
+  uint32 expiry_epoch_s = 4;
 }
 
 // A request to the routing tier to retrieve server addresses corresponding to

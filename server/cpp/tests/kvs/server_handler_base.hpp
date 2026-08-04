@@ -162,4 +162,20 @@ public:
 
     return request_str;
   }
+
+  string scan_key_request(string prefix, uint64_t cursor, uint32_t count,
+                          string ip) {
+    kvs::KeyRequest request;
+    request.set_type(kvs::RequestType::SCAN);
+    request.set_response_address(UserThread(ip, 0).response_connect_address());
+    request.set_request_id(kRequestId);
+    request.set_scan_prefix(std::move(prefix));
+    request.set_scan_cursor(cursor);
+    request.set_scan_count(count);
+
+    string request_str;
+    request.SerializeToString(&request_str);
+
+    return request_str;
+  }
 };

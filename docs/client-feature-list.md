@@ -84,6 +84,7 @@ See [autoscaling.md](autoscaling.md) for the full operator's guide.
 | PN-Counter (increment/decrement/get_counter) | Yes |
 | Batch PUT (put_multi)    | Yes    |
 | OR-Set (set_add/set_remove/get_or_set) | Yes |
+| Key scanning (scan)      | Yes    |
 
 ## C++ Client (`clients/cpp`)
 

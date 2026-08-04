@@ -15,6 +15,9 @@ const K_CACHE_UPDATE_PORT: usize = 6850;
 // The port on which KVS servers listen for direct cache registration messages.
 const K_CACHE_REGISTRATION_PORT: usize = 6900;
 
+// The port on which KVS servers listen for data requests (GET/PUT/SCAN).
+pub(crate) const K_KEY_REQUEST_PORT: usize = 6200;
+
 /// `Thread` is a base type for a number of other thread types
 pub struct Thread {
     ip: Address,
