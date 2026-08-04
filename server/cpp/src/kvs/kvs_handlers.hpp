@@ -106,6 +106,11 @@ void scan_handler(string &serialized, logger log,
                   map<Key, KeyProperty> &stored_key_map,
                   SocketCache &pushers);
 
+// Reap keys whose expiry time has passed (TTL + tombstone GC).
+// Returns the number of keys reaped.
+unsigned gc_reap_expired_keys(map<Key, KeyProperty> &stored_key_map,
+                              SerializerMap &serializers, logger log);
+
 void send_gossip(AddressKeysetMap &addr_keyset_map, SocketCache &pushers,
                  SerializerMap &serializers,
                  map<Key, KeyProperty> &stored_key_map);

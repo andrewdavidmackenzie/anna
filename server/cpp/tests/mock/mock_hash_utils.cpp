@@ -19,9 +19,17 @@ ServerThreadList MockHashRingUtil::get_responsible_threads(
     GlobalRingMap &global_hash_rings, LocalRingMap &local_hash_rings,
     map<Key, KeyReplication> &key_replication_map, SocketCache &pushers,
     const vector<Tier> &tiers, bool &succeed, unsigned &seed) {
+  // Check for per-key overrides.
+  auto it = thread_overrides.find(key);
+  if (it != thread_overrides.end()) {
+    auto sit = succeed_overrides.find(key);
+    succeed = (sit != succeed_overrides.end()) ? sit->second : true;
+    return it->second;
+  }
+
+  // Default: this thread is responsible.
   ServerThreadList threads;
   succeed = true;
-
   threads.push_back(ServerThread("127.0.0.1", "127.0.0.1", 0));
   return threads;
 }

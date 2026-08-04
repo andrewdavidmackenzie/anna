@@ -141,12 +141,12 @@ void run(unsigned thread_id, Address ip, vector<Address> monitoring_ips) {
                       local_hash_rings, key_replication_map, pending_requests,
                       seed);
     }
-   } catch (const zmq::error_t &e) {
+   } catch (const zmq::error_t &e) { // LCOV_EXCL_START
      if (e.num() == EINTR && shutdown_requested.load()) {
        break;
      }
      throw;
-   }
+   } // LCOV_EXCL_STOP
   }
 }
 

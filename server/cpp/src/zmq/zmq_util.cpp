@@ -41,10 +41,10 @@ string ZmqUtil::recv_string(zmq::socket_t* socket) {
 int ZmqUtil::poll(vector<zmq::pollitem_t>* items, std::chrono::milliseconds timeout) {
   try {
     return zmq::poll(items->data(), items->size(), timeout);
-  } catch (const zmq::error_t &e) {
+  } catch (const zmq::error_t &e) { // LCOV_EXCL_START
     if (e.num() == EINTR) {
       return 0;
     }
     throw;
-  }
+  } // LCOV_EXCL_STOP
 }

@@ -30,6 +30,7 @@
 #include "test_node_join_handler.hpp"
 #include "test_self_depart_handler.hpp"
 #include "test_signal_handler.hpp"
+#include "test_gossip_handler.hpp"
 #include "test_user_request_handler.hpp"
 
 unsigned kDefaultLocalReplication = 1;

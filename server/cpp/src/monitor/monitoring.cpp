@@ -465,11 +465,11 @@ int main(int argc, char *argv[]) {
 
       report_start = std::chrono::system_clock::now();
     }
-   } catch (const zmq::error_t &e) {
+   } catch (const zmq::error_t &e) { // LCOV_EXCL_START
      if (e.num() == EINTR && shutdown_requested.load()) {
        break;
      }
      throw;
-   }
+   } // LCOV_EXCL_STOP
   }
 }

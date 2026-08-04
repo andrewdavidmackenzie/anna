@@ -22,6 +22,12 @@ class MockHashRingUtil : public HashRingUtilInterface {
 public:
   virtual ~MockHashRingUtil(){};
 
+  // Override: if a key is in this map, return the custom thread list
+  // instead of the default (self). Set succeed_override to control the
+  // succeed flag for that key.
+  map<Key, ServerThreadList> thread_overrides;
+  map<Key, bool> succeed_overrides;
+
   virtual ServerThreadList get_responsible_threads(
       Address respond_address, const Key &key, bool metadata,
       GlobalRingMap &global_hash_rings, LocalRingMap &local_hash_rings,

@@ -17,46 +17,116 @@
 TEST_F(ServerHandlerTest, SimpleGossipReceive) {
   Key key = "key";
   string value = "value";
-  string put_request = put_key_request(key, value, ip);
 
-  unsigned access_count = 0;
+  // Build a gossip request (PUT with LWW payload).
+  string gossip_request =
+      put_key_request(key, kvs::LatticeType::LWW, serialize(1, value), ip);
+
   unsigned seed = 0;
-  unsigned error;
-  auto now = std::chrono::system_clock::now();
-
-  EXPECT_EQ(local_changeset.size(), 0);
-
-  gossip_handler(seed, put_request, global_hash_rings, local_hash_rings,
-                 key_size_map, pending_gossip, metadata_map, wt, serializer,
-                 pushers);
 
   EXPECT_EQ(pending_gossip.size(), 0);
-  EXPECT_EQ(serializer->get(key, error).reveal().value, value);
+
+  gossip_handler(seed, gossip_request, global_hash_rings, local_hash_rings,
+                 pending_gossip, stored_key_map, key_replication_map, wt,
+                 serializers, pushers, log_);
+
+  // Key should be stored locally (thread IS responsible via mock).
+  EXPECT_EQ(pending_gossip.size(), 0);
+  EXPECT_EQ(stored_key_map.count(key), 1);
 }
 
 TEST_F(ServerHandlerTest, GossipUpdate) {
   Key key = "key";
-  string value = "value1";
-  serializer->put(key, value, (unsigned)0);
+  // Pre-store a value.
+  serializers[kvs::LatticeType::LWW]->put(key, serialize(1, string("old")));
+  stored_key_map[key].set_type(kvs::LatticeType::LWW);
+  stored_key_map[key].set_size(3);
 
-  value = "value2";
+  // Gossip a newer value (higher timestamp wins in LWW).
+  string gossip_request = put_key_request(
+      key, kvs::LatticeType::LWW, serialize(2, string("new")), ip);
 
-  string put_request = put_key_request(key, value, ip);
-
-  unsigned access_count = 0;
   unsigned seed = 0;
-  unsigned error;
-  auto now = std::chrono::system_clock::now();
 
-  EXPECT_EQ(local_changeset.size(), 0);
-
-  gossip_handler(seed, put_request, global_hash_rings, local_hash_rings,
-                 key_size_map, pending_gossip, metadata_map, wt, serializer,
-                 pushers);
+  gossip_handler(seed, gossip_request, global_hash_rings, local_hash_rings,
+                 pending_gossip, stored_key_map, key_replication_map, wt,
+                 serializers, pushers, log_);
 
   EXPECT_EQ(pending_gossip.size(), 0);
-  EXPECT_EQ(serializer->get(key, error).reveal().value, value);
+  // Value should be updated to the newer one.
+  auto result = process_get(key, serializers[kvs::LatticeType::LWW]);
+  EXPECT_NE(result.first.find("new"), string::npos);
 }
 
-// TODO: test pending gossip
-// TODO: test gossip forwarding
+TEST_F(ServerHandlerTest, GossipTypeMismatch) {
+  Key key = "key";
+  // Pre-store as LWW.
+  serializers[kvs::LatticeType::LWW]->put(key, serialize(1, string("lww")));
+  stored_key_map[key].set_type(kvs::LatticeType::LWW);
+  stored_key_map[key].set_size(3);
+
+  // Gossip the same key as SET type — should be handled as type mismatch.
+  kvs::SetValue sv;
+  sv.add_values("elem");
+  string payload;
+  sv.SerializeToString(&payload);
+  string gossip_request =
+      put_key_request(key, kvs::LatticeType::SET, payload, ip);
+
+  unsigned seed = 0;
+
+  gossip_handler(seed, gossip_request, global_hash_rings, local_hash_rings,
+                 pending_gossip, stored_key_map, key_replication_map, wt,
+                 serializers, pushers, log_);
+
+  // Type mismatch should be handled (process_put handles the merge).
+  EXPECT_EQ(pending_gossip.size(), 0);
+}
+
+TEST_F(ServerHandlerTest, GossipForwardMetadata) {
+  // Configure mock: metadata key goes to a DIFFERENT thread.
+  Key meta_key = "ANNA_METADATA|replication|somekey";
+  ServerThread other_thread("10.0.0.2", "10.0.0.2", 0);
+  mock_hash_ring_util.thread_overrides[meta_key] = {other_thread};
+
+  string gossip_request = put_key_request(
+      meta_key, kvs::LatticeType::LWW, serialize(1, string("rep_data")), ip);
+
+  unsigned seed = 0;
+  size_t msg_count_before = mock_zmq_util.sent_messages.size();
+
+  gossip_handler(seed, gossip_request, global_hash_rings, local_hash_rings,
+                 pending_gossip, stored_key_map, key_replication_map, wt,
+                 serializers, pushers, log_);
+
+  // Key should NOT be stored locally — it was forwarded.
+  EXPECT_EQ(stored_key_map.count(meta_key), 0);
+  EXPECT_EQ(pending_gossip.size(), 0);
+
+  // A forwarding message should have been sent.
+  EXPECT_GT(mock_zmq_util.sent_messages.size(), msg_count_before);
+}
+
+TEST_F(ServerHandlerTest, GossipPendingOnLookupFailure) {
+  // Configure mock: key lookup fails (succeed = false).
+  Key key = "failing_key";
+  mock_hash_ring_util.thread_overrides[key] = {};  // empty thread list
+  mock_hash_ring_util.succeed_overrides[key] = false;
+
+  string gossip_request = put_key_request(
+      key, kvs::LatticeType::LWW, serialize(1, string("val")), ip);
+
+  unsigned seed = 0;
+
+  gossip_handler(seed, gossip_request, global_hash_rings, local_hash_rings,
+                 pending_gossip, stored_key_map, key_replication_map, wt,
+                 serializers, pushers, log_);
+
+  // Key should NOT be stored locally.
+  EXPECT_EQ(stored_key_map.count(key), 0);
+
+  // Should be in pending gossip.
+  EXPECT_EQ(pending_gossip.size(), 1);
+  EXPECT_EQ(pending_gossip.count(key), 1);
+  EXPECT_EQ(pending_gossip[key].size(), 1);
+}
