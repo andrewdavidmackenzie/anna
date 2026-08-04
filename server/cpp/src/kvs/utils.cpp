@@ -140,7 +140,7 @@ unsigned gc_reap_expired_keys(map<Key, KeyProperty> &stored_key_map,
 
   for (const auto &kv : stored_key_map) {
     if (!is_metadata(kv.first) && kv.second.expiry_epoch_s_ > 0 &&
-        now_s > kv.second.expiry_epoch_s_) {
+        now_s >= kv.second.expiry_epoch_s_) {
       keys_to_reap.push_back(kv.first);
     }
   }

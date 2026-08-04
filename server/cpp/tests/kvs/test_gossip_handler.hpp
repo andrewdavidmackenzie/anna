@@ -79,8 +79,11 @@ TEST_F(ServerHandlerTest, GossipTypeMismatch) {
                  pending_gossip, stored_key_map, key_replication_map, wt,
                  serializers, pushers, log_);
 
-  // Type mismatch should be handled (process_put handles the merge).
+  // Type mismatch: gossip is rejected, original value preserved.
   EXPECT_EQ(pending_gossip.size(), 0);
+  EXPECT_EQ(stored_key_map[key].type(), kvs::LatticeType::LWW);
+  auto result = process_get(key, serializers[kvs::LatticeType::LWW]);
+  EXPECT_NE(result.first.find("lww"), string::npos);
 }
 
 TEST_F(ServerHandlerTest, GossipForwardMetadata) {
