@@ -56,6 +56,7 @@ impl SocketCache {
 }
 
 /// Send a ScalingAlert (ADD) to the external scaling system.
+#[cfg(feature = "autoscaling")]
 async fn emit_scale_up_alert(
     pushers: &mut SocketCache,
     scaling_alert_ip: &str,
@@ -91,6 +92,7 @@ async fn emit_scale_up_alert(
 }
 
 /// Send a self-depart command to a KVS node, initiating graceful removal.
+#[cfg(feature = "autoscaling")]
 async fn remove_node(
     pushers: &mut SocketCache,
     mt: &MonitoringThread,
@@ -397,9 +399,7 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
             let crash_threshold = stale_threshold * 2;
             if !reporting_nodes.is_empty() {
                 for (ip_pair, last_seen) in &last_epoch_change {
-                    if !reporting_nodes.contains(ip_pair)
-                        && last_seen.elapsed() > crash_threshold
-                    {
+                    if !reporting_nodes.contains(ip_pair) && last_seen.elapsed() > crash_threshold {
                         dead_nodes.push(ip_pair.clone());
                     }
                 }
@@ -457,6 +457,7 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
             let prev_mem = new_memory_count;
             let prev_disk = new_disk_count;
 
+            #[cfg(feature = "autoscaling")]
             policies::storage_policy(
                 &ss,
                 &params,
@@ -468,6 +469,7 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
                 grace_elapsed,
             );
 
+            #[cfg(feature = "tiering")]
             let movement_requests = policies::movement_policy(
                 &ss,
                 &params,
@@ -479,6 +481,7 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
                 grace_elapsed,
             );
 
+            #[cfg(feature = "autoscaling")]
             let slo_requests = policies::slo_policy(
                 &ss,
                 &params,
@@ -492,6 +495,7 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
             );
 
             // Execute replication changes requested by policies.
+            #[cfg(feature = "tiering")]
             if !movement_requests.is_empty() {
                 crate::replication::change_replication_factor(
                     &movement_requests,
@@ -509,6 +513,7 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
                 .await;
             }
 
+            #[cfg(feature = "autoscaling")]
             if !slo_requests.is_empty() {
                 crate::replication::change_replication_factor(
                     &slo_requests,
@@ -527,6 +532,7 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
             }
 
             // Send scaling alerts if policies requested new nodes.
+            #[cfg(feature = "autoscaling")]
             if new_memory_count > prev_mem {
                 emit_scale_up_alert(
                     &mut pushers,
@@ -539,6 +545,7 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
                 .await;
                 grace_start = Instant::now();
             }
+            #[cfg(feature = "autoscaling")]
             if new_disk_count > prev_disk {
                 emit_scale_up_alert(
                     &mut pushers,

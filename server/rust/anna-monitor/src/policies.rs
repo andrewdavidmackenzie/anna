@@ -3,16 +3,22 @@
 //! Mirrors `server/cpp/src/monitor/storage_policy.cpp`,
 //! `movement_policy.cpp`, and `slo_policy.cpp`.
 
+#[allow(unused_imports)]
 use crate::types::*;
+#[allow(unused_imports)]
 use anna_server_common::metadata::KeyReplication;
+#[allow(unused_imports)]
 use anna_server_common::types::Key;
+#[allow(unused_imports)]
 use log::info;
+#[allow(unused_imports)]
 use std::collections::HashMap;
 
 /// Storage-based scaling policy.
 ///
 /// Adds nodes when storage exceeds upper threshold, removes nodes
 /// when below lower threshold.
+#[cfg(feature = "autoscaling")]
 pub fn storage_policy(
     ss: &SummaryStats,
     params: &MonitorParams,
@@ -72,6 +78,7 @@ pub fn storage_policy(
 ///
 /// Only active when tiering is enabled. Returns replication change
 /// requests for the monitor loop to execute.
+#[cfg(feature = "tiering")]
 pub fn movement_policy(
     ss: &SummaryStats,
     params: &MonitorParams,
@@ -164,6 +171,7 @@ pub fn movement_policy(
 ///
 /// Scales nodes based on latency SLO violations and occupancy.
 /// Returns replication change requests for the monitor loop.
+#[cfg(feature = "autoscaling")]
 pub fn slo_policy(
     ss: &SummaryStats,
     params: &MonitorParams,
@@ -251,6 +259,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "autoscaling")]
     fn storage_policy_noop_when_disabled() {
         let ss = default_ss();
         let params = MonitorParams {
@@ -268,6 +277,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "autoscaling")]
     fn storage_policy_scales_up_memory() {
         let mut ss = default_ss();
         ss.required_memory_node = 3;
@@ -286,6 +296,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "autoscaling")]
     fn storage_policy_respects_grace_period() {
         let mut ss = default_ss();
         ss.required_memory_node = 3;
@@ -304,6 +315,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "autoscaling")]
     fn slo_policy_noop_when_latency_ok() {
         let ss = default_ss();
         let params = MonitorParams::default();
@@ -320,6 +332,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "autoscaling")]
     fn slo_policy_scales_up_on_latency_violation() {
         let mut ss = default_ss();
         ss.avg_latency = 6000.0;
