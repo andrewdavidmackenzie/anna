@@ -174,7 +174,7 @@ fn spawn_server_with_env(
     extra_path: &str,
     env_vars: &[(&str, &str)],
 ) -> Option<Child> {
-    let bin = server_bin_dir().join(name);
+    let bin = common::resolve_server_binary(name, &server_bin_dir());
     if !bin.exists() {
         return None;
     }

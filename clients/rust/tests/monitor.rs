@@ -189,7 +189,7 @@ impl MonitorTestCluster {
         );
 
         for name in ["anna-monitor", "anna-route", "anna-kvs"] {
-            let bin = server_bin_dir().join(name);
+            let bin = common::resolve_server_binary(name, &server_bin_dir());
             if !bin.exists() {
                 self.shutdown();
                 panic!("Server binary {} not found", name);

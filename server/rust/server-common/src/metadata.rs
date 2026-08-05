@@ -28,7 +28,7 @@ pub struct TierMetadata {
 }
 
 /// Per-key replication factors.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct KeyReplication {
     pub global_replication: HashMap<Tier, u32>,
     pub local_replication: HashMap<Tier, u32>,

@@ -90,7 +90,7 @@ fmt:
 
 # Debug build, use "-DCMAKE_BUILD_TYPE=Release" for a Release build
 .PHONY: build
-build: client-cpp server-cpp client-rust client-python client-go
+build: client-cpp server-cpp server-rust client-rust client-python client-go
 
 UNAME := $(shell uname)
 
@@ -131,6 +131,11 @@ client-rust:
 	@echo "Building rust code in workspace into ./target"
 	@$(CARGO_ENV) RUSTFLAGS="$(RUST_LINK_ALLOW)" cargo build --quiet
 
+.PHONY: server-rust
+server-rust:
+	@echo "Building Rust server binaries"
+	@$(CARGO_ENV) RUSTFLAGS="$(RUST_LINK_ALLOW)" cargo build --quiet -p anna-monitor
+
 .PHONY: client-python
 client-python:
 	@echo "Compiling python client"
@@ -156,7 +161,12 @@ coverage: test
 	@genhtml -o coverage --quiet rust_workspace.info server/cpp/build/server.info clients/cpp/build/client.info || true
 
 .PHONY: test
-test: client-cpp-tests client-python-tests workspace-rust-tests client-go-tests server-system-coverage server-cpp-tests merge-server-coverage docs
+test: client-cpp-tests client-python-tests workspace-rust-tests client-go-tests server-system-coverage server-cpp-tests merge-server-coverage rust-monitor-tests docs
+
+.PHONY: rust-monitor-tests
+rust-monitor-tests: server-rust
+	@echo "Running monitor integration tests with Rust monitor (anna-monitor-rs)"
+	@ANNA_MONITOR_BIN=$(shell pwd)/target/debug/anna-monitor-rs cargo test --test monitor 2>&1 | tail -5
 
 .PHONY: server-system-coverage
 server-system-coverage:
