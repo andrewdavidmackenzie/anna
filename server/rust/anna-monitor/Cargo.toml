@@ -1,0 +1,23 @@
+[package]
+name = "anna-monitor"
+version = "0.1.0"
+edition = "2021"
+description = "Anna KVS monitoring server (Rust port)"
+
+[[bin]]
+name = "anna-monitor-rs"
+path = "src/main.rs"
+
+[dependencies]
+anna-server-common = { path = "../server-common" }
+clap = { version = "4", features = ["derive"] }
+log = "0.4"
+env_logger = "0.11"
+prost = "0.14"
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+omq-tokio = "0.20"
+tokio = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+tempfile = "3"
