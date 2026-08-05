@@ -20,20 +20,20 @@ use crate::stats;
 use crate::types::*;
 
 /// Lazy-connecting PUSH socket cache.
-struct SocketCache {
+pub(crate) struct SocketCache {
     ctx: Context,
     sockets: HashMap<Address, OmqSocket>,
 }
 
 impl SocketCache {
-    fn new(ctx: Context) -> Self {
+    pub(crate) fn new(ctx: Context) -> Self {
         Self {
             ctx,
             sockets: HashMap::new(),
         }
     }
 
-    async fn send(&mut self, addr: &str, data: &[u8]) -> Result<(), String> {
+    pub(crate) async fn send(&mut self, addr: &str, data: &[u8]) -> Result<(), String> {
         if !self.sockets.contains_key(addr) {
             let sock = self.ctx.socket(SocketType::Push, Options::default());
             let endpoint = addr
@@ -50,7 +50,7 @@ impl SocketCache {
             .map_err(|e| format!("Failed to send to {}: {}", addr, e))
     }
 
-    async fn send_string(&mut self, addr: &str, msg: &str) -> Result<(), String> {
+    pub(crate) async fn send_string(&mut self, addr: &str, msg: &str) -> Result<(), String> {
         self.send(addr, msg.as_bytes()).await
     }
 }

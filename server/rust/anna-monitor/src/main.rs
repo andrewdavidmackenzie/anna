@@ -7,6 +7,7 @@
 mod handlers;
 mod monitor;
 mod policies;
+mod replication;
 mod stats;
 mod types;
 
