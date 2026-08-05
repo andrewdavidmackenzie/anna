@@ -48,12 +48,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn initial_state_is_false() {
-        // Note: these globals persist across tests, but initially should be false.
-        // We can't easily test the signal handlers without sending actual signals.
-        assert!(
-            !SHUTDOWN_REQUESTED.load(Ordering::SeqCst) || true,
-            "Global state may be modified by other tests"
-        );
+    fn query_helpers_work() {
+        // Reset to known state (globals persist across tests).
+        SHUTDOWN_REQUESTED.store(false, Ordering::SeqCst);
+        SELF_DEPART_REQUESTED.store(false, Ordering::SeqCst);
+
+        assert!(!shutdown_requested());
+        assert!(!self_depart_requested());
+
+        SHUTDOWN_REQUESTED.store(true, Ordering::SeqCst);
+        assert!(shutdown_requested());
+
+        SELF_DEPART_REQUESTED.store(true, Ordering::SeqCst);
+        assert!(self_depart_requested());
+
+        // Reset for other tests.
+        SHUTDOWN_REQUESTED.store(false, Ordering::SeqCst);
+        SELF_DEPART_REQUESTED.store(false, Ordering::SeqCst);
     }
 }

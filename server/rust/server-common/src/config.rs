@@ -92,6 +92,28 @@ pub struct ThreadsConfig {
     pub benchmark: u32,
 }
 
+impl ThreadsConfig {
+    /// Resolve zero thread counts to auto-detected core count.
+    /// A value of 0 means "use all available cores" (matching C++ behavior).
+    pub fn resolve_auto(&mut self) {
+        let cores = std::thread::available_parallelism()
+            .map(|n| n.get() as u32)
+            .unwrap_or(1);
+        if self.memory == 0 {
+            self.memory = cores;
+        }
+        if self.disk == 0 {
+            self.disk = cores;
+        }
+        if self.routing == 0 {
+            self.routing = cores;
+        }
+        if self.benchmark == 0 {
+            self.benchmark = 1;
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Default)]
 pub struct CapacitiesConfig {
     #[serde(default, rename = "memory-cap")]
@@ -276,5 +298,39 @@ capacities:
         assert_eq!(config.ports.base_offset, 0);
         assert_eq!(config.threads.memory, 0);
         assert!(!config.policy.elasticity);
+    }
+
+    #[test]
+    fn resolve_auto_thread_counts() {
+        let mut threads = ThreadsConfig::default();
+        assert_eq!(threads.memory, 0);
+        assert_eq!(threads.disk, 0);
+        assert_eq!(threads.routing, 0);
+        assert_eq!(threads.benchmark, 0);
+
+        threads.resolve_auto();
+
+        // After resolve, all should be > 0.
+        assert!(threads.memory > 0, "memory should be auto-detected");
+        assert!(threads.disk > 0, "disk should be auto-detected");
+        assert!(threads.routing > 0, "routing should be auto-detected");
+        assert!(threads.benchmark > 0, "benchmark should default to 1");
+    }
+
+    #[test]
+    fn resolve_auto_preserves_explicit() {
+        let mut threads = ThreadsConfig {
+            memory: 4,
+            disk: 2,
+            routing: 0, // auto
+            benchmark: 0, // auto
+        };
+
+        threads.resolve_auto();
+
+        assert_eq!(threads.memory, 4, "explicit value preserved");
+        assert_eq!(threads.disk, 2, "explicit value preserved");
+        assert!(threads.routing > 0, "zero resolved to auto");
+        assert_eq!(threads.benchmark, 1, "benchmark defaults to 1");
     }
 }

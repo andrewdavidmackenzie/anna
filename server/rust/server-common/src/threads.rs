@@ -6,6 +6,10 @@
 use crate::ports::*;
 use crate::types::Address;
 
+/// Maximum thread ID. Port groups are spaced 50 apart, so tid must be < 50
+/// to avoid overlapping with the next port group.
+pub const MAX_TID: u32 = 50;
+
 /// A KVS server thread. Each KVS node runs multiple threads, each with
 /// its own set of ZMQ sockets.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -19,6 +23,7 @@ pub struct ServerThread {
 
 impl ServerThread {
     pub fn new(public_ip: &str, private_ip: &str, tid: u32, base_offset: u32) -> Self {
+        assert!(tid < MAX_TID, "tid {} exceeds maximum {}", tid, MAX_TID);
         Self {
             public_ip: public_ip.to_string(),
             private_ip: private_ip.to_string(),
@@ -35,6 +40,7 @@ impl ServerThread {
         virtual_num: u32,
         base_offset: u32,
     ) -> Self {
+        assert!(tid < MAX_TID, "tid {} exceeds maximum {}", tid, MAX_TID);
         Self {
             public_ip: public_ip.to_string(),
             private_ip: private_ip.to_string(),
@@ -126,6 +132,7 @@ pub struct RoutingThread {
 
 impl RoutingThread {
     pub fn new(ip: &str, tid: u32, base_offset: u32) -> Self {
+        assert!(tid < MAX_TID, "tid {} exceeds maximum {}", tid, MAX_TID);
         Self {
             ip: ip.to_string(),
             tid,
@@ -276,5 +283,24 @@ mod tests {
         let c = ServerThread::new("1.2.3.4", "10.0.0.1", 1, 0);
         assert_eq!(a, b);
         assert_ne!(a, c);
+    }
+
+    #[test]
+    #[should_panic(expected = "tid 50 exceeds maximum")]
+    fn server_thread_tid_too_large() {
+        ServerThread::new("1.2.3.4", "10.0.0.1", 50, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "tid 50 exceeds maximum")]
+    fn routing_thread_tid_too_large() {
+        RoutingThread::new("10.0.0.1", 50, 0);
+    }
+
+    #[test]
+    fn max_valid_tid() {
+        // tid=49 is the maximum valid value.
+        let st = ServerThread::new("1.2.3.4", "10.0.0.1", 49, 0);
+        assert_eq!(st.tid(), 49);
     }
 }

@@ -15,7 +15,7 @@ pub const DEFAULT_VIRTUAL_THREAD_NUM: u32 = 3000;
 /// Uses a `BTreeMap` for sorted key lookup with `O(log n)` find.
 #[derive(Debug, Clone)]
 pub struct ConsistentHashRing {
-    ring: BTreeMap<u32, ServerThread>,
+    ring: BTreeMap<u64, ServerThread>,
 }
 
 impl ConsistentHashRing {
@@ -65,12 +65,17 @@ impl ConsistentHashRing {
         } else {
             local_hash_key(key)
         };
-        // Find first entry >= hash, or wrap to beginning.
         self.ring
             .range(hash..)
             .next()
             .or_else(|| self.ring.iter().next())
             .map(|(_, st)| st)
+    }
+
+    /// Verify that all requested virtual nodes were inserted (no hash collisions).
+    /// Returns the actual ring size.
+    pub fn verify_size(&self, expected: usize) -> bool {
+        self.ring.len() == expected
     }
 
     /// Get all unique server threads (deduplicated by id).
@@ -105,41 +110,42 @@ impl Default for ConsistentHashRing {
 
 /// Global hasher for server threads: hash("GLOBAL" + virtual_id).
 /// Mirrors `GlobalHasher::operator()(const ServerThread&)` in C++.
-fn global_hash_thread(st: &ServerThread) -> u32 {
+fn global_hash_thread(st: &ServerThread) -> u64 {
     let input = format!("GLOBAL{}", st.virtual_id());
     std_hash(&input)
 }
 
 /// Global hasher for keys: hash("GLOBAL" + key).
 /// Mirrors `GlobalHasher::operator()(const Key&)` in C++.
-fn global_hash_key(key: &str) -> u32 {
+fn global_hash_key(key: &str) -> u64 {
     let input = format!("GLOBAL{}", key);
     std_hash(&input)
 }
 
 /// Local hasher for server threads: hash(tid + "_" + virtual_num).
 /// Mirrors `LocalHasher::operator()(const ServerThread&)` in C++.
-fn local_hash_thread(st: &ServerThread) -> u32 {
+fn local_hash_thread(st: &ServerThread) -> u64 {
     let input = format!("{}_{}", st.tid(), st.virtual_num());
     std_hash(&input)
 }
 
 /// Local hasher for keys: hash(key).
 /// Mirrors `LocalHasher::operator()(const Key&)` in C++.
-fn local_hash_key(key: &str) -> u32 {
+fn local_hash_key(key: &str) -> u64 {
     std_hash(key)
 }
 
-/// Compute a u32 hash using Rust's DefaultHasher.
+/// Compute a u64 hash using Rust's DefaultHasher.
 ///
-/// Note: This may not produce the same values as C++ std::hash<string>.
-/// For wire compatibility, this is acceptable because the hash ring is
-/// rebuilt from the same data on each node — what matters is that all
-/// Rust nodes agree, not that they match C++ nodes.
-fn std_hash(input: &str) -> u32 {
+/// Note: This does not produce the same values as C++ std::hash<string>.
+/// This is acceptable because the hash ring is rebuilt from the same
+/// cluster membership data on each node — all Rust nodes agree with
+/// each other. Rust and C++ servers communicate via protobuf, not
+/// shared hash rings.
+fn std_hash(input: &str) -> u64 {
     let mut hasher = DefaultHasher::new();
     input.hash(&mut hasher);
-    hasher.finish() as u32
+    hasher.finish()
 }
 
 #[cfg(test)]
