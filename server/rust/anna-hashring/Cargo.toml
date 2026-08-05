@@ -1,0 +1,14 @@
+[package]
+name = "anna-hashring"
+version = "0.1.0"
+edition = "2021"
+description = "Consistent hash ring with C FFI for Anna KVS"
+
+[lib]
+name = "anna_hashring"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+anna-server-common = { path = "../server-common" }
+
+

@@ -78,6 +78,67 @@ impl ConsistentHashRing {
         self.ring.len() == expected
     }
 
+    /// Find `rep_count` unique responsible servers for a key.
+    ///
+    /// Walks the ring clockwise from hash(key), collecting servers with
+    /// unique IDs. Mirrors `responsible_global` in C++.
+    pub fn find_responsible(&self, key: &str, rep_count: u32, global: bool) -> Vec<&ServerThread> {
+        if self.ring.is_empty() || rep_count == 0 {
+            return vec![];
+        }
+
+        let hash = if global {
+            global_hash_key(key)
+        } else {
+            local_hash_key(key)
+        };
+
+        let mut result = Vec::new();
+        let mut seen_ids = std::collections::HashSet::new();
+
+        // Start from hash position, walk clockwise.
+        let mut iter = self.ring.range(hash..).chain(self.ring.iter());
+        while result.len() < rep_count as usize {
+            match iter.next() {
+                Some((_, st)) => {
+                    if seen_ids.insert(st.id()) {
+                        result.push(st);
+                    }
+                }
+                None => break,
+            }
+        }
+
+        result
+    }
+
+    /// Find `rep_count` unique responsible thread IDs for a key (local ring).
+    ///
+    /// Mirrors `responsible_local` in C++.
+    pub fn find_responsible_local(&self, key: &str, rep_count: u32) -> Vec<u32> {
+        if self.ring.is_empty() || rep_count == 0 {
+            return vec![];
+        }
+
+        let hash = local_hash_key(key);
+        let mut result = Vec::new();
+        let mut seen_tids = std::collections::HashSet::new();
+
+        let mut iter = self.ring.range(hash..).chain(self.ring.iter());
+        while result.len() < rep_count as usize {
+            match iter.next() {
+                Some((_, st)) => {
+                    if seen_tids.insert(st.tid()) {
+                        result.push(st.tid());
+                    }
+                }
+                None => break,
+            }
+        }
+
+        result
+    }
+
     /// Get all unique server threads (deduplicated by id).
     pub fn get_unique_servers(&self) -> Vec<&ServerThread> {
         let mut seen = std::collections::HashSet::new();

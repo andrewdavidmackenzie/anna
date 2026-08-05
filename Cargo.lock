@@ -33,6 +33,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "anna-hashring"
+version = "0.1.0"
+dependencies = [
+ "anna-server-common",
+]
+
+[[package]]
 name = "anna-monitor"
 version = "0.1.0"
 dependencies = [
