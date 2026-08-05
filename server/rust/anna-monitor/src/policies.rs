@@ -32,7 +32,6 @@ pub fn storage_policy(
             to_add, ss.required_memory_node, memory_node_count
         );
         *new_memory_count = to_add;
-        // TODO: emit_scale_up_alert via ZMQ
     }
 
     // Scale up disk.
@@ -47,7 +46,6 @@ pub fn storage_policy(
             to_add, ss.required_disk_node, disk_node_count
         );
         *new_disk_count = to_add;
-        // TODO: emit_scale_up_alert via ZMQ
     }
 
     // Scale down disk if under-utilized.
@@ -63,7 +61,7 @@ pub fn storage_policy(
             ss.avg_disk_consumption_percentage * 100.0
         );
         *removing_disk_node = true;
-        // TODO: remove_node via ZMQ
+        // Node removal initiated by monitor loop after policies run.
     }
 }
 
@@ -95,7 +93,7 @@ pub fn movement_policy(
             "Movement policy: {} hot keys above promotion threshold",
             hot_keys.len()
         );
-        // TODO: change_replication_factor for hot keys
+        // TODO: change_replication_factor for hot keys (requires replication_helpers port)
     }
 
     // Count cold keys that should be demoted to disk.
@@ -110,7 +108,7 @@ pub fn movement_policy(
             "Movement policy: {} cold keys below demotion threshold",
             cold_keys.len()
         );
-        // TODO: change_replication_factor for cold keys
+        // TODO: change_replication_factor for cold keys (requires replication_helpers port)
     }
 
     // Selective replication reduction.
@@ -126,7 +124,7 @@ pub fn movement_policy(
                 "Movement policy: {} keys below mean for replication reduction",
                 cool_keys.len()
             );
-            // TODO: change_replication_factor to reduce
+            // TODO: change_replication_factor to reduce (requires replication_helpers port)
         }
     }
 
@@ -158,12 +156,12 @@ pub fn slo_policy(
                 nodes_to_add, ss.avg_latency, params.slo_worst_us
             );
             *new_memory_count = nodes_to_add;
-            // TODO: emit_scale_up_alert via ZMQ
+            // Scaling alert sent by monitor loop after policies run.
         }
 
         if params.enable_selective_rep {
             info!("SLO policy: would increase replication for hot keys");
-            // TODO: selective replication increase
+            // TODO: selective replication increase (requires replication_helpers port)
         }
     }
 
@@ -177,7 +175,7 @@ pub fn slo_policy(
             "SLO policy: removing memory node (min occupancy {:.2}%)",
             ss.min_memory_occupancy * 100.0
         );
-        // TODO: remove_node via ZMQ
+        // Node removal initiated by monitor loop after policies run.
     }
 }
 

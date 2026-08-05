@@ -142,6 +142,25 @@ pub fn wait_for_routing(base_offset: u16) {
     std::thread::sleep(Duration::from_secs(1));
 }
 
+/// Resolve the binary path for a server component, checking for
+/// ANNA_MONITOR_BIN override for the monitor binary.
+pub fn resolve_server_binary(name: &str, default_dir: &Path) -> PathBuf {
+    if name == "anna-monitor" {
+        if let Ok(alt) = std::env::var("ANNA_MONITOR_BIN") {
+            let alt_bin = PathBuf::from(&alt);
+            if alt_bin.exists() {
+                eprintln!("Using Rust monitor binary: {}", alt_bin.display());
+                return alt_bin;
+            }
+            eprintln!(
+                "WARNING: ANNA_MONITOR_BIN={} not found, falling back to C++ monitor",
+                alt
+            );
+        }
+    }
+    default_dir.join(name)
+}
+
 pub struct ServerGuard {
     processes: Vec<Child>,
 }
@@ -162,21 +181,7 @@ impl ServerGuard {
         let mut processes: Vec<Child> = Vec::new();
 
         for name in ["anna-monitor", "anna-route", "anna-kvs"] {
-            // Allow overriding the monitor binary via ANNA_MONITOR_BIN.
-            let bin = if name == "anna-monitor" {
-                if let Ok(alt) = std::env::var("ANNA_MONITOR_BIN") {
-                    let alt_bin = std::path::PathBuf::from(&alt);
-                    if alt_bin.exists() {
-                        alt_bin
-                    } else {
-                        bin_dir.join(name)
-                    }
-                } else {
-                    bin_dir.join(name)
-                }
-            } else {
-                bin_dir.join(name)
-            };
+            let bin = resolve_server_binary(name, &bin_dir);
             if !bin.exists() {
                 for mut p in processes {
                     p.kill().ok();

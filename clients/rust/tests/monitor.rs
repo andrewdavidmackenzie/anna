@@ -189,21 +189,7 @@ impl MonitorTestCluster {
         );
 
         for name in ["anna-monitor", "anna-route", "anna-kvs"] {
-            // Allow overriding the monitor binary via ANNA_MONITOR_BIN.
-            let bin = if name == "anna-monitor" {
-                if let Ok(alt) = std::env::var("ANNA_MONITOR_BIN") {
-                    let alt_bin = std::path::PathBuf::from(&alt);
-                    if alt_bin.exists() {
-                        alt_bin
-                    } else {
-                        server_bin_dir().join(name)
-                    }
-                } else {
-                    server_bin_dir().join(name)
-                }
-            } else {
-                server_bin_dir().join(name)
-            };
+            let bin = common::resolve_server_binary(name, &server_bin_dir());
             if !bin.exists() {
                 self.shutdown();
                 panic!("Server binary {} not found", name);

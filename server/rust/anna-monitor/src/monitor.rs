@@ -55,6 +55,65 @@ impl SocketCache {
     }
 }
 
+/// Send a ScalingAlert (ADD) to the external scaling system.
+async fn emit_scale_up_alert(
+    pushers: &mut SocketCache,
+    scaling_alert_ip: &str,
+    base_offset: u32,
+    tier_name: &str,
+    count: u32,
+    new_count: &mut u32,
+) {
+    use anna_server_common::proto::metadata::ScalingAlert;
+
+    let alert = ScalingAlert {
+        action: 1, // ADD
+        tier: match tier_name {
+            "MEMORY" => 1,
+            "DISK" => 2,
+            _ => 0,
+        },
+        count,
+        departed_node_ip: String::new(),
+    };
+    let encoded = alert.encode_to_vec();
+    let addr = anna_server_common::threads::scaling_alert_address(scaling_alert_ip, base_offset);
+
+    if let Err(e) = pushers.send(&addr, &encoded).await {
+        error!("Failed to send scale-up alert: {}", e);
+    } else {
+        info!(
+            "Emitted scale-up alert: add {} {} node(s)",
+            count, tier_name
+        );
+        *new_count = count;
+    }
+}
+
+/// Send a self-depart command to a KVS node, initiating graceful removal.
+async fn remove_node(
+    pushers: &mut SocketCache,
+    mt: &MonitoringThread,
+    node: &ServerThread,
+    departing_node_map: &mut HashMap<Address, u32>,
+    removing: &mut bool,
+    thread_count: u32,
+) {
+    let depart_addr = mt.depart_done_connect_address();
+
+    if let Err(e) = pushers
+        .send_string(&node.self_depart_connect_address(), &depart_addr)
+        .await
+    {
+        error!("Failed to send depart to {}: {}", node.private_ip(), e);
+        return;
+    }
+
+    departing_node_map.insert(node.private_ip().to_string(), thread_count);
+    *removing = true;
+    info!("Initiated removal of node {}", node.private_ip());
+}
+
 /// Run the monitoring event loop.
 pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     signal::install_shutdown_handler();
@@ -221,12 +280,22 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
                 &mut grace_start,
             ) {
                 // Send ScalingAlert (REMOVE) to scaling system.
+                use anna_server_common::proto::metadata::ScalingAlert;
+                let alert = ScalingAlert {
+                    action: 2, // REMOVE
+                    tier: _tier_id as i32,
+                    count: 1,
+                    departed_node_ip: format!("{}_{}", _pub_ip, _priv_ip),
+                };
                 let alert_addr = anna_server_common::threads::scaling_alert_address(
                     &scaling_alert_ip,
                     base_offset,
                 );
-                // TODO: build and send ScalingAlert protobuf
-                let _ = alert_addr;
+                let encoded = alert.encode_to_vec();
+                if let Err(e) = pushers.send(&alert_addr, &encoded).await {
+                    error!("Failed to send depart ScalingAlert: {}", e);
+                }
+                grace_start = Instant::now();
             }
         }
 
@@ -365,7 +434,10 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
 
             let grace_elapsed = grace_start.elapsed().as_secs() as u32 >= params.grace_period_s;
 
-            // Run policies.
+            // Run policies — they set new_*_count to request scaling.
+            let prev_mem = new_memory_count;
+            let prev_disk = new_disk_count;
+
             policies::storage_policy(
                 &ss,
                 &params,
@@ -396,6 +468,32 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
                 grace_elapsed,
             );
 
+            // Send scaling alerts if policies requested new nodes.
+            if new_memory_count > prev_mem {
+                emit_scale_up_alert(
+                    &mut pushers,
+                    &scaling_alert_ip,
+                    base_offset,
+                    "MEMORY",
+                    new_memory_count,
+                    &mut new_memory_count,
+                )
+                .await;
+                grace_start = Instant::now();
+            }
+            if new_disk_count > prev_disk {
+                emit_scale_up_alert(
+                    &mut pushers,
+                    &scaling_alert_ip,
+                    base_offset,
+                    "DISK",
+                    new_disk_count,
+                    &mut new_disk_count,
+                )
+                .await;
+                grace_start = Instant::now();
+            }
+
             // Clear feedback maps.
             user_latency.clear();
             user_throughput.clear();
@@ -415,6 +513,12 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
 ///
 /// Sends requests to all threads on all nodes, collects responses,
 /// then processes them into the stat maps.
+///
+/// Note: This runs sequentially (one request-response at a time) and
+/// blocks the event loop during collection. This matches the C++ monitor
+/// behavior. For large clusters, this could be parallelized with
+/// tokio::spawn, but the sequential approach is simpler and sufficient
+/// for typical deployments.
 async fn collect_internal_stats(
     global_hash_rings: &HashMap<Tier, ConsistentHashRing>,
     mt: &MonitoringThread,

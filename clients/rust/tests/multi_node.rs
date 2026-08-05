@@ -165,27 +165,6 @@ fn server_bin_dir() -> PathBuf {
 }
 
 fn spawn_server(name: &str, config: &Path, extra_path: &str) -> Option<Child> {
-    // Allow overriding the monitor binary via ANNA_MONITOR_BIN env var.
-    // This enables running the same tests against the Rust monitor.
-    if name == "anna-monitor" {
-        if let Ok(alt_bin) = std::env::var("ANNA_MONITOR_BIN") {
-            let bin = std::path::PathBuf::from(&alt_bin);
-            if bin.exists() {
-                let child = Command::new(&bin)
-                    .args(["--config", &config.to_string_lossy()])
-                    .env("PATH", extra_path)
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                    .unwrap_or_else(|e| panic!("Failed to spawn {}: {}", alt_bin, e));
-                return Some(child);
-            }
-            eprintln!(
-                "ANNA_MONITOR_BIN={} not found, falling back to C++ monitor",
-                alt_bin
-            );
-        }
-    }
     spawn_server_with_env(name, config, extra_path, &[])
 }
 
@@ -195,7 +174,7 @@ fn spawn_server_with_env(
     extra_path: &str,
     env_vars: &[(&str, &str)],
 ) -> Option<Child> {
-    let bin = server_bin_dir().join(name);
+    let bin = common::resolve_server_binary(name, &server_bin_dir());
     if !bin.exists() {
         return None;
     }
