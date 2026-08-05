@@ -4,7 +4,10 @@
 //! `movement_policy.cpp`, and `slo_policy.cpp`.
 
 use crate::types::*;
+use anna_server_common::metadata::KeyReplication;
+use anna_server_common::types::Key;
 use log::info;
+use std::collections::HashMap;
 
 /// Storage-based scaling policy.
 ///
@@ -67,81 +70,112 @@ pub fn storage_policy(
 
 /// Tier movement policy (promote/demote keys between memory and disk).
 ///
-/// Only active when tiering is enabled.
+/// Only active when tiering is enabled. Returns replication change
+/// requests for the monitor loop to execute.
 pub fn movement_policy(
     ss: &SummaryStats,
     params: &MonitorParams,
     key_access_summary: &KeyAccessSummary,
+    key_replication_map: &HashMap<Key, KeyReplication>,
     _key_size: &KeySizeMap,
-    memory_node_count: u32,
+    _memory_node_count: u32,
     _new_memory_count: &mut u32,
-    grace_elapsed: bool,
-) {
+    _grace_elapsed: bool,
+) -> HashMap<Key, KeyReplication> {
+    let mut requests = HashMap::new();
+
     if !params.enable_tiering {
-        return;
+        return requests;
     }
 
-    // Count hot keys that should be promoted to memory.
-    let hot_keys: Vec<&String> = key_access_summary
-        .iter()
-        .filter(|(_, &count)| count > params.key_promotion_threshold)
-        .map(|(key, _)| key)
-        .collect();
-
-    if !hot_keys.is_empty() {
-        info!(
-            "Movement policy: {} hot keys above promotion threshold",
-            hot_keys.len()
-        );
-        // TODO: change_replication_factor for hot keys (requires replication_helpers port)
+    // Promote hot keys to memory.
+    for (key, &count) in key_access_summary {
+        if count > params.key_promotion_threshold {
+            if let Some(rep) = key_replication_map.get(key) {
+                let mem_rep = rep
+                    .global_replication
+                    .get(&anna_server_common::metadata::Tier::Memory)
+                    .copied()
+                    .unwrap_or(0);
+                if mem_rep == 0 {
+                    let mut new_rep = rep.clone();
+                    new_rep
+                        .global_replication
+                        .insert(anna_server_common::metadata::Tier::Memory, 1);
+                    let disk_rep = rep
+                        .global_replication
+                        .get(&anna_server_common::metadata::Tier::Disk)
+                        .copied()
+                        .unwrap_or(1);
+                    if disk_rep > 0 {
+                        new_rep
+                            .global_replication
+                            .insert(anna_server_common::metadata::Tier::Disk, disk_rep - 1);
+                    }
+                    requests.insert(key.clone(), new_rep);
+                }
+            }
+        }
     }
 
-    // Count cold keys that should be demoted to disk.
-    let cold_keys: Vec<&String> = key_access_summary
-        .iter()
-        .filter(|(_, &count)| count < params.key_demotion_threshold)
-        .map(|(key, _)| key)
-        .collect();
-
-    if !cold_keys.is_empty() {
-        info!(
-            "Movement policy: {} cold keys below demotion threshold",
-            cold_keys.len()
-        );
-        // TODO: change_replication_factor for cold keys (requires replication_helpers port)
+    // Demote cold keys to disk.
+    for (key, &count) in key_access_summary {
+        if count < params.key_demotion_threshold {
+            if let Some(rep) = key_replication_map.get(key) {
+                let mem_rep = rep
+                    .global_replication
+                    .get(&anna_server_common::metadata::Tier::Memory)
+                    .copied()
+                    .unwrap_or(0);
+                if mem_rep > 0 {
+                    requests.insert(
+                        key.clone(),
+                        crate::replication::create_new_replication(0, 1, 1, 1),
+                    );
+                }
+            }
+        }
     }
 
     // Selective replication reduction.
     if params.enable_selective_rep {
-        let cool_keys: Vec<&String> = key_access_summary
-            .iter()
-            .filter(|(_, &count)| (count as f64) <= ss.key_access_mean)
-            .map(|(key, _)| key)
-            .collect();
-
-        if !cool_keys.is_empty() {
-            info!(
-                "Movement policy: {} keys below mean for replication reduction",
-                cool_keys.len()
-            );
-            // TODO: change_replication_factor to reduce (requires replication_helpers port)
+        for (key, &count) in key_access_summary {
+            if (count as f64) <= ss.key_access_mean {
+                requests.insert(
+                    key.clone(),
+                    crate::replication::create_new_replication(1, 0, 1, 1),
+                );
+            }
         }
     }
 
-    let _ = (memory_node_count, grace_elapsed);
+    if !requests.is_empty() {
+        info!(
+            "Movement policy: {} replication change(s) requested",
+            requests.len()
+        );
+    }
+
+    requests
 }
 
 /// SLO-based scaling policy.
 ///
 /// Scales nodes based on latency SLO violations and occupancy.
+/// Returns replication change requests for the monitor loop.
 pub fn slo_policy(
     ss: &SummaryStats,
     params: &MonitorParams,
+    key_access_summary: &KeyAccessSummary,
+    latency_miss_ratio_map: &HashMap<String, (f64, u32)>,
+    key_replication_map: &HashMap<Key, KeyReplication>,
     memory_node_count: u32,
     new_memory_count: &mut u32,
     _removing_memory_node: &mut bool,
     grace_elapsed: bool,
-) {
+) -> HashMap<Key, KeyReplication> {
+    let mut requests = HashMap::new();
+
     // Branch 1: Latency SLO violated.
     if ss.avg_latency > params.slo_worst_us as f64 && *new_memory_count == 0 {
         if params.enable_elasticity
@@ -156,12 +190,39 @@ pub fn slo_policy(
                 nodes_to_add, ss.avg_latency, params.slo_worst_us
             );
             *new_memory_count = nodes_to_add;
-            // Scaling alert sent by monitor loop after policies run.
         }
 
+        // Selective replication increase for hot keys with high latency.
         if params.enable_selective_rep {
-            info!("SLO policy: would increase replication for hot keys");
-            // TODO: selective replication increase (requires replication_helpers port)
+            let threshold = ss.key_access_mean + ss.key_access_std;
+            for (key, &count) in key_access_summary {
+                if (count as f64) > threshold {
+                    if let Some((ratio, _)) = latency_miss_ratio_map.get(key) {
+                        if let Some(rep) = key_replication_map.get(key) {
+                            let mem_rep = rep
+                                .global_replication
+                                .get(&anna_server_common::metadata::Tier::Memory)
+                                .copied()
+                                .unwrap_or(1);
+                            let target = ((mem_rep as f64) * ratio).ceil() as u32;
+                            let target = target.max(mem_rep + 1).min(memory_node_count);
+                            if target > mem_rep {
+                                let mut new_rep = rep.clone();
+                                new_rep
+                                    .global_replication
+                                    .insert(anna_server_common::metadata::Tier::Memory, target);
+                                requests.insert(key.clone(), new_rep);
+                            }
+                        }
+                    }
+                }
+            }
+            if !requests.is_empty() {
+                info!(
+                    "SLO policy: {} selective replication increase(s)",
+                    requests.len()
+                );
+            }
         }
     }
 
@@ -175,8 +236,9 @@ pub fn slo_policy(
             "SLO policy: removing memory node (min occupancy {:.2}%)",
             ss.min_memory_occupancy * 100.0
         );
-        // Node removal initiated by monitor loop after policies run.
     }
+
+    requests
 }
 
 #[cfg(test)]
@@ -242,21 +304,25 @@ mod tests {
 
     #[test]
     fn slo_policy_noop_when_latency_ok() {
-        let ss = default_ss(); // avg_latency = 0
+        let ss = default_ss();
         let params = MonitorParams::default();
         let mut nmc = 0u32;
         let mut rmn = false;
+        let kas = KeyAccessSummary::new();
+        let lmr = HashMap::new();
+        let krm = HashMap::new();
 
-        slo_policy(&ss, &params, 1, &mut nmc, &mut rmn, true);
+        let reqs = slo_policy(&ss, &params, &kas, &lmr, &krm, 1, &mut nmc, &mut rmn, true);
 
         assert_eq!(nmc, 0);
+        assert!(reqs.is_empty());
     }
 
     #[test]
     fn slo_policy_scales_up_on_latency_violation() {
         let mut ss = default_ss();
-        ss.avg_latency = 6000.0; // 2x SLO
-        ss.min_memory_occupancy = 0.5; // above upper threshold
+        ss.avg_latency = 6000.0;
+        ss.min_memory_occupancy = 0.5;
 
         let params = MonitorParams {
             enable_elasticity: true,
@@ -266,8 +332,11 @@ mod tests {
         };
         let mut nmc = 0u32;
         let mut rmn = false;
+        let kas = KeyAccessSummary::new();
+        let lmr = HashMap::new();
+        let krm = HashMap::new();
 
-        slo_policy(&ss, &params, 2, &mut nmc, &mut rmn, true);
+        slo_policy(&ss, &params, &kas, &lmr, &krm, 2, &mut nmc, &mut rmn, true);
 
         assert!(nmc > 0, "should scale up on latency violation");
     }

@@ -206,6 +206,10 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     let mut key_access_frequency = KeyAccessFrequency::new();
     let mut key_access_summary = KeyAccessSummary::new();
     let mut key_size = KeySizeMap::new();
+    let mut key_replication_map: HashMap<
+        anna_server_common::types::Key,
+        anna_server_common::metadata::KeyReplication,
+    > = HashMap::new();
     let mut ss = SummaryStats::default();
     let mut user_latency: HashMap<String, f64> = HashMap::new();
     let mut user_throughput: HashMap<String, f64> = HashMap::new();
@@ -449,24 +453,63 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
                 grace_elapsed,
             );
 
-            policies::movement_policy(
+            let movement_requests = policies::movement_policy(
                 &ss,
                 &params,
                 &key_access_summary,
+                &key_replication_map,
                 &key_size,
                 memory_node_count,
                 &mut new_memory_count,
                 grace_elapsed,
             );
 
-            policies::slo_policy(
+            let slo_requests = policies::slo_policy(
                 &ss,
                 &params,
+                &key_access_summary,
+                &latency_miss_ratio_map,
+                &key_replication_map,
                 memory_node_count,
                 &mut new_memory_count,
                 &mut removing_memory_node,
                 grace_elapsed,
             );
+
+            // Execute replication changes requested by policies.
+            if !movement_requests.is_empty() {
+                crate::replication::change_replication_factor(
+                    &movement_requests,
+                    &global_hash_rings,
+                    &routing_ips,
+                    &mut key_replication_map,
+                    &mut pushers,
+                    &mt,
+                    &response_puller,
+                    &mut rid,
+                    &monitoring_ip,
+                    base_offset,
+                    Duration::from_millis(params.monitoring_response_timeout_ms as u64),
+                )
+                .await;
+            }
+
+            if !slo_requests.is_empty() {
+                crate::replication::change_replication_factor(
+                    &slo_requests,
+                    &global_hash_rings,
+                    &routing_ips,
+                    &mut key_replication_map,
+                    &mut pushers,
+                    &mt,
+                    &response_puller,
+                    &mut rid,
+                    &monitoring_ip,
+                    base_offset,
+                    Duration::from_millis(params.monitoring_response_timeout_ms as u64),
+                )
+                .await;
+            }
 
             // Send scaling alerts if policies requested new nodes.
             if new_memory_count > prev_mem {
