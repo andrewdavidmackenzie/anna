@@ -19,5 +19,15 @@ serde_yaml = "0.9"
 omq-tokio = "0.20"
 tokio = { version = "1", features = ["full"] }
 
+[features]
+default = ["tiering", "autoscaling"]
+
+## Enable memory/disk tier movement policy (promote/demote keys).
+tiering = []
+
+## Enable storage and SLO-based auto-scaling policies.
+## Includes emit_scale_up_alert and remove_node functionality.
+autoscaling = []
+
 [dev-dependencies]
 tempfile = "3"
