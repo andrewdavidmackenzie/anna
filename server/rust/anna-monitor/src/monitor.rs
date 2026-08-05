@@ -242,14 +242,18 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
             let data: Vec<u8> = msg.iter().flat_map(|f| f.to_vec()).collect();
             let text = String::from_utf8_lossy(&data);
 
-            // Record last_epoch_change for join events.
+            // Record last_epoch_change for KVS join/depart events only.
+            // Routing joins don't report stats and shouldn't be crash-checked.
             let parts: Vec<&str> = text.split(':').collect();
             if parts.len() >= 4 {
-                let ip_pair = format!("{}/{}", parts[2], parts[3]);
-                if parts[0] == "join" {
-                    last_epoch_change.insert(ip_pair, Instant::now());
-                } else if parts[0] == "depart" {
-                    last_epoch_change.remove(&ip_pair);
+                let tier_name = parts[1];
+                if tier_name == "MEMORY" || tier_name == "DISK" {
+                    let ip_pair = format!("{}/{}", parts[2], parts[3]);
+                    if parts[0] == "join" {
+                        last_epoch_change.insert(ip_pair, Instant::now());
+                    } else if parts[0] == "depart" {
+                        last_epoch_change.remove(&ip_pair);
+                    }
                 }
             }
 
@@ -318,6 +322,7 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
         let elapsed = report_start.elapsed().as_secs() as u32;
         if elapsed >= params.monitoring_threshold_s {
             epoch += 1;
+            info!("Starting monitoring cycle {} (elapsed={}s)", epoch, elapsed);
 
             let memory_node_count = global_hash_rings
                 .get(&Tier::Memory)
@@ -360,12 +365,13 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
                 Duration::from_millis(params.monitoring_response_timeout_ms as u64),
             )
             .await;
-
-            // Crash detection.
+            // Crash detection — only run if we received at least some stats
+            // responses this cycle. If collect_internal_stats got nothing
+            // (e.g., KVS hasn't published its first report yet), skip
+            // crash detection to avoid false positives.
             let stale_threshold = Duration::from_secs(params.monitoring_threshold_s as u64);
             let mut dead_nodes = Vec::new();
 
-            // Build set of reporting nodes from occupancy data.
             let mut reporting_nodes = std::collections::HashSet::new();
             for ip_pair in memory_occupancy.keys() {
                 reporting_nodes.insert(ip_pair.clone());
@@ -382,13 +388,16 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
                     .or_insert_with(Instant::now);
             }
 
-            // Detect dead nodes.
-            for (ip_pair, last_seen) in &last_epoch_change {
-                if !reporting_nodes.contains(ip_pair) && last_seen.elapsed() > stale_threshold {
-                    dead_nodes.push(ip_pair.clone());
+            // Only detect dead nodes if we got SOME responses this cycle.
+            // This prevents false positives during startup when the KVS
+            // hasn't published its first stats report yet.
+            if !reporting_nodes.is_empty() {
+                for (ip_pair, last_seen) in &last_epoch_change {
+                    if !reporting_nodes.contains(ip_pair) && last_seen.elapsed() > stale_threshold {
+                        dead_nodes.push(ip_pair.clone());
+                    }
                 }
             }
-
             for ip_pair in &dead_nodes {
                 warn!("Detected crashed node: {}", ip_pair);
                 let parts: Vec<&str> = ip_pair.split('/').collect();
