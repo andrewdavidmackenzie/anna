@@ -322,7 +322,7 @@ capacities:
         let mut threads = ThreadsConfig {
             memory: 4,
             disk: 2,
-            routing: 0, // auto
+            routing: 0,   // auto
             benchmark: 0, // auto
         };
 
