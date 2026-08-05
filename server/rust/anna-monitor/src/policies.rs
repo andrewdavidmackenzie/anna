@@ -137,10 +137,11 @@ pub fn movement_policy(
         }
     }
 
-    // Selective replication reduction.
+    // Selective replication reduction — only for keys NOT already
+    // promoted or demoted by the loops above.
     if params.enable_selective_rep {
         for (key, &count) in key_access_summary {
-            if (count as f64) <= ss.key_access_mean {
+            if (count as f64) <= ss.key_access_mean && !requests.contains_key(key) {
                 requests.insert(
                     key.clone(),
                     crate::replication::create_new_replication(1, 0, 1, 1),

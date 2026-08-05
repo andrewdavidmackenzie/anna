@@ -391,9 +391,15 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
             // Only detect dead nodes if we got SOME responses this cycle.
             // This prevents false positives during startup when the KVS
             // hasn't published its first stats report yet.
+            // Use 2x threshold to give newly joined nodes time for their
+            // first stats report (server_report_period may exceed
+            // monitoring_timeout).
+            let crash_threshold = stale_threshold * 2;
             if !reporting_nodes.is_empty() {
                 for (ip_pair, last_seen) in &last_epoch_change {
-                    if !reporting_nodes.contains(ip_pair) && last_seen.elapsed() > stale_threshold {
+                    if !reporting_nodes.contains(ip_pair)
+                        && last_seen.elapsed() > crash_threshold
+                    {
                         dead_nodes.push(ip_pair.clone());
                     }
                 }
