@@ -90,7 +90,7 @@ fmt:
 
 # Debug build, use "-DCMAKE_BUILD_TYPE=Release" for a Release build
 .PHONY: build
-build: client-cpp server-cpp client-rust client-python client-go
+build: client-cpp server-cpp server-rust client-rust client-python client-go
 
 UNAME := $(shell uname)
 
@@ -130,6 +130,11 @@ endif
 client-rust:
 	@echo "Building rust code in workspace into ./target"
 	@$(CARGO_ENV) RUSTFLAGS="$(RUST_LINK_ALLOW)" cargo build --quiet
+
+.PHONY: server-rust
+server-rust:
+	@echo "Building Rust server binaries"
+	@$(CARGO_ENV) RUSTFLAGS="$(RUST_LINK_ALLOW)" cargo build --quiet -p anna-monitor
 
 .PHONY: client-python
 client-python:

@@ -6,16 +6,54 @@ use anna_server_common::config::Config;
 use anna_server_common::hash_ring::ConsistentHashRing;
 use anna_server_common::metadata::Tier;
 use anna_server_common::signal;
-use anna_server_common::threads::MonitoringThread;
+use anna_server_common::threads::{MonitoringThread, RoutingThread, ServerThread};
 use anna_server_common::types::Address;
 use log::{error, info, warn};
+use omq_tokio::{Context, Message as ZmqMessage, Options, Socket as OmqSocket, SocketType};
+use prost::Message;
 use std::collections::HashMap;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::handlers;
 use crate::policies;
 use crate::stats;
 use crate::types::*;
+
+/// Lazy-connecting PUSH socket cache.
+struct SocketCache {
+    ctx: Context,
+    sockets: HashMap<Address, OmqSocket>,
+}
+
+impl SocketCache {
+    fn new(ctx: Context) -> Self {
+        Self {
+            ctx,
+            sockets: HashMap::new(),
+        }
+    }
+
+    async fn send(&mut self, addr: &str, data: &[u8]) -> Result<(), String> {
+        if !self.sockets.contains_key(addr) {
+            let sock = self.ctx.socket(SocketType::Push, Options::default());
+            let endpoint = addr
+                .parse()
+                .map_err(|e| format!("Invalid address {}: {}", addr, e))?;
+            sock.connect(endpoint)
+                .await
+                .map_err(|e| format!("Failed to connect to {}: {}", addr, e))?;
+            self.sockets.insert(addr.to_string(), sock);
+        }
+        let sock = self.sockets.get_mut(addr).expect("socket just inserted");
+        sock.send(ZmqMessage::from(data.to_vec()))
+            .await
+            .map_err(|e| format!("Failed to send to {}: {}", addr, e))
+    }
+
+    async fn send_string(&mut self, addr: &str, msg: &str) -> Result<(), String> {
+        self.send(addr, msg.as_bytes()).await
+    }
+}
 
 /// Run the monitoring event loop.
 pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
@@ -25,7 +63,6 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     let monitoring_ip = config.monitoring.ip.clone();
     let scaling_alert_ip = config.monitoring.scaling_alert_ip.clone();
 
-    // Parse monitor parameters from config.
     let params = MonitorParams {
         monitoring_threshold_s: config.timings.monitoring_timeout.max(1),
         grace_period_s: config.timings.grace_period,
@@ -55,10 +92,9 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or(1)
     };
 
-    let memory_node_capacity = config.memory_capacity_bytes() / 1024; // in KB
+    let memory_node_capacity = config.memory_capacity_bytes() / 1024;
     let disk_node_capacity = config.disk_capacity_bytes() / 1024;
-
-    let virtual_nodes = 3000u32; // default, could be from config
+    let virtual_nodes = 3000u32;
 
     let mt = MonitoringThread::new(&monitoring_ip, base_offset);
 
@@ -68,6 +104,32 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
         "Selective replication policy enabled: {}",
         params.enable_selective_rep
     );
+
+    // ── ZMQ Sockets ─────────────────────────────────────────────────
+
+    let ctx = Context::new();
+
+    let notify_puller = ctx.socket(SocketType::Pull, Options::default());
+    notify_puller
+        .bind(mt.notify_connect_address().parse()?)
+        .await?;
+
+    let depart_done_puller = ctx.socket(SocketType::Pull, Options::default());
+    depart_done_puller
+        .bind(mt.depart_done_connect_address().parse()?)
+        .await?;
+
+    let feedback_puller = ctx.socket(SocketType::Pull, Options::default());
+    feedback_puller
+        .bind(mt.feedback_report_connect_address().parse()?)
+        .await?;
+
+    let response_puller = ctx.socket(SocketType::Pull, Options::default());
+    response_puller
+        .bind(mt.response_connect_address().parse()?)
+        .await?;
+
+    let mut pushers = SocketCache::new(ctx.clone());
 
     // ── State ───────────────────────────────────────────────────────
 
@@ -96,8 +158,9 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     let mut removing_disk_node = false;
     let mut grace_start = Instant::now();
     let mut report_start = Instant::now();
-    let mut _epoch = 0u32;
+    let mut epoch = 0u32;
     let mut last_epoch_change: HashMap<Address, Instant> = HashMap::new();
+    let mut rid = 0u32;
 
     info!(
         "Monitor listening on {} (base_offset={})",
@@ -105,20 +168,83 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ── Event loop ──────────────────────────────────────────────────
-    // TODO: integrate ZMQ sockets (notify_puller, depart_done_puller,
-    // feedback_puller, response_puller, pushers) when omq-tokio is
-    // wired up. For now, the structure is in place.
+
+    let poll_timeout = Duration::from_millis(100);
 
     while !signal::shutdown_requested() {
-        // TODO: ZMQ poll with 0ms timeout for non-blocking check
-        // pollitems[0] = notify_puller → membership_handler
-        // pollitems[1] = depart_done_puller → depart_done_handler
-        // pollitems[2] = feedback_puller → feedback_handler
+        // Non-blocking poll: try each socket with a short timeout.
+        // Process at most one message per iteration to keep the loop responsive.
 
-        // Periodic monitoring cycle.
+        if let Ok(Ok(msg)) = tokio::time::timeout(poll_timeout, notify_puller.recv()).await {
+            let data: Vec<u8> = msg.iter().flat_map(|f| f.to_vec()).collect();
+            let text = String::from_utf8_lossy(&data);
+
+            // Record last_epoch_change for join events.
+            let parts: Vec<&str> = text.split(':').collect();
+            if parts.len() >= 4 {
+                let ip_pair = format!("{}/{}", parts[2], parts[3]);
+                if parts[0] == "join" {
+                    last_epoch_change.insert(ip_pair, Instant::now());
+                } else if parts[0] == "depart" {
+                    last_epoch_change.remove(&ip_pair);
+                }
+            }
+
+            handlers::membership_handler(
+                &text,
+                &mut global_hash_rings,
+                &mut routing_ips,
+                &mut memory_storage,
+                &mut disk_storage,
+                &mut memory_occupancy,
+                &mut disk_occupancy,
+                &mut key_access_frequency,
+                &mut new_memory_count,
+                &mut new_disk_count,
+                &mut grace_start,
+                memory_thread_count,
+                disk_thread_count,
+                virtual_nodes,
+                base_offset,
+            );
+        }
+
+        if let Ok(Ok(msg)) = tokio::time::timeout(Duration::ZERO, depart_done_puller.recv()).await {
+            let data: Vec<u8> = msg.iter().flat_map(|f| f.to_vec()).collect();
+            let text = String::from_utf8_lossy(&data);
+
+            if let Some((_tier_id, _pub_ip, _priv_ip)) = handlers::depart_done_handler(
+                &text,
+                &mut departing_node_map,
+                &mut removing_memory_node,
+                &mut removing_disk_node,
+                &mut grace_start,
+            ) {
+                // Send ScalingAlert (REMOVE) to scaling system.
+                let alert_addr = anna_server_common::threads::scaling_alert_address(
+                    &scaling_alert_ip,
+                    base_offset,
+                );
+                // TODO: build and send ScalingAlert protobuf
+                let _ = alert_addr;
+            }
+        }
+
+        if let Ok(Ok(msg)) = tokio::time::timeout(Duration::ZERO, feedback_puller.recv()).await {
+            let data: Vec<u8> = msg.iter().flat_map(|f| f.to_vec()).collect();
+            handlers::feedback_handler(
+                &data,
+                &mut user_latency,
+                &mut user_throughput,
+                &mut latency_miss_ratio_map,
+                params.slo_worst_us,
+            );
+        }
+
+        // ── Periodic monitoring cycle ───────────────────────────────
         let elapsed = report_start.elapsed().as_secs() as u32;
         if elapsed >= params.monitoring_threshold_s {
-            _epoch += 1;
+            epoch += 1;
 
             let memory_node_count = global_hash_rings
                 .get(&Tier::Memory)
@@ -139,21 +265,83 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
             memory_accesses.clear();
             disk_accesses.clear();
 
-            // TODO: collect_internal_stats (requires ZMQ)
+            // Collect internal stats from all KVS nodes.
+            collect_internal_stats(
+                &global_hash_rings,
+                &mt,
+                &mut pushers,
+                &response_puller,
+                &mut memory_storage,
+                &mut disk_storage,
+                &mut memory_occupancy,
+                &mut disk_occupancy,
+                &mut memory_accesses,
+                &mut disk_accesses,
+                &mut key_access_frequency,
+                &mut key_size,
+                memory_thread_count,
+                disk_thread_count,
+                base_offset,
+                &mut rid,
+                &monitoring_ip,
+                Duration::from_millis(params.monitoring_response_timeout_ms as u64),
+            )
+            .await;
 
             // Crash detection.
-            let stale_threshold =
-                std::time::Duration::from_secs(params.monitoring_threshold_s as u64);
+            let stale_threshold = Duration::from_secs(params.monitoring_threshold_s as u64);
             let mut dead_nodes = Vec::new();
+
+            // Build set of reporting nodes from occupancy data.
+            let mut reporting_nodes = std::collections::HashSet::new();
+            for ip_pair in memory_occupancy.keys() {
+                reporting_nodes.insert(ip_pair.clone());
+            }
+            for ip_pair in disk_occupancy.keys() {
+                reporting_nodes.insert(ip_pair.clone());
+            }
+
+            // Update last_epoch_change for reporting nodes.
+            for ip_pair in &reporting_nodes {
+                last_epoch_change
+                    .entry(ip_pair.clone())
+                    .and_modify(|t| *t = Instant::now())
+                    .or_insert_with(Instant::now);
+            }
+
+            // Detect dead nodes.
             for (ip_pair, last_seen) in &last_epoch_change {
-                if last_seen.elapsed() > stale_threshold {
+                if !reporting_nodes.contains(ip_pair) && last_seen.elapsed() > stale_threshold {
                     dead_nodes.push(ip_pair.clone());
                 }
             }
+
             for ip_pair in &dead_nodes {
                 warn!("Detected crashed node: {}", ip_pair);
+                let parts: Vec<&str> = ip_pair.split('/').collect();
+                if parts.len() == 2 {
+                    let (pub_ip, priv_ip) = (parts[0], parts[1]);
+
+                    // Remove from hash rings.
+                    for ring in global_hash_rings.values_mut() {
+                        ring.remove(pub_ip, priv_ip, 0);
+                    }
+
+                    // Notify all routing nodes.
+                    for tier_name in ["MEMORY", "DISK"] {
+                        let msg = format!("depart:{}:{}:{}", tier_name, pub_ip, priv_ip);
+                        for rt_ip in &routing_ips {
+                            let rt = RoutingThread::new(rt_ip, 0, base_offset);
+                            if let Err(e) = pushers
+                                .send_string(&rt.notify_connect_address(), &msg)
+                                .await
+                            {
+                                error!("Failed to notify routing of crash: {}", e);
+                            }
+                        }
+                    }
+                }
                 last_epoch_change.remove(ip_pair);
-                // TODO: remove from hash ring, notify routing
             }
 
             // Compute summary stats.
@@ -215,20 +403,228 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
 
             report_start = Instant::now();
         }
-
-        // Yield to avoid busy-spinning.
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
 
     info!("Monitor shutting down");
-    let _ = (
-        mt,
-        scaling_alert_ip,
-        departing_node_map,
-        key_size,
-        dead_nodes_placeholder(),
-    );
+    let _ = (epoch, departing_node_map, key_size);
     Ok(())
 }
 
-fn dead_nodes_placeholder() {}
+/// Collect internal stats from all KVS nodes by sending GET requests
+/// for metadata keys and parsing the responses.
+///
+/// Sends requests to all threads on all nodes, collects responses,
+/// then processes them into the stat maps.
+async fn collect_internal_stats(
+    global_hash_rings: &HashMap<Tier, ConsistentHashRing>,
+    mt: &MonitoringThread,
+    pushers: &mut SocketCache,
+    response_puller: &OmqSocket,
+    memory_storage: &mut StorageStats,
+    disk_storage: &mut StorageStats,
+    memory_occupancy: &mut OccupancyStats,
+    disk_occupancy: &mut OccupancyStats,
+    memory_accesses: &mut AccessStats,
+    disk_accesses: &mut AccessStats,
+    key_access_frequency: &mut KeyAccessFrequency,
+    key_size: &mut KeySizeMap,
+    memory_thread_count: u32,
+    disk_thread_count: u32,
+    base_offset: u32,
+    rid: &mut u32,
+    monitor_ip: &str,
+    timeout: Duration,
+) {
+    use anna_server_common::proto::kvs::{
+        KeyRequest, KeyResponse, KeyTuple, LatticeType, RequestType,
+    };
+
+    // Phase 1: Send all requests and collect raw response bytes.
+    let mut responses: Vec<Vec<u8>> = Vec::new();
+
+    let tier_configs: &[(Tier, u32)] = &[
+        (Tier::Memory, memory_thread_count),
+        (Tier::Disk, disk_thread_count),
+    ];
+
+    for &(tier, thread_count) in tier_configs {
+        let ring = match global_hash_rings.get(&tier) {
+            Some(r) => r,
+            None => continue,
+        };
+
+        let tier_name = match tier {
+            Tier::Memory => "MEMORY",
+            Tier::Disk => "DISK",
+            _ => continue,
+        };
+
+        for st in ring.get_unique_servers() {
+            for tid in 0..thread_count {
+                let server_thread =
+                    ServerThread::new(st.public_ip(), st.private_ip(), tid, base_offset);
+
+                let ip_pair = format!("{}/{}", st.public_ip(), st.private_ip());
+                let meta_keys = [
+                    format!(
+                        "ANNA_METADATA|server_stats|{}|{}|{}",
+                        ip_pair, tid, tier_name
+                    ),
+                    format!("ANNA_METADATA|key_access|{}|{}|{}", ip_pair, tid, tier_name),
+                    format!("ANNA_METADATA|key_size|{}|{}|{}", ip_pair, tid, tier_name),
+                ];
+
+                *rid += 1;
+                let request_id = format!("{}:{}", monitor_ip, rid);
+
+                let mut request = KeyRequest {
+                    r#type: RequestType::Get as i32,
+                    response_address: mt.response_connect_address(),
+                    request_id,
+                    ..Default::default()
+                };
+
+                for key in &meta_keys {
+                    request.tuples.push(KeyTuple {
+                        key: key.clone(),
+                        lattice_type: LatticeType::Lww as i32,
+                        ..Default::default()
+                    });
+                }
+
+                let target_addr = server_thread.key_request_connect_address();
+                let encoded = request.encode_to_vec();
+
+                if let Err(e) = pushers.send(&target_addr, &encoded).await {
+                    warn!("Failed to send stats request to {}: {}", target_addr, e);
+                    continue;
+                }
+
+                match tokio::time::timeout(timeout, response_puller.recv()).await {
+                    Ok(Ok(msg)) => {
+                        let bytes: Vec<u8> = msg.iter().flat_map(|f| f.to_vec()).collect();
+                        responses.push(bytes);
+                    }
+                    Ok(Err(e)) => {
+                        warn!("ZMQ recv error for stats from {}: {}", ip_pair, e);
+                    }
+                    Err(_) => {
+                        warn!("Stats collection timed out for {}:{}", ip_pair, tid);
+                    }
+                }
+            }
+        }
+    }
+
+    // Phase 2: Process all collected responses.
+    for bytes in &responses {
+        if let Ok(response) = KeyResponse::decode(bytes.as_slice()) {
+            process_stats_response(
+                &response,
+                &mut *memory_storage,
+                &mut *disk_storage,
+                &mut *memory_occupancy,
+                &mut *disk_occupancy,
+                &mut *memory_accesses,
+                &mut *disk_accesses,
+                &mut *key_access_frequency,
+                &mut *key_size,
+            );
+        }
+    }
+}
+
+/// Process a stats response from a KVS node.
+fn process_stats_response(
+    response: &anna_server_common::proto::kvs::KeyResponse,
+    memory_storage: &mut StorageStats,
+    disk_storage: &mut StorageStats,
+    memory_occupancy: &mut OccupancyStats,
+    disk_occupancy: &mut OccupancyStats,
+    memory_accesses: &mut AccessStats,
+    disk_accesses: &mut AccessStats,
+    key_access_frequency: &mut KeyAccessFrequency,
+    key_size: &mut KeySizeMap,
+) {
+    use anna_server_common::proto::kvs::LwwValue;
+    use anna_server_common::proto::metadata::{KeyAccessData, KeySizeData, ServerThreadStatistics};
+
+    for tuple in &response.tuples {
+        if tuple.error != 0 {
+            continue; // KEY_DNE or other error
+        }
+
+        let key = &tuple.key;
+        let parts: Vec<&str> = key.split('|').collect();
+        // Expected: ANNA_METADATA|type|ip_pair|tid|tier
+        if parts.len() < 5 {
+            continue;
+        }
+
+        let meta_type = parts[1];
+        let ip_pair = parts[2].to_string();
+        let tid: u32 = parts[3].parse().unwrap_or(0);
+        let tier_name = parts[4];
+
+        // Unwrap LWW wrapper.
+        let inner_payload = match LwwValue::decode(tuple.payload.as_slice()) {
+            Ok(lww) => lww.value,
+            Err(_) => continue,
+        };
+
+        let is_memory = tier_name == "MEMORY";
+
+        match meta_type {
+            "server_stats" => {
+                if let Ok(stats) = ServerThreadStatistics::decode(inner_payload.as_slice()) {
+                    if is_memory {
+                        memory_storage
+                            .entry(ip_pair.clone())
+                            .or_default()
+                            .insert(tid, stats.storage_consumption);
+                        memory_occupancy
+                            .entry(ip_pair.clone())
+                            .or_default()
+                            .insert(tid, (stats.occupancy, stats.epoch));
+                        memory_accesses
+                            .entry(ip_pair)
+                            .or_default()
+                            .insert(tid, stats.access_count);
+                    } else {
+                        disk_storage
+                            .entry(ip_pair.clone())
+                            .or_default()
+                            .insert(tid, stats.storage_consumption);
+                        disk_occupancy
+                            .entry(ip_pair.clone())
+                            .or_default()
+                            .insert(tid, (stats.occupancy, stats.epoch));
+                        disk_accesses
+                            .entry(ip_pair)
+                            .or_default()
+                            .insert(tid, stats.access_count);
+                    }
+                }
+            }
+            "key_access" => {
+                if let Ok(access_data) = KeyAccessData::decode(inner_payload.as_slice()) {
+                    let thread_key = format!("{}:{}", ip_pair, tid);
+                    for ka in &access_data.keys {
+                        key_access_frequency
+                            .entry(ka.key.clone())
+                            .or_default()
+                            .insert(thread_key.clone(), ka.access_count);
+                    }
+                }
+            }
+            "key_size" => {
+                if let Ok(size_data) = KeySizeData::decode(inner_payload.as_slice()) {
+                    for ks in &size_data.key_sizes {
+                        key_size.insert(ks.key.clone(), ks.size);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}

@@ -162,7 +162,21 @@ impl ServerGuard {
         let mut processes: Vec<Child> = Vec::new();
 
         for name in ["anna-monitor", "anna-route", "anna-kvs"] {
-            let bin = bin_dir.join(name);
+            // Allow overriding the monitor binary via ANNA_MONITOR_BIN.
+            let bin = if name == "anna-monitor" {
+                if let Ok(alt) = std::env::var("ANNA_MONITOR_BIN") {
+                    let alt_bin = std::path::PathBuf::from(&alt);
+                    if alt_bin.exists() {
+                        alt_bin
+                    } else {
+                        bin_dir.join(name)
+                    }
+                } else {
+                    bin_dir.join(name)
+                }
+            } else {
+                bin_dir.join(name)
+            };
             if !bin.exists() {
                 for mut p in processes {
                     p.kill().ok();

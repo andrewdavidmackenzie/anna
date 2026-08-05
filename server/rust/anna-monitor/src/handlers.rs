@@ -127,24 +127,25 @@ pub fn membership_handler(
 /// Process a depart-done ack from a departing node.
 ///
 /// Message format: "public_ip_private_ip_tier_id"
+/// Returns `Some((tier_id, public_ip, private_ip))` if departure is complete
+/// (all thread acks received), so the caller can send a ScalingAlert via ZMQ.
 pub fn depart_done_handler(
     msg: &str,
     departing_node_map: &mut HashMap<Address, u32>,
     removing_memory_node: &mut bool,
     removing_disk_node: &mut bool,
     grace_start: &mut Instant,
-    scaling_alert_ip: &str,
-    base_offset: u32,
-    pushers: &mut HashMap<String, Vec<u8>>, // placeholder for ZMQ pushers
-) {
+) -> Option<(u32, String, String)> {
     let parts: Vec<&str> = msg.split('_').collect();
     if parts.len() < 3 {
         error!("Invalid depart_done message: {}", msg);
-        return;
+        return None;
     }
 
-    let private_ip = parts[1];
-    if let Some(count) = departing_node_map.get_mut(private_ip) {
+    let public_ip = parts[0].to_string();
+    let private_ip = parts[1].to_string();
+
+    if let Some(count) = departing_node_map.get_mut(&private_ip) {
         *count -= 1;
         if *count == 0 {
             let tier_id: u32 = parts[2].parse().unwrap_or(0);
@@ -155,17 +156,15 @@ pub fn depart_done_handler(
             }
 
             info!("Depart done for node {} (tier {})", private_ip, tier_id);
-
-            // TODO: Send ScalingAlert protobuf to scaling_alert_ip.
-            // This requires ZMQ socket integration.
-            let _ = (scaling_alert_ip, base_offset, pushers);
-
             *grace_start = Instant::now();
-            departing_node_map.remove(private_ip);
+            departing_node_map.remove(&private_ip);
+            return Some((tier_id, public_ip, private_ip));
         }
     } else {
         error!("Received depart_done for unknown node: {}", private_ip);
     }
+
+    None
 }
 
 /// Process user feedback (latency/throughput reports).
@@ -401,20 +400,19 @@ mod tests {
         let mut removing_mem = true;
         let mut removing_disk = false;
         let mut grace = Instant::now();
-        let mut pushers = HashMap::new();
 
-        depart_done_handler(
+        let result = depart_done_handler(
             "10.0.0.1_10.0.0.1_1",
             &mut departing,
             &mut removing_mem,
             &mut removing_disk,
             &mut grace,
-            "NULL",
-            0,
-            &mut pushers,
         );
 
         assert!(!removing_mem);
         assert!(departing.is_empty());
+        assert!(result.is_some());
+        let (tier_id, _pub_ip, _priv_ip) = result.unwrap();
+        assert_eq!(tier_id, 1); // Memory
     }
 }
