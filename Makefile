@@ -117,7 +117,7 @@ else
 endif
 
 .PHONY: server-cpp
-server-cpp:
+server-cpp: server-rust
 	@mkdir -p server/cpp/build
 	@echo "Building server C++ project into ./server/cpp/build"
 ifeq ($(UNAME), Darwin)

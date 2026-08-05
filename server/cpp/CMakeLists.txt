@@ -86,7 +86,12 @@ FIND_PACKAGE(cppzmq REQUIRED)
 FIND_PACKAGE(spdlog CONFIG REQUIRED)
 FIND_PACKAGE(yaml-cpp REQUIRED)
 
-INCLUDE_DIRECTORIES(src)
+# Anna hash ring Rust library (C FFI).
+# Built by `make server-rust` or `cargo build -p anna-hashring`.
+SET(ANNA_HASHRING_LIB "${CMAKE_SOURCE_DIR}/../../target/debug/libanna_hashring.a")
+SET(ANNA_HASHRING_INCLUDE "${CMAKE_SOURCE_DIR}/../rust/anna-hashring")
+
+INCLUDE_DIRECTORIES(src ${ANNA_HASHRING_INCLUDE})
 ADD_SUBDIRECTORY(src)
 
 IF(${BUILD_TEST})
