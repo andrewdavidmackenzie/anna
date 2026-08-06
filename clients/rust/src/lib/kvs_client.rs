@@ -644,6 +644,18 @@ impl KVSClient {
             .unwrap_or_default()
     }
 
+    /// Retrieve KVS member IPs from the metadata key.
+    ///
+    /// Returns a list of `"public_ip/private_ip"` strings for all KVS nodes
+    /// in the cluster. Returns an empty vec if the metadata key hasn't been
+    /// written yet (the KVS publishes it periodically during stats reporting).
+    pub async fn get_kvs_members(&mut self) -> Vec<String> {
+        match self.get_bytes("ANNA_METADATA|kvs_members").await {
+            Ok(bytes) => Self::decode_monitoring_ips(&bytes), // Same StringSet format
+            Err(_) => vec![],
+        }
+    }
+
     /// Store a key-value pair (Last-Writer-Wins lattice).
     ///
     /// ```rust

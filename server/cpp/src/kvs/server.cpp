@@ -789,6 +789,33 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
         }
       }
 
+      // Publish KVS member list so clients can build local hash rings
+      // for client-side routing (eliminating the routing tier dependency).
+      {
+        shared::StringSet members_set;
+        for (const auto &pair : global_hash_rings) {
+          for (const ServerThread &st :
+               pair.second.get_unique_servers()) {
+            members_set.add_keys(st.public_ip() + "/" + st.private_ip());
+          }
+        }
+        if (members_set.keys_size() > 0) {
+          string serialized_members;
+          members_set.SerializeToString(&serialized_members);
+
+          req.Clear();
+          req.set_type(kvs::RequestType::PUT);
+          prepare_put_tuple(
+              req, kMetadataIdentifier + kMetadataDelimiter + "kvs_members",
+              kvs::LatticeType::LWW, serialize(ts, serialized_members));
+
+          string serialized;
+          req.SerializeToString(&serialized);
+          kZmqUtil->send_string(serialized,
+                                &pushers[wt.key_request_connect_address()]);
+        }
+      }
+
       report_start = std::chrono::system_clock::now();
 
       // Get the most recent list of cache IPs from the external management
