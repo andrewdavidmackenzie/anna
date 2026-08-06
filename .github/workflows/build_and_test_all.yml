@@ -83,7 +83,7 @@ jobs:
       run: |
         docker info > /dev/null 2>&1 || { echo "Docker not available"; exit 1; }
         docker build -t anna-test .
-        cargo test --test docker -- --ignored --nocapture
+        cargo test --test docker -- --nocapture
 
     - name: test-rust (Windows)
       if: matrix.os == 'windows-latest'
