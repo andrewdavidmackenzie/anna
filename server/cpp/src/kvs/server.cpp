@@ -102,15 +102,19 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
 
   map<Key, KeyReplication> key_replication_map;
 
-  // request server addresses from the seed node
-  zmq::socket_t addr_requester(context, ZMQ_REQ);
-  addr_requester.connect(RoutingThread(seed_ip, 0).seed_connect_address());
-  kZmqUtil->send_string("join", &addr_requester);
-
-  // receive and add all the addresses that seed node sent
-  string serialized_addresses = kZmqUtil->recv_string(&addr_requester);
+  // Bootstrap: get cluster membership from a seed node.
+  // If this is the first node (seed_ip == private_ip), start with
+  // empty membership. Otherwise, request from an existing KVS node.
   ClusterMembership membership;
-  membership.ParseFromString(serialized_addresses);
+  if (seed_ip != private_ip) {
+    zmq::socket_t addr_requester(context, ZMQ_REQ);
+    addr_requester.connect(RoutingThread(seed_ip, 0).seed_connect_address());
+    kZmqUtil->send_string("join", &addr_requester);
+    string serialized_addresses = kZmqUtil->recv_string(&addr_requester);
+    membership.ParseFromString(serialized_addresses);
+  } else {
+    log->info("First node in cluster (seed_ip == private_ip), starting with empty membership.");
+  }
 
   // Request the restart count from the external management system.
   // The scaling_alert_ip serves as the address for all external
@@ -168,12 +172,6 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
     }
 
     msg = "join:" + msg;
-
-    // notify proxies that this node has joined
-    for (const string &address : routing_ips) {
-      kZmqUtil->send_string(
-          msg, &pushers[RoutingThread(address, 0).notify_connect_address()]);
-    }
 
     // notify monitoring nodes that this node has joined
     for (const string &address : monitoring_ips) {
@@ -348,6 +346,13 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
   zmq::socket_t cache_registration_puller(context, ZMQ_PULL);
   cache_registration_puller.bind(wt.cache_registration_bind_address());
 
+  // Seed handler: thread 0 responds to "join" requests from new KVS nodes.
+  // This replaces the routing server's seed handler.
+  zmq::socket_t seed_responder(context, ZMQ_REP);
+  if (thread_id == 0) {
+    seed_responder.bind(RoutingThread(private_ip, 0).seed_bind_address());
+  }
+
   //  Initialize poll set
   vector<zmq::pollitem_t> pollitems = {
       {static_cast<void *>(join_puller), 0, ZMQ_POLLIN, 0},
@@ -359,7 +364,8 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
       {static_cast<void *>(replication_change_puller), 0, ZMQ_POLLIN, 0},
       {static_cast<void *>(cache_ip_response_puller), 0, ZMQ_POLLIN, 0},
       {static_cast<void *>(management_node_response_puller), 0, ZMQ_POLLIN, 0},
-      {static_cast<void *>(cache_registration_puller), 0, ZMQ_POLLIN, 0}};
+      {static_cast<void *>(cache_registration_puller), 0, ZMQ_POLLIN, 0},
+      {static_cast<void *>(seed_responder), 0, ZMQ_POLLIN, 0}};
 
   auto gossip_start = std::chrono::system_clock::now();
   auto gossip_end = std::chrono::system_clock::now();
@@ -368,7 +374,7 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
   auto gc_start = std::chrono::system_clock::now();
 
   unsigned long long working_time = 0;
-  unsigned long long working_time_map[11] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+  unsigned long long working_time_map[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   unsigned epoch = 0;
 
   // enter event loop
@@ -555,6 +561,29 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
                               .count();
       working_time += time_elapsed;
       working_time_map[9] += time_elapsed;
+    }
+
+    // seed request handler (thread 0 only)
+    if (thread_id == 0 && pollitems[10].revents & ZMQ_POLLIN) {
+      string request = kZmqUtil->recv_string(&seed_responder);
+      log->info("Received seed join request");
+      
+      // Build membership response from current hash ring state.
+      ClusterMembership seed_membership;
+      for (const auto &pair : global_hash_rings) {
+        Tier tid = pair.first;
+        GlobalHashRing hash_ring = pair.second;
+        ClusterMembership_TierMembership *tier = seed_membership.add_tiers();
+        tier->set_tier_id(tid);
+        for (const ServerThread &st : hash_ring.get_unique_servers()) {
+          auto server = tier->add_servers();
+          server->set_private_ip(st.private_ip());
+          server->set_public_ip(st.public_ip());
+        }
+      }
+      string serialized;
+      seed_membership.SerializeToString(&serialized);
+      kZmqUtil->send_string(serialized, &seed_responder);
     }
 
     // gossip updates to other threads

@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for the Anna KVS server.
 #
-# Builds the three server binaries (anna-kvs, anna-route, anna-monitor)
+# Builds the two server binaries (anna-kvs, anna-monitor)
 # in a build stage, then copies them into a minimal runtime image.
 #
 # Usage:
@@ -76,7 +76,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy server binaries
 COPY --from=builder /src/server/cpp/build/target/kvs/anna-kvs /usr/local/bin/
-COPY --from=builder /src/server/cpp/build/target/kvs/anna-route /usr/local/bin/
 COPY --from=builder /src/server/cpp/build/target/kvs/anna-monitor /usr/local/bin/
 
 # Copy default config and entrypoint

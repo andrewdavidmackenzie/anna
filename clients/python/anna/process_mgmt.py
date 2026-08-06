@@ -3,7 +3,7 @@ import signal
 import subprocess
 import time
 
-PROCESS_LIST = ["anna-monitor", "anna-route", "anna-kvs"]
+PROCESS_LIST = ["anna-monitor", "anna-kvs"]
 
 
 def _pids_from_name(name):

@@ -26,7 +26,7 @@ def run_system_tests():
     log_file = "server.log"
 
     # Create a config with all sections required by anna-kvs, anna-monitor,
-    # anna-route, and the C++ client library.
+    # and the C++ client library.
     with open(test_config, "w") as f:
         f.write("""
 monitoring:
@@ -109,8 +109,8 @@ policy:
     # Create disk_0 directory for disk-tier serializer
     os.makedirs(os.path.join(test_data, "disk_0"), exist_ok=True)
 
-    # Start in dependency order: monitor first, then route, then kvs.
-    binaries = ["anna-monitor", "anna-route", "anna-kvs"]
+    # Start in dependency order: monitor first, then kvs.
+    binaries = ["anna-monitor", "anna-kvs"]
     procs = []
 
     print(f"Starting servers in {server_dir}...")
@@ -131,11 +131,11 @@ policy:
         time.sleep(1)
 
     try:
-        # Wait for the routing tier to be ready by probing its ZMQ TCP port.
-        # kKeyAddressPort (6450) is the port the routing thread binds for
+        # Wait for the KVS to be ready by probing its ZMQ TCP port.
+        # kKeyRequestPort (6200) is the port the KVS thread binds for
         # key-address lookups from clients.
-        routing_port = 6450
-        print(f"Waiting for routing tier on port {routing_port}...")
+        kvs_port = 6200
+        print(f"Waiting for KVS on port {kvs_port}...")
         timeout = 30
         start_time = time.time()
         ready = False
@@ -149,7 +149,7 @@ policy:
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     s.settimeout(1.0)
-                    if s.connect_ex(("127.0.0.1", routing_port)) == 0:
+                    if s.connect_ex(("127.0.0.1", kvs_port)) == 0:
                         ready = True
                         break
             except Exception:

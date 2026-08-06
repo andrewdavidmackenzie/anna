@@ -12,7 +12,7 @@ func detachedProcessAttr() *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{Setsid: true}
 }
 
-var processList = []string{"anna-monitor", "anna-route", "anna-kvs"}
+var processList = []string{"anna-monitor", "anna-kvs"}
 
 // Start starts the anna server processes.
 func Start(configFilePath string) (int, error) {

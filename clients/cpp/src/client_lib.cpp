@@ -38,7 +38,7 @@ ZmqUtilInterface* kZmqUtil = &zmq_util;
 
 namespace annalib {
 
-const vector<string> kProcessList = {"anna-monitor", "anna-route",
+const vector<string> kProcessList = {"anna-monitor",
                                       "anna-kvs"};
 
 std::unique_ptr<KvsClient> make_client(const ClientConfig& config,

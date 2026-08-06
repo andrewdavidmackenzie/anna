@@ -195,8 +195,7 @@ async fn test_memory_extras(client: &mut KVSClient) {
 async fn system_test_kvs_client() {
     let config_path = generate_config(MEMORY_BASE_OFFSET);
     let _guard = ServerGuard::start(&config_path, MEMORY_BASE_OFFSET);
-    let config = client_config(MEMORY_BASE_OFFSET);
-    let mut client = KVSClient::new(&config, Some(5)).await;
+    let mut client = common::client_with_direct_routing(MEMORY_BASE_OFFSET, Some(5)).await;
 
     test_all_lattice_types(&mut client, "mem").await;
     test_memory_extras(&mut client).await;
@@ -210,8 +209,7 @@ async fn system_test_kvs_client() {
 async fn disk_tier_lattice_types() {
     let config_path = generate_disk_config(DISK_BASE_OFFSET);
     let _guard = ServerGuard::start_disk(&config_path, DISK_BASE_OFFSET);
-    let config = client_config(DISK_BASE_OFFSET);
-    let mut client = KVSClient::new(&config, Some(6)).await;
+    let mut client = common::client_with_direct_routing(DISK_BASE_OFFSET, Some(6)).await;
 
     test_all_lattice_types(&mut client, "disk").await;
 }
@@ -224,8 +222,7 @@ const OR_SET_OFFSET: u16 = 206;
 async fn or_set_add_remove_get() {
     let config_path = generate_config(OR_SET_OFFSET);
     let _guard = ServerGuard::start(&config_path, OR_SET_OFFSET);
-    let config = client_config(OR_SET_OFFSET);
-    let mut client = KVSClient::new(&config, Some(7)).await;
+    let mut client = common::client_with_direct_routing(OR_SET_OFFSET, Some(7)).await;
 
     // Add elements
     client.or_set_add("oset", "apple").await.expect("add apple");
@@ -275,8 +272,7 @@ const BATCH_PUT_OFFSET: u16 = 207;
 async fn batch_put_and_get() {
     let config_path = generate_config(BATCH_PUT_OFFSET);
     let _guard = ServerGuard::start(&config_path, BATCH_PUT_OFFSET);
-    let config = client_config(BATCH_PUT_OFFSET);
-    let mut client = KVSClient::new(&config, Some(7)).await;
+    let mut client = common::client_with_direct_routing(BATCH_PUT_OFFSET, Some(7)).await;
 
     let pairs: Vec<(&str, &str)> = (0..10)
         .map(|i| {
@@ -308,8 +304,7 @@ const COUNTER_DNE_OFFSET: u16 = 209;
 async fn counter_basic() {
     let config_path = generate_config(COUNTER_BASIC_OFFSET);
     let _guard = ServerGuard::start(&config_path, COUNTER_BASIC_OFFSET);
-    let config = client_config(COUNTER_BASIC_OFFSET);
-    let mut client = KVSClient::new(&config, Some(7)).await;
+    let mut client = common::client_with_direct_routing(COUNTER_BASIC_OFFSET, Some(7)).await;
 
     // Increment 3 times
     client
@@ -372,8 +367,7 @@ async fn counter_basic() {
 async fn counter_nonexistent_key() {
     let config_path = generate_config(COUNTER_DNE_OFFSET);
     let _guard = ServerGuard::start(&config_path, COUNTER_DNE_OFFSET);
-    let config = client_config(COUNTER_DNE_OFFSET);
-    let mut client = KVSClient::new(&config, Some(7)).await;
+    let mut client = common::client_with_direct_routing(COUNTER_DNE_OFFSET, Some(7)).await;
 
     let result = client.get_counter("nonexistent_counter").await;
     assert!(
@@ -467,8 +461,7 @@ timings:
 async fn ttl_key_expires() {
     let config_path = generate_ttl_config(TTL_EXPIRE_OFFSET);
     let _guard = ServerGuard::start(&config_path, TTL_EXPIRE_OFFSET);
-    let config = client_config(TTL_EXPIRE_OFFSET);
-    let mut client = KVSClient::new(&config, Some(7)).await;
+    let mut client = common::client_with_direct_routing(TTL_EXPIRE_OFFSET, Some(7)).await;
 
     // PUT with 2-second TTL
     client
@@ -491,7 +484,7 @@ async fn ttl_key_expires() {
 
     // GET after expiry — should fail with KEY_DNE.
     // Use a fresh client to avoid the read cache.
-    let mut client2 = KVSClient::new(&config, Some(8)).await;
+    let mut client2 = common::client_with_direct_routing(TTL_EXPIRE_OFFSET, Some(8)).await;
     let result = client2.get("ttl_key").await;
     assert!(
         result.is_err(),
@@ -506,8 +499,7 @@ async fn ttl_key_expires() {
 async fn no_ttl_key_persists() {
     let config_path = generate_ttl_config(TTL_PERSIST_OFFSET);
     let _guard = ServerGuard::start(&config_path, TTL_PERSIST_OFFSET);
-    let config = client_config(TTL_PERSIST_OFFSET);
-    let mut client = KVSClient::new(&config, Some(7)).await;
+    let mut client = common::client_with_direct_routing(TTL_PERSIST_OFFSET, Some(7)).await;
 
     // PUT without TTL
     client
@@ -532,8 +524,7 @@ async fn no_ttl_key_persists() {
 async fn ttl_stress_many_keys() {
     let config_path = generate_ttl_config(TTL_STRESS_OFFSET);
     let _guard = ServerGuard::start(&config_path, TTL_STRESS_OFFSET);
-    let config = client_config(TTL_STRESS_OFFSET);
-    let mut client = KVSClient::new(&config, Some(7)).await;
+    let mut client = common::client_with_direct_routing(TTL_STRESS_OFFSET, Some(7)).await;
 
     let key_count = 50;
 
@@ -558,7 +549,7 @@ async fn ttl_stress_many_keys() {
     tokio::time::sleep(std::time::Duration::from_secs(4)).await;
 
     // Fresh client — verify all expired
-    let mut client2 = KVSClient::new(&config, Some(8)).await;
+    let mut client2 = common::client_with_direct_routing(TTL_STRESS_OFFSET, Some(8)).await;
     let mut expired_count = 0;
     for i in 0..key_count {
         if client2.get(&format!("stress_{}", i)).await.is_err() {
@@ -578,8 +569,7 @@ async fn ttl_stress_many_keys() {
 async fn scan_keys() {
     let config_path = generate_config(221);
     let _guard = ServerGuard::start(&config_path, 221);
-    let config = client_config(221);
-    let mut client = KVSClient::new(&config, Some(15)).await;
+    let mut client = common::client_with_direct_routing(221, Some(15)).await;
 
     // Insert some keys with different prefixes.
     client.put("scan_a1", "v1").await.expect("PUT failed");
@@ -620,8 +610,7 @@ async fn scan_keys() {
 async fn kvs_members_metadata() {
     let config_path = generate_config(1222);
     let _guard = ServerGuard::start(&config_path, 1222);
-    let config = client_config(1222);
-    let mut client = KVSClient::new(&config, Some(16)).await;
+    let mut client = common::client_with_direct_routing(1222, Some(16)).await;
 
     // PUT a key so the server has been active.
     client.put("member_test", "val").await.expect("PUT failed");
@@ -657,32 +646,7 @@ async fn kvs_members_metadata() {
 async fn direct_routing_put_get() {
     let config_path = generate_config(1223);
     let _guard = ServerGuard::start(&config_path, 1223);
-    let config = client_config(1223);
-    let mut client = KVSClient::new(&config, Some(17)).await;
-
-    // PUT a key via routing (normal path) so server publishes membership.
-    client
-        .put("direct_test_setup", "setup")
-        .await
-        .expect("setup PUT failed");
-
-    // Wait for membership to be published.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
-    loop {
-        if !client.get_kvs_members().await.is_empty() {
-            break;
-        }
-        if std::time::Instant::now() > deadline {
-            panic!("KVS members not published within 20s");
-        }
-        std::thread::sleep(std::time::Duration::from_secs(1));
-    }
-
-    // Enable direct routing.
-    client
-        .enable_direct_routing()
-        .await
-        .expect("enable_direct_routing failed");
+    let mut client = common::client_with_direct_routing(1223, Some(17)).await;
 
     // PUT and GET via direct routing (no routing tier involved).
     client
