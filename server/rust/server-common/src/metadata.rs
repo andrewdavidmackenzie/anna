@@ -101,10 +101,10 @@ pub fn get_server_metadata_key(
     let tier_name = match tier {
         Tier::Memory => "MEMORY",
         Tier::Disk => "DISK",
-        _ => "UNKNOWN",
+        Tier::Routing => "ROUTING",
     };
     format!(
-        "{}|{}|{}/{}|{}|{}",
+        "{}|{}|{}|{}|{}|{}",
         METADATA_IDENTIFIER, type_name, public_ip, private_ip, tid, tier_name
     )
 }
@@ -206,7 +206,7 @@ mod tests {
             Tier::Memory,
             MetadataType::ServerStats,
         );
-        assert_eq!(key, "ANNA_METADATA|stats|1.2.3.4/10.0.0.1|0|MEMORY");
+        assert_eq!(key, "ANNA_METADATA|stats|1.2.3.4|10.0.0.1|0|MEMORY");
     }
 
     #[test]
@@ -218,7 +218,7 @@ mod tests {
             Tier::Disk,
             MetadataType::KeyAccess,
         );
-        assert_eq!(key, "ANNA_METADATA|access|1.2.3.4/10.0.0.1|2|DISK");
+        assert_eq!(key, "ANNA_METADATA|access|1.2.3.4|10.0.0.1|2|DISK");
     }
 
     #[test]
