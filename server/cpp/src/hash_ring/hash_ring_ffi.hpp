@@ -8,29 +8,25 @@
 #ifndef INCLUDE_HASH_RING_FFI_HPP_
 #define INCLUDE_HASH_RING_FFI_HPP_
 
-#include <string>
-#include <set>
 #include <map>
+#include <set>
+#include <string>
 #include <vector>
 
 #include "anna_hashring.h"
+#include "metadata.hpp"
 #include "kvs/kvs_threads.hpp"
 #include "types.hpp"
-
-using std::string;
-using std::set;
-using std::map;
-using std::vector;
 
 // Number of virtual nodes per thread on the hash ring.
 // Must match the value used by the Rust server.
 inline unsigned kVirtualThreadNum = 3000;
 
 /// Set of unique server threads (used by get_unique_servers).
-typedef set<ServerThread, ThreadHash> ServerThreadSet;
+typedef std::set<ServerThread, ThreadHash> ServerThreadSet;
 
 /// List of server threads.
-typedef vector<ServerThread> ServerThreadList;
+typedef std::vector<ServerThread> ServerThreadList;
 
 /// Wrapper around the Rust anna-hashring C library.
 ///

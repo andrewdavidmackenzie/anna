@@ -91,6 +91,17 @@ uint32_t anna_responsible_local(const struct AnnaHashRing *ring,
                                  uint32_t max_results);
 
 /**
+ * Compute the global hash for a string: hash("GLOBAL" + input).
+ * Used by C++ code that maintains its own ring but needs the Rust hash.
+ */
+uint64_t anna_hash_global(const char *input);
+
+/**
+ * Compute the local hash for a string: hash(input).
+ */
+uint64_t anna_hash_local(const char *input);
+
+/**
  * Free a string allocated by the library.
  */
 void anna_string_free(char *s);

@@ -30,4 +30,9 @@ SET(KVS_SOURCE
   utils.cpp)
 
 ADD_EXECUTABLE(anna-kvs ${KVS_SOURCE})
-TARGET_LINK_LIBRARIES(anna-kvs anna-hash-ring spdlog::spdlog fmt::fmt ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES})
+TARGET_LINK_LIBRARIES(anna-kvs anna-hash-ring ${ANNA_HASHRING_LIB} spdlog::spdlog fmt::fmt ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES})
+IF(APPLE)
+  TARGET_LINK_LIBRARIES(anna-kvs "-framework Security" "-framework CoreFoundation" "-framework SystemConfiguration" "-lSystem" "-liconv")
+ELSE()
+  TARGET_LINK_LIBRARIES(anna-kvs dl pthread)
+ENDIF()
