@@ -74,6 +74,76 @@ pub fn get_metadata_key(key: &str, metadata_type: &str) -> Key {
     )
 }
 
+/// Metadata type for server stats keys.
+pub enum MetadataType {
+    Replication,
+    ServerStats,
+    KeyAccess,
+    KeySize,
+}
+
+/// Build a metadata key for server stats, access, or size data.
+///
+/// Format: `ANNA_METADATA|<type>|<pub_ip>/<priv_ip>|<tid>|<tier_name>`
+pub fn get_server_metadata_key(
+    public_ip: &str,
+    private_ip: &str,
+    tid: u32,
+    tier: Tier,
+    meta_type: MetadataType,
+) -> Key {
+    let type_name = match meta_type {
+        MetadataType::ServerStats => "stats",
+        MetadataType::KeyAccess => "access",
+        MetadataType::KeySize => "size",
+        MetadataType::Replication => return get_metadata_key("", "replication"),
+    };
+    let tier_name = match tier {
+        Tier::Memory => "MEMORY",
+        Tier::Disk => "DISK",
+        Tier::Routing => "ROUTING",
+    };
+    format!(
+        "{}|{}|{}|{}|{}|{}",
+        METADATA_IDENTIFIER, type_name, public_ip, private_ip, tid, tier_name
+    )
+}
+
+/// Build a replication metadata key for a data key.
+pub fn get_replication_key(data_key: &str) -> Key {
+    get_metadata_key(data_key, "replication")
+}
+
+/// Extract the data key from a replication metadata key.
+///
+/// Input: `ANNA_METADATA|replication|<data_key>`
+/// Output: `<data_key>`
+pub fn get_key_from_metadata(metadata_key: &str) -> Option<&str> {
+    let parts: Vec<&str> = metadata_key.splitn(3, METADATA_DELIMITER).collect();
+    if parts.len() == 3 && parts[0] == METADATA_IDENTIFIER && parts[1] == "replication" {
+        Some(parts[2])
+    } else {
+        None
+    }
+}
+
+/// Initialize default replication factors for a key.
+pub fn init_replication(
+    key_replication_map: &mut HashMap<Key, KeyReplication>,
+    key: &str,
+    default_memory_rep: u32,
+    default_disk_rep: u32,
+    default_local_rep: u32,
+) {
+    let rep = key_replication_map.entry(key.to_string()).or_default();
+    rep.global_replication
+        .insert(Tier::Memory, default_memory_rep);
+    rep.global_replication.insert(Tier::Disk, default_disk_rep);
+    rep.local_replication
+        .insert(Tier::Memory, default_local_rep);
+    rep.local_replication.insert(Tier::Disk, default_local_rep);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,5 +195,66 @@ mod tests {
         assert_eq!(Tier::Memory as i32, 1);
         assert_eq!(Tier::Disk as i32, 2);
         assert_eq!(Tier::Routing as i32, 3);
+    }
+
+    #[test]
+    fn server_metadata_key_format() {
+        let key = get_server_metadata_key(
+            "1.2.3.4",
+            "10.0.0.1",
+            0,
+            Tier::Memory,
+            MetadataType::ServerStats,
+        );
+        assert_eq!(key, "ANNA_METADATA|stats|1.2.3.4|10.0.0.1|0|MEMORY");
+    }
+
+    #[test]
+    fn server_metadata_key_access() {
+        let key = get_server_metadata_key(
+            "1.2.3.4",
+            "10.0.0.1",
+            2,
+            Tier::Disk,
+            MetadataType::KeyAccess,
+        );
+        assert_eq!(key, "ANNA_METADATA|access|1.2.3.4|10.0.0.1|2|DISK");
+    }
+
+    #[test]
+    fn replication_key_format() {
+        assert_eq!(
+            get_replication_key("mykey"),
+            "ANNA_METADATA|replication|mykey"
+        );
+    }
+
+    #[test]
+    fn get_key_from_metadata_replication() {
+        assert_eq!(
+            get_key_from_metadata("ANNA_METADATA|replication|mykey"),
+            Some("mykey")
+        );
+    }
+
+    #[test]
+    fn get_key_from_metadata_non_replication() {
+        assert_eq!(get_key_from_metadata("ANNA_METADATA|stats|data"), None);
+    }
+
+    #[test]
+    fn get_key_from_metadata_not_metadata() {
+        assert_eq!(get_key_from_metadata("user_key"), None);
+    }
+
+    #[test]
+    fn init_replication_sets_defaults() {
+        let mut map = HashMap::new();
+        init_replication(&mut map, "key1", 2, 1, 1);
+        let rep = map.get("key1").unwrap();
+        assert_eq!(rep.global_replication[&Tier::Memory], 2);
+        assert_eq!(rep.global_replication[&Tier::Disk], 1);
+        assert_eq!(rep.local_replication[&Tier::Memory], 1);
+        assert_eq!(rep.local_replication[&Tier::Disk], 1);
     }
 }
