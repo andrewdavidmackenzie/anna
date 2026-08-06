@@ -15,6 +15,7 @@ dependencies = [
 name = "anna"
 version = "0.1.0"
 dependencies = [
+ "anna-server-common",
  "assert_cmd",
  "clap",
  "log",

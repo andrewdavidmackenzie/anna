@@ -649,3 +649,59 @@ async fn kvs_members_metadata() {
         "member should contain localhost IP"
     );
 }
+
+/// Client-side routing: PUT/GET using direct hash ring routing.
+#[tokio::test]
+#[cfg(unix)]
+#[cfg(feature = "direct-routing")]
+async fn direct_routing_put_get() {
+    let config_path = generate_config(1223);
+    let _guard = ServerGuard::start(&config_path, 1223);
+    let config = client_config(1223);
+    let mut client = KVSClient::new(&config, Some(17)).await;
+
+    // PUT a key via routing (normal path) so server publishes membership.
+    client
+        .put("direct_test_setup", "setup")
+        .await
+        .expect("setup PUT failed");
+
+    // Wait for membership to be published.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    loop {
+        if !client.get_kvs_members().await.is_empty() {
+            break;
+        }
+        if std::time::Instant::now() > deadline {
+            panic!("KVS members not published within 20s");
+        }
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+
+    // Enable direct routing.
+    client
+        .enable_direct_routing()
+        .await
+        .expect("enable_direct_routing failed");
+
+    // PUT and GET via direct routing (no routing tier involved).
+    client
+        .put("direct_key1", "value1")
+        .await
+        .expect("direct PUT failed");
+    let val = client.get("direct_key1").await.expect("direct GET failed");
+    assert_eq!(val, "value1");
+
+    // Multiple keys to exercise hash distribution.
+    for i in 0..10 {
+        let key = format!("direct_batch_{}", i);
+        let value = format!("val_{}", i);
+        client.put(&key, &value).await.expect("batch PUT failed");
+    }
+    for i in 0..10 {
+        let key = format!("direct_batch_{}", i);
+        let value = format!("val_{}", i);
+        let got = client.get(&key).await.expect("batch GET failed");
+        assert_eq!(got, value, "mismatch for key {}", key);
+    }
+}
