@@ -6,6 +6,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * Opaque handle to a consistent hash ring.
  */
@@ -90,5 +94,9 @@ uint32_t anna_responsible_local(const struct AnnaHashRing *ring,
  * Free a string allocated by the library.
  */
 void anna_string_free(char *s);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* ANNA_HASHRING_H */

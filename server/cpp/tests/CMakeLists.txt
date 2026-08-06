@@ -39,4 +39,19 @@ ADD_SUBDIRECTORY(mock)
 ADD_SUBDIRECTORY(monitor)
 ADD_SUBDIRECTORY(route)
 
+# Hash ring FFI test (validates Rust C library from C++).
+IF(EXISTS ${ANNA_HASHRING_LIB})
+  ADD_EXECUTABLE(hashring-ffi-test test_hashring_ffi.cpp)
+  TARGET_LINK_LIBRARIES(hashring-ffi-test GTest::gtest_main ${ANNA_HASHRING_LIB})
+  # Rust static library needs system libraries for its runtime.
+  IF(APPLE)
+    TARGET_LINK_LIBRARIES(hashring-ffi-test
+      "-framework Security" "-framework CoreFoundation" "-framework SystemConfiguration"
+      "-lSystem" "-liconv" "-lm" "-lc++")
+  ELSE()
+    TARGET_LINK_LIBRARIES(hashring-ffi-test dl pthread m)
+  ENDIF()
+  ADD_TEST(NAME HashRingFFI COMMAND hashring-ffi-test)
+ENDIF()
+
 ADD_CUSTOM_TARGET(ctest ${CMAKE_CTEST_COMMAND})

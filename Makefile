@@ -117,7 +117,7 @@ else
 endif
 
 .PHONY: server-cpp
-server-cpp:
+server-cpp: server-rust
 	@mkdir -p server/cpp/build
 	@echo "Building server C++ project into ./server/cpp/build"
 ifeq ($(UNAME), Darwin)
@@ -134,7 +134,7 @@ client-rust:
 .PHONY: server-rust
 server-rust:
 	@echo "Building Rust server binaries"
-	@$(CARGO_ENV) RUSTFLAGS="$(RUST_LINK_ALLOW)" cargo build --quiet -p anna-monitor
+	@$(CARGO_ENV) RUSTFLAGS="$(RUST_LINK_ALLOW)" cargo build --quiet -p anna-monitor -p anna-hashring
 
 .PHONY: client-python
 client-python:
