@@ -42,10 +42,6 @@ class HashRingWrapper {
   bool global_;
 
 public:
-  /// Default constructor creates a global ring.
-  HashRingWrapper()
-      : ring_(anna_hashring_new(true, kBaseOffset)), global_(true) {}
-
   explicit HashRingWrapper(bool global)
       : ring_(anna_hashring_new(global, kBaseOffset)), global_(global) {}
 
@@ -69,14 +65,13 @@ public:
   }
 
   /// Insert a server with kVirtualThreadNum virtual nodes.
-  /// Returns true if the server was newly inserted.
+  /// Returns true if the server was inserted, false on error (e.g., tid >= 50).
   bool insert(Address public_ip, Address private_ip, int join_count,
               unsigned tid) {
     // TODO: track join_count for rejoin detection (not in C API yet)
     (void)join_count;
-    anna_hashring_insert(ring_, public_ip.c_str(), private_ip.c_str(), tid,
-                         kVirtualThreadNum);
-    return true;
+    return anna_hashring_insert(ring_, public_ip.c_str(), private_ip.c_str(),
+                                tid, kVirtualThreadNum) == 0;
   }
 
   /// Remove all virtual nodes for a server.
@@ -109,9 +104,19 @@ public:
   const AnnaHashRing *raw() const { return ring_; }
 };
 
-// Type aliases matching the old code.
-typedef HashRingWrapper GlobalHashRing;
-typedef HashRingWrapper LocalHashRing;
+/// Global hash ring — default-constructs with global=true.
+class GlobalHashRing : public HashRingWrapper {
+public:
+  GlobalHashRing() : HashRingWrapper(true) {}
+  explicit GlobalHashRing(bool global) : HashRingWrapper(global) {}
+};
+
+/// Local hash ring — default-constructs with global=false.
+class LocalHashRing : public HashRingWrapper {
+public:
+  LocalHashRing() : HashRingWrapper(false) {}
+  explicit LocalHashRing(bool global) : HashRingWrapper(global) {}
+};
 
 typedef map<Tier, GlobalHashRing> GlobalRingMap;
 typedef map<Tier, LocalHashRing> LocalRingMap;
