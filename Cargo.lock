@@ -868,9 +868,9 @@ dependencies = [
 
 [[package]]
 name = "omq-tokio"
-version = "0.20.3"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98aaa33702e7d723de268dd9fe725f93d469afef3f1bedb14cfa7f579f61a7b7"
+checksum = "5595cb3cb1e3ee36ec48c373eb949e21cb11b26d25423bd86d908de36de73b3a"
 dependencies = [
  "arc-swap",
  "bytes",
