@@ -25,13 +25,13 @@
 
 struct GlobalHasher {
   uint64_t operator()(const ServerThread &th) {
-    string input = "GLOBAL" + th.virtual_id();
-    return anna_hash_global(input.c_str());
+    // anna_hash_global adds "GLOBAL" prefix internally.
+    return anna_hash_global(th.virtual_id().c_str());
   }
 
   uint64_t operator()(const Key &key) {
-    string input = "GLOBAL" + key;
-    return anna_hash_global(input.c_str());
+    // anna_hash_global adds "GLOBAL" prefix internally.
+    return anna_hash_global(key.c_str());
   }
 
   typedef uint64_t ResultType;
