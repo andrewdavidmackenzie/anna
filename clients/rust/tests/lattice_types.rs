@@ -613,3 +613,39 @@ async fn scan_keys() {
         .expect("SCAN empty failed");
     assert!(none.is_empty(), "expected 0 keys for non-existent prefix");
 }
+
+/// Client-side routing: verify get_kvs_members returns node IPs.
+#[tokio::test]
+#[cfg(unix)]
+async fn kvs_members_metadata() {
+    let config_path = generate_config(1222);
+    let _guard = ServerGuard::start(&config_path, 1222);
+    let config = client_config(1222);
+    let mut client = KVSClient::new(&config, Some(16)).await;
+
+    // PUT a key so the server has been active.
+    client.put("member_test", "val").await.expect("PUT failed");
+
+    // Wait for the KVS to publish its member list (happens during
+    // stats reporting, period=15s in test config). Poll with retries.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    let mut members = vec![];
+    while std::time::Instant::now() < deadline {
+        members = client.get_kvs_members().await;
+        if !members.is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+
+    assert!(
+        !members.is_empty(),
+        "KVS should publish member list within 20s"
+    );
+    // Single-node cluster: expect exactly one member.
+    assert_eq!(members.len(), 1, "expected 1 KVS member");
+    assert!(
+        members[0].contains("127.0.0.1"),
+        "member should contain localhost IP"
+    );
+}

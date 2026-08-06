@@ -1262,10 +1262,7 @@ async fn self_depart_signal() {
             if cluster
                 .processes
                 .iter_mut()
-                .any(|p| {
-                    p.label == kvs_label
-                        && p.child.try_wait().ok().flatten().is_some()
-                })
+                .any(|p| p.label == kvs_label && p.child.try_wait().ok().flatten().is_some())
             {
                 kvs_exited = true;
                 break;
