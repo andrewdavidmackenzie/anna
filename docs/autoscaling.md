@@ -102,9 +102,12 @@ config keys, defaults, and valid ranges.
 
 ## Port Configuration for Multi-Node Deployments
 
-When a new node joins the cluster it contacts the routing tier's seed
-port, announces itself, and begins accepting requests on the same set
-of well-known ports as every other node. Port conflicts between nodes
+When a new node joins the cluster it contacts the seed node (via the
+routing tier's seed port, or discovered through KVS metadata), announces
+itself, and begins accepting requests on the same set of well-known
+ports as every other node. Clients using client-side routing automatically
+discover new nodes by refreshing their local hash ring from
+`ANNA_METADATA|kvs_members`. Port conflicts between nodes
 are avoided because ZMQ sockets bind to each node's specific IP address
 rather than `0.0.0.0`. In production each node has a distinct IP, so all
 nodes share the same port numbers.

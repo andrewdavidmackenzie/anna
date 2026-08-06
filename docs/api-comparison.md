@@ -46,7 +46,7 @@ All items from the original comparison have been implemented or classified as ar
 ## Hardest to emulate (architecture mismatch)
 
 - **Conditional writes / CAS**: Anna's eventual consistency model conflicts with strong CAS. The causal lattice types provide partial ordering but not compare-and-swap semantics.
-- **Range queries**: Anna uses hash-based key distribution (consistent hashing). Range queries require sequential key layout, which would need a fundamentally different routing strategy.
+- **Range queries**: Anna uses hash-based key distribution (consistent hashing). Range queries require sequential key layout, which would need a fundamentally different key distribution strategy.
 - **Secondary indexes**: Would require a server-side index maintenance layer that doesn't exist.
 
 ## Which store's API is closest to Anna?

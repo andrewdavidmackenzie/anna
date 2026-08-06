@@ -79,11 +79,16 @@ disk-tier threads read/write files on mounted volumes.
 Client proxies serve user requests:
 
 - Support GET, PUT, and DELETE operations
-- Query the routing tier to find key locations
-- Cache key-address mappings locally
-- Handle cache invalidation when the cluster reconfigures
+- Build a local hash ring from KVS membership data
+  (`ANNA_METADATA|kvs_members`) and compute key-to-server mappings
+  client-side using the shared `anna-hashring` library
+- Handle `WRONG_THREAD` responses by refreshing the local hash ring and
+  retrying (safety net during cluster reconfiguration)
 - For advanced consistency levels, maintain a per-transaction state 
   (message buffers, read caches)
+
+Legacy clients may still query the optional `anna-route` routing tier
+to find key locations, but this mode is deprecated.
 
 ## Operations
 

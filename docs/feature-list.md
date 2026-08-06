@@ -134,7 +134,7 @@ feature, not an autoscaling decision.
 | Node depart      | Node leaves, data redistributed                      | Yes           |
 | Self-depart      | Node gracefully removes itself, gossips all data out | Yes           |
 | Rejoin detection | Join counter distinguishes fresh joins from rejoins  | Yes           |
-| Seed node        | First routing node serves cluster membership         | Yes           |
+| Seed node        | First node serves cluster membership (via routing or KVS metadata) | Yes           |
 
 ### Fault Tolerance
 
@@ -155,7 +155,19 @@ feature, not an autoscaling decision.
 | CRC32 hashing                   | Hash function for key-to-ring mapping        | Yes           |
 | Thread responsibility lookup    | Determines which threads handle a key        | Yes           |
 
-### Routing Tier
+### Client-Side Routing
+
+| Feature                        | Description                                                            | System Tested |
+|--------------------------------|------------------------------------------------------------------------|---------------|
+| Client-side hash ring          | Clients build a local hash ring from `ANNA_METADATA\|kvs_members`      | Yes           |
+| Direct KVS routing             | Clients compute key-to-server mappings locally via `anna-hashring`     | Yes           |
+| `enable_direct_routing()`      | Rust client method to activate client-side routing                     | Yes           |
+| WRONG_THREAD retry             | Safety net: client refreshes hash ring on misrouted requests           | Yes           |
+
+### Routing Tier — Optional, Deprecated (`anna-route`)
+
+The `anna-route` process is kept for backward compatibility but is not
+required when clients use client-side routing.
 
 | Feature                   | Description                                              | System Tested |
 |---------------------------|----------------------------------------------------------|---------------|
@@ -254,8 +266,9 @@ can use the client library helpers to implement their own scaling logic.
 | Error Handling                         | `anna-kvs`     | 5     | 5      | 100%     | —      |
 | Multi-Tiered Storage                   | `anna-kvs`     | 5     | 5      | 100%     | —      |
 | Multi-Node Features                    | `anna-kvs`     | 25    | 25     | 100%     | —      |
-| Routing Tier                           | `anna-route`   | 6     | 6      | 100%     | —      |
+| Client-Side Routing                    | all clients    | 4     | 4      | 100%     | —      |
+| Routing Tier (optional, deprecated)    | `anna-route`   | 6     | 6      | 100%     | —      |
 | Monitoring                             | `anna-monitor` | 6     | 6      | 100%     | —      |
 | Autoscaling (server primitives)        | `anna-monitor` | 4     | 4      | 100%     | —      |
 | Client library helpers                 | all clients    | 7     | 7      | 100%     | —      |
-| **Total**                              |                | **88**| **88** | **100%** |        |
+| **Total**                              |                | **92**| **92** | **100%** |        |
