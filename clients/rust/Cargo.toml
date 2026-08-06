@@ -19,11 +19,13 @@ name = "annalib"
 path = "src/lib/lib.rs"
 
 [features]
-default = ["causal", "set"]
+default = ["causal", "set", "direct-routing"]
 causal = []
 set = []
+direct-routing = ["anna-server-common"]
 
 [dependencies]
+anna-server-common = { path = "../../server/rust/server-common", optional = true }
 clap = "~4"
 log = "0.4.17"
 simplog = "~1.6"

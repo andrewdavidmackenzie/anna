@@ -74,6 +74,19 @@ pub struct KVSClient {
     /// seen timestamp, providing the Writes Follow Reads guarantee.
     #[doc(hidden)]
     pub last_seen_ts: u64,
+    /// Optional client-side hash ring for direct routing (bypasses routing tier).
+    /// Initialized lazily on first use via `enable_direct_routing()`.
+    direct_ring: Option<DirectRouting>,
+}
+
+/// State for client-side routing via a local hash ring.
+#[cfg(feature = "direct-routing")]
+#[allow(dead_code)]
+struct DirectRouting {
+    global_ring: anna_server_common::hash_ring::ConsistentHashRing,
+    local_ring: anna_server_common::hash_ring::ConsistentHashRing,
+    memory_thread_count: u32,
+    base_offset_val: u32,
 }
 
 impl KVSClient {
@@ -147,6 +160,7 @@ impl KVSClient {
             counter_state: HashMap::new(),
             lww_read_cache: HashMap::new(),
             last_seen_ts: 0,
+            direct_ring: None,
         }
     }
 
@@ -168,6 +182,7 @@ impl KVSClient {
             counter_state: HashMap::new(),
             lww_read_cache: HashMap::new(),
             last_seen_ts: 0,
+            direct_ring: None,
         }
     }
 
@@ -321,6 +336,19 @@ impl KVSClient {
     }
 
     async fn get_worker_address(&mut self, key: &str) -> Option<Address> {
+        // Try client-side routing first (if enabled).
+        #[cfg(feature = "direct-routing")]
+        if let Some(ref dr) = self.direct_ring {
+            let servers = dr.global_ring.find_responsible(key, 1, true);
+            if let Some(st) = servers.first() {
+                let tids = dr.local_ring.find_responsible_local(key, 1);
+                let tid = tids.first().copied().unwrap_or(0);
+                let port = tid + anna_server_common::ports::KEY_REQUEST_PORT + dr.base_offset_val;
+                return Some(format!("tcp://{}:{}", st.public_ip(), port));
+            }
+        }
+
+        // Fall back to routing tier query.
         if !self.key_address_cache.contains_key(key) || self.key_address_cache[key].is_empty() {
             let addrs = self.query_routing(key).await;
             if addrs.is_empty() {
@@ -2139,6 +2167,70 @@ impl KVSClient {
     /// Set the request timeout duration.
     pub fn set_timeout(&mut self, timeout: Duration) {
         self.timeout = timeout;
+    }
+
+    /// Enable client-side routing by building a local hash ring from
+    /// KVS membership data. When enabled, the client routes directly
+    /// to KVS nodes without querying the routing tier.
+    ///
+    /// Requires the `direct-routing` feature. Call this after the
+    /// cluster has stabilized (KVS needs time to publish membership).
+    #[cfg(feature = "direct-routing")]
+    pub async fn enable_direct_routing(&mut self) -> Result<()> {
+        use anna_server_common::hash_ring::{ConsistentHashRing, DEFAULT_VIRTUAL_THREAD_NUM};
+
+        let members = self.get_kvs_members().await;
+        if members.is_empty() {
+            return Err(Error::Kvs(
+                "No KVS members found — cluster may not be ready".into(),
+            ));
+        }
+
+        let topology = self.get_cluster_topology().await;
+        let thread_count = topology.map(|t| t.memory_thread_count).unwrap_or(1);
+
+        let base = self.base_offset() as u32;
+
+        let mut global_ring = ConsistentHashRing::new();
+        let mut local_ring = ConsistentHashRing::new();
+
+        for member in &members {
+            let parts: Vec<&str> = member.split('/').collect();
+            if parts.len() != 2 {
+                continue;
+            }
+            let (pub_ip, priv_ip) = (parts[0], parts[1]);
+
+            // Insert into global ring (tid=0, virtual nodes).
+            global_ring.insert(pub_ip, priv_ip, 0, base, DEFAULT_VIRTUAL_THREAD_NUM, true);
+
+            // Insert each thread into local ring.
+            for tid in 0..thread_count {
+                local_ring.insert(
+                    pub_ip,
+                    priv_ip,
+                    tid,
+                    base,
+                    DEFAULT_VIRTUAL_THREAD_NUM,
+                    false,
+                );
+            }
+        }
+
+        log::info!(
+            "Direct routing enabled: {} members, {} threads/node",
+            members.len(),
+            thread_count
+        );
+
+        self.direct_ring = Some(DirectRouting {
+            global_ring,
+            local_ring,
+            memory_thread_count: thread_count,
+            base_offset_val: base,
+        });
+
+        Ok(())
     }
 
     // ── Scan / key listing ──────────────────────────────────────────
