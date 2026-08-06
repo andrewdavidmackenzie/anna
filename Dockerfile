@@ -38,6 +38,13 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
 COPY Cargo.toml Cargo.lock /src/
 COPY server/rust/ /src/server/rust/
 COPY server/protobuf/ /src/server/protobuf/
+COPY clients/rust/Cargo.toml /src/clients/rust/Cargo.toml
+COPY clients/rust/build.rs /src/clients/rust/build.rs
+# Create stub sources so workspace resolves without copying full client.
+RUN mkdir -p /src/clients/rust/src/lib && \
+    touch /src/clients/rust/src/lib/lib.rs && \
+    mkdir -p /src/clients/rust/src && \
+    echo 'fn main() {}' > /src/clients/rust/src/main.rs
 
 # Build the Rust hash ring library (static .a used by C++ server).
 RUN cd /src && cargo build --release -p anna-hashring
