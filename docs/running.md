@@ -13,8 +13,11 @@ If you have not installed it, then you can build and run the development version
 > cargo run -- start
 ```
 
-By default, the `server/conf/anna-config.yml` config file is used, which only specifies one routing thread and one storage
-thread.
+By default, the `server/conf/anna-config.yml` config file is used, which specifies one routing thread and one storage
+thread. The routing thread (`anna-route`) is **optional** — clients using
+client-side routing connect directly to KVS nodes and do not need a routing
+server. The `anna start` command still launches `anna-route` by default for
+backward compatibility, but it is not required.
 
 You are welcome to modify this file if you would like, but we generally do not recommend running more than one
 thread per process in local mode.

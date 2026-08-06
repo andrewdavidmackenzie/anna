@@ -32,7 +32,10 @@ spacing (6000-6900), followed by 7 singleton ports (6950-6956).
 | 6800 | `kManagementNodeResponsePort` | Receive management node responses (function node lists) |
 | 6900 | `kCacheRegistrationPort` | Receive cache registration messages from ValueChangeSubscriber clients |
 
-### Routing Server (5 per-thread ports)
+### Routing Server (5 per-thread ports) — Optional
+
+These ports are only used when running the legacy `anna-route` server.
+Clients using client-side routing do not need these ports.
 
 | Base Port | Constant | Purpose |
 |-----------|----------|---------|
@@ -47,7 +50,7 @@ spacing (6000-6900), followed by 7 singleton ports (6950-6956).
 | Base Port | Constant | Purpose |
 |-----------|----------|---------|
 | 6600 | `kUserResponsePort` | Receive GET/PUT responses from KVS |
-| 6650 | `kUserKeyAddressPort` | Receive key-address responses from routing |
+| 6650 | `kUserKeyAddressPort` | Receive key-address responses from routing (only used with `anna-route`) |
 
 ### Other per-thread ports
 

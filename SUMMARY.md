@@ -21,5 +21,7 @@
 Anna has four client implementations (C++, Rust, Python, Go), each with a
 library and CLI. All clients support the same operations (GET, PUT, GET_SET,
 PUT_SET, GET_CAUSAL, PUT_CAUSAL) and are tested against the same shared
-golden files.
+golden files. Clients discover KVS nodes via `ANNA_METADATA|kvs_members`
+and compute key-to-server mappings locally using the shared `anna-hashring`
+library (the legacy `anna-route` routing server is optional and deprecated).
 

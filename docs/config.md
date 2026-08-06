@@ -20,12 +20,16 @@ the compiled-in default is used, preserving backward-compatible behavior.
 | `monitoring.ip` | Yes | — | IP address of the monitoring node |
 | `monitoring.scaling_alert_ip` | Yes | — | IP address of the scaling alert endpoint |
 
-### Routing (`routing:`)
+### Routing (`routing:`) — Optional
+
+> **Note:** The `routing:` section is only required when running the legacy
+> `anna-route` server. Clients using client-side routing (the recommended
+> approach) do not need a routing server.
 
 | Config Key | Required | Default | Meaning |
 |------------|----------|---------|---------|
-| `routing.ip` | Yes | — | IP address of this routing node |
-| `routing.monitoring` | Yes | — | List of monitoring node IPs |
+| `routing.ip` | Yes (if using anna-route) | — | IP address of this routing node |
+| `routing.monitoring` | Yes (if using anna-route) | — | List of monitoring node IPs |
 
 ### Server (`server:`)
 
@@ -35,7 +39,7 @@ the compiled-in default is used, preserving backward-compatible behavior.
 | `server.private_ip` | Yes | — | Private IP of this KVS node |
 | `server.seed_ip` | Yes | — | IP of the seed node to join |
 | `server.scaling_alert_ip` | Yes | — | Scaling alert endpoint IP (or "NULL" for standalone) |
-| `server.routing` | Yes | — | List of routing node IPs |
+| `server.routing` | No | — | List of routing node IPs (only needed when using the legacy `anna-route` server) |
 | `server.monitoring` | Yes | — | List of monitoring node IPs |
 
 ### Ports (`ports:`)
@@ -70,7 +74,7 @@ If both `-cap` and `-cap-kb` variants are present, the `-kb` variant takes prece
 |------------|-------------|---------|---------|
 | `threads.memory` | `kMemoryThreadCount` | — | Threads per memory-tier node |
 | `threads.disk` | `kDiskThreadCount` | — | Threads per disk-tier node |
-| `threads.routing` | `kRoutingThreadCount` | — | Threads per routing node |
+| `threads.routing` | `kRoutingThreadCount` | — | Threads per routing node (only relevant when using `anna-route`) |
 | `threads.benchmark` | — | — | Benchmark threads (not used by server) |
 
 ## Hashing Configuration (`hashing:`)

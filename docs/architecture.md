@@ -19,15 +19,33 @@ Anna's design rests on four requirements:
 
 ## System Components
 
-An Anna deployment consists of four types of nodes:
+An Anna deployment consists of three required component types (storage,
+monitoring, and cluster management) plus an optional legacy routing tier:
 
 ![Anna Architecture](images/architecture.svg)
 
-### Routing Tier (anna-route)
+### Client-Side Routing
 
-The routing service isolates clients from the storage layer. A client asks
-the routing tier where to find a key and receives valid server addresses.
-Routing nodes:
+Clients now build a local hash ring from KVS membership data and compute
+key-to-server mappings locally, without requiring a separate routing server.
+The flow is:
+
+1. The client reads `ANNA_METADATA|kvs_members` from any KVS node to discover
+   cluster membership
+2. The client builds a local hash ring using the shared `anna-hashring` library
+3. For each request, the client hashes the key and sends it directly to the
+   responsible KVS node
+4. If a `WRONG_THREAD` error is returned (e.g., during cluster reconfiguration),
+   the client refreshes its hash ring and retries
+
+In the Rust client, call `enable_direct_routing()` to activate client-side
+routing. All client libraries support this mode.
+
+### Routing Tier (anna-route) — Optional, Deprecated
+
+The `anna-route` process is a legacy routing server kept for backward
+compatibility. It is **optional** — clients using client-side routing do not
+need it. When used, routing nodes:
 
 - Cache the storage tiers' hash rings and replication vectors
 - Return memory-tier addresses when available (for performance)
@@ -89,8 +107,10 @@ Anna uses ZeroMQ for all communication:
   with shared memory buffers for zero-copy messaging
 - **Inter-node** (between machines): ZeroMQ `tcp` transport with Protocol
   Buffer serialization
-- **Client-to-routing**: PUSH/PULL sockets on port 6450
-- **Client-to-KVS**: PUSH/PULL sockets on configurable ports (6600/6650)
+- **Client-to-routing** (optional, legacy): PUSH/PULL sockets on port 6450
+- **Client-to-KVS**: PUSH/PULL sockets on configurable ports (6600/6650).
+  With client-side routing, clients send requests directly to KVS nodes
+  without going through the routing tier.
 
 See [Port Layout](ports.md) for the complete port map (26 port groups across
 6000-7200).
@@ -113,4 +133,6 @@ Anna guarantees k-fault tolerance by ensuring k+1 replicas are live:
 - Data is automatically repartitioned using the updated hash ring
 - The management system spawns a replacement node
 - Key migration is interleaved with request handling (no downtime)
-- Routing and monitoring nodes are stateless and recover by querying peers
+- Monitoring nodes are stateless and recover by querying peers
+- With client-side routing, the routing tier is not required for fault
+  tolerance — clients refresh their local hash ring on `WRONG_THREAD` errors
