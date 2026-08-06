@@ -23,5 +23,10 @@ SET(ROUTING_SOURCE
 		address_handler.cpp)
 
 ADD_EXECUTABLE(anna-route ${ROUTING_SOURCE})
-TARGET_LINK_LIBRARIES(anna-route anna-hash-ring spdlog::spdlog fmt::fmt ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES})
+TARGET_LINK_LIBRARIES(anna-route anna-hash-ring ${ANNA_HASHRING_LIB} spdlog::spdlog fmt::fmt ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES})
+IF(APPLE)
+  TARGET_LINK_LIBRARIES(anna-route "-framework Security" "-framework CoreFoundation" "-framework SystemConfiguration" "-lSystem" "-liconv")
+ELSE()
+  TARGET_LINK_LIBRARIES(anna-route dl pthread)
+ENDIF()
 ADD_DEPENDENCIES(anna-route anna-hash-ring)

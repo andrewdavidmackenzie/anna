@@ -15,4 +15,9 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 
 ADD_LIBRARY(anna-hash-ring STATIC hash_ring.cpp)
-TARGET_LINK_LIBRARIES(anna-hash-ring anna-zmq spdlog::spdlog ${KV_LIBRARY_DEPENDENCIES})
+TARGET_LINK_LIBRARIES(anna-hash-ring anna-zmq ${ANNA_HASHRING_LIB} spdlog::spdlog ${KV_LIBRARY_DEPENDENCIES})
+IF(APPLE)
+  TARGET_LINK_LIBRARIES(anna-hash-ring "-framework Security" "-framework CoreFoundation" "-framework SystemConfiguration" "-lSystem" "-liconv")
+ELSE()
+  TARGET_LINK_LIBRARIES(anna-hash-ring dl pthread)
+ENDIF()

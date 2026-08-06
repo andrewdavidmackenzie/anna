@@ -15,34 +15,40 @@
 #ifndef KVS_INCLUDE_HASHERS_HPP_
 #define KVS_INCLUDE_HASHERS_HPP_
 
+#include "anna_hashring.h"
 #include "kvs/kvs_threads.hpp"
 #include <vector>
 
+// Hashers delegate to the Rust anna-hashring library for cross-language
+// consistency. All Anna components (Rust server, C++ server, all clients)
+// use the same hash function.
+
 struct GlobalHasher {
-  uint32_t operator()(const ServerThread &th) {
-    // prepend a string to make the hash value different than
-    // what it would be on the naked input
-    return std::hash<string>{}("GLOBAL" + th.virtual_id());
+  uint64_t operator()(const ServerThread &th) {
+    // anna_hash_global adds "GLOBAL" prefix internally.
+    return anna_hash_global(th.virtual_id().c_str());
   }
 
-  uint32_t operator()(const Key &key) {
-    // prepend a string to make the hash value different than
-    // what it would be on the naked input
-    return std::hash<string>{}("GLOBAL" + key);
+  uint64_t operator()(const Key &key) {
+    // anna_hash_global adds "GLOBAL" prefix internally.
+    return anna_hash_global(key.c_str());
   }
 
-  typedef uint32_t ResultType;
+  typedef uint64_t ResultType;
 };
 
 struct LocalHasher {
-  typedef std::hash<string>::result_type ResultType;
+  typedef uint64_t ResultType;
 
   ResultType operator()(const ServerThread &th) {
-    return std::hash<string>{}(std::to_string(th.tid()) + "_" +
-                               std::to_string(th.virtual_num()));
+    string input = std::to_string(th.tid()) + "_" +
+                   std::to_string(th.virtual_num());
+    return anna_hash_local(input.c_str());
   }
 
-  ResultType operator()(const Key &key) { return std::hash<string>{}(key); }
+  ResultType operator()(const Key &key) {
+    return anna_hash_local(key.c_str());
+  }
 };
 
 #endif // KVS_INCLUDE_HASHERS_HPP_

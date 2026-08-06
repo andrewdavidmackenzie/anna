@@ -88,8 +88,13 @@ FIND_PACKAGE(yaml-cpp REQUIRED)
 
 # Anna hash ring Rust library (C FFI).
 # Built by `make server-rust` or `cargo build -p anna-hashring`.
-SET(ANNA_HASHRING_LIB "${CMAKE_SOURCE_DIR}/../../target/debug/libanna_hashring.a")
-SET(ANNA_HASHRING_INCLUDE "${CMAKE_SOURCE_DIR}/../rust/anna-hashring")
+# Can be overridden via cmake -D flags for Docker/CI builds.
+IF(NOT DEFINED ANNA_HASHRING_LIB)
+  SET(ANNA_HASHRING_LIB "${CMAKE_SOURCE_DIR}/../../target/debug/libanna_hashring.a")
+ENDIF()
+IF(NOT DEFINED ANNA_HASHRING_INCLUDE)
+  SET(ANNA_HASHRING_INCLUDE "${CMAKE_SOURCE_DIR}/../rust/anna-hashring")
+ENDIF()
 
 INCLUDE_DIRECTORIES(src ${ANNA_HASHRING_INCLUDE})
 ADD_SUBDIRECTORY(src)

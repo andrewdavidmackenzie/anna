@@ -212,6 +212,45 @@ pub unsafe extern "C" fn anna_responsible_local(
     count as u32
 }
 
+// ── Hash functions (for use by C++ code that maintains its own ring) ─
+
+/// Compute the global hash for a key: hash("GLOBAL" + key).
+/// Returns a u64 hash value.
+///
+/// # Safety
+/// `input` must be a valid C string.
+#[no_mangle]
+pub unsafe extern "C" fn anna_hash_global(input: *const c_char) -> u64 {
+    use anna_server_common::hash_ring::global_hash_key;
+    let s = CStr::from_ptr(input).to_str().unwrap_or("");
+    global_hash_key(s)
+}
+
+/// Compute the local hash for a key: hash(key).
+/// Returns a u64 hash value.
+///
+/// # Safety
+/// `input` must be a valid C string.
+#[no_mangle]
+pub unsafe extern "C" fn anna_hash_local(input: *const c_char) -> u64 {
+    use anna_server_common::hash_ring::local_hash_key;
+    let s = CStr::from_ptr(input).to_str().unwrap_or("");
+    local_hash_key(s)
+}
+
+/// Compute the global hash for a server thread virtual ID.
+/// Input should be formatted as "GLOBAL<private_ip>:<tid>_<virtual_num>".
+///
+/// # Safety
+/// `input` must be a valid C string.
+#[no_mangle]
+pub unsafe extern "C" fn anna_hash_global_thread(input: *const c_char) -> u64 {
+    use anna_server_common::hash_ring::global_hash_key;
+    let s = CStr::from_ptr(input).to_str().unwrap_or("");
+    // The input already includes "GLOBAL" prefix from the caller.
+    global_hash_key(s)
+}
+
 // ── String management ───────────────────────────────────────────────
 
 /// Free a string allocated by the library.

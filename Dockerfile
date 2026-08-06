@@ -23,15 +23,41 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libspdlog-dev \
     libfmt-dev \
     libyaml-cpp-dev \
+    curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY server/ /src/server/
+# Install Rust (needed for anna-hashring shared hash library).
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --default-toolchain stable --no-modify-path \
+    && chmod -R a+w $RUSTUP_HOME $CARGO_HOME
+
+COPY Cargo.toml Cargo.lock /src/
+COPY server/rust/ /src/server/rust/
+COPY server/protobuf/ /src/server/protobuf/
+COPY clients/rust/Cargo.toml /src/clients/rust/Cargo.toml
+COPY clients/rust/build.rs /src/clients/rust/build.rs
+# Create stub sources so workspace resolves without copying full client.
+RUN mkdir -p /src/clients/rust/src/lib && \
+    touch /src/clients/rust/src/lib/lib.rs && \
+    mkdir -p /src/clients/rust/src && \
+    echo 'fn main() {}' > /src/clients/rust/src/main.rs
+
+# Build the Rust hash ring library (static .a used by C++ server).
+RUN cd /src && cargo build --release -p anna-hashring
+
+COPY server/cpp/ /src/server/cpp/
 
 RUN mkdir -p /src/server/cpp/build \
     && cd /src/server/cpp/build \
     && cmake -G "Unix Makefiles" \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_TEST=OFF \
+        -DANNA_HASHRING_LIB=/src/target/release/libanna_hashring.a \
+        -DANNA_HASHRING_INCLUDE=/src/server/rust/anna-hashring \
         .. \
     && make -j$(nproc)
 

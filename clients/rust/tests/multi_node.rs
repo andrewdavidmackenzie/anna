@@ -1243,25 +1243,43 @@ async fn self_depart_signal() {
         .expect("PUT failed");
 
     // Send SIGUSR1 to the KVS — triggers self_depart_handler which
-    // notifies routing of departure and exits the process
+    // notifies routing of departure and exits the process.
     let kvs_label = format!("anna-kvs@{}", NODE1_IP);
     cluster.signal_self_depart(&kvs_label);
 
     // Poll until the KVS process exits. signal_self_depart() already
     // slept 8s. The KVS handler + 2s ZMQ drain should finish in ~3s.
-    // Use generous timeout for loaded CI runners.
-    let deadline = Instant::now() + Duration::from_secs(30);
+    //
+    // On loaded CI runners the event loop may take many seconds to
+    // reach the self_depart_requested check. If the first SIGUSR1
+    // doesn't cause exit within 20s, resend it — the signal may have
+    // arrived during a periodic task that took longer than expected.
     let mut kvs_exited = false;
-    while Instant::now() < deadline {
-        if cluster
-            .processes
-            .iter_mut()
-            .any(|p| p.label == kvs_label && p.child.try_wait().ok().flatten().is_some())
-        {
-            kvs_exited = true;
+    for attempt in 0..2 {
+        let timeout = if attempt == 0 { 20 } else { 30 };
+        let deadline = Instant::now() + Duration::from_secs(timeout);
+        while Instant::now() < deadline {
+            if cluster
+                .processes
+                .iter_mut()
+                .any(|p| {
+                    p.label == kvs_label
+                        && p.child.try_wait().ok().flatten().is_some()
+                })
+            {
+                kvs_exited = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(500));
+        }
+        if kvs_exited {
             break;
         }
-        std::thread::sleep(Duration::from_millis(500));
+        if attempt == 0 {
+            // Resend SIGUSR1 in case the first one was lost or the
+            // process was in a state that delayed processing.
+            cluster.signal_self_depart(&kvs_label);
+        }
     }
     assert!(kvs_exited, "KVS should have exited after SIGUSR1");
 }

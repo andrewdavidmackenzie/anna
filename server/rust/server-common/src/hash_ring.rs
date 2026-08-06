@@ -178,7 +178,7 @@ fn global_hash_thread(st: &ServerThread) -> u64 {
 
 /// Global hasher for keys: hash("GLOBAL" + key).
 /// Mirrors `GlobalHasher::operator()(const Key&)` in C++.
-fn global_hash_key(key: &str) -> u64 {
+pub fn global_hash_key(key: &str) -> u64 {
     let input = format!("GLOBAL{}", key);
     std_hash(&input)
 }
@@ -192,7 +192,7 @@ fn local_hash_thread(st: &ServerThread) -> u64 {
 
 /// Local hasher for keys: hash(key).
 /// Mirrors `LocalHasher::operator()(const Key&)` in C++.
-fn local_hash_key(key: &str) -> u64 {
+pub fn local_hash_key(key: &str) -> u64 {
     std_hash(key)
 }
 

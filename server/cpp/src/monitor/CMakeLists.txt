@@ -28,4 +28,9 @@ SET(MONITORING_SOURCE
 
 ADD_EXECUTABLE(anna-monitor ${MONITORING_SOURCE})
 
-TARGET_LINK_LIBRARIES(anna-monitor anna-hash-ring spdlog::spdlog fmt::fmt ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES} anna-bench-proto)
+TARGET_LINK_LIBRARIES(anna-monitor anna-hash-ring ${ANNA_HASHRING_LIB} spdlog::spdlog fmt::fmt ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES} anna-bench-proto)
+IF(APPLE)
+  TARGET_LINK_LIBRARIES(anna-monitor "-framework Security" "-framework CoreFoundation" "-framework SystemConfiguration" "-lSystem" "-liconv")
+ELSE()
+  TARGET_LINK_LIBRARIES(anna-monitor dl pthread)
+ENDIF()
