@@ -4,5 +4,6 @@ members = [
     "server/rust/server-common",
     "server/rust/anna-monitor",
     "server/rust/anna-hashring",
+    "server/rust/anna-kvs",
 ]
 default-members = ["clients/rust"]
