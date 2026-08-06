@@ -108,10 +108,19 @@ void run(unsigned thread_id, string disk_root, Address public_ip, Address privat
   ClusterMembership membership;
   if (seed_ip != private_ip) {
     zmq::socket_t addr_requester(context, ZMQ_REQ);
+    addr_requester.set(zmq::sockopt::rcvtimeo, 30000); // 30s timeout
     addr_requester.connect(RoutingThread(seed_ip, 0).seed_connect_address());
     kZmqUtil->send_string("join", &addr_requester);
-    string serialized_addresses = kZmqUtil->recv_string(&addr_requester);
-    membership.ParseFromString(serialized_addresses);
+    try {
+      string serialized_addresses = kZmqUtil->recv_string(&addr_requester);
+      membership.ParseFromString(serialized_addresses);
+    } catch (const zmq::error_t &e) {
+      if (e.num() == EAGAIN) {
+        log->warn("Seed node at {} did not respond within 30s, starting with empty membership.", seed_ip);
+      } else {
+        throw;
+      }
+    }
   } else {
     log->info("First node in cluster (seed_ip == private_ip), starting with empty membership.");
   }

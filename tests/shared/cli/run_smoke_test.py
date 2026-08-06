@@ -12,7 +12,7 @@ Example:
 
 The runner:
 1. Starts anna server processes (anna-monitor, anna-kvs)
-2. Waits for the KVS seed port (port 6450) to become reachable
+2. Waits for the KVS request port (port 6200) to become reachable
 3. Runs the CLI with the shared input file
 4. Compares stdout against the shared expected output
 5. Stops servers and cleans up

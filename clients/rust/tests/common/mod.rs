@@ -114,8 +114,8 @@ timings:
 
 pub fn client_config(base_offset: u16) -> annalib::client_config::ClientConfig {
     annalib::client_config::ClientConfig {
-        // Points to KVS request port (6200). The routing_addresses field
-        // is used to derive the KVS IP for direct routing bootstrap.
+        // Uses routing port (6450 + offset). enable_direct_routing()
+        // derives the KVS request port (6200 + offset) from this address.
         routing_addresses: vec![format!("tcp://127.0.0.1:{}", 6450 + base_offset as usize)],
         client_ip: "127.0.0.1".to_string(),
     }
@@ -136,7 +136,7 @@ pub async fn client_with_direct_routing(
         match client.enable_direct_routing().await {
             Ok(()) => break,
             Err(_) if std::time::Instant::now() < deadline => {
-                std::thread::sleep(std::time::Duration::from_secs(1));
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
             Err(e) => panic!("Failed to enable direct routing: {}", e),
         }

@@ -2187,7 +2187,7 @@ impl KVSClient {
                 // Replace port: routing=6450+offset → kvs=6200+offset
                 if let Some((host_part, port_str)) = addr.rsplit_once(':') {
                     if let Ok(port) = port_str.parse::<u32>() {
-                        let kvs_port = port - 6450 + 6200;
+                        let kvs_port = port.saturating_sub(6450) + 6200;
                         return format!("{}:{}", host_part, kvs_port);
                     }
                 }

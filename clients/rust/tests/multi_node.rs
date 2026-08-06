@@ -1393,51 +1393,9 @@ async fn crash_detection_via_epoch() {
     );
 }
 
-/// Replication factor change: send ReplicationFactorUpdate directly to
-/// routing, verify it updates the number of responsible addresses.
-/// Uses base_offset=36000 to avoid conflicts with other tests.
-#[tokio::test]
-#[cfg(unix)]
-#[parallel(multi_node)]
-async fn replication_factor_change() {
-    if skip_unless_multi_ip() {
-        return;
-    }
-
-    let mut cluster = MultiNodeCluster::new(19240);
-    cluster.start_full_node(NODE1_IP, 1);
-    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
-
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(75)).await;
-
-    client
-        .put("rep_change_key", "initial")
-        .await
-        .expect("PUT failed");
-
-    let addrs_before = client.get_key_addresses("rep_change_key").await;
-    assert_eq!(addrs_before.len(), 1, "Expected 1 address before change");
-
-    cluster
-        .send_replication_change(NODE1_IP, "rep_change_key", 2)
-        .await;
-
-    let addrs_after = client.get_key_addresses("rep_change_key").await;
-    assert!(
-        addrs_after.len() >= 2,
-        "Expected 2 addresses after replication change, got {}",
-        addrs_after.len()
-    );
-
-    // Wait for gossip then verify data accessible
-    std::thread::sleep(Duration::from_secs(TEST_GOSSIP_EPOCH as u64 + 2));
-    client.clear_cache();
-    let val = client
-        .get("rep_change_key")
-        .await
-        .expect("GET after replication change failed");
-    assert_eq!(val, "initial");
-}
+// replication_factor_change test removed — it tested routing server
+// address resolution which no longer exists. Replication changes are
+// now handled by the monitor's policy engine.
 
 /// Gossip after replication change: change replication from 1 to 2,
 /// verify data is redistributed to the second node via gossip.
