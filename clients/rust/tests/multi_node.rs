@@ -49,6 +49,7 @@ struct NodeConfig {
     server_report_period: u32,
     monitoring_timeout: u32,
     tombstone_gc_multiplier: u32,
+    slo_occupancy_lower: f64,
 }
 
 impl Default for NodeConfig {
@@ -71,6 +72,7 @@ impl Default for NodeConfig {
             server_report_period: TEST_SERVER_REPORT_PERIOD,
             monitoring_timeout: TEST_MONITORING_TIMEOUT,
             tombstone_gc_multiplier: 30,
+            slo_occupancy_lower: 0.05,
         }
     }
 }
@@ -106,6 +108,8 @@ policy:
   elasticity: {elasticity}
   selective-rep: {selective_rep}
   tiering: {tiering}
+  slo:
+    occupancy_lower: {slo_occupancy_lower}
 disk: {disk_path}
 capacities:
   memory-cap: 1
@@ -149,6 +153,7 @@ replication:
         elasticity = cfg.elasticity,
         tiering = cfg.tiering,
         scaling_alert_ip = cfg.scaling_alert_ip,
+        slo_occupancy_lower = cfg.slo_occupancy_lower,
         memory_cap_kb_line = cfg
             .memory_cap_kb
             .map(|kb| format!("  memory-cap-kb: {}", kb))
@@ -1968,9 +1973,6 @@ async fn elasticity_storage_policy() {
 #[tokio::test]
 #[cfg(unix)]
 #[serial(multi_node)]
-#[ignore] // SLO underutilization policy requires tight timing between 2 nodes'
-          // stats reporting and monitor policy cycles. Passes locally but the
-          // policy doesn't trigger on CI within the timeout. See #467.
 async fn underutilization_scale_in() {
     use annalib::proto::metadata::{scaling_alert, ScalingAlert, Tier};
     use omq_tokio::{Context, Message as ZmqMessage, Options, SocketType};
@@ -2060,10 +2062,10 @@ async fn underutilization_scale_in() {
     // The SLO underutilization branch triggers remove_node.
     let mut cluster = MultiNodeCluster::new(base_offset);
 
-    // Use short timings so the underutilization path triggers quickly:
-    // - grace_period=3s: cooldown before policy engine acts
-    // - monitoring_timeout=3s: how often monitor collects stats and runs policies
-    // - server_report_period=2s: how often KVS reports stats to monitor
+    // Use short timings so the underutilization path triggers quickly.
+    // slo_occupancy_lower=0.5 (50%) ensures near-idle nodes reliably
+    // fall below the threshold even on loaded CI runners (default 5%
+    // was too tight for CI).
     let short_grace: u32 = 3;
     let short_monitoring: u32 = 3;
     let short_report: u32 = 2;
@@ -2077,6 +2079,7 @@ async fn underutilization_scale_in() {
         grace_period: short_grace,
         monitoring_timeout: short_monitoring,
         server_report_period: short_report,
+        slo_occupancy_lower: 0.5,
         ..Default::default()
     };
     cluster.start_full_node_with_config(cfg1);
@@ -2127,7 +2130,7 @@ async fn underutilization_scale_in() {
 
     // Both nodes confirmed reporting with epoch > 0. The SLO policy can
     // now see min_memory_occupancy < 0.05 and memory_node_count > 1.
-    // Wait for grace_period + monitoring cycles for policy decision,
+    // Wait for grace_period + enough monitoring cycles for policy decision,
     // replication adjustment, node self-departure, and depart-done ack.
     let timeout = Duration::from_secs((short_grace + short_monitoring * 10) as u64);
     let result = tokio::time::timeout(timeout, mgmt_handle).await;
