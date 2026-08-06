@@ -14,7 +14,7 @@ def server_binaries_exist():
         os.path.join(REPO_ROOT, "server", "cpp", "build", "target", "kvs"))
     return all(
         os.path.exists(os.path.join(server_dir, b))
-        for b in ["anna-monitor", "anna-route", "anna-kvs"]
+        for b in ["anna-monitor", "anna-kvs"]
     )
 
 

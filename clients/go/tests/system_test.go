@@ -33,7 +33,7 @@ func startServers(t *testing.T) {
 	path := fmt.Sprintf("%s:%s", os.Getenv("PATH"), binDir)
 	config := serverConfigFile()
 
-	for _, proc := range []string{"anna-monitor", "anna-route", "anna-kvs"} {
+	for _, proc := range []string{"anna-monitor", "anna-kvs"} {
 		cmd := exec.Command(proc, "--config", config)
 		cmd.Env = append(os.Environ(), "PATH="+path)
 		if err := cmd.Start(); err != nil {

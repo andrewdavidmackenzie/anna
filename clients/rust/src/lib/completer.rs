@@ -168,7 +168,7 @@ mod tests {
         let results = complete("START ");
         assert_eq!(results.len(), 3);
         assert!(results.contains(&"monitor".to_string()));
-        assert!(results.contains(&"route".to_string()));
+        assert!(!results.contains(&"route".to_string()));
         assert!(results.contains(&"kvs".to_string()));
     }
 

@@ -11,8 +11,8 @@ Example:
     python3 run_smoke_test.py ./clients/cpp/build/cli/anna-cli --config test_config.yml cli
 
 The runner:
-1. Starts anna server processes (anna-monitor, anna-route, anna-kvs)
-2. Waits for the routing tier (port 6450) to become reachable
+1. Starts anna server processes (anna-monitor, anna-kvs)
+2. Waits for the KVS request port (port 6200) to become reachable
 3. Runs the CLI with the shared input file
 4. Compares stdout against the shared expected output
 5. Stops servers and cleans up
@@ -116,7 +116,7 @@ policy:
 
 def start_servers(server_dir, config_path):
     procs = []
-    for name in ["anna-monitor", "anna-route", "anna-kvs"]:
+    for name in ["anna-monitor", "anna-kvs"]:
         bin_path = os.path.join(server_dir, name)
         if not os.path.exists(bin_path):
             print(f"SKIP: Server binary {bin_path} not found")
@@ -135,14 +135,14 @@ def start_servers(server_dir, config_path):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(1.0)
-                if s.connect_ex(("127.0.0.1", 6450)) == 0:
+                if s.connect_ex(("127.0.0.1", 6200)) == 0:
                     break
         except Exception:
             pass
         time.sleep(1)
     else:
         stop_servers(procs)
-        print("FAIL: Routing tier did not start within 30 seconds")
+        print("FAIL: KVS seed port did not start within 30 seconds")
         sys.exit(1)
 
     time.sleep(3)

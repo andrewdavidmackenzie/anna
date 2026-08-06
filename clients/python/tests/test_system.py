@@ -24,7 +24,7 @@ def server_binaries_exist():
     server_dir = find_server_dir()
     return all(
         os.path.exists(os.path.join(server_dir, b))
-        for b in ["anna-monitor", "anna-route", "anna-kvs"]
+        for b in ["anna-monitor", "anna-kvs"]
     )
 
 
@@ -89,7 +89,7 @@ def live_server(tmp_path_factory):
     log_path = str(work_dir / "server.log")
     procs = []
 
-    for name in ["anna-monitor", "anna-route", "anna-kvs"]:
+    for name in ["anna-monitor", "anna-kvs"]:
         bin_path = os.path.join(server_dir, name)
         proc = subprocess.Popen(
             [bin_path, "--config", config_path],

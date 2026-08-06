@@ -114,17 +114,43 @@ timings:
 
 pub fn client_config(base_offset: u16) -> annalib::client_config::ClientConfig {
     annalib::client_config::ClientConfig {
+        // Uses routing port (6450 + offset). enable_direct_routing()
+        // derives the KVS request port (6200 + offset) from this address.
         routing_addresses: vec![format!("tcp://127.0.0.1:{}", 6450 + base_offset as usize)],
         client_ip: "127.0.0.1".to_string(),
     }
 }
 
-pub fn routing_port(base_offset: u16) -> u16 {
-    6450 + base_offset
+/// Create a client with direct routing enabled. Retries until the KVS
+/// publishes its membership metadata (up to 20 seconds).
+#[cfg(feature = "direct-routing")]
+pub async fn client_with_direct_routing(
+    base_offset: u16,
+    tid: Option<usize>,
+) -> annalib::kvs_client::KVSClient {
+    let config = client_config(base_offset);
+    let mut client = annalib::kvs_client::KVSClient::new(&config, tid).await;
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    loop {
+        match client.enable_direct_routing().await {
+            Ok(()) => break,
+            Err(_) if std::time::Instant::now() < deadline => {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
+            Err(e) => panic!("Failed to enable direct routing: {}", e),
+        }
+    }
+
+    client
 }
 
-pub fn wait_for_routing(base_offset: u16) {
-    let port = routing_port(base_offset);
+pub fn kvs_port(base_offset: u16) -> u16 {
+    6200 + base_offset
+}
+
+pub fn wait_for_kvs(base_offset: u16) {
+    let port = kvs_port(base_offset);
     let addr = format!("127.0.0.1:{}", port);
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
@@ -132,10 +158,7 @@ pub fn wait_for_routing(base_offset: u16) {
             break;
         }
         if Instant::now() > deadline {
-            panic!(
-                "Routing tier did not start within 30 seconds (port {})",
-                port
-            );
+            panic!("KVS did not start within 30 seconds (port {})", port);
         }
         std::thread::sleep(Duration::from_millis(500));
     }
@@ -180,7 +203,7 @@ impl ServerGuard {
         let extra_path = server_path();
         let mut processes: Vec<Child> = Vec::new();
 
-        for name in ["anna-monitor", "anna-route", "anna-kvs"] {
+        for name in ["anna-monitor", "anna-kvs"] {
             let bin = resolve_server_binary(name, &bin_dir);
             if !bin.exists() {
                 for mut p in processes {
@@ -205,7 +228,7 @@ impl ServerGuard {
             std::thread::sleep(Duration::from_secs(1));
         }
 
-        wait_for_routing(base_offset);
+        wait_for_kvs(base_offset);
 
         ServerGuard { processes }
     }

@@ -334,7 +334,6 @@ impl KVSClient {
             }
         }
     }
-
     async fn get_worker_address(&mut self, key: &str) -> Option<Address> {
         // Try client-side routing first (if enabled).
         #[cfg(feature = "direct-routing")]
@@ -366,7 +365,6 @@ impl KVSClient {
             Some(addrs[idx].clone())
         }
     }
-
     async fn send_data_request(
         &mut self,
         key: &str,
@@ -2178,6 +2176,35 @@ impl KVSClient {
     #[cfg(feature = "direct-routing")]
     pub async fn enable_direct_routing(&mut self) -> Result<()> {
         use anna_server_common::hash_ring::{ConsistentHashRing, DEFAULT_VIRTUAL_THREAD_NUM};
+
+        // Derive a KVS address from the routing config IP.
+        // The routing port is 6450 + offset, KVS request port is 6200 + offset.
+        let kvs_seed_addr = self
+            .routing_threads
+            .first()
+            .map(|rt| {
+                let addr = rt.key_address_connect_address();
+                // Replace port: routing=6450+offset → kvs=6200+offset
+                if let Some((host_part, port_str)) = addr.rsplit_once(':') {
+                    if let Ok(port) = port_str.parse::<u32>() {
+                        let kvs_port = port.saturating_sub(6450) + 6200;
+                        return format!("{}:{}", host_part, kvs_port);
+                    }
+                }
+                addr
+            })
+            .ok_or_else(|| Error::Kvs("No routing address configured".into()))?;
+
+        // Pre-populate the address cache for the metadata key so
+        // get_kvs_members() can reach the KVS without routing.
+        self.key_address_cache.insert(
+            "ANNA_METADATA|kvs_members".to_string(),
+            std::iter::once(kvs_seed_addr.clone()).collect(),
+        );
+        self.key_address_cache.insert(
+            "ANNA_METADATA|cluster_topology".to_string(),
+            std::iter::once(kvs_seed_addr).collect(),
+        );
 
         let members = self.get_kvs_members().await;
         if members.is_empty() {

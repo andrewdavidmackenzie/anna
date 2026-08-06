@@ -16,7 +16,7 @@ set -euo pipefail
 # Kill any leftover anna server processes from previous runs to avoid port
 # conflicts. Uses exact binary name matching to avoid killing unrelated
 # processes that happen to contain these strings in their arguments.
-for proc in anna-kvs anna-route anna-monitor; do
+for proc in anna-kvs anna-monitor; do
   pkill -x "$proc" 2>/dev/null || true
 done
 sleep 1
@@ -27,7 +27,6 @@ BENCH_DATA="${BENCH_ROOT}/data"
 BENCH_CONFIG="${BENCH_ROOT}/config.yml"
 LOG_DIR="${BENCH_ROOT}/logs"
 MONITOR_PID=""
-ROUTE_PID=""
 KVS_PID=""
 
 # Default benchmark parameters
@@ -53,7 +52,7 @@ SERVER_DIR="${REPO_ROOT}/server/cpp/release-build/target/kvs"
 
 # Check binaries exist
 for bin in "$CPP_CLI" "$RUST_CLI" "$GO_CLI" \
-           "$SERVER_DIR/anna-monitor" "$SERVER_DIR/anna-route" "$SERVER_DIR/anna-kvs"; do
+           "$SERVER_DIR/anna-monitor" "$SERVER_DIR/anna-kvs"; do
   if [[ ! -x "$bin" ]]; then
     echo "Error: $bin not found. Run 'make bench-build' first."
     exit 1
@@ -63,7 +62,7 @@ done
 cleanup() {
   echo ""
   echo "Stopping cluster..."
-  for pid in "$KVS_PID" "$ROUTE_PID" "$MONITOR_PID"; do
+  for pid in "$KVS_PID" "$MONITOR_PID"; do
     [[ -z "$pid" ]] && continue
     kill "$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
@@ -116,14 +115,11 @@ echo "Starting anna cluster..."
 "$SERVER_DIR/anna-monitor" --config "$BENCH_CONFIG" > "$LOG_DIR/monitor.log" 2>&1 &
 MONITOR_PID=$!
 sleep 1
-"$SERVER_DIR/anna-route" --config "$BENCH_CONFIG" > "$LOG_DIR/route.log" 2>&1 &
-ROUTE_PID=$!
-sleep 1
 "$SERVER_DIR/anna-kvs" --config "$BENCH_CONFIG" > "$LOG_DIR/kvs.log" 2>&1 &
 KVS_PID=$!
 
 # Verify processes are alive
-for pid_var in MONITOR_PID ROUTE_PID KVS_PID; do
+for pid_var in MONITOR_PID KVS_PID; do
   pid="${!pid_var}"
   sleep 0.5
   if ! kill -0 "$pid" 2>/dev/null; then
@@ -133,7 +129,7 @@ for pid_var in MONITOR_PID ROUTE_PID KVS_PID; do
   fi
 done
 
-# Wait for routing tier to accept connections (port 6450)
+# Wait for KVS seed port to accept connections (port 6450)
 echo "Waiting for cluster to be ready..."
 TIMEOUT=30
 ELAPSED=0
@@ -141,12 +137,12 @@ while ! (echo > /dev/tcp/127.0.0.1/6450) 2>/dev/null; do
   sleep 1
   ELAPSED=$((ELAPSED + 1))
   if [[ $ELAPSED -ge $TIMEOUT ]]; then
-    echo "Error: routing tier not ready after ${TIMEOUT}s. Check $LOG_DIR/"
+    echo "Error: KVS not ready after ${TIMEOUT}s. Check $LOG_DIR/"
     cat "$LOG_DIR"/*.log
     exit 1
   fi
 done
-# Allow hash ring to stabilize after routing is reachable
+# Allow hash ring to stabilize after KVS is reachable
 sleep 2
 echo "Cluster ready"
 echo ""

@@ -23,7 +23,7 @@ func TestStatusProcessNames(t *testing.T) {
 	for _, s := range statuses {
 		names[s.Name] = true
 	}
-	for _, name := range []string{"anna-monitor", "anna-route", "anna-kvs"} {
+	for _, name := range []string{"anna-monitor", "anna-kvs"} {
 		if !names[name] {
 			t.Errorf("missing process name: %s", name)
 		}
@@ -77,7 +77,7 @@ func TestStartBinaryNotFound(t *testing.T) {
 }
 
 func TestProcessListContents(t *testing.T) {
-	expected := []string{"anna-monitor", "anna-route", "anna-kvs"}
+	expected := []string{"anna-monitor", "anna-kvs"}
 	if len(processList) != len(expected) {
 		t.Fatalf("expected %d processes, got %d", len(expected), len(processList))
 	}
