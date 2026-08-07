@@ -8,6 +8,33 @@ use anna_server_common::proto::kvs::*;
 use prost::Message;
 use std::collections::HashMap;
 
+/// Check if vector clock `a` dominates `b` (a >= b for all entries).
+fn vc_dominates(a: &HashMap<String, u32>, b: &HashMap<String, u32>) -> bool {
+    // a dominates b if every entry in b has a <= entry in a,
+    // and a has at least one entry strictly greater.
+    let mut dominated = true;
+    let mut strictly_greater = false;
+    for (node, &b_val) in b {
+        let a_val = a.get(node).copied().unwrap_or(0);
+        if a_val < b_val {
+            dominated = false;
+            break;
+        }
+        if a_val > b_val {
+            strictly_greater = true;
+        }
+    }
+    // Also check entries in a that aren't in b.
+    if dominated {
+        for (node, &a_val) in a {
+            if !b.contains_key(node) && a_val > 0 {
+                strictly_greater = true;
+            }
+        }
+    }
+    dominated && strictly_greater
+}
+
 // ── LWW (Last-Writer-Wins) ─────────────────────────────────────────
 
 pub struct LwwSerializer {
@@ -115,8 +142,11 @@ impl Serializer for PrioritySerializer {
         let new = PriorityValue::decode(payload).unwrap_or_default();
         if let Some(existing) = self.store.get(key) {
             let old = PriorityValue::decode(existing.as_slice()).unwrap_or_default();
-            if new.priority >= old.priority {
-                return existing.len(); // Lower priority wins.
+            // Lower priority wins. NaN is treated as infinite (never wins).
+            let new_pri = if new.priority.is_nan() { f64::INFINITY } else { new.priority };
+            let old_pri = if old.priority.is_nan() { f64::INFINITY } else { old.priority };
+            if new_pri >= old_pri {
+                return existing.len();
             }
         }
         let encoded = new.encode_to_vec();
@@ -257,16 +287,30 @@ impl SingleCausalSerializer {
 
 impl Serializer for SingleCausalSerializer {
     fn put(&mut self, key: &str, payload: &[u8]) -> usize {
-        // For causal types, the merge compares vector clocks.
-        // Simplified: store the payload with the highest vector clock sum.
         let new = SingleKeyCausalValue::decode(payload).unwrap_or_default();
         if let Some(existing) = self.store.get(key) {
-            let old = SingleKeyCausalValue::decode(existing.as_slice()).unwrap_or_default();
-            let new_sum: u64 = new.vector_clock.values().map(|&v| v as u64).sum();
-            let old_sum: u64 = old.vector_clock.values().map(|&v| v as u64).sum();
-            if new_sum <= old_sum {
-                return existing.len();
+            let mut old = SingleKeyCausalValue::decode(existing.as_slice()).unwrap_or_default();
+            // Merge vector clocks: element-wise max.
+            for (node, &val) in &new.vector_clock {
+                let entry = old.vector_clock.entry(node.clone()).or_insert(0);
+                *entry = (*entry).max(val);
             }
+            // If new dominates old, take new values. If concurrent, union values.
+            if vc_dominates(&new.vector_clock, &old.vector_clock) {
+                old.values = new.values;
+            } else if !vc_dominates(&old.vector_clock, &new.vector_clock) {
+                // Concurrent: keep union of values.
+                for v in &new.values {
+                    if !old.values.contains(v) {
+                        old.values.push(v.clone());
+                    }
+                }
+            }
+            // else: old dominates, keep old values.
+            let encoded = old.encode_to_vec();
+            let size = encoded.len();
+            self.store.insert(key.to_string(), encoded);
+            return size;
         }
         let encoded = new.encode_to_vec();
         let size = encoded.len();
@@ -304,12 +348,26 @@ impl Serializer for MultiCausalSerializer {
     fn put(&mut self, key: &str, payload: &[u8]) -> usize {
         let new = MultiKeyCausalValue::decode(payload).unwrap_or_default();
         if let Some(existing) = self.store.get(key) {
-            let old = MultiKeyCausalValue::decode(existing.as_slice()).unwrap_or_default();
-            let new_sum: u64 = new.vector_clock.values().map(|&v| v as u64).sum();
-            let old_sum: u64 = old.vector_clock.values().map(|&v| v as u64).sum();
-            if new_sum <= old_sum {
-                return existing.len();
+            let mut old = MultiKeyCausalValue::decode(existing.as_slice()).unwrap_or_default();
+            // Merge vector clocks: element-wise max.
+            for (node, &val) in &new.vector_clock {
+                let entry = old.vector_clock.entry(node.clone()).or_insert(0);
+                *entry = (*entry).max(val);
             }
+            // If new dominates, take new values. If concurrent, union values.
+            if vc_dominates(&new.vector_clock, &old.vector_clock) {
+                old.values = new.values;
+            } else if !vc_dominates(&old.vector_clock, &new.vector_clock) {
+                for v in &new.values {
+                    if !old.values.contains(v) {
+                        old.values.push(v.clone());
+                    }
+                }
+            }
+            let encoded = old.encode_to_vec();
+            let size = encoded.len();
+            self.store.insert(key.to_string(), encoded);
+            return size;
         }
         let encoded = new.encode_to_vec();
         let size = encoded.len();
