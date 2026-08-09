@@ -46,9 +46,25 @@ correctly merged and move on.
 
 Ensure that the remote branch is also deleted along with the local branch.
 
+## Post-Merge: Verify master CI
+
+After merging, the PR is NOT considered successfully merged until the
+corresponding CI run on master is also green.
+
+1. Check out master and `git pull`.
+2. Verify the merge commit from the PR is present in the log.
+3. Monitor the CI run triggered by the merge on master (`gh run list --branch master --limit 1`).
+4. Wait for the CI run to complete. If it fails:
+   - Analyse the failure logs to determine if the merge caused it.
+   - If the merge caused the failure, immediately fix it on a new branch,
+     create a PR, and get it merged. Do NOT leave master broken.
+   - If the failure is pre-existing (unrelated to the merge), note it
+     but still investigate — a broken master blocks all other work.
+5. Only after master CI is green, proceed to cleanup.
+
+**A merged PR with a red master CI is not done.** Go back and fix it.
+
 ## Cleaning up
 
-If everything is OK, then check out the master/main branch and `git pull`.
-Verify the merge commit from the PR is present in the log.
 Check that all checks pass by running `make test`.
 Delete the feature branch that was merged, locally and remote.

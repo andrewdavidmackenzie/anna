@@ -41,6 +41,9 @@ for a specific task, then propose it to the user.
 - Always wait for code reviews to terminate or be repeated if they failed due to
   rate limiting, and then address all comments from the review.
 - Always wait for the human user to approve before you merge a PR.
+- After merging a PR, monitor the CI run on master. A PR is not considered
+  successfully merged until master CI is green. If the merge breaks master CI,
+  immediately fix it — do not leave master broken.
 - Don't close GitHub issues without the user's explicit approval.
 - Don't change Rust versions or install or uninstall anything using rustup without the user's explicit approval.
 - Don't add new crate dependencies without the user's explicit approval.
