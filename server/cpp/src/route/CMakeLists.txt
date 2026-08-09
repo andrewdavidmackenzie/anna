@@ -14,19 +14,19 @@
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 
-SET(KV_LIBRARY_DEPENDENCIES
-    protobuf::libprotobuf
-    kvs-proto
-    pthread
-    anna-zmq
-    yaml-cpp
-)
+SET(ROUTING_SOURCE 
+		routing.cpp
+		seed_handler.cpp
+		membership_handler.cpp
+		replication_response_handler.cpp
+		replication_change_handler.cpp
+		address_handler.cpp)
 
-SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/target/kvs)
-
-ADD_SUBDIRECTORY(hash_ring)
-ADD_SUBDIRECTORY(kvs)
-ADD_SUBDIRECTORY(lattices)
-ADD_SUBDIRECTORY(monitor)
-ADD_SUBDIRECTORY(route)
-ADD_SUBDIRECTORY(zmq)
+ADD_EXECUTABLE(anna-route ${ROUTING_SOURCE})
+TARGET_LINK_LIBRARIES(anna-route anna-hash-ring ${ANNA_HASHRING_LIB} spdlog::spdlog fmt::fmt ${ZeroMQ_LIBRARY} ${KV_LIBRARY_DEPENDENCIES})
+IF(APPLE)
+  TARGET_LINK_LIBRARIES(anna-route "-framework Security" "-framework CoreFoundation" "-framework SystemConfiguration" "-lSystem" "-liconv")
+ELSE()
+  TARGET_LINK_LIBRARIES(anna-route dl pthread)
+ENDIF()
+ADD_DEPENDENCIES(anna-route anna-hash-ring)

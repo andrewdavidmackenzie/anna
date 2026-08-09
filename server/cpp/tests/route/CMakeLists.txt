@@ -1,11 +1,11 @@
 #  Copyright 2019 U.C. Berkeley RISE Lab
-# 
+#
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
 #  You may obtain a copy of the License at
-# 
+#
 #      http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 #  Unless required by applicable law or agreed to in writing, software
 #  distributed under the License is distributed on an "AS IS" BASIS,
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,19 +14,15 @@
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 
-SET(KV_LIBRARY_DEPENDENCIES
-    protobuf::libprotobuf
-    kvs-proto
-    pthread
-    anna-zmq
-    yaml-cpp
-)
+SET(ROUTE_SRC_DIR ${CMAKE_SOURCE_DIR}/src/route)
 
-SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/target/kvs)
+FILE(GLOB HANDLER_SOURCES "${ROUTE_SRC_DIR}/*handler.cpp")
 
-ADD_SUBDIRECTORY(hash_ring)
-ADD_SUBDIRECTORY(kvs)
-ADD_SUBDIRECTORY(lattices)
-ADD_SUBDIRECTORY(monitor)
-ADD_SUBDIRECTORY(route)
-ADD_SUBDIRECTORY(zmq)
+ADD_EXECUTABLE(run_routing_handler_tests
+         run_routing_handler_tests.cpp
+         ${HANDLER_SOURCES})
+
+TARGET_LINK_LIBRARIES(run_routing_handler_tests GTest::gtest GTest::gmock
+  anna-hash-ring spdlog::spdlog fmt::fmt ${ZeroMQ_LIBRARY} anna-mock)
+
+ADD_TEST(NAME RouteTests COMMAND run_routing_handler_tests)

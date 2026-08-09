@@ -37,6 +37,7 @@ ADD_SUBDIRECTORY(kvs)
 ADD_SUBDIRECTORY(lattices)
 ADD_SUBDIRECTORY(mock)
 ADD_SUBDIRECTORY(monitor)
+ADD_SUBDIRECTORY(route)
 
 # Hash ring FFI test (validates Rust C library from C++).
 IF(EXISTS ${ANNA_HASHRING_LIB})

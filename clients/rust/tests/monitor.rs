@@ -188,7 +188,7 @@ impl MonitorTestCluster {
             self.base_offset, port_range_start, port_range_end
         );
 
-        for name in ["anna-monitor", "anna-kvs"] {
+        for name in ["anna-monitor", "anna-route", "anna-kvs"] {
             let bin = common::resolve_server_binary(name, &server_bin_dir());
             if !bin.exists() {
                 self.shutdown();
@@ -211,11 +211,11 @@ impl MonitorTestCluster {
             std::thread::sleep(Duration::from_secs(1));
         }
 
-        let kvs_port = (6200 + self.base_offset) as u16;
+        let routing_port = (6450 + self.base_offset) as u16;
         assert!(
-            wait_for_port(NODE_IP, kvs_port, 30),
-            "KVS did not start (port {})",
-            kvs_port
+            wait_for_port(NODE_IP, routing_port, 30),
+            "Routing tier did not start (port {})",
+            routing_port
         );
         std::thread::sleep(Duration::from_secs(1));
         eprintln!(
@@ -299,6 +299,8 @@ impl Drop for MonitorTestCluster {
 #[cfg(unix)]
 #[serial(monitor)]
 async fn monitor_stats_collection() {
+    use annalib::kvs_client::KVSClient;
+
     if !server_bin_dir().join("anna-kvs").exists() {
         eprintln!("SKIP: server binaries not built");
         return;
@@ -307,7 +309,8 @@ async fn monitor_stats_collection() {
     let mut cluster = MonitorTestCluster::new(100);
     cluster.start();
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(95)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(95)).await;
 
     // Generate activity: PUT keys with varying sizes
     for i in 0..5 {
@@ -410,6 +413,8 @@ async fn monitor_stats_collection() {
 #[cfg(unix)]
 #[serial(monitor)]
 async fn policy_toggles_and_grace_period() {
+    use annalib::kvs_client::KVSClient;
+
     if !server_bin_dir().join("anna-kvs").exists() {
         eprintln!("SKIP: server binaries not built");
         return;
@@ -423,7 +428,8 @@ async fn policy_toggles_and_grace_period() {
         ..Default::default()
     });
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(96)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(96)).await;
 
     // PUT and GET keys to generate activity with policies enabled
     for i in 0..3 {
@@ -469,6 +475,8 @@ async fn policy_toggles_and_grace_period() {
 #[cfg(unix)]
 #[serial(monitor)]
 async fn cross_tier_data_movement() {
+    use annalib::kvs_client::KVSClient;
+
     if !server_bin_dir().join("anna-kvs").exists() {
         eprintln!("SKIP: server binaries not built");
         return;
@@ -490,7 +498,8 @@ async fn cross_tier_data_movement() {
     // Start a disk-tier KVS node on the same cluster
     cluster.start_disk_kvs();
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(97)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(97)).await;
 
     // PUT hot keys (will be accessed) and cold keys (won't be accessed).
     // Hot keys exercise the promotion path, cold keys exercise demotion.
@@ -552,6 +561,7 @@ async fn cross_tier_data_movement() {
 #[cfg(unix)]
 #[serial(monitor)]
 async fn latency_feedback_ingestion() {
+    use annalib::kvs_client::KVSClient;
     use annalib::proto::metadata::user_feedback::KeyLatency;
     use annalib::proto::metadata::UserFeedback;
     use omq_tokio::{Context, Message as ZmqMessage, Options, SocketType};
@@ -569,7 +579,8 @@ async fn latency_feedback_ingestion() {
         ..Default::default()
     });
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(98)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(98)).await;
 
     // PUT keys to have data in the system
     for i in 0..3 {
@@ -663,6 +674,8 @@ async fn latency_feedback_ingestion() {
 #[cfg(unix)]
 #[serial(monitor)]
 async fn hot_key_selective_replication() {
+    use annalib::kvs_client::KVSClient;
+
     if !server_bin_dir().join("anna-kvs").exists() {
         eprintln!("SKIP: server binaries not built");
         return;
@@ -675,7 +688,8 @@ async fn hot_key_selective_replication() {
         ..Default::default()
     });
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(99)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(99)).await;
 
     // Create a "hot" key with many accesses
     client
@@ -732,6 +746,7 @@ async fn hot_key_selective_replication() {
 #[cfg(unix)]
 #[serial(monitor)]
 async fn monitoring_ips_metadata() {
+    use annalib::kvs_client::KVSClient;
     use annalib::proto::shared::StringSet;
     use prost::Message;
 
@@ -743,7 +758,8 @@ async fn monitoring_ips_metadata() {
     let mut cluster = MonitorTestCluster::new(8900);
     cluster.start();
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(96)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(96)).await;
 
     // The KVS writes monitoring IPs every server_report_period (3s in test config).
     // Poll until the metadata key appears.
@@ -783,6 +799,8 @@ async fn monitoring_ips_metadata() {
 #[cfg(unix)]
 #[serial(monitor)]
 async fn cluster_topology_metadata() {
+    use annalib::kvs_client::KVSClient;
+
     if !server_bin_dir().join("anna-kvs").exists() {
         eprintln!("SKIP: server binaries not built");
         return;
@@ -791,7 +809,8 @@ async fn cluster_topology_metadata() {
     let mut cluster = MonitorTestCluster::new(10100);
     cluster.start();
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(97)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(97)).await;
 
     // Poll until the topology metadata key appears.
     // The KVS publishes this key every server_report_period (3s in test config).
@@ -827,6 +846,8 @@ async fn cluster_topology_metadata() {
 #[cfg(unix)]
 #[serial(monitor)]
 async fn monitor_disk_tier_stats() {
+    use annalib::kvs_client::KVSClient;
+
     if !server_bin_dir().join("anna-kvs").exists() {
         eprintln!("SKIP: server binaries not built");
         return;
@@ -844,7 +865,8 @@ async fn monitor_disk_tier_stats() {
         ..Default::default()
     });
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(98)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(98)).await;
 
     // PUT data so the disk-tier KVS has storage consumption to report
     for i in 0..5 {
