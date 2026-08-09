@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-34c39b89.js";
+            window.path_to_searchindex_js = "../searchindex-6bf4303b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f6b367e2.js"></script>
@@ -245,12 +245,16 @@ disk-tier threads read/write files on mounted volumes.</p>
 <p>Client proxies serve user requests:</p>
 <ul>
 <li>Support GET, PUT, and DELETE operations</li>
-<li>Query the routing tier to find key locations</li>
-<li>Cache key-address mappings locally</li>
-<li>Handle cache invalidation when the cluster reconfigures</li>
+<li>Build a local hash ring from KVS membership data
+(<code>ANNA_METADATA|kvs_members</code>) and compute key-to-server mappings
+client-side using the shared <code>anna-hashring</code> library</li>
+<li>Handle <code>WRONG_THREAD</code> responses by refreshing the local hash ring and
+retrying (safety net during cluster reconfiguration)</li>
 <li>For advanced consistency levels, maintain a per-transaction state
 (message buffers, read caches)</li>
 </ul>
+<p>Legacy clients may still query the optional <code>anna-route</code> routing tier
+to find key locations, but this mode is deprecated.</p>
 <h2 id="operations"><a class="header" href="#operations">Operations</a></h2>
 <p>Anna supports these operations:</p>
 <div class="table-wrapper">

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-34c39b89.js";
+            window.path_to_searchindex_js = "../searchindex-6bf4303b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f6b367e2.js"></script>
@@ -208,7 +208,9 @@ spacing (6000-6900), followed by 7 singleton ports (6950-6956).</p>
 </tbody>
 </table>
 </div>
-<h3 id="routing-server-5-per-thread-ports"><a class="header" href="#routing-server-5-per-thread-ports">Routing Server (5 per-thread ports)</a></h3>
+<h3 id="routing-server-5-per-thread-ports--optional"><a class="header" href="#routing-server-5-per-thread-ports--optional">Routing Server (5 per-thread ports) — Optional</a></h3>
+<p>These ports are only used when running the legacy <code>anna-route</code> server.
+Clients using client-side routing do not need these ports.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -231,7 +233,7 @@ spacing (6000-6900), followed by 7 singleton ports (6950-6956).</p>
 </thead>
 <tbody>
 <tr><td>6600</td><td><code>kUserResponsePort</code></td><td>Receive GET/PUT responses from KVS</td></tr>
-<tr><td>6650</td><td><code>kUserKeyAddressPort</code></td><td>Receive key-address responses from routing</td></tr>
+<tr><td>6650</td><td><code>kUserKeyAddressPort</code></td><td>Receive key-address responses from routing (only used with <code>anna-route</code>)</td></tr>
 </tbody>
 </table>
 </div>

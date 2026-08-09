@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-34c39b89.js";
+            window.path_to_searchindex_js = "../searchindex-6bf4303b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f6b367e2.js"></script>
@@ -203,15 +203,20 @@ the compiled-in default is used, preserving backward-compatible behavior.</p>
 </tbody>
 </table>
 </div>
-<h3 id="routing-routing"><a class="header" href="#routing-routing">Routing (<code>routing:</code>)</a></h3>
+<h3 id="routing-routing--optional"><a class="header" href="#routing-routing--optional">Routing (<code>routing:</code>) — Optional</a></h3>
+<blockquote>
+<p><strong>Note:</strong> The <code>routing:</code> section is only required when running the legacy
+<code>anna-route</code> server. Clients using client-side routing (the recommended
+approach) do not need a routing server.</p>
+</blockquote>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Config Key</th><th>Required</th><th>Default</th><th>Meaning</th></tr>
 </thead>
 <tbody>
-<tr><td><code>routing.ip</code></td><td>Yes</td><td>—</td><td>IP address of this routing node</td></tr>
-<tr><td><code>routing.monitoring</code></td><td>Yes</td><td>—</td><td>List of monitoring node IPs</td></tr>
+<tr><td><code>routing.ip</code></td><td>Yes (if using anna-route)</td><td>—</td><td>IP address of this routing node</td></tr>
+<tr><td><code>routing.monitoring</code></td><td>Yes (if using anna-route)</td><td>—</td><td>List of monitoring node IPs</td></tr>
 </tbody>
 </table>
 </div>
@@ -226,7 +231,7 @@ the compiled-in default is used, preserving backward-compatible behavior.</p>
 <tr><td><code>server.private_ip</code></td><td>Yes</td><td>—</td><td>Private IP of this KVS node</td></tr>
 <tr><td><code>server.seed_ip</code></td><td>Yes</td><td>—</td><td>IP of the seed node to join</td></tr>
 <tr><td><code>server.scaling_alert_ip</code></td><td>Yes</td><td>—</td><td>Scaling alert endpoint IP (or “NULL” for standalone)</td></tr>
-<tr><td><code>server.routing</code></td><td>Yes</td><td>—</td><td>List of routing node IPs</td></tr>
+<tr><td><code>server.routing</code></td><td>No</td><td>—</td><td>List of routing node IPs (only needed when using the legacy <code>anna-route</code> server)</td></tr>
 <tr><td><code>server.monitoring</code></td><td>Yes</td><td>—</td><td>List of monitoring node IPs</td></tr>
 </tbody>
 </table>
@@ -279,7 +284,7 @@ the compiled-in default is used, preserving backward-compatible behavior.</p>
 <tbody>
 <tr><td><code>threads.memory</code></td><td><code>kMemoryThreadCount</code></td><td>—</td><td>Threads per memory-tier node</td></tr>
 <tr><td><code>threads.disk</code></td><td><code>kDiskThreadCount</code></td><td>—</td><td>Threads per disk-tier node</td></tr>
-<tr><td><code>threads.routing</code></td><td><code>kRoutingThreadCount</code></td><td>—</td><td>Threads per routing node</td></tr>
+<tr><td><code>threads.routing</code></td><td><code>kRoutingThreadCount</code></td><td>—</td><td>Threads per routing node (only relevant when using <code>anna-route</code>)</td></tr>
 <tr><td><code>threads.benchmark</code></td><td>—</td><td>—</td><td>Benchmark threads (not used by server)</td></tr>
 </tbody>
 </table>

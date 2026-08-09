@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-34c39b89.js";
+            window.path_to_searchindex_js = "../searchindex-6bf4303b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f6b367e2.js"></script>
@@ -340,7 +340,7 @@ feature, not an autoscaling decision.</p>
 <tr><td>Node depart</td><td>Node leaves, data redistributed</td><td>Yes</td></tr>
 <tr><td>Self-depart</td><td>Node gracefully removes itself, gossips all data out</td><td>Yes</td></tr>
 <tr><td>Rejoin detection</td><td>Join counter distinguishes fresh joins from rejoins</td><td>Yes</td></tr>
-<tr><td>Seed node</td><td>First routing node serves cluster membership</td><td>Yes</td></tr>
+<tr><td>Seed node</td><td>First node serves cluster membership (via routing or KVS metadata)</td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
@@ -373,7 +373,23 @@ feature, not an autoscaling decision.</p>
 </tbody>
 </table>
 </div>
-<h3 id="routing-tier"><a class="header" href="#routing-tier">Routing Tier</a></h3>
+<h3 id="client-side-routing"><a class="header" href="#client-side-routing">Client-Side Routing</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Description</th><th>System Tested</th></tr>
+</thead>
+<tbody>
+<tr><td>Client-side hash ring</td><td>Clients build a local hash ring from <code>ANNA_METADATA|kvs_members</code></td><td>Yes</td></tr>
+<tr><td>Direct KVS routing</td><td>Clients compute key-to-server mappings locally via <code>anna-hashring</code></td><td>Yes</td></tr>
+<tr><td><code>enable_direct_routing()</code></td><td>Rust client method to activate client-side routing</td><td>Yes</td></tr>
+<tr><td>WRONG_THREAD retry</td><td>Safety net: client refreshes hash ring on misrouted requests</td><td>Yes</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="routing-tier--optional-deprecated-anna-route"><a class="header" href="#routing-tier--optional-deprecated-anna-route">Routing Tier — Optional, Deprecated (<code>anna-route</code>)</a></h3>
+<p>The <code>anna-route</code> process is kept for backward compatibility but is not
+required when clients use client-side routing.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -489,11 +505,12 @@ can use the client library helpers to implement their own scaling logic.</p>
 <tr><td>Error Handling</td><td><code>anna-kvs</code></td><td>5</td><td>5</td><td>100%</td><td>—</td></tr>
 <tr><td>Multi-Tiered Storage</td><td><code>anna-kvs</code></td><td>5</td><td>5</td><td>100%</td><td>—</td></tr>
 <tr><td>Multi-Node Features</td><td><code>anna-kvs</code></td><td>25</td><td>25</td><td>100%</td><td>—</td></tr>
-<tr><td>Routing Tier</td><td><code>anna-route</code></td><td>6</td><td>6</td><td>100%</td><td>—</td></tr>
+<tr><td>Client-Side Routing</td><td>all clients</td><td>4</td><td>4</td><td>100%</td><td>—</td></tr>
+<tr><td>Routing Tier (optional, deprecated)</td><td><code>anna-route</code></td><td>6</td><td>6</td><td>100%</td><td>—</td></tr>
 <tr><td>Monitoring</td><td><code>anna-monitor</code></td><td>6</td><td>6</td><td>100%</td><td>—</td></tr>
 <tr><td>Autoscaling (server primitives)</td><td><code>anna-monitor</code></td><td>4</td><td>4</td><td>100%</td><td>—</td></tr>
 <tr><td>Client library helpers</td><td>all clients</td><td>7</td><td>7</td><td>100%</td><td>—</td></tr>
-<tr><td><strong>Total</strong></td><td></td><td><strong>88</strong></td><td><strong>88</strong></td><td><strong>100%</strong></td><td></td></tr>
+<tr><td><strong>Total</strong></td><td></td><td><strong>92</strong></td><td><strong>92</strong></td><td><strong>100%</strong></td><td></td></tr>
 </tbody>
 </table>
 </div>

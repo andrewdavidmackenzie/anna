@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-34c39b89.js";
+            window.path_to_searchindex_js = "../searchindex-6bf4303b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f6b367e2.js"></script>
@@ -228,7 +228,7 @@
 <h2 id="hardest-to-emulate-architecture-mismatch"><a class="header" href="#hardest-to-emulate-architecture-mismatch">Hardest to emulate (architecture mismatch)</a></h2>
 <ul>
 <li><strong>Conditional writes / CAS</strong>: Anna’s eventual consistency model conflicts with strong CAS. The causal lattice types provide partial ordering but not compare-and-swap semantics.</li>
-<li><strong>Range queries</strong>: Anna uses hash-based key distribution (consistent hashing). Range queries require sequential key layout, which would need a fundamentally different routing strategy.</li>
+<li><strong>Range queries</strong>: Anna uses hash-based key distribution (consistent hashing). Range queries require sequential key layout, which would need a fundamentally different key distribution strategy.</li>
 <li><strong>Secondary indexes</strong>: Would require a server-side index maintenance layer that doesn’t exist.</li>
 </ul>
 <h2 id="which-stores-api-is-closest-to-anna"><a class="header" href="#which-stores-api-is-closest-to-anna">Which store’s API is closest to Anna?</a></h2>

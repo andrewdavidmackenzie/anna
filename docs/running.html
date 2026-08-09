@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-34c39b89.js";
+            window.path_to_searchindex_js = "../searchindex-6bf4303b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f6b367e2.js"></script>
@@ -183,8 +183,11 @@
 <p>If you have not installed it, then you can build and run the development version using</p>
 <pre><code class="language-bash">&gt; cargo run -- start
 </code></pre>
-<p>By default, the <code>server/conf/anna-config.yml</code> config file is used, which only specifies one routing thread and one storage
-thread.</p>
+<p>By default, the <code>server/conf/anna-config.yml</code> config file is used, which specifies one routing thread and one storage
+thread. The routing thread (<code>anna-route</code>) is <strong>optional</strong> — clients using
+client-side routing connect directly to KVS nodes and do not need a routing
+server. The <code>anna start</code> command still launches <code>anna-route</code> by default for
+backward compatibility, but it is not required.</p>
 <p>You are welcome to modify this file if you would like, but we generally do not recommend running more than one
 thread per process in local mode.</p>
 <h3 id="stopping-anna"><a class="header" href="#stopping-anna">Stopping Anna</a></h3>

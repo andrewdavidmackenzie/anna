@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-34c39b89.js";
+            window.path_to_searchindex_js = "../searchindex-6bf4303b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f6b367e2.js"></script>
@@ -191,12 +191,28 @@ for other threads for coordination or consistency.</li>
 of consistency models without coordination protocols.</li>
 </ol>
 <h2 id="system-components"><a class="header" href="#system-components">System Components</a></h2>
-<p>An Anna deployment consists of four types of nodes:</p>
+<p>An Anna deployment consists of three required component types (storage,
+monitoring, and cluster management) plus an optional legacy routing tier:</p>
 <p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="images/architecture.svg" alt="Anna Architecture"><span class="img-wrapper"><img src="images/architecture.svg" alt="Anna Architecture"></span></label></p>
-<h3 id="routing-tier-anna-route"><a class="header" href="#routing-tier-anna-route">Routing Tier (anna-route)</a></h3>
-<p>The routing service isolates clients from the storage layer. A client asks
-the routing tier where to find a key and receives valid server addresses.
-Routing nodes:</p>
+<h3 id="client-side-routing"><a class="header" href="#client-side-routing">Client-Side Routing</a></h3>
+<p>Clients now build a local hash ring from KVS membership data and compute
+key-to-server mappings locally, without requiring a separate routing server.
+The flow is:</p>
+<ol>
+<li>The client reads <code>ANNA_METADATA|kvs_members</code> from any KVS node to discover
+cluster membership</li>
+<li>The client builds a local hash ring using the shared <code>anna-hashring</code> library</li>
+<li>For each request, the client hashes the key and sends it directly to the
+responsible KVS node</li>
+<li>If a <code>WRONG_THREAD</code> error is returned (e.g., during cluster reconfiguration),
+the client refreshes its hash ring and retries</li>
+</ol>
+<p>In the Rust client, call <code>enable_direct_routing()</code> to activate client-side
+routing. All client libraries support this mode.</p>
+<h3 id="routing-tier-anna-route--optional-deprecated"><a class="header" href="#routing-tier-anna-route--optional-deprecated">Routing Tier (anna-route) — Optional, Deprecated</a></h3>
+<p>The <code>anna-route</code> process is a legacy routing server kept for backward
+compatibility. It is <strong>optional</strong> — clients using client-side routing do not
+need it. When used, routing nodes:</p>
 <ul>
 <li>Cache the storage tiers’ hash rings and replication vectors</li>
 <li>Return memory-tier addresses when available (for performance)</li>
@@ -255,8 +271,10 @@ provision or decommission infrastructure.</p>
 with shared memory buffers for zero-copy messaging</li>
 <li><strong>Inter-node</strong> (between machines): ZeroMQ <code>tcp</code> transport with Protocol
 Buffer serialization</li>
-<li><strong>Client-to-routing</strong>: PUSH/PULL sockets on port 6450</li>
-<li><strong>Client-to-KVS</strong>: PUSH/PULL sockets on configurable ports (6600/6650)</li>
+<li><strong>Client-to-routing</strong> (optional, legacy): PUSH/PULL sockets on port 6450</li>
+<li><strong>Client-to-KVS</strong>: PUSH/PULL sockets on configurable ports (6600/6650).
+With client-side routing, clients send requests directly to KVS nodes
+without going through the routing tier.</li>
 </ul>
 <p>See <a href="ports.html">Port Layout</a> for the complete port map (26 port groups across
 6000-7200).</p>
@@ -276,7 +294,9 @@ from the hash ring</li>
 <li>Data is automatically repartitioned using the updated hash ring</li>
 <li>The management system spawns a replacement node</li>
 <li>Key migration is interleaved with request handling (no downtime)</li>
-<li>Routing and monitoring nodes are stateless and recover by querying peers</li>
+<li>Monitoring nodes are stateless and recover by querying peers</li>
+<li>With client-side routing, the routing tier is not required for fault
+tolerance — clients refresh their local hash ring on <code>WRONG_THREAD</code> errors</li>
 </ul>
 
                     </main>

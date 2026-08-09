@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-34c39b89.js";
+            window.path_to_searchindex_js = "../searchindex-6bf4303b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f6b367e2.js"></script>
@@ -281,9 +281,12 @@ targets, and node scaling limits) are configurable via the YAML config
 file. See the <a href="config.html">Configuration Reference</a> for the full list of
 config keys, defaults, and valid ranges.</p>
 <h2 id="port-configuration-for-multi-node-deployments"><a class="header" href="#port-configuration-for-multi-node-deployments">Port Configuration for Multi-Node Deployments</a></h2>
-<p>When a new node joins the cluster it contacts the routing tier’s seed
-port, announces itself, and begins accepting requests on the same set
-of well-known ports as every other node. Port conflicts between nodes
+<p>When a new node joins the cluster it contacts the seed node (via the
+routing tier’s seed port, or discovered through KVS metadata), announces
+itself, and begins accepting requests on the same set of well-known
+ports as every other node. Clients using client-side routing automatically
+discover new nodes by refreshing their local hash ring from
+<code>ANNA_METADATA|kvs_members</code>. Port conflicts between nodes
 are avoided because ZMQ sockets bind to each node’s specific IP address
 rather than <code>0.0.0.0</code>. In production each node has a distinct IP, so all
 nodes share the same port numbers.</p>
