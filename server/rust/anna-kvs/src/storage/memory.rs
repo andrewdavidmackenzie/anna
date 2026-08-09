@@ -143,8 +143,16 @@ impl Serializer for PrioritySerializer {
         if let Some(existing) = self.store.get(key) {
             let old = PriorityValue::decode(existing.as_slice()).unwrap_or_default();
             // Lower priority wins. NaN is treated as infinite (never wins).
-            let new_pri = if new.priority.is_nan() { f64::INFINITY } else { new.priority };
-            let old_pri = if old.priority.is_nan() { f64::INFINITY } else { old.priority };
+            let new_pri = if new.priority.is_nan() {
+                f64::INFINITY
+            } else {
+                new.priority
+            };
+            let old_pri = if old.priority.is_nan() {
+                f64::INFINITY
+            } else {
+                old.priority
+            };
             if new_pri >= old_pri {
                 return existing.len();
             }
