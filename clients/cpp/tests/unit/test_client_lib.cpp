@@ -685,9 +685,10 @@ TEST(ClientLibTest, GetSingleCausalWithMultipleValues) {
 
 TEST(ClientLibTest, KProcessListContainsExpectedProcesses) {
   // Verify the process list used by start/stop/status
-  EXPECT_EQ(annalib::kProcessList.size(), 2u);
+  EXPECT_EQ(annalib::kProcessList.size(), 3u);
   EXPECT_EQ(annalib::kProcessList[0], "anna-monitor");
-  EXPECT_EQ(annalib::kProcessList[1], "anna-kvs");
+  EXPECT_EQ(annalib::kProcessList[1], "anna-route");
+  EXPECT_EQ(annalib::kProcessList[2], "anna-kvs");
 }
 
 TEST(ClientLibTest, PutPriorityWithZeroPriority) {

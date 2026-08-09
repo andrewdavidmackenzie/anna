@@ -74,7 +74,7 @@ pub mod value_change_subscriber;
 
 // Pending them being defined elsewhere in a build script or similar
 const ANNA_MONITOR_PROCESS_NAME: &str = "anna-monitor";
-// anna-route has been removed — KVS nodes handle their own seed bootstrapping.
+const ANNA_ROUTE_PROCESS_NAME: &str = "anna-route";
 const ANNA_KVS_PROCESS_NAME: &str = "anna-kvs";
 
 pub use errors::{Error, Result};
@@ -84,23 +84,24 @@ pub use errors::{Error, Result};
 pub enum Component {
     /// The monitoring daemon (`anna-monitor`).
     Monitor,
-
+    /// The routing tier (`anna-route`).
+    Route,
     /// The key-value store server (`anna-kvs`).
     Kvs,
 }
 
 /// All components in their canonical start order.
-pub const ALL_COMPONENTS: [Component; 2] = [Component::Monitor, Component::Kvs];
+pub const ALL_COMPONENTS: [Component; 3] = [Component::Monitor, Component::Route, Component::Kvs];
 
 /// The short names accepted on the command line (in the same order as [`ALL_COMPONENTS`]).
-pub const COMPONENT_NAMES: [&str; 2] = ["monitor", "kvs"];
+pub const COMPONENT_NAMES: [&str; 3] = ["monitor", "route", "kvs"];
 
 impl Component {
     /// Return the binary/process name for this component.
     pub fn process_name(self) -> &'static str {
         match self {
             Component::Monitor => ANNA_MONITOR_PROCESS_NAME,
-
+            Component::Route => ANNA_ROUTE_PROCESS_NAME,
             Component::Kvs => ANNA_KVS_PROCESS_NAME,
         }
     }
@@ -111,7 +112,7 @@ impl Component {
     pub fn from_name(name: &str) -> Option<Component> {
         match name.to_ascii_lowercase().as_str() {
             "monitor" => Some(Component::Monitor),
-
+            "route" => Some(Component::Route),
             "kvs" => Some(Component::Kvs),
             _ => None,
         }
@@ -122,7 +123,7 @@ impl fmt::Display for Component {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Component::Monitor => write!(f, "monitor"),
-
+            Component::Route => write!(f, "route"),
             Component::Kvs => write!(f, "kvs"),
         }
     }
@@ -305,6 +306,7 @@ mod test {
         let status = status(&[]).expect("status failed");
         let names: Vec<&str> = status.iter().map(|(n, _)| n.as_str()).collect();
         assert!(names.contains(&"anna-monitor"));
+        assert!(names.contains(&"anna-route"));
         assert!(names.contains(&"anna-kvs"));
     }
 
@@ -318,7 +320,7 @@ mod test {
     fn component_from_name() {
         assert_eq!(Component::from_name("kvs"), Some(Component::Kvs));
         assert_eq!(Component::from_name("monitor"), Some(Component::Monitor));
-        assert_eq!(Component::from_name("route"), None);
+        assert_eq!(Component::from_name("route"), Some(Component::Route));
         assert_eq!(Component::from_name("KVS"), Some(Component::Kvs));
         assert_eq!(Component::from_name("unknown"), None);
     }
@@ -327,12 +329,14 @@ mod test {
     fn component_process_name() {
         assert_eq!(Component::Kvs.process_name(), "anna-kvs");
         assert_eq!(Component::Monitor.process_name(), "anna-monitor");
+        assert_eq!(Component::Route.process_name(), "anna-route");
     }
 
     #[test]
     fn component_display() {
         assert_eq!(format!("{}", Component::Kvs), "kvs");
         assert_eq!(format!("{}", Component::Monitor), "monitor");
+        assert_eq!(format!("{}", Component::Route), "route");
     }
 
     #[test]

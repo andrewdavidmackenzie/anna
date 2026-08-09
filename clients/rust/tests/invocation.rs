@@ -79,7 +79,7 @@ fn status_works() -> Result<(), Box<dyn std::error::Error>> {
         .stdout(predicate::str::contains("anna-kvs"));
     cmd.assert()
         .stdout(predicate::str::contains("anna-monitor"));
-    cmd.assert().stdout(predicate::str::contains("anna-kvs"));
+    cmd.assert().stdout(predicate::str::contains("anna-route"));
 
     Ok(())
 }
@@ -162,12 +162,15 @@ fn status_monitor_component() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn status_route_component_rejected() -> Result<(), Box<dyn std::error::Error>> {
+fn status_route_component() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("anna")?;
 
     cmd.args(["status", "route"]);
-    // "route" is no longer a valid component (anna-route removed).
-    cmd.assert().failure();
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("anna-route"));
+    cmd.assert()
+        .stdout(predicate::str::contains("anna-kvs").not());
 
     Ok(())
 }

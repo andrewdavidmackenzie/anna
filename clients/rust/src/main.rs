@@ -640,7 +640,7 @@ fn cli_usage() -> String {
     \n\tput single_causal {key} {value} \t- store with single-key causal consistency\
     \n\nOther:\
     \n\tbench [keys] [value_size] [duration] [workload] - run a benchmark\
-    \n\tstart [component] \t\t- start anna processes (component: kvs, monitor; omit for all)\
+    \n\tstart [component] \t\t- start anna processes (component: kvs, monitor, route; omit for all)\
     \n\tstop [component] \t\t- stop running anna processes\
     \n\tstatus [component] \t\t- print the status of anna processes\
     \n\thelp \t\t\t\t- print this usage message\
@@ -758,7 +758,7 @@ fn get_app() -> Command {
                     Arg::new("component")
                         .index(1)
                         .value_parser(COMPONENT_NAMES.to_vec())
-                        .help("Component to start (kvs, monitor). Omit to start all"),
+                        .help("Component to start (kvs, monitor, route). Omit to start all"),
                 ),
         )
         .subcommand(
@@ -768,7 +768,7 @@ fn get_app() -> Command {
                     Arg::new("component")
                         .index(1)
                         .value_parser(COMPONENT_NAMES.to_vec())
-                        .help("Component to stop (kvs, monitor). Omit to stop all"),
+                        .help("Component to stop (kvs, monitor, route). Omit to stop all"),
                 ),
         )
         .subcommand(
@@ -778,7 +778,7 @@ fn get_app() -> Command {
                     Arg::new("component")
                         .index(1)
                         .value_parser(COMPONENT_NAMES.to_vec())
-                        .help("Component to check (kvs, monitor). Omit to check all"),
+                        .help("Component to check (kvs, monitor, route). Omit to check all"),
                 ),
         )
         .subcommand(

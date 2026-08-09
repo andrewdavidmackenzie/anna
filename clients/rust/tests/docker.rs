@@ -2,7 +2,8 @@
 //! and verify PUT/GET works from a client on the host.
 //!
 //! This test only runs on Linux (--network host requires Linux).
-//! Automatically ignored on non-Linux platforms via cfg_attr.
+//! It is ignored by default since it requires Docker to be installed
+//! and the image build takes ~20 seconds.
 
 mod common;
 
@@ -92,6 +93,7 @@ impl Drop for DockerGuard {
 
 #[tokio::test]
 #[cfg(target_os = "linux")]
+#[ignore] // requires Docker; run with: cargo test --test docker -- --ignored
 async fn docker_put_get() {
     if !docker_available() {
         eprintln!("SKIP: Docker not available");

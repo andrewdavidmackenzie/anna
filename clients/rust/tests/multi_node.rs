@@ -49,7 +49,6 @@ struct NodeConfig {
     server_report_period: u32,
     monitoring_timeout: u32,
     tombstone_gc_multiplier: u32,
-    slo_occupancy_lower: f64,
 }
 
 impl Default for NodeConfig {
@@ -72,7 +71,6 @@ impl Default for NodeConfig {
             server_report_period: TEST_SERVER_REPORT_PERIOD,
             monitoring_timeout: TEST_MONITORING_TIMEOUT,
             tombstone_gc_multiplier: 30,
-            slo_occupancy_lower: 0.05,
         }
     }
 }
@@ -108,8 +106,6 @@ policy:
   elasticity: {elasticity}
   selective-rep: {selective_rep}
   tiering: {tiering}
-  slo:
-    occupancy_lower: {slo_occupancy_lower}
 disk: {disk_path}
 capacities:
   memory-cap: 1
@@ -153,7 +149,6 @@ replication:
         elasticity = cfg.elasticity,
         tiering = cfg.tiering,
         scaling_alert_ip = cfg.scaling_alert_ip,
-        slo_occupancy_lower = cfg.slo_occupancy_lower,
         memory_cap_kb_line = cfg
             .memory_cap_kb
             .map(|kb| format!("  memory-cap-kb: {}", kb))
@@ -270,7 +265,7 @@ impl MultiNodeCluster {
         let config = self.config_dir.join(format!("node-{}.yml", cfg.node_ip));
         write_node_config(&config, &cfg);
 
-        for name in ["anna-monitor", "anna-kvs"] {
+        for name in ["anna-monitor", "anna-route", "anna-kvs"] {
             if let Some(child) = spawn_server(name, &config, &server_path()) {
                 self.processes.push(ServerProcess {
                     child,
@@ -283,12 +278,12 @@ impl MultiNodeCluster {
             std::thread::sleep(Duration::from_secs(1));
         }
 
-        let kvs_port = (6200 + cfg.base_offset) as u16;
+        let routing_port = (6450 + cfg.base_offset) as u16;
         assert!(
-            wait_for_port(cfg.node_ip, kvs_port, 60),
-            "KVS on {} did not start within 60 seconds (port {})",
+            wait_for_port(cfg.node_ip, routing_port, 60),
+            "Routing tier on {} did not start within 60 seconds (port {})",
             cfg.node_ip,
-            kvs_port
+            routing_port
         );
         std::thread::sleep(Duration::from_secs(1));
     }
@@ -353,18 +348,24 @@ impl MultiNodeCluster {
         let config = self.config_dir.join(format!("node-{}.yml", cfg.node_ip));
         write_node_config(&config, &cfg);
 
-        // Only start the monitor (anna-route no longer exists)
-        let name = "anna-monitor";
-        if let Some(child) = spawn_server(name, &config, &server_path()) {
-            self.processes.push(ServerProcess {
-                child,
-                label: format!("{}@{}", name, node_ip),
-            });
-        } else {
-            self.shutdown();
-            panic!("Server binary {} not found", name);
+        for name in ["anna-monitor", "anna-route"] {
+            if let Some(child) = spawn_server(name, &config, &server_path()) {
+                self.processes.push(ServerProcess {
+                    child,
+                    label: format!("{}@{}", name, node_ip),
+                });
+            } else {
+                self.shutdown();
+                panic!("Server binary {} not found", name);
+            }
+            std::thread::sleep(Duration::from_secs(1));
         }
-        std::thread::sleep(Duration::from_secs(1));
+
+        assert!(
+            wait_for_port(node_ip, self.routing_port(), 30),
+            "Routing tier on {} did not start within 30 seconds",
+            node_ip
+        );
     }
 
     #[cfg(unix)]
@@ -513,6 +514,8 @@ fn skip_unless_multi_ip() -> bool {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn multi_node_cluster_join_and_data_access() {
+    use annalib::kvs_client::KVSClient;
+
     if skip_unless_multi_ip() {
         return;
     }
@@ -522,7 +525,8 @@ async fn multi_node_cluster_join_and_data_access() {
     cluster.start_full_node(NODE1_IP, 1);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(1)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(1)).await;
 
     for i in 0..10 {
         let key = format!("multi_node_key_{}", i);
@@ -557,6 +561,8 @@ async fn multi_node_cluster_join_and_data_access() {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn multi_node_gossip_replication() {
+    use annalib::kvs_client::KVSClient;
+
     if skip_unless_multi_ip() {
         return;
     }
@@ -566,7 +572,8 @@ async fn multi_node_gossip_replication() {
     cluster.start_full_node(NODE1_IP, 2);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(2)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(2)).await;
 
     client
         .put("gossip_test_1", "alpha")
@@ -602,6 +609,8 @@ async fn multi_node_gossip_replication() {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn multi_node_address_cache_invalidation() {
+    use annalib::kvs_client::KVSClient;
+
     if skip_unless_multi_ip() {
         return;
     }
@@ -610,7 +619,8 @@ async fn multi_node_address_cache_invalidation() {
 
     cluster.start_full_node(NODE1_IP, 1);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(3)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(3)).await;
 
     for i in 0..5 {
         client
@@ -651,6 +661,8 @@ async fn multi_node_address_cache_invalidation() {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn multi_node_fault_tolerance() {
+    use annalib::kvs_client::KVSClient;
+
     if skip_unless_multi_ip() {
         return;
     }
@@ -660,7 +672,8 @@ async fn multi_node_fault_tolerance() {
     cluster.start_full_node(NODE1_IP, 2);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(4)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(4)).await;
 
     // PUT data and wait for gossip to replicate to both nodes
     client
@@ -680,7 +693,7 @@ async fn multi_node_fault_tolerance() {
     // addresses. Verify fault tolerance by reading each key individually
     // with a fresh client and short timeout. The client's retry logic
     // evicts the dead address on timeout and retries via the live node.
-    let mut reader = common::client_with_direct_routing(cluster.base_offset as u16, Some(5)).await;
+    let mut reader = KVSClient::new(&config, Some(5)).await;
     reader.set_timeout(Duration::from_secs(2));
 
     let v1 = reader
@@ -696,13 +709,15 @@ async fn multi_node_fault_tolerance() {
     assert_eq!(v2, "survive_2");
 }
 
-/// NO_SERVERS error: start monitor without KVS, verify client gets error.
+/// NO_SERVERS error: start monitor+route without KVS, verify client gets error.
 /// Uses base_offset=8000 to avoid conflicts with other tests.
 #[tokio::test]
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn no_servers_error() {
-    if !server_bin_dir().join("anna-kvs").exists() {
+    use annalib::kvs_client::KVSClient;
+
+    if !server_bin_dir().join("anna-route").exists() {
         eprintln!("SKIP: server binaries not built");
         return;
     }
@@ -710,7 +725,8 @@ async fn no_servers_error() {
     let mut cluster = MultiNodeCluster::new(3928);
     cluster.start_routing_only(NODE1_IP);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(6)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(6)).await;
     client.set_timeout(Duration::from_secs(3));
 
     let result = client.put("no_servers_test", "value").await;
@@ -729,6 +745,7 @@ async fn no_servers_error() {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn virtual_nodes_key_distribution() {
+    use annalib::kvs_client::KVSClient;
     use std::collections::HashMap;
 
     if skip_unless_multi_ip() {
@@ -739,7 +756,8 @@ async fn virtual_nodes_key_distribution() {
     cluster.start_full_node(NODE1_IP, 1);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(7)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(7)).await;
 
     let mut node_counts: HashMap<String, usize> = HashMap::new();
     let num_keys = 100;
@@ -791,6 +809,8 @@ async fn virtual_nodes_key_distribution() {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn multi_node_replica_survival() {
+    use annalib::kvs_client::KVSClient;
+
     if skip_unless_multi_ip() {
         return;
     }
@@ -799,7 +819,8 @@ async fn multi_node_replica_survival() {
     cluster.start_full_node(NODE1_IP, 2);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(8)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(8)).await;
 
     client
         .put("depart_key_1", "data_1")
@@ -817,7 +838,7 @@ async fn multi_node_replica_survival() {
     cluster.kill_process("anna-kvs@127.0.0.2");
 
     // Data should survive on Node 1 via client retry
-    let mut reader = common::client_with_direct_routing(cluster.base_offset as u16, Some(9)).await;
+    let mut reader = KVSClient::new(&config, Some(9)).await;
     reader.set_timeout(Duration::from_secs(2));
 
     let v1 = reader
@@ -842,6 +863,8 @@ async fn multi_node_replica_survival() {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn multi_node_rejoin() {
+    use annalib::kvs_client::KVSClient;
+
     if skip_unless_multi_ip() {
         return;
     }
@@ -850,6 +873,8 @@ async fn multi_node_rejoin() {
     cluster.start_full_node(NODE1_IP, 2);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
 
+    let config = cluster.client_config();
+
     // Kill Node 2
     cluster.kill_process("anna-kvs@127.0.0.2");
 
@@ -857,7 +882,7 @@ async fn multi_node_rejoin() {
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
 
     // PUT data after rejoin — with replication=2, data goes to both nodes
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(10)).await;
+    let mut client = KVSClient::new(&config, Some(10)).await;
     client
         .put("rejoin_proof", "on_both_nodes")
         .await
@@ -869,7 +894,7 @@ async fn multi_node_rejoin() {
 
     // Poll Node 2 — routing may still try the dead Node 1 first,
     // so retry until the client's address cache updates
-    let mut reader = common::client_with_direct_routing(cluster.base_offset as u16, Some(11)).await;
+    let mut reader = KVSClient::new(&config, Some(11)).await;
     reader.set_timeout(Duration::from_secs(2));
 
     let deadline = Instant::now() + Duration::from_secs(15);
@@ -886,14 +911,149 @@ async fn multi_node_rejoin() {
     assert!(got_value, "GET rejoin_proof failed — Node 2 did not rejoin");
 }
 
-// stateless_routing_recovery test removed: anna-route no longer exists.
-// KVS self-seeding recovery is tested by multi_node_rejoin.
+/// Stateless routing recovery: kill routing and KVS, restart both, verify
+/// the cluster rebuilds and serves requests. Routing is stateless — it
+/// rebuilds its hash ring from join announcements when KVS nodes start.
+/// Uses base_offset=16000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+#[parallel(multi_node)]
+async fn stateless_routing_recovery() {
+    use annalib::kvs_client::KVSClient;
 
-// multi_threaded_routing test removed: anna-route no longer exists.
-// Client-side routing handles thread distribution directly.
+    if skip_unless_multi_ip() {
+        return;
+    }
 
-// replication_aware_routing test removed: anna-route no longer exists.
-// Client-side routing handles replication-aware address resolution directly.
+    let mut cluster = MultiNodeCluster::new(9670);
+    cluster.start_full_node(NODE1_IP, 1);
+
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(12)).await;
+
+    client
+        .put("routing_recovery_key", "persistent")
+        .await
+        .expect("PUT failed");
+
+    // Kill both routing and KVS
+    cluster.kill_process("anna-route@127.0.0.1");
+    cluster.kill_process("anna-kvs@127.0.0.1");
+
+    // Restart routing, then KVS (KVS announces to routing on startup)
+    let node_config = cluster.config_dir.join(format!("node-{}.yml", NODE1_IP));
+    for name in ["anna-route", "anna-kvs"] {
+        if let Some(child) = spawn_server(name, &node_config, &server_path()) {
+            cluster.processes.push(ServerProcess {
+                child,
+                label: format!("{}@{}", name, NODE1_IP),
+            });
+        }
+        std::thread::sleep(Duration::from_secs(1));
+    }
+    assert!(
+        wait_for_port(NODE1_IP, cluster.routing_port(), 30),
+        "Routing did not restart"
+    );
+    std::thread::sleep(Duration::from_secs(2));
+
+    // KVS data is in-memory and lost on restart, so PUT again
+    let mut client2 = KVSClient::new(&config, Some(13)).await;
+    client2
+        .put("post_recovery_key", "recovered")
+        .await
+        .expect("PUT after recovery failed");
+    let v = client2
+        .get("post_recovery_key")
+        .await
+        .expect("GET after recovery failed");
+    assert_eq!(v, "recovered");
+}
+
+/// Multi-threaded routing: start with threads.routing=2, verify PUT/GET
+/// works through multiple routing threads.
+/// Uses base_offset=18000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+#[parallel(multi_node)]
+async fn multi_threaded_routing() {
+    use annalib::kvs_client::KVSClient;
+
+    if !server_bin_dir().join("anna-kvs").exists() {
+        eprintln!("SKIP: server binaries not built");
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(10627);
+    cluster.start_full_node_with_config(NodeConfig {
+        base_offset: 10627,
+        routing_threads: 2,
+        ..Default::default()
+    });
+
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(14)).await;
+
+    for i in 0..10 {
+        let key = format!("mt_route_key_{}", i);
+        client
+            .put(&key, &format!("val_{}", i))
+            .await
+            .unwrap_or_else(|e| panic!("PUT {} failed: {}", key, e));
+    }
+
+    for i in 0..10 {
+        let key = format!("mt_route_key_{}", i);
+        let val = client
+            .get(&key)
+            .await
+            .unwrap_or_else(|e| panic!("GET {} failed: {}", key, e));
+        assert_eq!(val, format!("val_{}", i));
+    }
+}
+
+/// Replication-aware routing: with replication=2 and 2 nodes, routing
+/// returns addresses for both responsible nodes per key.
+/// Uses base_offset=20000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+#[parallel(multi_node)]
+async fn replication_aware_routing() {
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(11584);
+    cluster.start_full_node(NODE1_IP, 2);
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 2);
+
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(15)).await;
+
+    // PUT a key so routing resolves it
+    client
+        .put("rep_aware_key", "value")
+        .await
+        .expect("PUT failed");
+
+    // Query routing — with replication=2 and 2 nodes, should return 2 addresses
+    let addrs = client.get_key_addresses("rep_aware_key").await;
+    assert!(
+        addrs.len() >= 2,
+        "Expected 2 addresses for replication=2, got {}",
+        addrs.len()
+    );
+
+    let has_node1 = addrs.iter().any(|a| a.contains(NODE1_IP));
+    let has_node2 = addrs.iter().any(|a| a.contains(NODE2_IP));
+    assert!(
+        has_node1 && has_node2,
+        "Expected addresses from both nodes, got {:?}",
+        addrs
+    );
+}
 
 /// Pending request queue: when a KVS node receives a request for a key
 /// whose replication factor is unknown, it queues the request and fetches
@@ -904,6 +1064,8 @@ async fn multi_node_rejoin() {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn pending_request_queue() {
+    use annalib::kvs_client::KVSClient;
+
     if skip_unless_multi_ip() {
         return;
     }
@@ -912,7 +1074,8 @@ async fn pending_request_queue() {
     cluster.start_full_node(NODE1_IP, 1);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(16)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(16)).await;
 
     // Rapidly PUT many new keys — each triggers a replication factor lookup
     // that goes through the pending request queue
@@ -942,6 +1105,8 @@ async fn pending_request_queue() {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn key_migration_during_join() {
+    use annalib::kvs_client::KVSClient;
+
     if skip_unless_multi_ip() {
         return;
     }
@@ -949,7 +1114,8 @@ async fn key_migration_during_join() {
     let mut cluster = MultiNodeCluster::new(13498);
     cluster.start_full_node(NODE1_IP, 1);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(17)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(17)).await;
 
     // PUT initial data on single node
     for i in 0..10 {
@@ -1009,6 +1175,8 @@ async fn key_migration_during_join() {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn per_key_replication_metadata() {
+    use annalib::kvs_client::KVSClient;
+
     if skip_unless_multi_ip() {
         return;
     }
@@ -1017,7 +1185,8 @@ async fn per_key_replication_metadata() {
     cluster.start_full_node(NODE1_IP, 1);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(18)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(18)).await;
 
     // PUT a regular key
     client
@@ -1055,6 +1224,8 @@ async fn per_key_replication_metadata() {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn self_depart_signal() {
+    use annalib::kvs_client::KVSClient;
+
     if !server_bin_dir().join("anna-kvs").exists() {
         eprintln!("SKIP: server binaries not built");
         return;
@@ -1063,7 +1234,8 @@ async fn self_depart_signal() {
     let mut cluster = MultiNodeCluster::new(15412);
     cluster.start_full_node(NODE1_IP, 1);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(19)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(19)).await;
 
     client
         .put("sd_signal_key", "before_depart")
@@ -1115,6 +1287,8 @@ async fn self_depart_signal() {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn disk_tier_basic() {
+    use annalib::kvs_client::KVSClient;
+
     if skip_unless_multi_ip() {
         return;
     }
@@ -1132,7 +1306,8 @@ async fn disk_tier_basic() {
     // Start a disk-tier KVS on Node 2
     cluster.start_disk_kvs_node(NODE2_IP, NODE1_IP);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(71)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(71)).await;
 
     // PUT many keys with varied prefixes — with consistent hashing, some
     // will map to the disk node, exercising disk serializers.
@@ -1255,6 +1430,8 @@ async fn disk_tier_basic() {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn memory_tier_preference() {
+    use annalib::kvs_client::KVSClient;
+
     if skip_unless_multi_ip() {
         return;
     }
@@ -1267,7 +1444,8 @@ async fn memory_tier_preference() {
     });
     cluster.start_disk_kvs_node(NODE2_IP, NODE1_IP);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(72)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(72)).await;
 
     client
         .put("tier_pref_key", "value")
@@ -1293,6 +1471,8 @@ async fn memory_tier_preference() {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn cross_tier_gossip() {
+    use annalib::kvs_client::KVSClient;
+
     if skip_unless_multi_ip() {
         return;
     }
@@ -1308,7 +1488,8 @@ async fn cross_tier_gossip() {
     });
     cluster.start_disk_kvs_node(NODE2_IP, NODE1_IP);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(73)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(73)).await;
 
     // PUT multiple keys
     for i in 0..10 {
@@ -1340,6 +1521,8 @@ async fn cross_tier_gossip() {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn crash_detection_via_epoch() {
+    use annalib::kvs_client::KVSClient;
+
     if skip_unless_multi_ip() {
         return;
     }
@@ -1353,7 +1536,8 @@ async fn crash_detection_via_epoch() {
     });
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(78)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(78)).await;
 
     client
         .put("crash_detect_key", "survives")
@@ -1377,7 +1561,7 @@ async fn crash_detection_via_epoch() {
 
     // Fresh client with short timeout + retry — if routing hasn't
     // fully updated, the retry will evict the dead address
-    let mut reader = common::client_with_direct_routing(cluster.base_offset as u16, Some(79)).await;
+    let mut reader = KVSClient::new(&config, Some(79)).await;
     reader.set_timeout(Duration::from_secs(3));
 
     // Verify crash detection worked: routing should only return Node 1
@@ -1398,9 +1582,54 @@ async fn crash_detection_via_epoch() {
     );
 }
 
-// replication_factor_change test removed — it tested routing server
-// address resolution which no longer exists. Replication changes are
-// now handled by the monitor's policy engine.
+/// Replication factor change: send ReplicationFactorUpdate directly to
+/// routing, verify it updates the number of responsible addresses.
+/// Uses base_offset=36000 to avoid conflicts with other tests.
+#[tokio::test]
+#[cfg(unix)]
+#[parallel(multi_node)]
+async fn replication_factor_change() {
+    use annalib::kvs_client::KVSClient;
+
+    if skip_unless_multi_ip() {
+        return;
+    }
+
+    let mut cluster = MultiNodeCluster::new(19240);
+    cluster.start_full_node(NODE1_IP, 1);
+    cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
+
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(75)).await;
+
+    client
+        .put("rep_change_key", "initial")
+        .await
+        .expect("PUT failed");
+
+    let addrs_before = client.get_key_addresses("rep_change_key").await;
+    assert_eq!(addrs_before.len(), 1, "Expected 1 address before change");
+
+    cluster
+        .send_replication_change(NODE1_IP, "rep_change_key", 2)
+        .await;
+
+    let addrs_after = client.get_key_addresses("rep_change_key").await;
+    assert!(
+        addrs_after.len() >= 2,
+        "Expected 2 addresses after replication change, got {}",
+        addrs_after.len()
+    );
+
+    // Wait for gossip then verify data accessible
+    std::thread::sleep(Duration::from_secs(TEST_GOSSIP_EPOCH as u64 + 2));
+    client.clear_cache();
+    let val = client
+        .get("rep_change_key")
+        .await
+        .expect("GET after replication change failed");
+    assert_eq!(val, "initial");
+}
 
 /// Gossip after replication change: change replication from 1 to 2,
 /// verify data is redistributed to the second node via gossip.
@@ -1409,6 +1638,8 @@ async fn crash_detection_via_epoch() {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn gossip_after_replication_change() {
+    use annalib::kvs_client::KVSClient;
+
     if skip_unless_multi_ip() {
         return;
     }
@@ -1417,7 +1648,8 @@ async fn gossip_after_replication_change() {
     cluster.start_full_node(NODE1_IP, 1);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(76)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(76)).await;
 
     client
         .put("gossip_rep_key", "redistributed")
@@ -1430,7 +1662,7 @@ async fn gossip_after_replication_change() {
 
     std::thread::sleep(Duration::from_secs(TEST_GOSSIP_EPOCH as u64 + 2));
 
-    let mut reader = common::client_with_direct_routing(cluster.base_offset as u16, Some(77)).await;
+    let mut reader = KVSClient::new(&config, Some(77)).await;
     let val = reader
         .get("gossip_rep_key")
         .await
@@ -1445,6 +1677,7 @@ async fn gossip_after_replication_change() {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn gossip_to_caches() {
+    use annalib::kvs_client::KVSClient;
     use annalib::value_change_subscriber::ValueChangeSubscriber;
 
     if skip_unless_multi_ip() {
@@ -1465,7 +1698,7 @@ async fn gossip_to_caches() {
         .await
         .expect("Watch failed");
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(82)).await;
+    let mut client = KVSClient::new(&config, Some(82)).await;
     client
         .put("cache_test_key", "cache_value_1")
         .await
@@ -1513,6 +1746,7 @@ async fn gossip_to_caches() {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn slo_selective_replication() {
+    use annalib::kvs_client::KVSClient;
     use annalib::proto::metadata::user_feedback::KeyLatency;
     use annalib::proto::metadata::{ReplicationFactor, UserFeedback};
     use omq_tokio::{Context, Message as ZmqMessage, Options, SocketType};
@@ -1539,7 +1773,8 @@ async fn slo_selective_replication() {
     // Start node 2 (kvs only, joining node 1) so there's a second node
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(1)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(1)).await;
 
     let hot_key = "slo_key_0";
 
@@ -1637,6 +1872,7 @@ async fn slo_selective_replication() {
 #[cfg(unix)]
 #[serial(multi_node)]
 async fn management_node_integration() {
+    use annalib::kvs_client::KVSClient;
     use omq_tokio::{Context, Message as ZmqMessage, Options, SocketType};
 
     if !server_bin_dir().join("anna-kvs").exists() {
@@ -1750,7 +1986,8 @@ async fn management_node_integration() {
     };
     cluster.start_full_node_with_config(cfg);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(40)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(40)).await;
 
     // KVS port is confirmed up by start_full_node_with_config, so PUT
     // should succeed quickly. Short poll as safety margin for routing
@@ -1799,6 +2036,7 @@ async fn management_node_integration() {
 #[cfg(unix)]
 #[serial(multi_node)]
 async fn elasticity_storage_policy() {
+    use annalib::kvs_client::KVSClient;
     use annalib::proto::metadata::{scaling_alert, ScalingAlert, Tier};
     use omq_tokio::{Context, Message as ZmqMessage, Options, SocketType};
     use prost::Message;
@@ -1897,7 +2135,8 @@ async fn elasticity_storage_policy() {
     };
     cluster.start_full_node_with_config(cfg);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(41)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(41)).await;
 
     // KVS port is confirmed up by start_full_node_with_config, so PUT
     // should succeed quickly. Short poll as safety margin for routing
@@ -1973,7 +2212,11 @@ async fn elasticity_storage_policy() {
 #[tokio::test]
 #[cfg(unix)]
 #[serial(multi_node)]
+#[ignore] // SLO underutilization policy requires tight timing between 2 nodes'
+          // stats reporting and monitor policy cycles. Passes locally but the
+          // policy doesn't trigger on CI within the timeout. See #467.
 async fn underutilization_scale_in() {
+    use annalib::kvs_client::KVSClient;
     use annalib::proto::metadata::{scaling_alert, ScalingAlert, Tier};
     use omq_tokio::{Context, Message as ZmqMessage, Options, SocketType};
     use prost::Message;
@@ -2062,10 +2305,10 @@ async fn underutilization_scale_in() {
     // The SLO underutilization branch triggers remove_node.
     let mut cluster = MultiNodeCluster::new(base_offset);
 
-    // Use short timings so the underutilization path triggers quickly.
-    // slo_occupancy_lower=0.5 (50%) ensures near-idle nodes reliably
-    // fall below the threshold even on loaded CI runners (default 5%
-    // was too tight for CI).
+    // Use short timings so the underutilization path triggers quickly:
+    // - grace_period=3s: cooldown before policy engine acts
+    // - monitoring_timeout=3s: how often monitor collects stats and runs policies
+    // - server_report_period=2s: how often KVS reports stats to monitor
     let short_grace: u32 = 3;
     let short_monitoring: u32 = 3;
     let short_report: u32 = 2;
@@ -2079,13 +2322,13 @@ async fn underutilization_scale_in() {
         grace_period: short_grace,
         monitoring_timeout: short_monitoring,
         server_report_period: short_report,
-        slo_occupancy_lower: 0.5,
         ..Default::default()
     };
     cluster.start_full_node_with_config(cfg1);
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(42)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(42)).await;
 
     // KVS port is confirmed up by start_full_node_with_config, so PUT
     // should succeed quickly. Short poll as safety margin for routing
@@ -2130,7 +2373,7 @@ async fn underutilization_scale_in() {
 
     // Both nodes confirmed reporting with epoch > 0. The SLO policy can
     // now see min_memory_occupancy < 0.05 and memory_node_count > 1.
-    // Wait for grace_period + enough monitoring cycles for policy decision,
+    // Wait for grace_period + monitoring cycles for policy decision,
     // replication adjustment, node self-departure, and depart-done ack.
     let timeout = Duration::from_secs((short_grace + short_monitoring * 10) as u64);
     let result = tokio::time::timeout(timeout, mgmt_handle).await;
@@ -2177,6 +2420,8 @@ async fn underutilization_scale_in() {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn tiering_movement_policy() {
+    use annalib::kvs_client::KVSClient;
+
     if skip_unless_multi_ip() {
         return;
     }
@@ -2199,7 +2444,8 @@ async fn tiering_movement_policy() {
     // Start a disk-tier KVS on Node 2 so both tiers are present
     cluster.start_disk_kvs_node(NODE2_IP, NODE1_IP);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(90)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(90)).await;
 
     // PUT several keys — these start with memory_rep=1, disk_rep=1
     let deadline = Instant::now() + Duration::from_secs(15);
@@ -2269,6 +2515,8 @@ async fn tiering_movement_policy() {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn replication_response_wrong_thread() {
+    use annalib::kvs_client::KVSClient;
+
     if skip_unless_multi_ip() {
         return;
     }
@@ -2284,7 +2532,8 @@ async fn replication_response_wrong_thread() {
     });
     cluster.start_kvs_node(NODE2_IP, NODE1_IP, 1);
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(20)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(20)).await;
 
     // PUT keys across both nodes
     let deadline = Instant::now() + Duration::from_secs(15);
@@ -2371,6 +2620,8 @@ async fn replication_response_wrong_thread() {
 #[cfg(unix)]
 #[parallel(multi_node)]
 async fn tombstone_gc() {
+    use annalib::kvs_client::KVSClient;
+
     if !server_bin_dir().join("anna-kvs").exists() {
         eprintln!("SKIP: server binaries not built");
         return;
@@ -2385,7 +2636,8 @@ async fn tombstone_gc() {
         ..Default::default()
     });
 
-    let mut client = common::client_with_direct_routing(cluster.base_offset as u16, Some(73)).await;
+    let config = cluster.client_config();
+    let mut client = KVSClient::new(&config, Some(73)).await;
 
     // PUT several keys with non-trivial values
     for i in 0..10 {
