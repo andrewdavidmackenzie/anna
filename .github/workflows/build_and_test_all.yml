@@ -89,12 +89,12 @@ jobs:
       if: matrix.os == 'windows-latest'
       run: cargo test
 
-    - name: Upload Rust client coverage
+    - name: Upload Rust workspace coverage
       if: matrix.os == 'macos-latest'
       uses: codecov/codecov-action@v6
       with:
         files: rust_workspace.info
-        flags: rust-client
+        flags: rust-client,rust-server
         token: ${{ secrets.CODECOV_TOKEN }}
         fail_ci_if_error: true
 

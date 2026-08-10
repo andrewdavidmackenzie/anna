@@ -212,7 +212,7 @@ client-python-tests: client-python-dependencies
 workspace-rust-tests:
 	@echo "Running rust tests with coverage"
 	@find clients/cpp/build -name "*.gcda" -delete 2>/dev/null || true
-	@$(CARGO_ENV) cargo llvm-cov test --lcov --output-path rust_workspace.info
+	@$(CARGO_ENV) cargo llvm-cov test --workspace --lcov --output-path rust_workspace.info -- --skip docker
 	@lcov --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' '*/incremental/*' -o rust_workspace.info --ignore-errors inconsistent,format,unused
 
 MDBOOK := $(shell command -v mdbook 2> /dev/null)
