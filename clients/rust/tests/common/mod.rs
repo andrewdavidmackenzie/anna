@@ -143,18 +143,25 @@ pub fn wait_for_routing(base_offset: u16) {
 }
 
 /// Resolve the binary path for a server component, checking for
-/// ANNA_MONITOR_BIN override for the monitor binary.
+/// Resolve the binary path for a server component, checking for
+/// ANNA_MONITOR_BIN and ANNA_KVS_BIN overrides.
 pub fn resolve_server_binary(name: &str, default_dir: &Path) -> PathBuf {
-    if name == "anna-monitor" {
-        if let Ok(alt) = std::env::var("ANNA_MONITOR_BIN") {
+    let env_var = match name {
+        "anna-monitor" => Some("ANNA_MONITOR_BIN"),
+        "anna-kvs" => Some("ANNA_KVS_BIN"),
+        _ => None,
+    };
+
+    if let Some(var) = env_var {
+        if let Ok(alt) = std::env::var(var) {
             let alt_bin = PathBuf::from(&alt);
             if alt_bin.exists() {
-                eprintln!("Using Rust monitor binary: {}", alt_bin.display());
+                eprintln!("Using override binary for {}: {}", name, alt_bin.display());
                 return alt_bin;
             }
             eprintln!(
-                "WARNING: ANNA_MONITOR_BIN={} not found, falling back to C++ monitor",
-                alt
+                "WARNING: {}={} not found, falling back to C++ {}",
+                var, alt, name
             );
         }
     }
