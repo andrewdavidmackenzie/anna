@@ -331,7 +331,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn cache_thread_update_address() {
         let ct = CacheThread::new("10.0.0.1", 0, 0);
         assert_eq!(ct.cache_update_connect_address(), "tcp://10.0.0.1:6850");

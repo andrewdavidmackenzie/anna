@@ -151,11 +151,8 @@ pub fn get_key_from_metadata(metadata_key: &str) -> Option<&str> {
     // Format: ANNA_METADATA|replication|<data_key>
     let rest = metadata_key.strip_prefix(METADATA_IDENTIFIER)?;
     let rest = rest.strip_prefix(METADATA_DELIMITER)?;
-    if let Some(data_key) = rest.strip_prefix("replication") {
-        Some(data_key.strip_prefix(METADATA_DELIMITER).unwrap_or(""))
-    } else {
-        None
-    }
+    let (metadata_type, data_key) = rest.split_once(METADATA_DELIMITER)?;
+    (metadata_type == MetadataType::Replication.as_str()).then_some(data_key)
 }
 
 fn tier_name(tier: Tier) -> &'static str {

@@ -171,7 +171,7 @@ pub fn replication_request_target(
     threads.into_iter().next().map(|t| (t, rep_key))
 }
 
-/// Find the target thread for a metadata request and return its address.
+/// Find the target server thread for a metadata request.
 /// Returns `None` if no memory-tier servers exist.
 pub fn metadata_request_target(
     key: &str,
