@@ -142,12 +142,18 @@ pub(crate) fn now_epoch_s() -> u32 {
 }
 
 /// Generate a monotonic timestamp combining wall-clock millis with a thread ID.
+/// Mirrors C++ `generate_timestamp` — dynamically scales the multiplier so
+/// that any thread ID fits without collision.
 pub(crate) fn generate_timestamp(tid: u32) -> u64 {
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64;
-    millis * 10 + tid as u64
+    let mut pow: u64 = 10;
+    while (tid as u64) >= pow {
+        pow *= 10;
+    }
+    millis * pow + tid as u64
 }
 
 /// Default tombstone GC timeout in seconds (gossip_epoch * tombstone_gc_multiplier).
@@ -218,5 +224,15 @@ mod tests {
         let t1 = generate_timestamp(0);
         let t2 = generate_timestamp(0);
         assert!(t2 >= t1);
+    }
+
+    #[test]
+    fn generate_timestamp_different_tids_no_collision() {
+        // tid 0 and tid 10 in the same millisecond must produce different values
+        let t0 = generate_timestamp(0);
+        let t10 = generate_timestamp(10);
+        // They may be in different milliseconds, but if same ms, they differ
+        // because tid=10 uses pow=100 while tid=0 uses pow=10.
+        assert_ne!(t0, t10);
     }
 }

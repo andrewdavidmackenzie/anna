@@ -37,16 +37,26 @@ pub(crate) fn handle(ctx: &KvsContext, data: &[u8]) -> Vec<OutgoingMessage> {
     let mut response = KeyResponse {
         response_id: request.request_id.clone(),
         r#type: RequestType::Scan as i32,
-        scan_total_keys: ctx.stored_key_map.len() as u64,
+        scan_total_keys: ctx
+            .stored_key_map
+            .keys()
+            .filter(|k| !is_metadata(k))
+            .count() as u64,
         ..Default::default()
     };
 
-    // Iterate, skip `cursor` entries, collect up to `count` matching keys.
+    // Sort keys for deterministic pagination across requests.
+    // HashMap iteration order is unstable — without sorting, rehashes
+    // between pages would silently skip or repeat keys.
+    let mut ordered: Vec<&String> = ctx.stored_key_map.keys().collect();
+    ordered.sort_unstable();
+
     let mut index: u64 = 0;
     let mut collected: u32 = 0;
     let mut next_cursor: u64 = 0;
 
-    for (key, kp) in &ctx.stored_key_map {
+    for key in ordered {
+        let kp = &ctx.stored_key_map[key];
         if index < cursor {
             index += 1;
             continue;
