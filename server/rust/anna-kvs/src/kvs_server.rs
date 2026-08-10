@@ -7,9 +7,9 @@ use std::time::{Duration, Instant};
 
 use anna_server_common::config::Config;
 use anna_server_common::hash_ring::{ConsistentHashRing, DEFAULT_VIRTUAL_THREAD_NUM};
-use anna_server_common::metadata::{is_metadata, Tier, TierMetadata};
-use anna_server_common::proto::kvs::{KeyRequest, LatticeType, RequestType};
-use anna_server_common::routing::{DEFAULT_LOCAL_REPLICATION, DEFAULT_METADATA_REPLICATION_FACTOR};
+use anna_server_common::metadata::{Tier, TierMetadata};
+use anna_server_common::proto::kvs::{KeyRequest, RequestType};
+use anna_server_common::routing::DEFAULT_METADATA_REPLICATION_FACTOR;
 use anna_server_common::signal;
 use anna_server_common::threads::ServerThread;
 use anna_server_common::types::Address;
@@ -18,8 +18,7 @@ use prost::Message;
 
 use crate::context::KvsContext;
 use crate::handlers;
-use crate::storage::memory;
-use crate::storage::SerializerMap;
+use crate::storage;
 
 /// ZMQ PUSH socket cache — lazily connects on first send.
 struct SocketCache {
@@ -58,19 +57,31 @@ fn msg_bytes(msg: &ZmqMessage) -> Vec<u8> {
     msg.iter().flat_map(|f| f.to_vec()).collect()
 }
 
+/// Bind a PULL socket to the given address, returning a descriptive error.
+async fn bind_pull(ctx: &Context, addr: &str, name: &str) -> Result<omq_tokio::Socket, String> {
+    let sock = ctx.socket(SocketType::Pull, Options::default());
+    let endpoint = addr
+        .parse()
+        .map_err(|e| format!("Invalid address for {}: {} ({})", name, addr, e))?;
+    sock.bind(endpoint)
+        .await
+        .map_err(|e| format!("Failed to bind {} on {}: {}", name, addr, e))?;
+    Ok(sock)
+}
+
 /// Run the KVS event loop for a single thread.
 pub async fn run(
     thread_id: u32,
     config: &Config,
     public_ip: &str,
     private_ip: &str,
-    seed_ip: &str,
+    _seed_ip: &str,
     self_tier: Tier,
     thread_count: u32,
     self_join_count: i32,
     routing_ips: Vec<Address>,
     monitoring_ips: Vec<Address>,
-) {
+) -> Result<(), String> {
     let base_offset = config.ports.base_offset;
     let wt = ServerThread::new(public_ip, private_ip, thread_id, base_offset);
 
@@ -80,69 +91,34 @@ pub async fn run(
     // ── ZMQ context and sockets ──
     let ctx = Context::new();
 
-    let join_puller = ctx.socket(SocketType::Pull, Options::default());
-    join_puller
-        .bind(wt.node_join_connect_address().parse().unwrap())
-        .await
-        .expect("bind join_puller");
-
-    let depart_puller = ctx.socket(SocketType::Pull, Options::default());
-    depart_puller
-        .bind(wt.node_depart_connect_address().parse().unwrap())
-        .await
-        .expect("bind depart_puller");
-
-    let self_depart_puller = ctx.socket(SocketType::Pull, Options::default());
-    self_depart_puller
-        .bind(wt.self_depart_connect_address().parse().unwrap())
-        .await
-        .expect("bind self_depart_puller");
-
-    let request_puller = ctx.socket(SocketType::Pull, Options::default());
-    request_puller
-        .bind(wt.key_request_bind_address().parse().unwrap())
-        .await
-        .expect("bind request_puller");
-
-    let gossip_puller = ctx.socket(SocketType::Pull, Options::default());
-    gossip_puller
-        .bind(wt.gossip_connect_address().parse().unwrap())
-        .await
-        .expect("bind gossip_puller");
-
-    let replication_response_puller = ctx.socket(SocketType::Pull, Options::default());
-    replication_response_puller
-        .bind(wt.replication_response_connect_address().parse().unwrap())
-        .await
-        .expect("bind replication_response_puller");
-
-    let replication_change_puller = ctx.socket(SocketType::Pull, Options::default());
-    replication_change_puller
-        .bind(wt.replication_change_connect_address().parse().unwrap())
-        .await
-        .expect("bind replication_change_puller");
-
-    let cache_ip_response_puller = ctx.socket(SocketType::Pull, Options::default());
-    cache_ip_response_puller
-        .bind(wt.cache_ip_response_connect_address().parse().unwrap())
-        .await
-        .expect("bind cache_ip_response_puller");
-
-    let management_node_response_puller = ctx.socket(SocketType::Pull, Options::default());
-    management_node_response_puller
-        .bind(
-            wt.management_node_response_connect_address()
-                .parse()
-                .unwrap(),
-        )
-        .await
-        .expect("bind management_node_response_puller");
-
-    let cache_registration_puller = ctx.socket(SocketType::Pull, Options::default());
-    cache_registration_puller
-        .bind(wt.cache_registration_connect_address().parse().unwrap())
-        .await
-        .expect("bind cache_registration_puller");
+    let join_puller = bind_pull(&ctx, &wt.node_join_connect_address(), "join").await?;
+    let depart_puller = bind_pull(&ctx, &wt.node_depart_connect_address(), "depart").await?;
+    let self_depart_puller =
+        bind_pull(&ctx, &wt.self_depart_connect_address(), "self_depart").await?;
+    let request_puller = bind_pull(&ctx, &wt.key_request_bind_address(), "request").await?;
+    let gossip_puller = bind_pull(&ctx, &wt.gossip_connect_address(), "gossip").await?;
+    let replication_response_puller = bind_pull(
+        &ctx,
+        &wt.replication_response_connect_address(),
+        "rep_response",
+    )
+    .await?;
+    let replication_change_puller =
+        bind_pull(&ctx, &wt.replication_change_connect_address(), "rep_change").await?;
+    let cache_ip_response_puller = bind_pull(
+        &ctx,
+        &wt.cache_ip_response_connect_address(),
+        "cache_ip_response",
+    )
+    .await?;
+    let management_node_response_puller = bind_pull(
+        &ctx,
+        &wt.management_node_response_connect_address(),
+        "mgmt_response",
+    )
+    .await?;
+    let cache_registration_puller =
+        bind_pull(&ctx, &wt.cache_registration_connect_address(), "cache_reg").await?;
 
     let mut pushers = SocketCache::new(ctx.clone());
 
@@ -176,41 +152,8 @@ pub async fn run(
     }
     local_hash_rings.insert(self_tier, l_ring);
 
-    // ── Initialize serializers ──
-    let mut serializers: SerializerMap = HashMap::new();
-    serializers.insert(
-        LatticeType::Lww as i32,
-        Box::new(memory::LwwSerializer::new()),
-    );
-    serializers.insert(
-        LatticeType::Set as i32,
-        Box::new(memory::SetSerializer::new()),
-    );
-    // OrderedSet uses the same wire format as Set.
-    serializers.insert(
-        LatticeType::OrderedSet as i32,
-        Box::new(memory::SetSerializer::new()),
-    );
-    serializers.insert(
-        LatticeType::SingleCausal as i32,
-        Box::new(memory::SingleCausalSerializer::new()),
-    );
-    serializers.insert(
-        LatticeType::MultiCausal as i32,
-        Box::new(memory::MultiCausalSerializer::new()),
-    );
-    serializers.insert(
-        LatticeType::Priority as i32,
-        Box::new(memory::PrioritySerializer::new()),
-    );
-    serializers.insert(
-        LatticeType::Counter as i32,
-        Box::new(memory::CounterSerializer::new()),
-    );
-    serializers.insert(
-        LatticeType::OrSet as i32,
-        Box::new(memory::OrSetSerializer::new()),
-    );
+    // ── Initialize serializers (all lattice types including compounds) ──
+    let serializers = storage::create_memory_serializers();
 
     // ── Initialize tier metadata ──
     let mut tier_metadata = HashMap::new();
@@ -269,6 +212,12 @@ pub async fn run(
     // ── Timers ──
     let poll_timeout = Duration::from_millis(100);
     let gossip_period = Duration::from_secs(config.timings.gossip_epoch.into());
+    let gc_period = Duration::from_micros(
+        config
+            .timings
+            .garbage_collect_period_us
+            .unwrap_or(config.timings.gossip_epoch as u64 * 1_000_000),
+    );
     let report_period = Duration::from_secs(config.timings.server_report_period.into());
     let mut gossip_start = Instant::now();
     let mut gc_start = Instant::now();
@@ -298,8 +247,25 @@ pub async fn run(
             break;
         }
 
-        // Socket 0: node_join — first socket gets poll_timeout.
-        if let Ok(Ok(msg)) = tokio::time::timeout(poll_timeout, join_puller.recv()).await {
+        // Socket 3: user requests (GET/PUT/SCAN) — gets poll_timeout as the
+        // loop's sleep. This is the hot path; all other sockets drain with
+        // Duration::ZERO so they never add latency to user requests.
+        if let Ok(Ok(msg)) = tokio::time::timeout(poll_timeout, request_puller.recv()).await {
+            let data = msg_bytes(&msg);
+            if let Ok(req) = KeyRequest::decode(data.as_slice()) {
+                let msgs = if req.r#type == RequestType::Scan as i32 {
+                    handlers::scan::handle(&ctx_state, &data)
+                } else {
+                    handlers::user_request::handle(&mut ctx_state, &data)
+                };
+                for (addr, d) in &msgs {
+                    let _ = pushers.send(addr, d).await;
+                }
+            }
+        }
+
+        // Socket 0: node_join — non-blocking.
+        if let Ok(Ok(msg)) = tokio::time::timeout(Duration::ZERO, join_puller.recv()).await {
             let data = msg_bytes(&msg);
             let serialized = String::from_utf8_lossy(&data);
             let msgs = handlers::node_join::handle(&mut ctx_state, &serialized);
@@ -318,27 +284,10 @@ pub async fn run(
             }
         }
 
-        // Socket 2: self_depart — trigger from other threads.
+        // Socket 2: self_depart relay from thread 0 to workers.
         if let Ok(Ok(_)) = tokio::time::timeout(Duration::ZERO, self_depart_puller.recv()).await {
-            // self_depart_requested flag is already set by the signal handler.
-            // This socket is for relay from thread 0 to worker threads.
+            signal::request_self_depart();
             continue; // re-check self_depart_requested at top of loop.
-        }
-
-        // Socket 3: user requests (GET/PUT/SCAN).
-        if let Ok(Ok(msg)) = tokio::time::timeout(Duration::ZERO, request_puller.recv()).await {
-            let data = msg_bytes(&msg);
-            // Peek at request type to dispatch to scan or user_request.
-            if let Ok(req) = KeyRequest::decode(data.as_slice()) {
-                let msgs = if req.r#type == RequestType::Scan as i32 {
-                    handlers::scan::handle(&ctx_state, &data)
-                } else {
-                    handlers::user_request::handle(&mut ctx_state, &data)
-                };
-                for (addr, d) in &msgs {
-                    let _ = pushers.send(addr, d).await;
-                }
-            }
         }
 
         // Socket 4: gossip.
@@ -405,8 +354,8 @@ pub async fn run(
             gossip_start = Instant::now();
         }
 
-        // ── Periodic: GC ──
-        if gc_start.elapsed() >= gossip_period {
+        // ── Periodic: GC (expired key reaping) ──
+        if gc_start.elapsed() >= gc_period {
             let reaped = handlers::utils::gc_reap_expired_keys(
                 &mut ctx_state.stored_key_map,
                 &mut ctx_state.serializers,
@@ -449,4 +398,5 @@ pub async fn run(
     }
 
     log::info!("[{}] Event loop exited", log_name);
+    Ok(())
 }

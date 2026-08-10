@@ -156,6 +156,8 @@ pub struct TimingsConfig {
     pub grace_period: u32,
     #[serde(default)]
     pub monitoring_response_timeout_ms: u32,
+    #[serde(default)]
+    pub garbage_collect_period_us: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]

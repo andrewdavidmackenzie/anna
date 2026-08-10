@@ -25,10 +25,13 @@ async fn main() {
 
     let cli = Cli::parse();
 
-    let config = Config::load(std::path::Path::new(&cli.config)).unwrap_or_else(|e| {
+    let mut config = Config::load(std::path::Path::new(&cli.config)).unwrap_or_else(|e| {
         eprintln!("Failed to load config {}: {}", cli.config, e);
         std::process::exit(1);
     });
+
+    // Resolve auto thread counts (0 = hardware_concurrency).
+    config.threads.resolve_auto();
 
     // Determine tier from SERVER_TYPE env var (default: memory).
     let self_tier = match std::env::var("SERVER_TYPE")
@@ -73,7 +76,7 @@ async fn main() {
         let routing_ips = routing_ips.clone();
         let monitoring_ips = monitoring_ips.clone();
         handles.push(tokio::spawn(async move {
-            kvs_server::run(
+            if let Err(e) = kvs_server::run(
                 tid,
                 &config,
                 &public_ip,
@@ -85,12 +88,16 @@ async fn main() {
                 routing_ips,
                 monitoring_ips,
             )
-            .await;
+            .await
+            {
+                log::error!("Worker thread {} failed: {}", tid, e);
+                std::process::exit(1);
+            }
         }));
     }
 
     // Thread 0 runs on the main task.
-    kvs_server::run(
+    if let Err(e) = kvs_server::run(
         0,
         &config,
         &public_ip,
@@ -102,10 +109,17 @@ async fn main() {
         routing_ips,
         monitoring_ips,
     )
-    .await;
+    .await
+    {
+        log::error!("Thread 0 failed: {}", e);
+        std::process::exit(1);
+    }
 
     // Wait for worker threads.
     for handle in handles {
-        let _ = handle.await;
+        if let Err(e) = handle.await {
+            log::error!("Worker task panicked: {}", e);
+            std::process::exit(1);
+        }
     }
 }
