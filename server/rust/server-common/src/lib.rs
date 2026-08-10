@@ -15,6 +15,7 @@ pub mod hash_ring;
 pub mod metadata;
 pub mod ports;
 pub mod proto;
+pub mod routing;
 pub mod signal;
 pub mod threads;
 pub mod types;

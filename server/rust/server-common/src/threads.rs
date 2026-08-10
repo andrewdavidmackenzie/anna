@@ -62,6 +62,9 @@ impl ServerThread {
     pub fn virtual_num(&self) -> u32 {
         self.virtual_num
     }
+    pub fn base_offset(&self) -> u32 {
+        self.base_offset
+    }
 
     pub fn id(&self) -> String {
         format!("{}:{}", self.private_ip, self.tid)
@@ -223,6 +226,42 @@ pub fn scaling_alert_address(scaling_alert_ip: &str, base_offset: u32) -> Addres
     )
 }
 
+/// Represents a cache node thread.
+/// Mirrors `CacheThread` in `server/cpp/src/threads.hpp`.
+#[derive(Debug, Clone)]
+pub struct CacheThread {
+    ip: Address,
+    tid: u32,
+    base_offset: u32,
+}
+
+impl CacheThread {
+    pub fn new(ip: &str, tid: u32, base_offset: u32) -> Self {
+        assert!(tid < MAX_TID, "tid {} exceeds maximum {}", tid, MAX_TID - 1);
+        CacheThread {
+            ip: ip.to_string(),
+            tid,
+            base_offset,
+        }
+    }
+
+    pub fn ip(&self) -> &str {
+        &self.ip
+    }
+
+    pub fn tid(&self) -> u32 {
+        self.tid
+    }
+
+    pub fn cache_update_connect_address(&self) -> Address {
+        format!(
+            "tcp://{}:{}",
+            self.ip,
+            self.tid + CACHE_UPDATE_PORT + self.base_offset
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -292,6 +331,11 @@ mod tests {
     }
 
     #[test]
+    fn cache_thread_update_address() {
+        let ct = CacheThread::new("10.0.0.1", 0, 0);
+        assert_eq!(ct.cache_update_connect_address(), "tcp://10.0.0.1:6850");
+    }
+
     #[should_panic(expected = "tid 50 exceeds maximum")]
     fn routing_thread_tid_too_large() {
         RoutingThread::new("10.0.0.1", 50, 0);
