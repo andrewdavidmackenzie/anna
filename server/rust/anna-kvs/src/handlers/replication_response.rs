@@ -212,6 +212,10 @@ fn process_pending_request(
             Some(kp) if kp.lattice_type() == LatticeType::None => {
                 tp.error = AnnaError::KeyDne as i32;
             }
+            Some(kp) if kp.size() == 0 => {
+                // Tombstone (deleted key).
+                tp.error = AnnaError::KeyDne as i32;
+            }
             Some(kp) => {
                 let lt = kp.lattice_type();
                 if let Some(serializer) = ctx.serializers.get(&(lt as i32)) {

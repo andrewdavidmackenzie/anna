@@ -8,7 +8,9 @@ use anna_server_common::metadata::is_metadata;
 use anna_server_common::proto::kvs::{
     AnnaError, KeyRequest, KeyResponse, KeyTuple, LatticeType, RequestType,
 };
-use anna_server_common::routing::{get_responsible_threads, ResponsibleResult};
+use anna_server_common::routing::{
+    get_responsible_threads, replication_request_target, ResponsibleResult,
+};
 use prost::Message;
 
 use crate::context::{KvsContext, OutgoingMessage, PendingRequest};
@@ -30,6 +32,7 @@ pub(crate) fn handle(ctx: &mut KvsContext, data: &[u8]) -> Vec<OutgoingMessage> 
         ..Default::default()
     };
 
+    let mut outgoing: Vec<OutgoingMessage> = Vec::new();
     let request_type = request.r#type;
     let response_address = request.response_address.clone();
 
@@ -90,6 +93,33 @@ pub(crate) fn handle(ctx: &mut KvsContext, data: &[u8]) -> Vec<OutgoingMessage> 
                 }
             }
             ResponsibleResult::NeedReplicationFactor(_) => {
+                // Issue a replication factor request so the pending
+                // request can be drained when the response arrives.
+                if let Some((target, rep_key)) = replication_request_target(
+                    key,
+                    &ctx.global_hash_rings,
+                    &ctx.local_hash_rings,
+                    ctx.metadata_replication_factor,
+                    ctx.default_local_replication,
+                ) {
+                    let rep_req = KeyRequest {
+                        request_id: format!("rep_{}_{}", ctx.rid, key),
+                        response_address: ctx.wt.replication_response_connect_address(),
+                        r#type: RequestType::Get as i32,
+                        tuples: vec![KeyTuple {
+                            key: rep_key,
+                            lattice_type: LatticeType::Lww as i32,
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    };
+                    ctx.rid += 1;
+                    outgoing.push((
+                        target.key_request_connect_address(),
+                        rep_req.encode_to_vec(),
+                    ));
+                }
+
                 ctx.pending_requests
                     .entry(key.clone())
                     .or_default()
@@ -106,10 +136,9 @@ pub(crate) fn handle(ctx: &mut KvsContext, data: &[u8]) -> Vec<OutgoingMessage> 
     }
 
     if !response.tuples.is_empty() && !response_address.is_empty() {
-        vec![(response_address, response.encode_to_vec())]
-    } else {
-        vec![]
+        outgoing.push((response_address, response.encode_to_vec()));
     }
+    outgoing
 }
 
 /// Process a single key tuple (GET or PUT).
@@ -135,6 +164,11 @@ fn process_tuple(
                 tp.error = AnnaError::KeyDne as i32;
             }
             Some(kp) if kp.expiry_epoch_s > 0 && now_epoch_s() >= kp.expiry_epoch_s => {
+                // Expired (TTL or tombstone past GC threshold).
+                tp.error = AnnaError::KeyDne as i32;
+            }
+            Some(kp) if kp.size() == 0 => {
+                // Tombstone (deleted key, not yet GC'd).
                 tp.error = AnnaError::KeyDne as i32;
             }
             Some(kp) => {
@@ -325,8 +359,12 @@ mod tests {
         let data = make_get_request("pending_key");
         let msgs = handle(&mut ctx, &data);
 
-        // No response sent (request is pending).
-        assert!(msgs.is_empty());
+        // Request is pending, and a replication factor request is sent.
         assert!(ctx.pending_requests.contains_key("pending_key"));
+        // The outgoing messages include the rep factor request (no client response).
+        assert!(
+            msgs.iter().all(|(addr, _)| !addr.contains("6600")),
+            "Should not send client response, only rep factor request"
+        );
     }
 }

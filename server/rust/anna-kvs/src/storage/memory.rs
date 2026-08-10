@@ -66,7 +66,15 @@ impl Serializer for LwwSerializer {
 
     fn get(&self, key: &str) -> GetResult {
         match self.store.get(key) {
-            Some(v) => (v.clone(), 0),
+            Some(v) => {
+                // Check for tombstone: LWW with empty value.
+                if let Ok(lww) = LwwValue::decode(v.as_slice()) {
+                    if lww.value.is_empty() {
+                        return (vec![], 1); // KEY_DNE (tombstone)
+                    }
+                }
+                (v.clone(), 0)
+            }
             None => (vec![], 1), // KEY_DNE
         }
     }
