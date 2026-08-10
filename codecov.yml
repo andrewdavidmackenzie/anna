@@ -25,6 +25,10 @@ component_management:
       name: Rust Client
       paths:
         - clients/rust/
+    - component_id: rust-server
+      name: Rust Server
+      paths:
+        - server/rust/
     - component_id: cpp-client
       name: C++ Client
       paths:
@@ -58,6 +62,10 @@ flags:
   go-client:
     paths:
       - clients/go/
+    carryforward: true
+  rust-server:
+    paths:
+      - server/rust/
     carryforward: true
   server-system-tests:
     paths:
