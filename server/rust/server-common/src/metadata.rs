@@ -59,6 +59,49 @@ impl KeyProperty {
     }
 }
 
+/// Metadata type discriminator — mirrors C++ `MetadataType` enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MetadataType {
+    Replication,
+    ServerStats,
+    KeyAccess,
+    KeySize,
+}
+
+impl MetadataType {
+    fn as_str(&self) -> &'static str {
+        match self {
+            MetadataType::Replication => "replication",
+            MetadataType::ServerStats => "stats",
+            MetadataType::KeyAccess => "access",
+            MetadataType::KeySize => "size",
+        }
+    }
+}
+
+/// All tiers that store user data.
+pub const ALL_DATA_TIERS: &[Tier] = &[Tier::Memory, Tier::Disk];
+
+/// Initialize a key's replication factors to the defaults from tier metadata.
+pub fn init_replication(
+    key_replication_map: &mut HashMap<Key, KeyReplication>,
+    key: &Key,
+    tier_metadata: &HashMap<Tier, TierMetadata>,
+    default_local_replication: u32,
+) {
+    let kr = key_replication_map.entry(key.clone()).or_default();
+    for tier in ALL_DATA_TIERS {
+        if let Some(tm) = tier_metadata.get(tier) {
+            kr.global_replication
+                .entry(*tier)
+                .or_insert(tm.default_replication);
+        }
+        kr.local_replication
+            .entry(*tier)
+            .or_insert(default_local_replication);
+    }
+}
+
 /// Check if a key is an internal metadata key.
 pub fn is_metadata(key: &str) -> bool {
     key.starts_with(METADATA_IDENTIFIER)
@@ -67,11 +110,60 @@ pub fn is_metadata(key: &str) -> bool {
 }
 
 /// Build a metadata key for a given type and data key.
+/// Example: `get_metadata_key("mykey", "replication")` → `"ANNA_METADATA|replication|mykey"`
 pub fn get_metadata_key(key: &str, metadata_type: &str) -> Key {
     format!(
         "{}{}{}{}{}",
         METADATA_IDENTIFIER, METADATA_DELIMITER, metadata_type, METADATA_DELIMITER, key
     )
+}
+
+/// Build a server-stats metadata key for a specific server thread.
+/// Example: `"ANNA_METADATA|stats|1.2.3.4|10.0.0.1|2|MEMORY"`
+pub fn get_server_metadata_key(
+    st: &crate::threads::ServerThread,
+    tier: Tier,
+    thread_num: u32,
+    metadata_type: MetadataType,
+) -> Key {
+    match metadata_type {
+        MetadataType::Replication => String::new(), // use get_metadata_key instead
+        _ => format!(
+            "{}{}{}{}{}{}{}{}{}{}{}",
+            METADATA_IDENTIFIER,
+            METADATA_DELIMITER,
+            metadata_type.as_str(),
+            METADATA_DELIMITER,
+            st.public_ip(),
+            METADATA_DELIMITER,
+            st.private_ip(),
+            METADATA_DELIMITER,
+            thread_num,
+            METADATA_DELIMITER,
+            tier_name(tier),
+        ),
+    }
+}
+
+/// Extract the data key from a replication metadata key.
+/// Returns `None` for non-replication metadata keys.
+pub fn get_key_from_metadata(metadata_key: &str) -> Option<&str> {
+    // Format: ANNA_METADATA|replication|<data_key>
+    let rest = metadata_key.strip_prefix(METADATA_IDENTIFIER)?;
+    let rest = rest.strip_prefix(METADATA_DELIMITER)?;
+    if let Some(data_key) = rest.strip_prefix("replication") {
+        Some(data_key.strip_prefix(METADATA_DELIMITER).unwrap_or(""))
+    } else {
+        None
+    }
+}
+
+fn tier_name(tier: Tier) -> &'static str {
+    match tier {
+        Tier::Memory => "MEMORY",
+        Tier::Disk => "DISK",
+        Tier::Routing => "ROUTING",
+    }
 }
 
 #[cfg(test)]
@@ -97,6 +189,68 @@ mod tests {
             get_metadata_key("mykey", "replication"),
             "ANNA_METADATA|replication|mykey"
         );
+    }
+
+    #[test]
+    fn get_server_metadata_key_stats() {
+        let st = crate::threads::ServerThread::new("1.2.3.4", "10.0.0.1", 0, 0);
+        let key = get_server_metadata_key(&st, Tier::Memory, 2, MetadataType::ServerStats);
+        assert_eq!(key, "ANNA_METADATA|stats|1.2.3.4|10.0.0.1|2|MEMORY");
+    }
+
+    #[test]
+    fn get_server_metadata_key_replication_returns_empty() {
+        let st = crate::threads::ServerThread::new("1.2.3.4", "10.0.0.1", 0, 0);
+        let key = get_server_metadata_key(&st, Tier::Memory, 0, MetadataType::Replication);
+        assert!(key.is_empty());
+    }
+
+    #[test]
+    fn get_key_from_metadata_replication() {
+        assert_eq!(
+            get_key_from_metadata("ANNA_METADATA|replication|mykey"),
+            Some("mykey")
+        );
+    }
+
+    #[test]
+    fn get_key_from_metadata_non_replication() {
+        assert_eq!(
+            get_key_from_metadata("ANNA_METADATA|stats|1.2.3.4|10.0.0.1|0|MEMORY"),
+            None
+        );
+    }
+
+    #[test]
+    fn get_key_from_metadata_not_metadata() {
+        assert_eq!(get_key_from_metadata("user_key"), None);
+    }
+
+    #[test]
+    fn init_replication_sets_defaults() {
+        let mut kr_map = std::collections::HashMap::new();
+        let mut tier_metadata = std::collections::HashMap::new();
+        tier_metadata.insert(
+            Tier::Memory,
+            TierMetadata {
+                id: Tier::Memory,
+                thread_number: 1,
+                default_replication: 2,
+                node_capacity: 1024,
+            },
+        );
+        init_replication(&mut kr_map, &"test_key".to_string(), &tier_metadata, 1);
+        let kr = &kr_map["test_key"];
+        assert_eq!(kr.global_replication[&Tier::Memory], 2);
+        assert_eq!(kr.local_replication[&Tier::Memory], 1);
+    }
+
+    #[test]
+    fn metadata_type_as_str() {
+        assert_eq!(MetadataType::Replication.as_str(), "replication");
+        assert_eq!(MetadataType::ServerStats.as_str(), "stats");
+        assert_eq!(MetadataType::KeyAccess.as_str(), "access");
+        assert_eq!(MetadataType::KeySize.as_str(), "size");
     }
 
     #[test]

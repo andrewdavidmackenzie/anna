@@ -159,6 +159,16 @@ impl ConsistentHashRing {
     pub fn is_empty(&self) -> bool {
         self.ring.is_empty()
     }
+
+    /// Get the base port offset from the first entry in the ring.
+    /// Returns 0 if the ring is empty.
+    pub fn base_offset(&self) -> u32 {
+        self.ring
+            .values()
+            .next()
+            .map(|st| st.base_offset())
+            .unwrap_or(0)
+    }
 }
 
 impl Default for ConsistentHashRing {

@@ -15,3 +15,12 @@ pub type ThreadID = u32;
 
 /// Hash map type alias.
 pub type Map<K, V> = HashMap<K, V>;
+
+/// Map from tier → global hash ring.
+pub type GlobalRingMap = HashMap<crate::metadata::Tier, crate::hash_ring::ConsistentHashRing>;
+
+/// Map from tier → local hash ring.
+pub type LocalRingMap = HashMap<crate::metadata::Tier, crate::hash_ring::ConsistentHashRing>;
+
+/// List of server threads (result of `get_responsible_threads`).
+pub type ServerThreadList = Vec<crate::threads::ServerThread>;
