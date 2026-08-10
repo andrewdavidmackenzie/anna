@@ -43,6 +43,11 @@ pub fn self_depart_requested() -> bool {
     SELF_DEPART_REQUESTED.load(Ordering::SeqCst)
 }
 
+/// Programmatically request self-departure (e.g., relayed from thread 0).
+pub fn request_self_depart() {
+    SELF_DEPART_REQUESTED.store(true, Ordering::SeqCst);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

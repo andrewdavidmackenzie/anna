@@ -6,7 +6,7 @@ use serde::Deserialize;
 use std::path::Path;
 
 /// Top-level configuration structure.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     #[serde(default)]
     pub monitoring: MonitoringConfig,
@@ -32,7 +32,7 @@ pub struct Config {
     pub disk: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct MonitoringConfig {
     #[serde(default)]
     pub ip: String,
@@ -40,7 +40,7 @@ pub struct MonitoringConfig {
     pub scaling_alert_ip: String,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct RoutingConfig {
     #[serde(default)]
     pub ip: String,
@@ -48,7 +48,7 @@ pub struct RoutingConfig {
     pub monitoring: Vec<String>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct ServerConfig {
     #[serde(default)]
     pub public_ip: String,
@@ -64,7 +64,7 @@ pub struct ServerConfig {
     pub monitoring: Vec<String>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct UserConfig {
     #[serde(default)]
     pub ip: String,
@@ -74,13 +74,13 @@ pub struct UserConfig {
     pub monitoring: Vec<String>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct PortsConfig {
     #[serde(default)]
     pub base_offset: u32,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct ThreadsConfig {
     #[serde(default)]
     pub memory: u32,
@@ -114,7 +114,7 @@ impl ThreadsConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct CapacitiesConfig {
     #[serde(default, rename = "memory-cap")]
     pub memory_cap_gb: u64,
@@ -126,7 +126,7 @@ pub struct CapacitiesConfig {
     pub disk_cap_kb: Option<u64>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct ReplicationConfig {
     #[serde(default)]
     pub memory: u32,
@@ -138,7 +138,7 @@ pub struct ReplicationConfig {
     pub minimum: u32,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct TimingsConfig {
     #[serde(default)]
     pub server_report_period: u32,
@@ -156,9 +156,11 @@ pub struct TimingsConfig {
     pub grace_period: u32,
     #[serde(default)]
     pub monitoring_response_timeout_ms: u32,
+    #[serde(default)]
+    pub garbage_collect_period_us: Option<u64>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct PolicyConfig {
     #[serde(default)]
     pub elasticity: bool,
