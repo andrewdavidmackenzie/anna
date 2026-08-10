@@ -20,7 +20,7 @@ dependencies = [
  "clap",
  "log",
  "nix",
- "omq-tokio 0.21.0",
+ "omq-tokio",
  "predicates",
  "prost",
  "prost-build",
@@ -48,7 +48,7 @@ dependencies = [
  "clap",
  "env_logger",
  "log",
- "omq-tokio 0.20.3",
+ "omq-tokio",
  "prost",
  "tempfile",
  "tokio",
@@ -62,7 +62,7 @@ dependencies = [
  "clap",
  "env_logger",
  "log",
- "omq-tokio 0.21.0",
+ "omq-tokio",
  "prost",
  "serde",
  "serde_yaml",
@@ -879,28 +879,6 @@ dependencies = [
  "smallvec",
  "socket2",
  "thiserror",
-]
-
-[[package]]
-name = "omq-tokio"
-version = "0.20.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98aaa33702e7d723de268dd9fe725f93d469afef3f1bedb14cfa7f579f61a7b7"
-dependencies = [
- "arc-swap",
- "bytes",
- "concurrent-queue",
- "futures",
- "libc",
- "omq-proto",
- "rand",
- "rustc-hash",
- "smallvec",
- "socket2",
- "thiserror",
- "tokio",
- "tokio-util",
- "yring",
 ]
 
 [[package]]
