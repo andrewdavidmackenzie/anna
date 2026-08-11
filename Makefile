@@ -161,12 +161,19 @@ coverage: test
 	@genhtml -o coverage --quiet rust_workspace.info server/cpp/build/server.info clients/cpp/build/client.info || true
 
 .PHONY: test
-test: client-cpp-tests client-python-tests workspace-rust-tests client-go-tests server-system-coverage server-cpp-tests merge-server-coverage rust-monitor-tests docs
+test: client-cpp-tests client-python-tests workspace-rust-tests client-go-tests server-system-coverage server-cpp-tests merge-server-coverage rust-monitor-tests rust-kvs-tests docs
 
 .PHONY: rust-monitor-tests
 rust-monitor-tests: server-rust
 	@echo "Running monitor integration tests with Rust monitor (anna-monitor-rs)"
 	@ANNA_MONITOR_BIN=$(shell pwd)/target/debug/anna-monitor-rs cargo test --test monitor 2>&1 | tail -5
+
+.PHONY: rust-kvs-tests
+rust-kvs-tests: server-rust
+	@echo "Running lattice type tests with Rust KVS (anna-kvs-rs)"
+	@ANNA_KVS_BIN=$(shell pwd)/target/debug/anna-kvs-rs cargo test --test lattice_types -- --skip disk_tier 2>&1 | tail -5
+	@echo "Running consistency tests with Rust KVS (anna-kvs-rs)"
+	@ANNA_KVS_BIN=$(shell pwd)/target/debug/anna-kvs-rs cargo test --test consistency 2>&1 | tail -5
 
 .PHONY: server-system-coverage
 server-system-coverage:

@@ -93,8 +93,42 @@ pub(crate) fn handle(ctx: &mut KvsContext, data: &[u8]) -> Vec<OutgoingMessage> 
                 }
             }
             ResponsibleResult::NeedReplicationFactor(_) => {
-                // Issue a replication factor request so the pending
-                // request can be drained when the response arrives.
+                // Initialize with defaults and retry immediately — avoids
+                // round-trip through the replication response handler for
+                // every new key.
+                anna_server_common::metadata::init_replication(
+                    &mut ctx.key_replication_map,
+                    &key.to_string(),
+                    &ctx.tier_metadata,
+                    ctx.default_local_replication,
+                );
+                // Retry routing with defaults now populated.
+                let retry = get_responsible_threads(
+                    key,
+                    is_meta,
+                    &ctx.global_hash_rings,
+                    &ctx.local_hash_rings,
+                    &ctx.key_replication_map,
+                    ctx.metadata_replication_factor,
+                    ctx.default_local_replication,
+                );
+                if let ResponsibleResult::Ok(ref threads) = retry {
+                    let am_responsible =
+                        is_own_metadata || threads.iter().any(|t| *t == ctx.wt);
+                    if am_responsible {
+                        let tp = process_tuple(ctx, key, tuple, request_type, threads);
+                        response.tuples.push(tp);
+                        ctx.key_access_tracker
+                            .entry(key.clone())
+                            .or_default()
+                            .insert(Instant::now());
+                        ctx.access_count += 1;
+                        continue; // Skip the pending path.
+                    }
+                }
+
+                // Still not responsible after defaults — issue a replication
+                // factor request so the pending request can be drained.
                 if let Some((target, rep_key)) = replication_request_target(
                     key,
                     &ctx.global_hash_rings,
@@ -350,21 +384,22 @@ mod tests {
     }
 
     #[test]
-    fn request_without_rep_factor_goes_pending() {
+    fn request_without_rep_factor_uses_defaults() {
         let mut ctx = crate::context::tests::make_test_ctx();
         ctx.serializers
             .insert(LatticeType::Lww as i32, Box::new(LwwSerializer::new()));
-        // No replication factor for "pending_key".
+        // No replication factor — handler should init with defaults and process.
 
-        let data = make_get_request("pending_key");
-        let msgs = handle(&mut ctx, &data);
+        // PUT a value first so GET can find it.
+        let put_data = make_put_request("default_key", 1, b"value");
+        let _ = handle(&mut ctx, &put_data);
 
-        // Request is pending, and a replication factor request is sent.
-        assert!(ctx.pending_requests.contains_key("pending_key"));
-        // The outgoing messages include the rep factor request (no client response).
-        assert!(
-            msgs.iter().all(|(addr, _)| !addr.contains("6600")),
-            "Should not send client response, only rep factor request"
-        );
+        // GET should succeed using default replication.
+        let get_data = make_get_request("default_key");
+        let msgs = handle(&mut ctx, &get_data);
+        assert!(!msgs.is_empty(), "Should get a response with defaults");
+
+        // Replication map should have defaults now.
+        assert!(ctx.key_replication_map.contains_key("default_key"));
     }
 }
