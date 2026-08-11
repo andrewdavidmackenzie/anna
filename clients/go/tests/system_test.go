@@ -39,7 +39,7 @@ func startServers(t *testing.T) {
 		"anna-monitor": "ANNA_MONITOR_BIN",
 	}
 	for _, proc := range []string{"anna-monitor", "anna-route", "anna-kvs"} {
-		binPath := proc
+		binPath := filepath.Join(binDir, proc)
 		if envVar, ok := envOverrides[proc]; ok {
 			if override := os.Getenv(envVar); override != "" {
 				if _, err := os.Stat(override); err != nil {
