@@ -101,7 +101,7 @@ impl SetSerializer {
 impl Serializer for SetSerializer {
     fn put(&mut self, key: &str, payload: &[u8]) -> usize {
         let new = SetValue::decode(payload).unwrap_or_default();
-        let merged = if let Some(existing) = self.store.get(key) {
+        let mut merged = if let Some(existing) = self.store.get(key) {
             let mut old = SetValue::decode(existing.as_slice()).unwrap_or_default();
             // Union merge: add all new values to old.
             for v in new.values {
@@ -113,6 +113,9 @@ impl Serializer for SetSerializer {
         } else {
             new
         };
+        // Sort values for deterministic ordering (required for OrderedSet
+        // lattice type which shares this serializer).
+        merged.values.sort();
         let encoded = merged.encode_to_vec();
         let size = encoded.len();
         self.store.insert(key.to_string(), encoded);
