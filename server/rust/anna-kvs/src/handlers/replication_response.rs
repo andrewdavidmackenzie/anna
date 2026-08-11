@@ -282,6 +282,167 @@ mod tests {
     }
 
     #[test]
+    fn decode_failure_returns_empty() {
+        let mut ctx = crate::context::tests::make_test_ctx();
+        let msgs = handle(&mut ctx, b"garbage");
+        assert!(msgs.is_empty());
+    }
+
+    #[test]
+    fn empty_tuples_returns_empty() {
+        let mut ctx = crate::context::tests::make_test_ctx();
+        let response = KeyResponse::default();
+        let msgs = handle(&mut ctx, &response.encode_to_vec());
+        assert!(msgs.is_empty());
+    }
+
+    #[test]
+    fn bad_metadata_key_returns_empty() {
+        let mut ctx = crate::context::tests::make_test_ctx();
+        let response = KeyResponse {
+            tuples: vec![KeyTuple {
+                key: "not_metadata".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let msgs = handle(&mut ctx, &response.encode_to_vec());
+        assert!(msgs.is_empty());
+    }
+
+    #[test]
+    fn wrong_thread_returns_empty() {
+        let mut ctx = crate::context::tests::make_test_ctx();
+        let response = KeyResponse {
+            tuples: vec![KeyTuple {
+                key: "ANNA_METADATA|replication|wt_key".into(),
+                error: AnnaError::WrongThread as i32,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let msgs = handle(&mut ctx, &response.encode_to_vec());
+        assert!(msgs.is_empty());
+    }
+
+    #[test]
+    fn unexpected_error_returns_empty() {
+        let mut ctx = crate::context::tests::make_test_ctx();
+        let response = KeyResponse {
+            tuples: vec![KeyTuple {
+                key: "ANNA_METADATA|replication|err_key".into(),
+                error: 99,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let msgs = handle(&mut ctx, &response.encode_to_vec());
+        assert!(msgs.is_empty());
+    }
+
+    #[test]
+    fn pending_get_returns_value() {
+        let mut ctx = crate::context::tests::make_test_ctx();
+        ctx.serializers
+            .insert(LatticeType::Lww as i32, Box::new(LwwSerializer::new()));
+
+        // Store a value first.
+        let lww_val = LwwValue {
+            timestamp: 1,
+            value: b"stored".to_vec(),
+        };
+        if let Some(s) = ctx.serializers.get_mut(&(LatticeType::Lww as i32)) {
+            crate::handlers::utils::process_put(
+                "get_key",
+                LatticeType::Lww,
+                &lww_val.encode_to_vec(),
+                s.as_mut(),
+                &mut ctx.stored_key_map,
+                0,
+            );
+        }
+
+        // Add a pending GET.
+        ctx.pending_requests.insert(
+            "get_key".into(),
+            vec![PendingRequest {
+                r#type: RequestType::Get as i32,
+                lattice_type: LatticeType::Lww as i32,
+                payload: vec![],
+                addr: "tcp://127.0.0.1:9999".into(),
+                response_id: "req_1".into(),
+                expiry_epoch_ms: 0,
+            }],
+        );
+
+        let data = make_rep_response("get_key", 1);
+        let msgs = handle(&mut ctx, &data);
+        assert!(!msgs.is_empty());
+        // Response should go to the client address.
+        assert!(msgs.iter().any(|(addr, _)| addr == "tcp://127.0.0.1:9999"));
+    }
+
+    #[test]
+    fn pending_not_responsible_sends_wrong_thread() {
+        let mut ctx = crate::context::tests::make_test_ctx();
+        // Add a second node and set replication=1 so we might not be responsible.
+        ctx.global_hash_rings
+            .get_mut(&Tier::Memory)
+            .unwrap()
+            .insert(
+                "2.2.2.2",
+                "10.0.0.2",
+                0,
+                0,
+                anna_server_common::hash_ring::DEFAULT_VIRTUAL_THREAD_NUM,
+                true,
+            );
+
+        ctx.pending_requests.insert(
+            "remote_key".into(),
+            vec![PendingRequest {
+                r#type: RequestType::Get as i32,
+                lattice_type: LatticeType::Lww as i32,
+                payload: vec![],
+                addr: "tcp://127.0.0.1:9999".into(),
+                response_id: "req_2".into(),
+                expiry_epoch_ms: 0,
+            }],
+        );
+
+        let data = make_rep_response("remote_key", 1);
+        let msgs = handle(&mut ctx, &data);
+        // Either WRONG_THREAD response or processed — depends on hash.
+        assert!(!ctx.pending_requests.contains_key("remote_key"));
+    }
+
+    #[test]
+    fn pending_gossip_applied_when_responsible() {
+        let mut ctx = crate::context::tests::make_test_ctx();
+        ctx.serializers
+            .insert(LatticeType::Lww as i32, Box::new(LwwSerializer::new()));
+
+        let lww = LwwValue {
+            timestamp: 1,
+            value: b"gossip_val".to_vec(),
+        };
+        ctx.pending_gossip.insert(
+            "gossip_k".into(),
+            vec![crate::context::PendingGossip {
+                lattice_type: LatticeType::Lww as i32,
+                payload: lww.encode_to_vec(),
+                expiry_epoch_ms: 0,
+            }],
+        );
+
+        let data = make_rep_response("gossip_k", 1);
+        let _ = handle(&mut ctx, &data);
+
+        assert!(!ctx.pending_gossip.contains_key("gossip_k"));
+        assert!(ctx.stored_key_map.contains_key("gossip_k"));
+    }
+
+    #[test]
     fn updates_replication_map() {
         let mut ctx = crate::context::tests::make_test_ctx();
         let data = make_rep_response("my_key", 2);

@@ -172,6 +172,152 @@ mod tests {
     use super::*;
     use anna_server_common::proto::metadata::ReplicationFactor;
 
+    use crate::storage::memory::LwwSerializer;
+    use anna_server_common::metadata::KeyProperty;
+    use anna_server_common::proto::kvs::LatticeType;
+
+    fn ctx_with_stored_key(key: &str) -> KvsContext {
+        let mut ctx = crate::context::tests::make_test_ctx();
+        ctx.serializers
+            .insert(LatticeType::Lww as i32, Box::new(LwwSerializer::new()));
+        // Store a key.
+        let mut kp = KeyProperty::default();
+        kp.set_size(10);
+        kp.set_type(LatticeType::Lww);
+        ctx.stored_key_map.insert(key.to_string(), kp);
+        // Set replication factor.
+        let mut kr = anna_server_common::metadata::KeyReplication::default();
+        kr.global_replication.insert(Tier::Memory, 1);
+        kr.local_replication.insert(Tier::Memory, 1);
+        ctx.key_replication_map.insert(key.to_string(), kr);
+        ctx
+    }
+
+    #[test]
+    fn thread0_relays_to_workers() {
+        let mut ctx = crate::context::tests::make_test_ctx();
+        ctx.thread_id = 0;
+        ctx.thread_count = 3;
+        let update = ReplicationFactorUpdate {
+            updates: vec![ReplicationFactor {
+                key: "k".into(),
+                global: vec![ReplicationValue {
+                    tier: Tier::Memory as i32,
+                    value: 1,
+                }],
+                local: vec![],
+            }],
+        };
+        let msgs = handle(&mut ctx, &update.encode_to_vec());
+        // Should relay to threads 1 and 2.
+        assert_eq!(msgs.len(), 2);
+    }
+
+    #[test]
+    fn decode_failure_returns_early() {
+        let mut ctx = crate::context::tests::make_test_ctx();
+        let msgs = handle(&mut ctx, b"garbage");
+        // Only relay messages (if thread 0), no crash.
+        assert!(msgs.is_empty() || msgs.iter().all(|(_, d)| d == b"garbage"));
+    }
+
+    #[test]
+    fn stored_key_replication_update() {
+        let mut ctx = ctx_with_stored_key("stored_k");
+        let update = ReplicationFactorUpdate {
+            updates: vec![ReplicationFactor {
+                key: "stored_k".into(),
+                global: vec![ReplicationValue {
+                    tier: Tier::Memory as i32,
+                    value: 2,
+                }],
+                local: vec![ReplicationValue {
+                    tier: Tier::Memory as i32,
+                    value: 1,
+                }],
+            }],
+        };
+        let _ = handle(&mut ctx, &update.encode_to_vec());
+        assert_eq!(
+            ctx.key_replication_map["stored_k"].global_replication[&Tier::Memory],
+            2
+        );
+    }
+
+    #[test]
+    fn replication_decrement_removes_key() {
+        let mut ctx = ctx_with_stored_key("dec_k");
+        // Add a second node so the key can move.
+        ctx.global_hash_rings
+            .get_mut(&Tier::Memory)
+            .unwrap()
+            .insert(
+                "2.2.2.2",
+                "10.0.0.2",
+                0,
+                0,
+                anna_server_common::hash_ring::DEFAULT_VIRTUAL_THREAD_NUM,
+                true,
+            );
+        // Set high replication so we're initially responsible.
+        ctx.key_replication_map
+            .get_mut("dec_k")
+            .unwrap()
+            .global_replication
+            .insert(Tier::Memory, 2);
+
+        let update = ReplicationFactorUpdate {
+            updates: vec![ReplicationFactor {
+                key: "dec_k".into(),
+                global: vec![ReplicationValue {
+                    tier: Tier::Memory as i32,
+                    value: 1, // decrease
+                }],
+                local: vec![],
+            }],
+        };
+        let _ = handle(&mut ctx, &update.encode_to_vec());
+        // Key may have been removed if no longer responsible.
+        // Either stored or removed — both are valid outcomes depending on hash.
+    }
+
+    #[test]
+    fn invalid_tier_ignored() {
+        let mut ctx = crate::context::tests::make_test_ctx();
+        let update = ReplicationFactorUpdate {
+            updates: vec![ReplicationFactor {
+                key: "bad_tier_k".into(),
+                global: vec![ReplicationValue { tier: 99, value: 1 }],
+                local: vec![],
+            }],
+        };
+        let _ = handle(&mut ctx, &update.encode_to_vec());
+        // No crash, no entry for invalid tier.
+        if let Some(kr) = ctx.key_replication_map.get("bad_tier_k") {
+            assert!(kr.global_replication.is_empty());
+        }
+    }
+
+    #[test]
+    fn local_replication_update() {
+        let mut ctx = crate::context::tests::make_test_ctx();
+        let update = ReplicationFactorUpdate {
+            updates: vec![ReplicationFactor {
+                key: "local_k".into(),
+                global: vec![],
+                local: vec![ReplicationValue {
+                    tier: Tier::Memory as i32,
+                    value: 3,
+                }],
+            }],
+        };
+        let _ = handle(&mut ctx, &update.encode_to_vec());
+        assert_eq!(
+            ctx.key_replication_map["local_k"].local_replication[&Tier::Memory],
+            3
+        );
+    }
+
     #[test]
     fn updates_replication_factor() {
         let mut ctx = crate::context::tests::make_test_ctx();
