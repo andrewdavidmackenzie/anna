@@ -116,8 +116,11 @@ policy:
 
 def start_servers(server_dir, config_path):
     procs = []
+    # Support ANNA_KVS_BIN / ANNA_MONITOR_BIN overrides for dual testing.
+    env_overrides = {"anna-kvs": "ANNA_KVS_BIN", "anna-monitor": "ANNA_MONITOR_BIN"}
     for name in ["anna-monitor", "anna-route", "anna-kvs"]:
-        bin_path = os.path.join(server_dir, name)
+        override = os.environ.get(env_overrides.get(name, ""))
+        bin_path = override if override and os.path.exists(override) else os.path.join(server_dir, name)
         if not os.path.exists(bin_path):
             print(f"SKIP: Server binary {bin_path} not found")
             sys.exit(0)

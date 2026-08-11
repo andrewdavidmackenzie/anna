@@ -168,14 +168,26 @@ rust-monitor-tests: server-rust
 	@echo "Running monitor integration tests with Rust monitor (anna-monitor-rs)"
 	@ANNA_MONITOR_BIN=$(shell pwd)/target/debug/anna-monitor-rs cargo test --test monitor
 
+# Dual-KVS testing: run all black-box / client tests against the Rust KVS.
+# These are the same tests that workspace-rust-tests, client-cpp-tests, etc.
+# run against the C++ KVS — duplicated here to ensure compatibility.
 .PHONY: rust-kvs-tests
 rust-kvs-tests: server-rust
 	@echo "Building instrumented Rust KVS binary for subprocess coverage"
 	@cargo llvm-cov run --no-report -p anna-kvs -- --help 2>/dev/null
-	@echo "Running lattice type tests with Rust KVS (anna-kvs-rs)"
+	@echo "=== Rust client tests with Rust KVS ==="
 	@ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs cargo test --test lattice_types -- --skip disk_tier
-	@echo "Running consistency tests with Rust KVS (anna-kvs-rs)"
 	@ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs cargo test --test consistency -- --skip disk
+	@echo "=== C++ client system tests with Rust KVS ==="
+	@cd clients/cpp/build && ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs ctest -R system_tests --output-on-failure
+	@echo "=== C++ CLI smoke test with Rust KVS ==="
+	@cd clients/cpp/build && ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs ctest -R CliSmokeTest --output-on-failure
+	@echo "=== Python client system tests with Rust KVS ==="
+	@cd clients/python && ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs python3 -m pytest tests/test_system.py -x
+	@echo "=== Go client system tests with Rust KVS ==="
+	@cd clients/go && ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs go test ./tests/ -run TestSystem -count=1 -timeout 60s
+	@echo "=== Shared CLI smoke tests with Rust KVS ==="
+	@ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs python3 tests/shared/cli/run_smoke_test.py $(shell pwd)/target/debug/anna --config server/conf/anna-local.yml cli
 
 .PHONY: server-system-coverage
 server-system-coverage:

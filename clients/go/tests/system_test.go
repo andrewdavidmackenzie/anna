@@ -33,8 +33,21 @@ func startServers(t *testing.T) {
 	path := fmt.Sprintf("%s:%s", os.Getenv("PATH"), binDir)
 	config := serverConfigFile()
 
+	// Support ANNA_KVS_BIN / ANNA_MONITOR_BIN overrides for dual testing.
+	envOverrides := map[string]string{
+		"anna-kvs":     "ANNA_KVS_BIN",
+		"anna-monitor": "ANNA_MONITOR_BIN",
+	}
 	for _, proc := range []string{"anna-monitor", "anna-route", "anna-kvs"} {
-		cmd := exec.Command(proc, "--config", config)
+		binPath := proc
+		if envVar, ok := envOverrides[proc]; ok {
+			if override := os.Getenv(envVar); override != "" {
+				if _, err := os.Stat(override); err == nil {
+					binPath = override
+				}
+			}
+		}
+		cmd := exec.Command(binPath, "--config", config)
 		cmd.Env = append(os.Environ(), "PATH="+path)
 		if err := cmd.Start(); err != nil {
 			stopServers()
