@@ -113,8 +113,7 @@ pub(crate) fn handle(ctx: &mut KvsContext, data: &[u8]) -> Vec<OutgoingMessage> 
                     ctx.default_local_replication,
                 );
                 if let ResponsibleResult::Ok(ref threads) = retry {
-                    let am_responsible =
-                        is_own_metadata || threads.iter().any(|t| *t == ctx.wt);
+                    let am_responsible = is_own_metadata || threads.iter().any(|t| *t == ctx.wt);
                     if am_responsible {
                         let tp = process_tuple(ctx, key, tuple, request_type, threads);
                         response.tuples.push(tp);

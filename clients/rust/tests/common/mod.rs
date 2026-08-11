@@ -200,6 +200,25 @@ impl ServerGuard {
                 .env("PATH", &extra_path)
                 .stdout(Stdio::null())
                 .stderr(Stdio::null());
+            // Forward LLVM coverage profiling to subprocess so integration
+            // test coverage of server binaries is captured.
+            // Forward LLVM coverage profiling to subprocess so integration
+            // test coverage of server binaries is captured.
+            if std::env::var("CARGO_LLVM_COV").is_ok() || std::env::var("LLVM_PROFILE_FILE").is_ok()
+            {
+                // Use absolute path — subprocess working dir may differ.
+                let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+                let profraw_dir = manifest_dir.join("../../target/llvm-cov-target");
+                cmd.env(
+                    "LLVM_PROFILE_FILE",
+                    profraw_dir.join(format!(
+                        "{}-{}-{}.profraw",
+                        name,
+                        base_offset,
+                        std::process::id()
+                    )),
+                );
+            }
             if name == "anna-kvs" {
                 if let Some(st) = server_type {
                     cmd.env("SERVER_TYPE", st);

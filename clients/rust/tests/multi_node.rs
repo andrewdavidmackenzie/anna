@@ -183,6 +183,17 @@ fn spawn_server_with_env(
         .env("PATH", extra_path)
         .stdout(Stdio::null())
         .stderr(Stdio::null());
+    // Forward LLVM coverage profiling to subprocess.
+    if std::env::var("CARGO_LLVM_COV").is_ok() || std::env::var("LLVM_PROFILE_FILE").is_ok() {
+        cmd.env(
+            "LLVM_PROFILE_FILE",
+            format!(
+                "target/llvm-cov-target/{}-mn-{}.profraw",
+                name,
+                std::process::id()
+            ),
+        );
+    }
     for (k, v) in env_vars {
         cmd.env(k, v);
     }

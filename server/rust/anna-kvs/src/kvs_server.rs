@@ -262,7 +262,7 @@ pub async fn run(
         let topology = anna_server_common::proto::metadata::ClusterTopology {
             memory_thread_count: config.threads.memory,
             disk_thread_count: config.threads.disk,
-            ..Default::default()
+            routing_thread_count: config.threads.routing,
         };
         let topo_payload = topology.encode_to_vec();
         let ts = handlers::utils::generate_timestamp(0);
