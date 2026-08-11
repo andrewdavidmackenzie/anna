@@ -152,8 +152,10 @@ client-go:
 
 .PHONY: client-go-tests
 client-go-tests:
-	@echo "Running Go client tests with coverage"
+	@echo "Running Go client unit tests with coverage"
 	@cd clients/go/annalib && go test -v -coverprofile=coverage.out -coverpkg=github.com/andrewdavidmackenzie/anna/clients/go/annalib ./... 2>&1
+	@echo "Running Go client system tests"
+	@cd clients/go/tests && go test -run TestSystem -count=1 -timeout 60s
 
 .PHONY: coverage
 coverage: test
@@ -185,7 +187,7 @@ rust-kvs-tests: server-rust
 	@echo "=== Python client system tests with Rust KVS ==="
 	@cd clients/python && ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs python3 -m pytest tests/test_system.py -x
 	@echo "=== Go client system tests with Rust KVS ==="
-	@echo "SKIP: Go system tests have broken config path (clients/go/tests/)"
+	@cd clients/go/tests && ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs go test -run TestSystem -count=1 -timeout 60s
 
 .PHONY: server-system-coverage
 server-system-coverage:

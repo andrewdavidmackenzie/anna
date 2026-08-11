@@ -19,7 +19,7 @@ func serverBinaryDir() string {
 
 func serverConfigFile() string {
 	root := filepath.Join("..", "..", "..")
-	return filepath.Join(root, "conf", "anna-config.yml")
+	return filepath.Join(root, "server", "conf", "anna-local.yml")
 }
 
 func startServers(t *testing.T) {
