@@ -75,6 +75,11 @@ func startServers(t *testing.T) {
 
 func stopServers() {
 	annalib.Stop()
+	// Also kill override binaries (e.g., anna-kvs-rs) that annalib.Stop()
+	// won't find by the default process name.
+	for _, name := range []string{"anna-kvs-rs", "anna-monitor-rs"} {
+		exec.Command("pkill", "-9", "-f", name).Run()
+	}
 	time.Sleep(2 * time.Second)
 }
 
