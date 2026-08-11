@@ -170,10 +170,12 @@ rust-monitor-tests: server-rust
 
 .PHONY: rust-kvs-tests
 rust-kvs-tests: server-rust
+	@echo "Building instrumented Rust KVS binary for subprocess coverage"
+	@cargo llvm-cov run --no-report -p anna-kvs -- --help 2>/dev/null
 	@echo "Running lattice type tests with Rust KVS (anna-kvs-rs)"
-	@ANNA_KVS_BIN=$(shell pwd)/target/debug/anna-kvs-rs cargo test --test lattice_types -- --skip disk_tier
+	@ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs cargo test --test lattice_types -- --skip disk_tier
 	@echo "Running consistency tests with Rust KVS (anna-kvs-rs)"
-	@ANNA_KVS_BIN=$(shell pwd)/target/debug/anna-kvs-rs cargo test --test consistency -- --skip disk
+	@ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs cargo test --test consistency -- --skip disk
 
 .PHONY: server-system-coverage
 server-system-coverage:
@@ -219,10 +221,7 @@ client-python-tests: client-python-dependencies
 workspace-rust-tests:
 	@echo "Running rust tests with coverage"
 	@find clients/cpp/build -name "*.gcda" -delete 2>/dev/null || true
-	@echo "Building instrumented Rust KVS binary for subprocess coverage"
-	@cargo llvm-cov run --no-report -p anna-kvs -- --help 2>/dev/null
-	@$(CARGO_ENV) ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs cargo llvm-cov test --workspace --no-report -- --skip docker
-	@cargo llvm-cov report --workspace --lcov --output-path rust_workspace.info
+	@$(CARGO_ENV) cargo llvm-cov test --workspace --lcov --output-path rust_workspace.info -- --skip docker
 	@lcov --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' '*/incremental/*' -o rust_workspace.info --ignore-errors inconsistent,format,unused
 
 MDBOOK := $(shell command -v mdbook 2> /dev/null)
