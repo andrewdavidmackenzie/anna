@@ -123,7 +123,13 @@ policy:
     for bin_name in binaries:
         override_var = env_overrides.get(bin_name)
         override_path = os.environ.get(override_var) if override_var else None
-        bin_path = override_path if override_path and os.path.exists(override_path) else os.path.join(server_dir, bin_name)
+        if override_path:
+            if not os.path.exists(override_path):
+                print(f"Error: {override_var}={override_path} does not exist")
+                sys.exit(1)
+            bin_path = override_path
+        else:
+            bin_path = os.path.join(server_dir, bin_name)
         if not os.path.exists(bin_path):
             print(f"Warning: {bin_path} not found. Skipping.")
             continue

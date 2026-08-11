@@ -277,8 +277,11 @@ mod tests {
             }],
         };
         let _ = handle(&mut ctx, &update.encode_to_vec());
-        // Key may have been removed if no longer responsible.
-        // Either stored or removed — both are valid outcomes depending on hash.
+        // Replication factor should be updated to 1.
+        assert_eq!(
+            ctx.key_replication_map["dec_k"].global_replication[&Tier::Memory],
+            1
+        );
     }
 
     #[test]

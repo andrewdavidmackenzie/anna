@@ -42,9 +42,10 @@ func startServers(t *testing.T) {
 		binPath := proc
 		if envVar, ok := envOverrides[proc]; ok {
 			if override := os.Getenv(envVar); override != "" {
-				if _, err := os.Stat(override); err == nil {
-					binPath = override
+				if _, err := os.Stat(override); err != nil {
+					t.Fatalf("%s=%s does not exist: %v", envVar, override, err)
 				}
+				binPath = override
 			}
 		}
 		cmd := exec.Command(binPath, "--config", config)

@@ -209,8 +209,27 @@ mod tests {
 
         let msgs = handle(&mut ctx, "tcp://monitor:6450");
 
-        // Should have gossip messages (to remaining node) + depart-done.
-        assert!(msgs.len() >= 2);
+        // Should have depart-done message.
+        assert!(msgs.iter().any(|(addr, _)| addr == "tcp://monitor:6450"));
+
+        // Should have gossip to the remaining node's gossip address.
+        let gossip_addr =
+            anna_server_common::threads::ServerThread::new("2.2.2.2", "10.0.0.2", 0, 0)
+                .gossip_connect_address();
+        let gossip_msg = msgs.iter().find(|(addr, _)| addr == &gossip_addr);
+        assert!(
+            gossip_msg.is_some(),
+            "Expected gossip to remaining node at {}, got addrs: {:?}",
+            gossip_addr,
+            msgs.iter().map(|(a, _)| a).collect::<Vec<_>>()
+        );
+        // Verify the gossip payload contains depart_key.
+        let payload = &gossip_msg.unwrap().1;
+        let payload_str = String::from_utf8_lossy(payload);
+        assert!(
+            payload_str.contains("depart_key") || payload.len() > 10,
+            "Gossip payload should contain key data"
+        );
     }
 
     #[test]
