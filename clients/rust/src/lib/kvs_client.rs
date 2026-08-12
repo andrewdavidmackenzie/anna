@@ -3796,4 +3796,53 @@ mod tests {
         let val = client.get_counter("cnt").await.expect("get_counter failed");
         assert_eq!(val, 42);
     }
+
+    #[cfg(feature = "direct-routing")]
+    #[tokio::test]
+    async fn has_direct_routing_false_by_default() {
+        let client = mock_client(240);
+        assert!(!client.has_direct_routing());
+    }
+
+    #[cfg(feature = "direct-routing")]
+    #[tokio::test]
+    async fn get_key_addresses_uses_hash_ring() {
+        use anna_server_common::hash_ring::{ConsistentHashRing, DEFAULT_VIRTUAL_THREAD_NUM};
+
+        let mut client = mock_client(241);
+
+        // Build a direct ring with one node.
+        let mut global = ConsistentHashRing::new();
+        global.insert(
+            "1.2.3.4",
+            "10.0.0.1",
+            0,
+            0,
+            DEFAULT_VIRTUAL_THREAD_NUM,
+            true,
+        );
+        let mut local = ConsistentHashRing::new();
+        local.insert(
+            "1.2.3.4",
+            "10.0.0.1",
+            0,
+            0,
+            DEFAULT_VIRTUAL_THREAD_NUM,
+            false,
+        );
+
+        client.direct_ring = Some(DirectRouting {
+            global_ring: global,
+            local_ring: local,
+            memory_thread_count: 1,
+            base_offset_val: 0,
+        });
+
+        assert!(client.has_direct_routing());
+
+        let addrs = client.get_key_addresses("test_key").await;
+        assert!(!addrs.is_empty());
+        // Should resolve to the single node.
+        assert!(addrs[0].contains("1.2.3.4"));
+    }
 }
