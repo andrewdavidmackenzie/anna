@@ -163,23 +163,33 @@ coverage: test
 	@genhtml -o coverage --quiet rust_workspace.info server/cpp/build/server.info clients/cpp/build/client.info || true
 
 .PHONY: test
-test: client-cpp-tests client-python-tests workspace-rust-tests client-go-tests server-system-coverage server-cpp-tests merge-server-coverage rust-monitor-tests rust-kvs-tests docs
+test: client-cpp-tests client-python-tests workspace-rust-tests client-go-tests server-system-coverage server-cpp-tests merge-server-coverage rust-monitor-tests rust-kvs-tests rust-coverage-report docs
+
+# Generate combined Rust coverage report from all accumulated profraw files
+# (unit tests + Rust KVS subprocess + Rust monitor subprocess).
+.PHONY: rust-coverage-report
+rust-coverage-report:
+	@echo "Generating combined Rust coverage report"
+	@cargo llvm-cov report --lcov --output-path rust_workspace.info
+	@lcov --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' '*/incremental/*' -o rust_workspace.info --ignore-errors inconsistent,format,unused
 
 .PHONY: rust-monitor-tests
-rust-monitor-tests: server-rust
-	@echo "Running monitor integration tests with Rust monitor (anna-monitor-rs)"
-	@ANNA_MONITOR_BIN=$(shell pwd)/target/debug/anna-monitor-rs cargo test --test monitor
+rust-monitor-tests:
+	@echo "Running monitor integration tests with Rust monitor (instrumented)"
+	@ANNA_MONITOR_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-monitor-rs \
+		cargo llvm-cov test --no-report -p anna --test monitor
 
 # Dual-KVS testing: run all black-box / client tests against the Rust KVS.
 # These are the same tests that workspace-rust-tests, client-cpp-tests, etc.
 # run against the C++ KVS — duplicated here to ensure compatibility.
+# Disk-tier tests are excluded because the Rust KVS only has memory serializers.
 .PHONY: rust-kvs-tests
-rust-kvs-tests: server-rust
-	@echo "Building instrumented Rust KVS binary for subprocess coverage"
-	@cargo llvm-cov run --no-report -p anna-kvs -- --help 2>/dev/null
-	@echo "=== Rust client tests with Rust KVS ==="
-	@ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs cargo test --test lattice_types -- --skip disk_tier
-	@ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs cargo test --test consistency -- --skip disk
+rust-kvs-tests:
+	@echo "=== Rust client tests with Rust KVS (instrumented) ==="
+	@ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs \
+		cargo llvm-cov test --no-report -p anna --test lattice_types -- --skip disk_tier
+	@ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs \
+		cargo llvm-cov test --no-report -p anna --test consistency -- --skip disk
 	@echo "=== C++ client system tests with Rust KVS ==="
 	@cd clients/cpp/build && ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs ctest -R system_tests --output-on-failure
 	@echo "=== C++ CLI smoke test with Rust KVS ==="
@@ -233,8 +243,11 @@ client-python-tests: client-python-dependencies
 workspace-rust-tests:
 	@echo "Running rust tests with coverage"
 	@find clients/cpp/build -name "*.gcda" -delete 2>/dev/null || true
-	@$(CARGO_ENV) cargo llvm-cov test --workspace --lcov --output-path rust_workspace.info -- --skip docker
-	@lcov --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' '*/incremental/*' -o rust_workspace.info --ignore-errors inconsistent,format,unused
+	@echo "Building instrumented Rust server binaries for subprocess coverage"
+	@cargo llvm-cov run --no-report -p anna-kvs -- --help 2>/dev/null
+	@cargo llvm-cov run --no-report -p anna-monitor -- --help 2>/dev/null
+	@echo "Running workspace tests with C++ KVS (profraw accumulated)"
+	@$(CARGO_ENV) cargo llvm-cov test --workspace --no-report -- --skip docker
 
 MDBOOK := $(shell command -v mdbook 2> /dev/null)
 LYCHEE := $(shell command -v lychee 2> /dev/null)
