@@ -596,37 +596,19 @@ async fn execute_command(
         // ── Cluster introspection commands ──
         "MEMBERS" => {
             let members = client.get_kvs_members().await;
-            if members.is_empty() {
-                println!("(no members found)");
-            } else {
-                for m in &members {
-                    println!("{}", m);
-                }
-            }
+            print!("{}", format_members(&members));
         }
         "TOPOLOGY" => {
             let members = client.get_kvs_members().await;
             let topo = client.get_cluster_topology().await;
-            if members.is_empty() {
-                println!("(no members found)");
-            } else {
-                let (mem_threads, disk_threads) = match topo {
-                    Some(t) => (t.memory_thread_count, t.disk_thread_count),
-                    None => (0, 0),
-                };
-                println!("Nodes: {}", members.len());
-                println!("Memory threads/node: {}", mem_threads);
-                println!("Disk threads/node: {}", disk_threads);
-                println!("---");
-                for m in &members {
-                    println!("  {}", m);
-                }
-            }
+            print!("{}", format_topology(&members, topo.as_ref()));
         }
         #[cfg(feature = "direct-routing")]
         "KEYSLOT" if split.len() == 2 => {
-            let hash = anna_server_common::hash_ring::global_hash_key(split[1]);
-            println!("{}", hash);
+            println!(
+                "{}",
+                anna_server_common::hash_ring::global_hash_key(split[1])
+            );
         }
         #[cfg(feature = "direct-routing")]
         "ROUTE" if split.len() == 2 => {
@@ -638,16 +620,7 @@ async fn execute_command(
                 }
             }
             let addrs = client.get_key_addresses(key).await;
-            if addrs.is_empty() {
-                println!("(no route found)");
-            } else {
-                let hash = anna_server_common::hash_ring::global_hash_key(key);
-                println!("Key: {}", key);
-                println!("Hash: {}", hash);
-                for addr in &addrs {
-                    println!("Route: {}", addr);
-                }
-            }
+            print!("{}", format_route(key, &addrs));
         }
         #[cfg(feature = "direct-routing")]
         "DISTRIBUTION" => {
@@ -670,15 +643,7 @@ async fn execute_command(
                 *count += 1;
                 *size += entry.size;
             }
-            if node_counts.is_empty() {
-                println!("(no keys found)");
-            } else {
-                println!("Total keys: {}", entries.len());
-                println!("---");
-                for (node, (count, size)) in &node_counts {
-                    println!("  {}: {} keys, {} bytes", node, count, size);
-                }
-            }
+            print!("{}", format_distribution(entries.len(), &node_counts));
         }
         "HELP" => println!("{}", cli_usage()),
         "EXIT" => return Ok(true),
@@ -692,6 +657,65 @@ async fn execute_command(
     }
 
     Ok(false)
+}
+
+fn format_members(members: &[String]) -> String {
+    if members.is_empty() {
+        "(no members found)\n".to_string()
+    } else {
+        members.iter().map(|m| format!("{}\n", m)).collect()
+    }
+}
+
+fn format_topology(
+    members: &[String],
+    topo: Option<&annalib::proto::metadata::ClusterTopology>,
+) -> String {
+    if members.is_empty() {
+        return "(no members found)\n".to_string();
+    }
+    let (mem_threads, disk_threads) = match topo {
+        Some(t) => (t.memory_thread_count, t.disk_thread_count),
+        None => (0, 0),
+    };
+    let mut out = format!("Nodes: {}\n", members.len());
+    out += &format!("Memory threads/node: {}\n", mem_threads);
+    out += &format!("Disk threads/node: {}\n", disk_threads);
+    out += "---\n";
+    for m in members {
+        out += &format!("  {}\n", m);
+    }
+    out
+}
+
+#[cfg(feature = "direct-routing")]
+fn format_route(key: &str, addrs: &[String]) -> String {
+    if addrs.is_empty() {
+        "(no route found)\n".to_string()
+    } else {
+        let hash = anna_server_common::hash_ring::global_hash_key(key);
+        let mut out = format!("Key: {}\nHash: {}\n", key, hash);
+        for addr in addrs {
+            out += &format!("Route: {}\n", addr);
+        }
+        out
+    }
+}
+
+#[cfg(feature = "direct-routing")]
+fn format_distribution(
+    total: usize,
+    node_counts: &std::collections::HashMap<String, (usize, u32)>,
+) -> String {
+    if node_counts.is_empty() {
+        "(no keys found)\n".to_string()
+    } else {
+        let mut out = format!("Total keys: {}\n---\n", total);
+        for (node, (count, size)) in node_counts {
+            out += &format!("  {}: {} keys, {} bytes\n", node, count, size);
+        }
+        out
+    }
 }
 
 fn cli_usage() -> String {
@@ -1020,6 +1044,79 @@ mod test {
     }
 
     #[test]
+    #[test]
+    fn format_members_empty() {
+        assert_eq!(format_members(&[]), "(no members found)\n");
+    }
+
+    #[test]
+    fn format_members_with_nodes() {
+        let members = vec!["1.2.3.4/10.0.0.1".to_string()];
+        let out = format_members(&members);
+        assert!(out.contains("1.2.3.4/10.0.0.1"));
+    }
+
+    #[test]
+    fn format_topology_empty() {
+        assert_eq!(format_topology(&[], None), "(no members found)\n");
+    }
+
+    #[test]
+    fn format_topology_with_data() {
+        use annalib::proto::metadata::ClusterTopology;
+        let members = vec!["1.2.3.4/10.0.0.1".to_string()];
+        let topo = ClusterTopology {
+            memory_thread_count: 2,
+            disk_thread_count: 1,
+            ..Default::default()
+        };
+        let out = format_topology(&members, Some(&topo));
+        assert!(out.contains("Nodes: 1"));
+        assert!(out.contains("Memory threads/node: 2"));
+        assert!(out.contains("Disk threads/node: 1"));
+        assert!(out.contains("1.2.3.4/10.0.0.1"));
+    }
+
+    #[test]
+    fn format_topology_no_topo() {
+        let members = vec!["1.2.3.4/10.0.0.1".to_string()];
+        let out = format_topology(&members, None);
+        assert!(out.contains("Memory threads/node: 0"));
+    }
+
+    #[cfg(feature = "direct-routing")]
+    #[test]
+    fn format_route_empty() {
+        assert_eq!(format_route("key", &[]), "(no route found)\n");
+    }
+
+    #[cfg(feature = "direct-routing")]
+    #[test]
+    fn format_route_with_address() {
+        let addrs = vec!["tcp://1.2.3.4:6200".to_string()];
+        let out = format_route("test_key", &addrs);
+        assert!(out.contains("Key: test_key"));
+        assert!(out.contains("Hash:"));
+        assert!(out.contains("Route: tcp://1.2.3.4:6200"));
+    }
+
+    #[cfg(feature = "direct-routing")]
+    #[test]
+    fn format_distribution_empty() {
+        let empty = std::collections::HashMap::new();
+        assert_eq!(format_distribution(0, &empty), "(no keys found)\n");
+    }
+
+    #[cfg(feature = "direct-routing")]
+    #[test]
+    fn format_distribution_with_data() {
+        let mut counts = std::collections::HashMap::new();
+        counts.insert("tcp://1.2.3.4:6200".to_string(), (10usize, 500u32));
+        let out = format_distribution(10, &counts);
+        assert!(out.contains("Total keys: 10"));
+        assert!(out.contains("tcp://1.2.3.4:6200: 10 keys, 500 bytes"));
+    }
+
     fn cli_usage_contains_commands() {
         let usage = cli_usage();
         assert!(usage.contains("get"));
