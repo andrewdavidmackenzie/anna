@@ -318,6 +318,30 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
   } else if (command == "STOP") {
     std::cout << annalib::stop() << " anna processes were stopped"
               << std::endl;
+  } else if (command == "MEMBERS") {
+    auto members = annalib::get_kvs_members(client);
+    if (members.empty()) {
+      std::cout << "(no members found)" << std::endl;
+    } else {
+      for (const auto& m : members) {
+        std::cout << m << std::endl;
+      }
+    }
+  } else if (command == "TOPOLOGY") {
+    auto members = annalib::get_kvs_members(client);
+    auto topo = annalib::get_cluster_topology(client);
+    if (members.empty()) {
+      std::cout << "(no members found)" << std::endl;
+    } else {
+      std::cout << "Nodes: " << members.size() << std::endl;
+      std::cout << "Memory threads/node: " << topo.memory_thread_count() << std::endl;
+      std::cout << "Disk threads/node: " << topo.disk_thread_count() << std::endl;
+      std::cout << "Routing threads/node: " << topo.routing_thread_count() << std::endl;
+      std::cout << "---" << std::endl;
+      for (const auto& m : members) {
+        std::cout << "  " << m << std::endl;
+      }
+    }
   } else if (command == "HELP") {
     std::cout << cli_usage() << std::endl;
   } else if (command == "EXIT") {

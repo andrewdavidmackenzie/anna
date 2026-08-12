@@ -846,6 +846,18 @@ ClusterTopology get_cluster_topology(KvsClientInterface* client) {
   return topology;
 }
 
+vector<string> get_kvs_members(KvsClientInterface* client) {
+  string key = kMetadataIdentifier + kMetadataDelimiter +
+               string("kvs_members");
+  string bytes = get_bytes(client, key);
+
+  shared::StringSet string_set;
+  if (!string_set.ParseFromString(bytes)) {
+    return {};
+  }
+  return {string_set.keys().begin(), string_set.keys().end()};
+}
+
 vector<string> get_monitoring_ips(KvsClientInterface* client) {
   string key = kMetadataIdentifier + kMetadataDelimiter +
                string("monitoring_ips");

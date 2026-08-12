@@ -593,6 +593,96 @@ async fn execute_command(
             let components = parse_component_from_split(&split)?;
             println!("{}", format_status(status(&components)?));
         }
+        // ── Cluster introspection commands ──
+        "MEMBERS" => {
+            let members = client.get_kvs_members().await;
+            if members.is_empty() {
+                println!("(no members found)");
+            } else {
+                for m in &members {
+                    println!("{}", m);
+                }
+            }
+        }
+        "TOPOLOGY" => {
+            let members = client.get_kvs_members().await;
+            let topo = client.get_cluster_topology().await;
+            if members.is_empty() {
+                println!("(no members found)");
+            } else {
+                let (mem_threads, disk_threads, routing_threads) = match topo {
+                    Some(t) => (
+                        t.memory_thread_count,
+                        t.disk_thread_count,
+                        t.routing_thread_count,
+                    ),
+                    None => (0, 0, 0),
+                };
+                println!("Nodes: {}", members.len());
+                println!("Memory threads/node: {}", mem_threads);
+                println!("Disk threads/node: {}", disk_threads);
+                println!("Routing threads/node: {}", routing_threads);
+                println!("---");
+                for m in &members {
+                    println!("  {}", m);
+                }
+            }
+        }
+        #[cfg(feature = "direct-routing")]
+        "KEYSLOT" if split.len() == 2 => {
+            let hash = anna_server_common::hash_ring::global_hash_key(split[1]);
+            println!("{}", hash);
+        }
+        #[cfg(feature = "direct-routing")]
+        "ROUTE" if split.len() == 2 => {
+            let key = split[1];
+            if !client.has_direct_routing() {
+                if let Err(e) = client.enable_direct_routing().await {
+                    println!("Cannot route: {}", e);
+                    return Ok(false);
+                }
+            }
+            let addrs = client.get_key_addresses(key).await;
+            if addrs.is_empty() {
+                println!("(no route found)");
+            } else {
+                let hash = anna_server_common::hash_ring::global_hash_key(key);
+                println!("Key: {}", key);
+                println!("Hash: {}", hash);
+                for addr in &addrs {
+                    println!("Route: {}", addr);
+                }
+            }
+        }
+        #[cfg(feature = "direct-routing")]
+        "DISTRIBUTION" => {
+            let prefix = if split.len() >= 2 { split[1] } else { "" };
+            if !client.has_direct_routing() {
+                if let Err(e) = client.enable_direct_routing().await {
+                    println!("Cannot compute distribution: {}", e);
+                    return Ok(false);
+                }
+            }
+            let entries = client.scan(prefix).await?;
+            let mut node_counts: std::collections::HashMap<String, (usize, u32)> =
+                std::collections::HashMap::new();
+            for entry in &entries {
+                let addrs = client.get_key_addresses(&entry.key).await;
+                let node = addrs.first().cloned().unwrap_or_else(|| "unknown".into());
+                let (count, size) = node_counts.entry(node).or_insert((0, 0));
+                *count += 1;
+                *size += entry.size;
+            }
+            if node_counts.is_empty() {
+                println!("(no keys found)");
+            } else {
+                println!("Total keys: {}", entries.len());
+                println!("---");
+                for (node, (count, size)) in &node_counts {
+                    println!("  {}: {} keys, {} bytes", node, count, size);
+                }
+            }
+        }
         "HELP" => println!("{}", cli_usage()),
         "EXIT" => return Ok(true),
         _ => {
@@ -638,6 +728,12 @@ fn cli_usage() -> String {
     \n\tput priority {key} {pri} {val} \t- store with priority (lowest wins)\
     \n\tput causal {key} {value} \t- store with multi-key causal consistency\
     \n\tput single_causal {key} {value} \t- store with single-key causal consistency\
+    \n\nCluster introspection:\
+    \n\tmembers \t\t\t\t- list all KVS nodes in the cluster\
+    \n\ttopology \t\t\t- show cluster topology (nodes, threads, tiers)\
+    \n\tkeyslot {key} \t\t\t- show the hash value for a key\
+    \n\troute {key} \t\t\t- show which server handles a key\
+    \n\tdistribution [prefix] \t\t- show per-node key distribution\
     \n\nOther:\
     \n\tbench [keys] [value_size] [duration] [workload] - run a benchmark\
     \n\tstart [component] \t\t- start anna processes (component: kvs, monitor, route; omit for all)\
@@ -935,6 +1031,11 @@ mod test {
         assert!(usage.contains("stop"));
         assert!(usage.contains("status"));
         assert!(usage.contains("exit"));
+        assert!(usage.contains("members"));
+        assert!(usage.contains("topology"));
+        assert!(usage.contains("keyslot"));
+        assert!(usage.contains("route"));
+        assert!(usage.contains("distribution"));
     }
 
     #[test]

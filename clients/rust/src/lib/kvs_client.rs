@@ -2173,6 +2173,12 @@ impl KVSClient {
     /// KVS membership data. When enabled, the client routes directly
     /// to KVS nodes without querying the routing tier.
     ///
+    /// Check if direct routing (hash ring) is enabled.
+    #[cfg(feature = "direct-routing")]
+    pub fn has_direct_routing(&self) -> bool {
+        self.direct_ring.is_some()
+    }
+
     /// Requires the `direct-routing` feature. Call this after the
     /// cluster has stabilized (KVS needs time to publish membership).
     #[cfg(feature = "direct-routing")]

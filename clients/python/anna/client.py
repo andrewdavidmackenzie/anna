@@ -658,6 +658,22 @@ class AnnaTcpClient(BaseAnnaClient):
             'disk_thread_count': topology.disk_thread_count,
         }
 
+    def get_kvs_members(self):
+        """
+        Retrieves KVS member node IPs from the metadata key
+        ANNA_METADATA|kvs_members.
+
+        Returns a list of "public_ip/private_ip" strings, or an empty list
+        if the key does not exist.
+        """
+        raw = self.get_bytes("ANNA_METADATA|kvs_members")
+        if raw is None:
+            return []
+
+        string_set = StringSet()
+        string_set.ParseFromString(raw)
+        return list(string_set.keys)
+
     def get_monitoring_ips(self):
         """
         Retrieves monitoring node IP addresses from the metadata key

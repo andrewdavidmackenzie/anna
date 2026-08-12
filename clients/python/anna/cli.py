@@ -452,6 +452,26 @@ def execute_command(client, config_path, line):
         running = status()
         for name in running:
             print(f"{name} process is running")
+    elif cmd == "MEMBERS":
+        members = client.get_kvs_members()
+        if not members:
+            print("(no members found)")
+        else:
+            for m in members:
+                print(m)
+    elif cmd == "TOPOLOGY":
+        members = client.get_kvs_members()
+        topo = client.get_cluster_topology()
+        if not members:
+            print("(no members found)")
+        else:
+            print(f"Nodes: {len(members)}")
+            print(f"Memory threads/node: {topo.memory_thread_count if topo else 0}")
+            print(f"Disk threads/node: {topo.disk_thread_count if topo else 0}")
+            print(f"Routing threads/node: {topo.routing_thread_count if topo else 0}")
+            print("---")
+            for m in members:
+                print(f"  {m}")
     elif cmd == "HELP":
         print(cli_usage())
     elif cmd == "EXIT":

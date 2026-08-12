@@ -545,6 +545,40 @@ func executeCommand(client *annalib.KVSClient, line, configFilePath string) (exi
 	case "STATUS":
 		fmt.Print(formatStatus(annalib.Status()))
 
+	case "MEMBERS":
+		members, err := client.GetKvsMembers()
+		if err != nil {
+			return false, err
+		}
+		if len(members) == 0 {
+			fmt.Println("(no members found)")
+		} else {
+			for _, m := range members {
+				fmt.Println(m)
+			}
+		}
+
+	case "TOPOLOGY":
+		members, err := client.GetKvsMembers()
+		if err != nil {
+			return false, err
+		}
+		if len(members) == 0 {
+			fmt.Println("(no members found)")
+		} else {
+			topo, _ := client.GetClusterTopology()
+			fmt.Printf("Nodes: %d\n", len(members))
+			if topo != nil {
+				fmt.Printf("Memory threads/node: %d\n", topo.MemoryThreadCount)
+				fmt.Printf("Disk threads/node: %d\n", topo.DiskThreadCount)
+				fmt.Printf("Routing threads/node: %d\n", topo.RoutingThreadCount)
+			}
+			fmt.Println("---")
+			for _, m := range members {
+				fmt.Printf("  %s\n", m)
+			}
+		}
+
 	case "HELP":
 		fmt.Print(cliUsage())
 
