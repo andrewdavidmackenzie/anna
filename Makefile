@@ -172,6 +172,8 @@ rust-coverage-report:
 	@echo "Generating combined Rust coverage report"
 	@cargo llvm-cov report --lcov --output-path rust_workspace.info
 	@lcov --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' '*/incremental/*' -o rust_workspace.info --ignore-errors inconsistent,format,unused
+	@echo "Cleaning up profraw files"
+	@find target/llvm-cov-target -name "*.profraw" -delete 2>/dev/null || true
 
 .PHONY: rust-monitor-tests
 rust-monitor-tests:
