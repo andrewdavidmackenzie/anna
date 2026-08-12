@@ -610,18 +610,13 @@ async fn execute_command(
             if members.is_empty() {
                 println!("(no members found)");
             } else {
-                let (mem_threads, disk_threads, routing_threads) = match topo {
-                    Some(t) => (
-                        t.memory_thread_count,
-                        t.disk_thread_count,
-                        t.routing_thread_count,
-                    ),
-                    None => (0, 0, 0),
+                let (mem_threads, disk_threads) = match topo {
+                    Some(t) => (t.memory_thread_count, t.disk_thread_count),
+                    None => (0, 0),
                 };
                 println!("Nodes: {}", members.len());
                 println!("Memory threads/node: {}", mem_threads);
                 println!("Disk threads/node: {}", disk_threads);
-                println!("Routing threads/node: {}", routing_threads);
                 println!("---");
                 for m in &members {
                     println!("  {}", m);
@@ -663,6 +658,8 @@ async fn execute_command(
                     return Ok(false);
                 }
             }
+            // NOTE: scan() only queries the connected node's threads.
+            // In a multi-node cluster, this shows a partial view.
             let entries = client.scan(prefix).await?;
             let mut node_counts: std::collections::HashMap<String, (usize, u32)> =
                 std::collections::HashMap::new();

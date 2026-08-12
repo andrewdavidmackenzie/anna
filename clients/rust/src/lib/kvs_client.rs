@@ -2133,7 +2133,23 @@ impl KVSClient {
     }
 
     /// Query routing for a key and return all responsible server addresses.
+    /// Uses the hash ring if direct routing is enabled.
     pub async fn get_key_addresses(&mut self, key: &str) -> Vec<Address> {
+        #[cfg(feature = "direct-routing")]
+        if let Some(ref dr) = self.direct_ring {
+            let servers = dr.global_ring.find_responsible(key, 1, true);
+            return servers
+                .iter()
+                .map(|st| {
+                    let tids = dr.local_ring.find_responsible_local(key, 1);
+                    let tid = tids.first().copied().unwrap_or(0);
+                    let port =
+                        tid + anna_server_common::ports::KEY_REQUEST_PORT + dr.base_offset_val;
+                    format!("tcp://{}:{}", st.public_ip(), port)
+                })
+                .collect();
+        }
+
         self.key_address_cache.remove(key);
         self.query_routing(key).await
     }

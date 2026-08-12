@@ -35,6 +35,8 @@ def cli_usage():
             "  SREM {key} {member} [member...] - remove members from an OR-Set (not yet implemented)\n"
             "  SMEMBERS {key}                  - list members of an OR-Set (not yet implemented)\n"
             "  SUBSCRIBE {key1} [key2...]      - subscribe to value changes on keys (not available in Python CLI, use Rust CLI or library API)\n"
+            "  MEMBERS                         - list all KVS nodes in the cluster\n"
+            "  TOPOLOGY                        - show cluster topology (nodes, threads, tiers)\n"
             "  BENCH [keys] [value_size] [duration] [workload] - run a benchmark\n"
             "  START, STOP, STATUS, HELP, EXIT")
 
@@ -468,7 +470,6 @@ def execute_command(client, config_path, line):
             print(f"Nodes: {len(members)}")
             print(f"Memory threads/node: {topo.memory_thread_count if topo else 0}")
             print(f"Disk threads/node: {topo.disk_thread_count if topo else 0}")
-            print(f"Routing threads/node: {topo.routing_thread_count if topo else 0}")
             print("---")
             for m in members:
                 print(f"  {m}")

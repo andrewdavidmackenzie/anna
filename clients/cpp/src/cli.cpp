@@ -93,6 +93,8 @@ string cli_usage() {
          "  SREM {key} {member} [member...] - remove members from an OR-Set (not yet implemented)\n"
          "  SMEMBERS {key}                  - list members of an OR-Set (not yet implemented)\n"
          "  SUBSCRIBE {key1} [key2...]      - subscribe to value changes on keys (not available in C++ CLI, use Rust CLI or library API)\n"
+         "  MEMBERS                         - list all KVS nodes in the cluster\n"
+         "  TOPOLOGY                        - show cluster topology (nodes, threads, tiers)\n"
          "  BENCH [keys] [value_size] [duration] [workload] - run a benchmark\n"
          "  START, STOP, STATUS, HELP, EXIT";
 }
@@ -336,7 +338,6 @@ void execute_cli_command(KvsClientInterface* client, const string& config_file,
       std::cout << "Nodes: " << members.size() << std::endl;
       std::cout << "Memory threads/node: " << topo.memory_thread_count() << std::endl;
       std::cout << "Disk threads/node: " << topo.disk_thread_count() << std::endl;
-      std::cout << "Routing threads/node: " << topo.routing_thread_count() << std::endl;
       std::cout << "---" << std::endl;
       for (const auto& m : members) {
         std::cout << "  " << m << std::endl;
