@@ -189,7 +189,7 @@ rust-kvs-tests:
 	@echo "=== Rust client tests with Rust KVS (instrumented) ==="
 	@ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs \
 		CARGO_LLVM_COV=1 \
-		$(CARGO_ENV) cargo test --target-dir target/llvm-cov-target --test lattice_types -- --skip disk_tier
+		$(CARGO_ENV) cargo test --target-dir target/llvm-cov-target --test lattice_types -- --skip disk_tier --test-threads=1
 	@pkill -9 -f anna-kvs 2>/dev/null; pkill -9 -f anna-monitor 2>/dev/null; pkill -9 -f anna-route 2>/dev/null; sleep 1; true
 	@ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs \
 		CARGO_LLVM_COV=1 \
