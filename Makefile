@@ -189,21 +189,21 @@ rust-kvs-tests:
 	@echo "=== Rust client tests with Rust KVS (instrumented) ==="
 	@ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs \
 		CARGO_LLVM_COV=1 \
-		$(CARGO_ENV) cargo test --target-dir target/llvm-cov-target --test lattice_types -- --skip disk_tier --test-threads=1
-	@pkill -9 -f anna-kvs 2>/dev/null; pkill -9 -f anna-monitor 2>/dev/null; pkill -9 -f anna-route 2>/dev/null; sleep 1; true
+		$(CARGO_ENV) cargo test --target-dir target/llvm-cov-target --test lattice_types -- --skip disk_tier
+	@pkill -9 -x anna-kvs 2>/dev/null; pkill -9 -x anna-kvs-rs 2>/dev/null; pkill -9 -x anna-monitor 2>/dev/null; pkill -9 -x anna-route 2>/dev/null; sleep 1; true
 	@ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs \
 		CARGO_LLVM_COV=1 \
 		$(CARGO_ENV) cargo test --target-dir target/llvm-cov-target --test consistency -- --skip disk
-	@pkill -9 -f anna-kvs 2>/dev/null; pkill -9 -f anna-monitor 2>/dev/null; pkill -9 -f anna-route 2>/dev/null; sleep 1; true
+	@pkill -9 -x anna-kvs 2>/dev/null; pkill -9 -x anna-kvs-rs 2>/dev/null; pkill -9 -x anna-monitor 2>/dev/null; pkill -9 -x anna-route 2>/dev/null; sleep 1; true
 	@echo "=== C++ client system tests with Rust KVS ==="
 	@cd clients/cpp/build && ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs ctest -R system_tests --output-on-failure
-	@pkill -9 -f anna-kvs 2>/dev/null; pkill -9 -f anna-monitor 2>/dev/null; pkill -9 -f anna-route 2>/dev/null; sleep 1; true
+	@pkill -9 -x anna-kvs 2>/dev/null; pkill -9 -x anna-kvs-rs 2>/dev/null; pkill -9 -x anna-monitor 2>/dev/null; pkill -9 -x anna-route 2>/dev/null; sleep 1; true
 	@echo "=== C++ CLI smoke test with Rust KVS ==="
 	@cd clients/cpp/build && ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs ctest -R CliSmokeTest --output-on-failure
-	@pkill -9 -f anna-kvs 2>/dev/null; pkill -9 -f anna-monitor 2>/dev/null; pkill -9 -f anna-route 2>/dev/null; sleep 1; true
+	@pkill -9 -x anna-kvs 2>/dev/null; pkill -9 -x anna-kvs-rs 2>/dev/null; pkill -9 -x anna-monitor 2>/dev/null; pkill -9 -x anna-route 2>/dev/null; sleep 1; true
 	@echo "=== Python client system tests with Rust KVS ==="
 	@cd clients/python && ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs python3 -m pytest tests/test_system.py -x
-	@pkill -9 -f anna-kvs 2>/dev/null; pkill -9 -f anna-monitor 2>/dev/null; pkill -9 -f anna-route 2>/dev/null; sleep 1; true
+	@pkill -9 -x anna-kvs 2>/dev/null; pkill -9 -x anna-kvs-rs 2>/dev/null; pkill -9 -x anna-monitor 2>/dev/null; pkill -9 -x anna-route 2>/dev/null; sleep 1; true
 	@echo "=== Go client system tests with Rust KVS ==="
 	@cd clients/go/tests && ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs go test -run TestSystem -count=1 -timeout 60s
 
