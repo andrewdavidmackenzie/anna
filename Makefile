@@ -177,7 +177,8 @@ rust-coverage-report:
 rust-monitor-tests:
 	@echo "Running monitor integration tests with Rust monitor (instrumented)"
 	@ANNA_MONITOR_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-monitor-rs \
-		$(CARGO_ENV) cargo llvm-cov test --no-report -p anna --test monitor
+		CARGO_LLVM_COV=1 \
+		$(CARGO_ENV) cargo test --target-dir target/llvm-cov-target --test monitor
 
 # Dual-KVS testing: run all black-box / client tests against the Rust KVS.
 # These are the same tests that workspace-rust-tests, client-cpp-tests, etc.
@@ -187,10 +188,12 @@ rust-monitor-tests:
 rust-kvs-tests:
 	@echo "=== Rust client tests with Rust KVS (instrumented) ==="
 	@ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs \
-		$(CARGO_ENV) cargo llvm-cov test --no-report -p anna --test lattice_types -- --skip disk_tier
+		CARGO_LLVM_COV=1 \
+		$(CARGO_ENV) cargo test --target-dir target/llvm-cov-target --test lattice_types -- --skip disk_tier
 	@pkill -9 -f anna-kvs 2>/dev/null; pkill -9 -f anna-monitor 2>/dev/null; pkill -9 -f anna-route 2>/dev/null; sleep 1; true
 	@ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs \
-		$(CARGO_ENV) cargo llvm-cov test --no-report -p anna --test consistency -- --skip disk
+		CARGO_LLVM_COV=1 \
+		$(CARGO_ENV) cargo test --target-dir target/llvm-cov-target --test consistency -- --skip disk
 	@pkill -9 -f anna-kvs 2>/dev/null; pkill -9 -f anna-monitor 2>/dev/null; pkill -9 -f anna-route 2>/dev/null; sleep 1; true
 	@echo "=== C++ client system tests with Rust KVS ==="
 	@cd clients/cpp/build && ANNA_KVS_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-kvs-rs ctest -R system_tests --output-on-failure
