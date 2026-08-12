@@ -537,10 +537,11 @@ async fn ttl_stress_many_keys() {
 
     let key_count = 50;
 
-    // PUT many keys with 2-second TTL
+    // PUT many keys with 5-second TTL (must be long enough for all PUTs
+    // and GETs to complete before expiry, even on loaded CI runners).
     for i in 0..key_count {
         client
-            .put_with_ttl(&format!("stress_{}", i), &format!("val_{}", i), 2)
+            .put_with_ttl(&format!("stress_{}", i), &format!("val_{}", i), 5)
             .await
             .unwrap_or_else(|e| panic!("PUT_TTL stress_{} failed: {}", i, e));
     }
@@ -555,7 +556,7 @@ async fn ttl_stress_many_keys() {
     }
 
     // Wait for expiry
-    tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(7)).await;
 
     // Fresh client — verify all expired
     let mut client2 = KVSClient::new(&config, Some(8)).await;

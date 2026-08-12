@@ -143,18 +143,25 @@ pub fn wait_for_routing(base_offset: u16) {
 }
 
 /// Resolve the binary path for a server component, checking for
-/// ANNA_MONITOR_BIN override for the monitor binary.
+/// Resolve the binary path for a server component, checking for
+/// ANNA_MONITOR_BIN and ANNA_KVS_BIN overrides.
 pub fn resolve_server_binary(name: &str, default_dir: &Path) -> PathBuf {
-    if name == "anna-monitor" {
-        if let Ok(alt) = std::env::var("ANNA_MONITOR_BIN") {
+    let env_var = match name {
+        "anna-monitor" => Some("ANNA_MONITOR_BIN"),
+        "anna-kvs" => Some("ANNA_KVS_BIN"),
+        _ => None,
+    };
+
+    if let Some(var) = env_var {
+        if let Ok(alt) = std::env::var(var) {
             let alt_bin = PathBuf::from(&alt);
             if alt_bin.exists() {
-                eprintln!("Using Rust monitor binary: {}", alt_bin.display());
+                eprintln!("Using override binary for {}: {}", name, alt_bin.display());
                 return alt_bin;
             }
             eprintln!(
-                "WARNING: ANNA_MONITOR_BIN={} not found, falling back to C++ monitor",
-                alt
+                "WARNING: {}={} not found, falling back to C++ {}",
+                var, alt, name
             );
         }
     }
@@ -193,6 +200,25 @@ impl ServerGuard {
                 .env("PATH", &extra_path)
                 .stdout(Stdio::null())
                 .stderr(Stdio::null());
+            // Forward LLVM coverage profiling to subprocess so integration
+            // test coverage of server binaries is captured.
+            // Forward LLVM coverage profiling to subprocess so integration
+            // test coverage of server binaries is captured.
+            if std::env::var("CARGO_LLVM_COV").is_ok() || std::env::var("LLVM_PROFILE_FILE").is_ok()
+            {
+                // Use absolute path — subprocess working dir may differ.
+                let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+                let profraw_dir = manifest_dir.join("../../target/llvm-cov-target");
+                cmd.env(
+                    "LLVM_PROFILE_FILE",
+                    profraw_dir.join(format!(
+                        "{}-{}-{}.profraw",
+                        name,
+                        base_offset,
+                        std::process::id()
+                    )),
+                );
+            }
             if name == "anna-kvs" {
                 if let Some(st) = server_type {
                     cmd.env("SERVER_TYPE", st);

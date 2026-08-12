@@ -8,7 +8,9 @@ use anna_server_common::metadata::is_metadata;
 use anna_server_common::proto::kvs::{
     AnnaError, KeyRequest, KeyResponse, KeyTuple, LatticeType, RequestType,
 };
-use anna_server_common::routing::{get_responsible_threads, ResponsibleResult};
+use anna_server_common::routing::{
+    get_responsible_threads, replication_request_target, ResponsibleResult,
+};
 use prost::Message;
 
 use crate::context::{KvsContext, OutgoingMessage, PendingRequest};
@@ -30,6 +32,7 @@ pub(crate) fn handle(ctx: &mut KvsContext, data: &[u8]) -> Vec<OutgoingMessage> 
         ..Default::default()
     };
 
+    let mut outgoing: Vec<OutgoingMessage> = Vec::new();
     let request_type = request.r#type;
     let response_address = request.response_address.clone();
 
@@ -90,6 +93,66 @@ pub(crate) fn handle(ctx: &mut KvsContext, data: &[u8]) -> Vec<OutgoingMessage> 
                 }
             }
             ResponsibleResult::NeedReplicationFactor(_) => {
+                // Initialize with defaults and retry immediately — avoids
+                // round-trip through the replication response handler for
+                // every new key.
+                anna_server_common::metadata::init_replication(
+                    &mut ctx.key_replication_map,
+                    &key.to_string(),
+                    &ctx.tier_metadata,
+                    ctx.default_local_replication,
+                );
+                // Retry routing with defaults now populated.
+                let retry = get_responsible_threads(
+                    key,
+                    is_meta,
+                    &ctx.global_hash_rings,
+                    &ctx.local_hash_rings,
+                    &ctx.key_replication_map,
+                    ctx.metadata_replication_factor,
+                    ctx.default_local_replication,
+                );
+                if let ResponsibleResult::Ok(ref threads) = retry {
+                    let am_responsible = is_own_metadata || threads.iter().any(|t| *t == ctx.wt);
+                    if am_responsible {
+                        let tp = process_tuple(ctx, key, tuple, request_type, threads);
+                        response.tuples.push(tp);
+                        ctx.key_access_tracker
+                            .entry(key.clone())
+                            .or_default()
+                            .insert(Instant::now());
+                        ctx.access_count += 1;
+                        continue; // Skip the pending path.
+                    }
+                }
+
+                // Still not responsible after defaults — issue a replication
+                // factor request so the pending request can be drained.
+                if let Some((target, rep_key)) = replication_request_target(
+                    key,
+                    &ctx.global_hash_rings,
+                    &ctx.local_hash_rings,
+                    ctx.metadata_replication_factor,
+                    ctx.default_local_replication,
+                ) {
+                    let rep_req = KeyRequest {
+                        request_id: format!("rep_{}_{}", ctx.rid, key),
+                        response_address: ctx.wt.replication_response_connect_address(),
+                        r#type: RequestType::Get as i32,
+                        tuples: vec![KeyTuple {
+                            key: rep_key,
+                            lattice_type: LatticeType::Lww as i32,
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    };
+                    ctx.rid += 1;
+                    outgoing.push((
+                        target.key_request_connect_address(),
+                        rep_req.encode_to_vec(),
+                    ));
+                }
+
                 ctx.pending_requests
                     .entry(key.clone())
                     .or_default()
@@ -106,10 +169,9 @@ pub(crate) fn handle(ctx: &mut KvsContext, data: &[u8]) -> Vec<OutgoingMessage> 
     }
 
     if !response.tuples.is_empty() && !response_address.is_empty() {
-        vec![(response_address, response.encode_to_vec())]
-    } else {
-        vec![]
+        outgoing.push((response_address, response.encode_to_vec()));
     }
+    outgoing
 }
 
 /// Process a single key tuple (GET or PUT).
@@ -135,6 +197,11 @@ fn process_tuple(
                 tp.error = AnnaError::KeyDne as i32;
             }
             Some(kp) if kp.expiry_epoch_s > 0 && now_epoch_s() >= kp.expiry_epoch_s => {
+                // Expired (TTL or tombstone past GC threshold).
+                tp.error = AnnaError::KeyDne as i32;
+            }
+            Some(kp) if kp.size() == 0 => {
+                // Tombstone (deleted key, not yet GC'd).
                 tp.error = AnnaError::KeyDne as i32;
             }
             Some(kp) => {
@@ -316,17 +383,22 @@ mod tests {
     }
 
     #[test]
-    fn request_without_rep_factor_goes_pending() {
+    fn request_without_rep_factor_uses_defaults() {
         let mut ctx = crate::context::tests::make_test_ctx();
         ctx.serializers
             .insert(LatticeType::Lww as i32, Box::new(LwwSerializer::new()));
-        // No replication factor for "pending_key".
+        // No replication factor — handler should init with defaults and process.
 
-        let data = make_get_request("pending_key");
-        let msgs = handle(&mut ctx, &data);
+        // PUT a value first so GET can find it.
+        let put_data = make_put_request("default_key", 1, b"value");
+        let _ = handle(&mut ctx, &put_data);
 
-        // No response sent (request is pending).
-        assert!(msgs.is_empty());
-        assert!(ctx.pending_requests.contains_key("pending_key"));
+        // GET should succeed using default replication.
+        let get_data = make_get_request("default_key");
+        let msgs = handle(&mut ctx, &get_data);
+        assert!(!msgs.is_empty(), "Should get a response with defaults");
+
+        // Replication map should have defaults now.
+        assert!(ctx.key_replication_map.contains_key("default_key"));
     }
 }

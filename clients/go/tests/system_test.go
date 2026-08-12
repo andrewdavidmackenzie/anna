@@ -19,7 +19,7 @@ func serverBinaryDir() string {
 
 func serverConfigFile() string {
 	root := filepath.Join("..", "..", "..")
-	return filepath.Join(root, "conf", "anna-config.yml")
+	return filepath.Join(root, "server", "conf", "anna-local.yml")
 }
 
 func startServers(t *testing.T) {
@@ -33,8 +33,22 @@ func startServers(t *testing.T) {
 	path := fmt.Sprintf("%s:%s", os.Getenv("PATH"), binDir)
 	config := serverConfigFile()
 
+	// Support ANNA_KVS_BIN / ANNA_MONITOR_BIN overrides for dual testing.
+	envOverrides := map[string]string{
+		"anna-kvs":     "ANNA_KVS_BIN",
+		"anna-monitor": "ANNA_MONITOR_BIN",
+	}
 	for _, proc := range []string{"anna-monitor", "anna-route", "anna-kvs"} {
-		cmd := exec.Command(proc, "--config", config)
+		binPath := filepath.Join(binDir, proc)
+		if envVar, ok := envOverrides[proc]; ok {
+			if override := os.Getenv(envVar); override != "" {
+				if _, err := os.Stat(override); err != nil {
+					t.Fatalf("%s=%s does not exist: %v", envVar, override, err)
+				}
+				binPath = override
+			}
+		}
+		cmd := exec.Command(binPath, "--config", config)
 		cmd.Env = append(os.Environ(), "PATH="+path)
 		if err := cmd.Start(); err != nil {
 			stopServers()
@@ -61,6 +75,12 @@ func startServers(t *testing.T) {
 
 func stopServers() {
 	annalib.Stop()
+	// Also kill override binaries by exact process name (-x), not by
+	// command line match (-f), to avoid killing make/cargo/shell processes
+	// that have ANNA_KVS_BIN in their environment.
+	for _, name := range []string{"anna-kvs-rs", "anna-monitor-rs"} {
+		exec.Command("pkill", "-9", "-x", name).Run()
+	}
 	time.Sleep(2 * time.Second)
 }
 

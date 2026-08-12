@@ -66,7 +66,15 @@ impl Serializer for LwwSerializer {
 
     fn get(&self, key: &str) -> GetResult {
         match self.store.get(key) {
-            Some(v) => (v.clone(), 0),
+            Some(v) => {
+                // Check for tombstone: LWW with empty value.
+                if let Ok(lww) = LwwValue::decode(v.as_slice()) {
+                    if lww.value.is_empty() {
+                        return (vec![], 1); // KEY_DNE (tombstone)
+                    }
+                }
+                (v.clone(), 0)
+            }
             None => (vec![], 1), // KEY_DNE
         }
     }
@@ -93,7 +101,7 @@ impl SetSerializer {
 impl Serializer for SetSerializer {
     fn put(&mut self, key: &str, payload: &[u8]) -> usize {
         let new = SetValue::decode(payload).unwrap_or_default();
-        let merged = if let Some(existing) = self.store.get(key) {
+        let mut merged = if let Some(existing) = self.store.get(key) {
             let mut old = SetValue::decode(existing.as_slice()).unwrap_or_default();
             // Union merge: add all new values to old.
             for v in new.values {
@@ -105,6 +113,9 @@ impl Serializer for SetSerializer {
         } else {
             new
         };
+        // Sort values for deterministic ordering (required for OrderedSet
+        // lattice type which shares this serializer).
+        merged.values.sort();
         let encoded = merged.encode_to_vec();
         let size = encoded.len();
         self.store.insert(key.to_string(), encoded);

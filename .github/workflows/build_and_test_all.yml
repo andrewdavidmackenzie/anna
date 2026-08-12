@@ -81,6 +81,14 @@ jobs:
     - name: docker-test
       if: matrix.os == 'ubuntu-latest'
       run: |
+        # Kill any leftover server processes from make test to avoid port conflicts
+        # with the Docker container which uses --network host on the same ports.
+        pkill -9 -x anna-kvs 2>/dev/null || true
+        pkill -9 -x anna-kvs-rs 2>/dev/null || true
+        pkill -9 -x anna-monitor 2>/dev/null || true
+        pkill -9 -x anna-monitor-rs 2>/dev/null || true
+        pkill -9 -x anna-route 2>/dev/null || true
+        sleep 5
         docker info > /dev/null 2>&1 || { echo "Docker not available"; exit 1; }
         docker build -t anna-test .
         cargo test --test docker -- --ignored --nocapture

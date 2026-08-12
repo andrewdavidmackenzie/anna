@@ -89,8 +89,18 @@ def live_server(tmp_path_factory):
     log_path = str(work_dir / "server.log")
     procs = []
 
+    # Support ANNA_KVS_BIN / ANNA_MONITOR_BIN overrides for dual testing.
+    env_overrides = {"anna-kvs": "ANNA_KVS_BIN", "anna-monitor": "ANNA_MONITOR_BIN"}
     for name in ["anna-monitor", "anna-route", "anna-kvs"]:
-        bin_path = os.path.join(server_dir, name)
+        override = os.environ.get(env_overrides.get(name, ""))
+        if override:
+            if not os.path.exists(override):
+                pytest.fail(f"{env_overrides[name]}={override} does not exist")
+            bin_path = override
+        else:
+            bin_path = os.path.join(server_dir, name)
+        if not os.path.exists(bin_path):
+            pytest.skip(f"Server binary {bin_path} not found")
         proc = subprocess.Popen(
             [bin_path, "--config", config_path],
             stdout=open(log_path, "a"),

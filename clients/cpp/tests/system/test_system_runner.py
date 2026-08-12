@@ -113,14 +113,31 @@ policy:
     binaries = ["anna-monitor", "anna-route", "anna-kvs"]
     procs = []
 
+    # Support ANNA_KVS_BIN override for dual-KVS testing.
+    env_overrides = {
+        "anna-kvs": "ANNA_KVS_BIN",
+        "anna-monitor": "ANNA_MONITOR_BIN",
+    }
+
     print(f"Starting servers in {server_dir}...")
     for bin_name in binaries:
-        bin_path = os.path.join(server_dir, bin_name)
+        override_var = env_overrides.get(bin_name)
+        override_path = os.environ.get(override_var) if override_var else None
+        if override_path:
+            if not os.path.exists(override_path):
+                print(f"Error: {override_var}={override_path} does not exist")
+                sys.exit(1)
+            bin_path = override_path
+        else:
+            bin_path = os.path.join(server_dir, bin_name)
         if not os.path.exists(bin_path):
             print(f"Warning: {bin_path} not found. Skipping.")
             continue
 
-        print(f"Starting {bin_name}...")
+        if override_path and os.path.exists(override_path):
+            print(f"Starting {bin_name} (override: {bin_path})...")
+        else:
+            print(f"Starting {bin_name}...")
         proc = subprocess.Popen(
             [bin_path, "--config", test_config],
             stdout=open(log_file, "a"),

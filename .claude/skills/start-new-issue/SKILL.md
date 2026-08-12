@@ -28,13 +28,21 @@ Then a branch name could be `analyse_on_config_change_103`
 As we work on the branch, we will commit changes once pre-commit checks pass and then later
 push the branch and create a PR from it.
 
-## Pre-commit checks
+## Pre-push checks
 
-Before committing new work to a branch, the following checks should pass:
+Before pushing any commit, run the FULL `make test` target — not individual
+test commands that approximate it. `make test` is the single source of truth
+for what CI runs. If new tests are added, they must be wired into `make test`
+so they are always validated locally before pushing.
+
+Run these in order:
 
 - `make clippy`
 - `make fmt`
 - `make test`
+
+Do NOT push until all three pass. Running individual `cargo test` commands
+is useful during development but does NOT replace `make test` before pushing.
 
 Expect the PR checks to check for:
 - non-reducing code coverage of the project and the patch (lines changed), add tests to reduce the possibility

@@ -223,6 +223,101 @@ pub async fn run(
     let mut gc_start = Instant::now();
     let mut report_start = Instant::now();
 
+    // ── Store initial membership metadata (thread 0 only) ──
+    // Clients using direct routing need this metadata immediately.
+    if thread_id == 0 {
+        use anna_server_common::proto::kvs::LatticeType;
+        use anna_server_common::proto::shared::StringSet;
+
+        // kvs_members
+        let mut members_set = StringSet::default();
+        for ring in ctx_state.global_hash_rings.values() {
+            for st in ring.get_unique_servers() {
+                members_set
+                    .keys
+                    .push(format!("{}/{}", st.public_ip(), st.private_ip()));
+            }
+        }
+        if !members_set.keys.is_empty() {
+            let members_payload = members_set.encode_to_vec();
+            let ts = handlers::utils::generate_timestamp(0);
+            let lww = anna_server_common::proto::kvs::LwwValue {
+                timestamp: ts,
+                value: members_payload,
+            };
+            let key = "ANNA_METADATA|kvs_members";
+            if let Some(s) = ctx_state.serializers.get_mut(&(LatticeType::Lww as i32)) {
+                handlers::utils::process_put(
+                    key,
+                    LatticeType::Lww,
+                    &lww.encode_to_vec(),
+                    s.as_mut(),
+                    &mut ctx_state.stored_key_map,
+                    0,
+                );
+            }
+        }
+
+        // cluster_topology
+        let topology = anna_server_common::proto::metadata::ClusterTopology {
+            memory_thread_count: config.threads.memory,
+            disk_thread_count: config.threads.disk,
+            routing_thread_count: config.threads.routing,
+        };
+        let topo_payload = topology.encode_to_vec();
+        let ts = handlers::utils::generate_timestamp(0);
+        let lww = anna_server_common::proto::kvs::LwwValue {
+            timestamp: ts,
+            value: topo_payload,
+        };
+        let key = "ANNA_METADATA|cluster_topology";
+        if let Some(s) = ctx_state.serializers.get_mut(&(LatticeType::Lww as i32)) {
+            handlers::utils::process_put(
+                key,
+                LatticeType::Lww,
+                &lww.encode_to_vec(),
+                s.as_mut(),
+                &mut ctx_state.stored_key_map,
+                0,
+            );
+        }
+
+        log::info!("[{}] Stored initial membership metadata", log_name);
+    }
+
+    // ── Startup notifications (thread 0 only) ──
+    if thread_id == 0 {
+        let tier_name = match self_tier {
+            Tier::Memory => "MEMORY",
+            Tier::Disk => "DISK",
+            _ => "MEMORY",
+        };
+        let join_msg = format!(
+            "join:{}:{}:{}:{}",
+            tier_name, public_ip, private_ip, self_join_count
+        );
+
+        // Notify routing nodes.
+        for addr in &ctx_state.routing_ips {
+            let target = anna_server_common::threads::RoutingThread::new(addr, 0, base_offset)
+                .notify_connect_address();
+            if let Err(e) = pushers.send(&target, join_msg.as_bytes()).await {
+                log::warn!("[{}] Failed to notify routing {}: {}", log_name, addr, e);
+            }
+        }
+
+        // Notify monitoring nodes.
+        for addr in &ctx_state.monitoring_ips {
+            let target = anna_server_common::threads::MonitoringThread::new(addr, base_offset)
+                .notify_connect_address();
+            if let Err(e) = pushers.send(&target, join_msg.as_bytes()).await {
+                log::warn!("[{}] Failed to notify monitoring {}: {}", log_name, addr, e);
+            }
+        }
+
+        log::info!("[{}] Sent join notifications", log_name);
+    }
+
     log::info!("[{}] Entering event loop", log_name);
 
     // ── Event loop ──
@@ -258,9 +353,15 @@ pub async fn run(
                 } else {
                     handlers::user_request::handle(&mut ctx_state, &data)
                 };
+                log::debug!(
+                    "[{}] Handler produced {} outgoing messages",
+                    log_name,
+                    msgs.len()
+                );
                 for (addr, d) in &msgs {
-                    let _ = pushers.send(addr, d).await;
+                    if let Err(e) = pushers.send(addr, d).await {}
                 }
+            } else {
             }
         }
 
