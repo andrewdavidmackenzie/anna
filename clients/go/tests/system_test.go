@@ -79,7 +79,7 @@ func stopServers() {
 	// Also kill override binaries by exact process name (-x), not by
 	// command line match (-f), to avoid killing make/cargo/shell processes
 	// that have ANNA_KVS_BIN in their environment.
-	for _, name := range []string{"anna-kvs-rs", "anna-monitor-rs"} {
+	for _, name := range []string{"anna-kvs-rs", "anna-monitor-rs", "anna-route-rs"} {
 		exec.Command("pkill", "-9", "-x", name).Run()
 	}
 	time.Sleep(2 * time.Second)

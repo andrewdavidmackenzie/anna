@@ -151,4 +151,52 @@ mod tests {
         // Should relay to thread 1.
         assert!(!msgs.is_empty());
     }
+
+    #[test]
+    fn thread0_relays_depart() {
+        let mut ctx = crate::context::tests::make_test_ctx();
+        ctx.thread_id = 0;
+        ctx.thread_count = 2;
+        let _ = handle(&mut ctx, "join:MEMORY:2.2.2.2:10.0.0.2:0");
+        let msgs = handle(&mut ctx, "depart:MEMORY:2.2.2.2:10.0.0.2");
+        // Should relay to thread 1.
+        assert!(!msgs.is_empty());
+    }
+
+    #[test]
+    fn unknown_prefix_rejected() {
+        let mut ctx = crate::context::tests::make_test_ctx();
+        let msgs = handle(&mut ctx, "MEMORY:2.2.2.2:10.0.0.2:0");
+        assert!(msgs.is_empty());
+    }
+
+    #[test]
+    fn join_gossips_to_existing_kvs() {
+        use anna_server_common::hash_ring::{ConsistentHashRing, DEFAULT_VIRTUAL_THREAD_NUM};
+        let mut ctx = crate::context::tests::make_test_ctx();
+        ctx.thread_id = 0;
+        ctx.thread_count = 1;
+        // Add an existing node first.
+        let mut ring = ConsistentHashRing::new();
+        ring.insert(
+            "1.1.1.1",
+            "10.0.0.1",
+            0,
+            0,
+            DEFAULT_VIRTUAL_THREAD_NUM,
+            true,
+        );
+        ctx.global_hash_rings.insert(Tier::Memory, ring);
+
+        // Join a second node — should gossip to the first.
+        let msgs = handle(&mut ctx, "join:MEMORY:2.2.2.2:10.0.0.2:0");
+        assert!(msgs.iter().any(|(addr, _)| addr.contains("10.0.0.1")));
+    }
+
+    #[test]
+    fn unknown_tier_ignored() {
+        let mut ctx = crate::context::tests::make_test_ctx();
+        let msgs = handle(&mut ctx, "join:UNKNOWN:2.2.2.2:10.0.0.2:0");
+        assert!(msgs.is_empty());
+    }
 }

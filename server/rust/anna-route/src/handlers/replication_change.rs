@@ -86,6 +86,37 @@ mod tests {
     }
 
     #[test]
+    fn updates_local_replication() {
+        let mut ctx = crate::context::tests::make_test_ctx();
+        let update = ReplicationFactorUpdate {
+            updates: vec![ReplicationFactor {
+                key: "local_k".into(),
+                global: vec![],
+                local: vec![ReplicationValue {
+                    tier: Tier::Memory as i32,
+                    value: 3,
+                }],
+            }],
+        };
+        let _ = handle(&mut ctx, &update.encode_to_vec());
+        assert_eq!(
+            ctx.key_replication_map["local_k"].local_replication[&Tier::Memory],
+            3
+        );
+    }
+
+    #[test]
+    fn decode_failure_returns_relay_only() {
+        let mut ctx = crate::context::tests::make_test_ctx();
+        ctx.thread_id = 0;
+        ctx.thread_count = 2;
+        let msgs = handle(&mut ctx, b"garbage");
+        // Should still relay (thread 0), but no replication update.
+        assert!(!msgs.is_empty());
+        assert!(ctx.key_replication_map.is_empty());
+    }
+
+    #[test]
     fn thread0_relays() {
         let mut ctx = crate::context::tests::make_test_ctx();
         ctx.thread_id = 0;

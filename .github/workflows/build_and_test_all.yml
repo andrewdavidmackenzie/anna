@@ -88,6 +88,7 @@ jobs:
         pkill -9 -x anna-monitor 2>/dev/null || true
         pkill -9 -x anna-monitor-rs 2>/dev/null || true
         pkill -9 -x anna-route 2>/dev/null || true
+        pkill -9 -x anna-route-rs 2>/dev/null || true
         sleep 5
         docker info > /dev/null 2>&1 || { echo "Docker not available"; exit 1; }
         docker build -t anna-test .
