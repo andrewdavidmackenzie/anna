@@ -37,6 +37,7 @@ func startServers(t *testing.T) {
 	envOverrides := map[string]string{
 		"anna-kvs":     "ANNA_KVS_BIN",
 		"anna-monitor": "ANNA_MONITOR_BIN",
+		"anna-route":   "ANNA_ROUTE_BIN",
 	}
 	for _, proc := range []string{"anna-monitor", "anna-route", "anna-kvs"} {
 		binPath := filepath.Join(binDir, proc)
@@ -78,7 +79,7 @@ func stopServers() {
 	// Also kill override binaries by exact process name (-x), not by
 	// command line match (-f), to avoid killing make/cargo/shell processes
 	// that have ANNA_KVS_BIN in their environment.
-	for _, name := range []string{"anna-kvs-rs", "anna-monitor-rs"} {
+	for _, name := range []string{"anna-kvs-rs", "anna-monitor-rs", "anna-route-rs"} {
 		exec.Command("pkill", "-9", "-x", name).Run()
 	}
 	time.Sleep(2 * time.Second)

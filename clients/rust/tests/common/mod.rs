@@ -149,6 +149,7 @@ pub fn resolve_server_binary(name: &str, default_dir: &Path) -> PathBuf {
     let env_var = match name {
         "anna-monitor" => Some("ANNA_MONITOR_BIN"),
         "anna-kvs" => Some("ANNA_KVS_BIN"),
+        "anna-route" => Some("ANNA_ROUTE_BIN"),
         _ => None,
     };
 

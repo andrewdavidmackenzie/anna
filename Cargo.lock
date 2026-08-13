@@ -71,6 +71,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "anna-route"
+version = "0.1.0"
+dependencies = [
+ "anna-server-common",
+ "clap",
+ "env_logger",
+ "log",
+ "omq-tokio",
+ "prost",
+ "tokio",
+]
+
+[[package]]
 name = "anna-server-common"
 version = "0.1.0"
 dependencies = [

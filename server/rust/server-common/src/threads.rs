@@ -149,6 +149,9 @@ impl RoutingThread {
     pub fn tid(&self) -> u32 {
         self.tid
     }
+    pub fn base_offset(&self) -> u32 {
+        self.base_offset
+    }
 
     fn addr(&self, port: u32) -> Address {
         format!("tcp://{}:{}", self.ip, self.tid + port + self.base_offset)
