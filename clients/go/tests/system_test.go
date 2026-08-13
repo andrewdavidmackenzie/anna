@@ -37,6 +37,7 @@ func startServers(t *testing.T) {
 	envOverrides := map[string]string{
 		"anna-kvs":     "ANNA_KVS_BIN",
 		"anna-monitor": "ANNA_MONITOR_BIN",
+		"anna-route":   "ANNA_ROUTE_BIN",
 	}
 	for _, proc := range []string{"anna-monitor", "anna-route", "anna-kvs"} {
 		binPath := filepath.Join(binDir, proc)

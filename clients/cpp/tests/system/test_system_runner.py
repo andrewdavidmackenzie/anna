@@ -117,6 +117,7 @@ policy:
     env_overrides = {
         "anna-kvs": "ANNA_KVS_BIN",
         "anna-monitor": "ANNA_MONITOR_BIN",
+        "anna-route": "ANNA_ROUTE_BIN",
     }
 
     print(f"Starting servers in {server_dir}...")

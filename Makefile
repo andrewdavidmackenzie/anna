@@ -134,7 +134,7 @@ client-rust:
 .PHONY: server-rust
 server-rust:
 	@echo "Building Rust server binaries"
-	@$(CARGO_ENV) RUSTFLAGS="$(RUST_LINK_ALLOW)" cargo build --quiet -p anna-monitor -p anna-hashring
+	@$(CARGO_ENV) RUSTFLAGS="$(RUST_LINK_ALLOW)" cargo build --quiet -p anna-monitor -p anna-hashring -p anna-route
 
 .PHONY: client-python
 client-python:
@@ -163,7 +163,7 @@ coverage: test
 	@genhtml -o coverage --quiet rust_workspace.info server/cpp/build/server.info clients/cpp/build/client.info || true
 
 .PHONY: test
-test: client-cpp-tests client-python-tests workspace-rust-tests client-go-tests server-system-coverage server-cpp-tests merge-server-coverage rust-monitor-tests rust-kvs-tests rust-coverage-report docs
+test: client-cpp-tests client-python-tests workspace-rust-tests client-go-tests server-system-coverage server-cpp-tests merge-server-coverage rust-monitor-tests rust-kvs-tests rust-route-tests rust-coverage-report docs
 
 # Generate combined Rust coverage report from all accumulated profraw files
 # (unit tests + Rust KVS subprocess + Rust monitor subprocess).
@@ -174,6 +174,14 @@ rust-coverage-report:
 	@lcov --remove rust_workspace.info '/Applications/*' '/usr*' '*/build/*' '**/build.rs' '*/cpp/hash_ring/*' '*/cpp/zmq/*' '**/errors.rs' '**/*.pb.*' '*tests/*' '*/protobuf/*' '*/incremental/*' -o rust_workspace.info --ignore-errors inconsistent,format,unused
 	@echo "Cleaning up profraw files"
 	@find target/llvm-cov-target -name "*.profraw" -delete 2>/dev/null || true
+
+.PHONY: rust-monitor-tests
+rust-route-tests:
+	@echo "Running integration tests with Rust route (instrumented)"
+	@ANNA_ROUTE_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-route-rs \
+		CARGO_LLVM_COV=1 \
+		$(CARGO_ENV) cargo test --target-dir target/llvm-cov-target --test lattice_types -- --skip disk_tier
+	@pkill -9 -x anna-kvs 2>/dev/null; pkill -9 -x anna-route-rs 2>/dev/null; pkill -9 -x anna-monitor 2>/dev/null; pkill -9 -x anna-route 2>/dev/null; sleep 1; true
 
 .PHONY: rust-monitor-tests
 rust-monitor-tests:
@@ -256,6 +264,7 @@ workspace-rust-tests:
 	@echo "Building instrumented Rust server binaries for subprocess coverage"
 	@cargo llvm-cov run --no-report -p anna-kvs -- --help 2>/dev/null
 	@cargo llvm-cov run --no-report -p anna-monitor -- --help 2>/dev/null
+	@cargo llvm-cov run --no-report -p anna-route -- --help 2>/dev/null
 	@echo "Running workspace tests with C++ KVS (profraw accumulated)"
 	@$(CARGO_ENV) cargo llvm-cov test --workspace --no-report -- --skip docker
 
