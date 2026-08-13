@@ -940,6 +940,25 @@ TEST(ClientLibTest, GetMonitoringIpsDecodesProtobuf) {
   EXPECT_EQ(client.keys_get_[0], "ANNA_METADATA|monitoring_ips");
 }
 
+TEST(ClientLibTest, GetKvsMembersReturnsList) {
+  MockKvsClient client;
+
+  shared::StringSet string_set;
+  string_set.add_keys("1.2.3.4/10.0.0.1");
+  string serialized;
+  string_set.SerializeToString(&serialized);
+
+  client.responses_.push_back(make_lww_response("0", serialized));
+
+  vector<string> result = annalib::get_kvs_members(&client);
+
+  ASSERT_EQ(result.size(), 1u);
+  EXPECT_EQ(result[0], "1.2.3.4/10.0.0.1");
+
+  ASSERT_EQ(client.keys_get_.size(), 1u);
+  EXPECT_EQ(client.keys_get_[0], "ANNA_METADATA|kvs_members");
+}
+
 TEST(ClientLibTest, GetMultiReturnsMultipleValues) {
   MockKvsClient client;
   client.responses_.push_back(make_lww_response("0", "val_a"));

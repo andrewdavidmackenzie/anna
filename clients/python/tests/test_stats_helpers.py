@@ -399,3 +399,29 @@ class TestGetMonitoringIps:
         with patch.object(client, 'get_bytes', return_value=None) as mock_gb:
             client.get_monitoring_ips()
         mock_gb.assert_called_once_with("ANNA_METADATA|monitoring_ips")
+
+
+class TestGetKvsMembers:
+    def test_returns_member_list(self):
+        from anna.shared_pb2 import StringSet
+        client = make_client()
+        string_set = StringSet()
+        string_set.keys.append("1.2.3.4/10.0.0.1")
+        inner = string_set.SerializeToString()
+
+        with patch.object(client, 'get_bytes', return_value=inner):
+            result = client.get_kvs_members()
+
+        assert result == ["1.2.3.4/10.0.0.1"]
+
+    def test_returns_empty_when_key_missing(self):
+        client = make_client()
+        with patch.object(client, 'get_bytes', return_value=None):
+            result = client.get_kvs_members()
+        assert result == []
+
+    def test_reads_correct_key(self):
+        client = make_client()
+        with patch.object(client, 'get_bytes', return_value=None) as mock_gb:
+            client.get_kvs_members()
+        mock_gb.assert_called_once_with("ANNA_METADATA|kvs_members")
