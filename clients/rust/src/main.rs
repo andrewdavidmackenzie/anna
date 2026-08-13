@@ -1044,7 +1044,6 @@ mod test {
     }
 
     #[test]
-    #[test]
     fn format_members_empty() {
         assert_eq!(format_members(&[]), "(no members found)\n");
     }
@@ -1117,6 +1116,7 @@ mod test {
         assert!(out.contains("tcp://1.2.3.4:6200: 10 keys, 500 bytes"));
     }
 
+    #[test]
     fn cli_usage_contains_commands() {
         let usage = cli_usage();
         assert!(usage.contains("get"));
