@@ -537,7 +537,7 @@ async fn ttl_stress_many_keys() {
 
     let key_count = 50;
 
-    // PUT many keys with 5-second TTL (must be long enough for all PUTs
+    // PUT many keys with 10-second TTL (must be long enough for all PUTs
     // and GETs to complete before expiry, even on loaded CI runners).
     for i in 0..key_count {
         client

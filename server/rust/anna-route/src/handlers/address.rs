@@ -58,6 +58,10 @@ pub(crate) fn handle(ctx: &mut RouteContext, data: &[u8]) -> Vec<OutgoingMessage
             }
             ResponsibleResult::NeedReplicationFactor(_) => {
                 // Initialize with defaults and retry immediately.
+                // The C++ version issues an async replication factor request
+                // and parks the request. We use defaults for simplicity —
+                // this is correct for standard deployments where all keys
+                // use the default replication factor.
                 anna_server_common::metadata::init_replication(
                     &mut ctx.key_replication_map,
                     &key.to_string(),
@@ -73,15 +77,25 @@ pub(crate) fn handle(ctx: &mut RouteContext, data: &[u8]) -> Vec<OutgoingMessage
                     ctx.metadata_replication_factor,
                     ctx.default_local_replication,
                 );
-                if let ResponsibleResult::Ok(threads) = retry {
-                    let mut addr = KeyAddress {
-                        key: key.clone(),
-                        ..Default::default()
-                    };
-                    for thread in &threads {
-                        addr.ips.push(thread.key_request_connect_address());
+                match retry {
+                    ResponsibleResult::Ok(threads) => {
+                        let mut addr = KeyAddress {
+                            key: key.clone(),
+                            ..Default::default()
+                        };
+                        for thread in &threads {
+                            addr.ips.push(thread.key_request_connect_address());
+                        }
+                        response.addresses.push(addr);
                     }
-                    response.addresses.push(addr);
+                    _ => {
+                        // Still can't resolve — return empty entry so clients
+                        // see an explicit result for every requested key.
+                        response.addresses.push(KeyAddress {
+                            key: key.clone(),
+                            ..Default::default()
+                        });
+                    }
                 }
             }
         }

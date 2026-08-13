@@ -16,22 +16,25 @@ pub(crate) fn handle(ctx: &mut RouteContext, serialized: &str) -> Vec<OutgoingMe
     let parts: Vec<&str> = serialized.split(':').collect();
 
     let is_join = parts[0] == "join";
-    let tier_offset = if is_join || parts[0] == "depart" {
-        1
-    } else {
-        0
-    };
+    let is_depart = parts[0] == "depart";
+    if !is_join && !is_depart {
+        log::warn!(
+            "membership: unknown prefix '{}', expected join/depart",
+            parts[0]
+        );
+        return vec![];
+    }
 
-    if parts.len() < tier_offset + 3 {
+    if parts.len() < 4 {
         log::warn!("membership: malformed message: {}", serialized);
         return vec![];
     }
 
-    let tier_name = parts[tier_offset];
-    let public_ip = parts[tier_offset + 1];
-    let private_ip = parts[tier_offset + 2];
-    let join_count: i32 = if parts.len() > tier_offset + 3 {
-        parts[tier_offset + 3].parse().unwrap_or(0)
+    let tier_name = parts[1];
+    let public_ip = parts[2];
+    let private_ip = parts[3];
+    let join_count: i32 = if parts.len() > 4 {
+        parts[4].parse().unwrap_or(0)
     } else {
         0
     };

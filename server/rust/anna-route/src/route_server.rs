@@ -107,13 +107,24 @@ pub async fn run(
 
     let mut pushers = SocketCache::new(ctx.clone());
 
-    // ── Initialize hash rings ──
+    // ── Initialize local hash rings ──
+    // Local rings model KVS thread distribution (memory + disk tiers),
+    // not routing threads. These are used to resolve which KVS thread
+    // handles a given key within a node.
     let mut local_hash_rings = HashMap::new();
-    for tid in 0..thread_count {
-        let mut l_ring = local_hash_rings
+    let mem_threads = config.threads.memory;
+    let disk_threads = config.threads.disk;
+    for tid in 0..mem_threads {
+        local_hash_rings
             .entry(Tier::Memory)
-            .or_insert_with(ConsistentHashRing::new);
-        l_ring.insert(ip, ip, tid, base_offset, DEFAULT_VIRTUAL_THREAD_NUM, false);
+            .or_insert_with(ConsistentHashRing::new)
+            .insert(ip, ip, tid, base_offset, DEFAULT_VIRTUAL_THREAD_NUM, false);
+    }
+    for tid in 0..disk_threads {
+        local_hash_rings
+            .entry(Tier::Disk)
+            .or_insert_with(ConsistentHashRing::new)
+            .insert(ip, ip, tid, base_offset, DEFAULT_VIRTUAL_THREAD_NUM, false);
     }
 
     // ── Build context ──
