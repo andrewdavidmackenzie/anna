@@ -90,7 +90,7 @@ def live_server(tmp_path_factory):
     procs = []
 
     # Support ANNA_KVS_BIN / ANNA_MONITOR_BIN overrides for dual testing.
-    env_overrides = {"anna-kvs": "ANNA_KVS_BIN", "anna-monitor": "ANNA_MONITOR_BIN"}
+    env_overrides = {"anna-kvs": "ANNA_KVS_BIN", "anna-monitor": "ANNA_MONITOR_BIN", "anna-route": "ANNA_ROUTE_BIN"}
     for name in ["anna-monitor", "anna-route", "anna-kvs"]:
         override = os.environ.get(env_overrides.get(name, ""))
         if override:

@@ -176,12 +176,30 @@ rust-coverage-report:
 	@find target/llvm-cov-target -name "*.profraw" -delete 2>/dev/null || true
 
 .PHONY: rust-monitor-tests
+# Dual-route testing: run all black-box / client tests against the Rust route.
+# Disk-tier tests are excluded because the Rust KVS only has memory serializers.
+.PHONY: rust-route-tests
 rust-route-tests:
-	@echo "Running integration tests with Rust route (instrumented)"
+	@echo "=== Rust client tests with Rust route (instrumented) ==="
 	@ANNA_ROUTE_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-route-rs \
 		CARGO_LLVM_COV=1 \
 		$(CARGO_ENV) cargo test --target-dir target/llvm-cov-target --test lattice_types -- --skip disk_tier
 	@pkill -9 -x anna-kvs 2>/dev/null; pkill -9 -x anna-route-rs 2>/dev/null; pkill -9 -x anna-monitor 2>/dev/null; pkill -9 -x anna-route 2>/dev/null; sleep 1; true
+	@ANNA_ROUTE_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-route-rs \
+		CARGO_LLVM_COV=1 \
+		$(CARGO_ENV) cargo test --target-dir target/llvm-cov-target --test consistency -- --skip disk
+	@pkill -9 -x anna-kvs 2>/dev/null; pkill -9 -x anna-route-rs 2>/dev/null; pkill -9 -x anna-monitor 2>/dev/null; pkill -9 -x anna-route 2>/dev/null; sleep 1; true
+	@echo "=== C++ client system tests with Rust route ==="
+	@cd clients/cpp/build && ANNA_ROUTE_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-route-rs ctest -R system_tests --output-on-failure
+	@pkill -9 -x anna-kvs 2>/dev/null; pkill -9 -x anna-route-rs 2>/dev/null; pkill -9 -x anna-monitor 2>/dev/null; pkill -9 -x anna-route 2>/dev/null; sleep 1; true
+	@echo "=== C++ CLI smoke test with Rust route ==="
+	@cd clients/cpp/build && ANNA_ROUTE_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-route-rs ctest -R CliSmokeTest --output-on-failure
+	@pkill -9 -x anna-kvs 2>/dev/null; pkill -9 -x anna-route-rs 2>/dev/null; pkill -9 -x anna-monitor 2>/dev/null; pkill -9 -x anna-route 2>/dev/null; sleep 1; true
+	@echo "=== Python client system tests with Rust route ==="
+	@cd clients/python && ANNA_ROUTE_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-route-rs python3 -m pytest tests/test_system.py -x
+	@pkill -9 -x anna-kvs 2>/dev/null; pkill -9 -x anna-route-rs 2>/dev/null; pkill -9 -x anna-monitor 2>/dev/null; pkill -9 -x anna-route 2>/dev/null; sleep 1; true
+	@echo "=== Go client system tests with Rust route ==="
+	@cd clients/go/tests && ANNA_ROUTE_BIN=$(shell pwd)/target/llvm-cov-target/debug/anna-route-rs go test -run TestSystem -count=1 -timeout 60s
 
 .PHONY: rust-monitor-tests
 rust-monitor-tests:
