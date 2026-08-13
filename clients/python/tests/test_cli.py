@@ -209,6 +209,39 @@ class TestExecuteCommand:
         assert result is True
         assert capsys.readouterr().out == ""
 
+    def test_members_with_mock_client(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.get_kvs_members.return_value = ["1.2.3.4/10.0.0.1"]
+        result = execute_command(client, None, "MEMBERS")
+        assert result is True
+        assert "1.2.3.4/10.0.0.1" in capsys.readouterr().out
+
+    def test_members_empty(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.get_kvs_members.return_value = []
+        result = execute_command(client, None, "MEMBERS")
+        assert result is True
+        assert "(no members found)" in capsys.readouterr().out
+
+    def test_topology_with_mock_client(self, capsys):
+        from unittest.mock import MagicMock
+        from anna.cli import execute_command
+        client = MagicMock()
+        client.get_kvs_members.return_value = ["1.2.3.4/10.0.0.1"]
+        topo = MagicMock()
+        topo.memory_thread_count = 2
+        topo.disk_thread_count = 1
+        client.get_cluster_topology.return_value = topo
+        result = execute_command(client, None, "TOPOLOGY")
+        assert result is True
+        out = capsys.readouterr().out
+        assert "Nodes: 1" in out
+        assert "Memory threads/node: 2" in out
+
     def test_unrecognized_command(self, capsys):
         from anna.cli import execute_command
         result = execute_command(None, None, "FOOBAR")

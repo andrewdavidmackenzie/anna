@@ -2133,7 +2133,23 @@ impl KVSClient {
     }
 
     /// Query routing for a key and return all responsible server addresses.
+    /// Uses the hash ring if direct routing is enabled.
     pub async fn get_key_addresses(&mut self, key: &str) -> Vec<Address> {
+        #[cfg(feature = "direct-routing")]
+        if let Some(ref dr) = self.direct_ring {
+            let servers = dr.global_ring.find_responsible(key, 1, true);
+            return servers
+                .iter()
+                .map(|st| {
+                    let tids = dr.local_ring.find_responsible_local(key, 1);
+                    let tid = tids.first().copied().unwrap_or(0);
+                    let port =
+                        tid + anna_server_common::ports::KEY_REQUEST_PORT + dr.base_offset_val;
+                    format!("tcp://{}:{}", st.public_ip(), port)
+                })
+                .collect();
+        }
+
         self.key_address_cache.remove(key);
         self.query_routing(key).await
     }
@@ -2173,6 +2189,12 @@ impl KVSClient {
     /// KVS membership data. When enabled, the client routes directly
     /// to KVS nodes without querying the routing tier.
     ///
+    /// Check if direct routing (hash ring) is enabled.
+    #[cfg(feature = "direct-routing")]
+    pub fn has_direct_routing(&self) -> bool {
+        self.direct_ring.is_some()
+    }
+
     /// Requires the `direct-routing` feature. Call this after the
     /// cluster has stabilized (KVS needs time to publish membership).
     #[cfg(feature = "direct-routing")]
@@ -3773,5 +3795,54 @@ mod tests {
         client.push_mock_response(false, Some(make_counter_response("cnt", 42)));
         let val = client.get_counter("cnt").await.expect("get_counter failed");
         assert_eq!(val, 42);
+    }
+
+    #[cfg(feature = "direct-routing")]
+    #[tokio::test]
+    async fn has_direct_routing_false_by_default() {
+        let client = mock_client(240);
+        assert!(!client.has_direct_routing());
+    }
+
+    #[cfg(feature = "direct-routing")]
+    #[tokio::test]
+    async fn get_key_addresses_uses_hash_ring() {
+        use anna_server_common::hash_ring::{ConsistentHashRing, DEFAULT_VIRTUAL_THREAD_NUM};
+
+        let mut client = mock_client(241);
+
+        // Build a direct ring with one node.
+        let mut global = ConsistentHashRing::new();
+        global.insert(
+            "1.2.3.4",
+            "10.0.0.1",
+            0,
+            0,
+            DEFAULT_VIRTUAL_THREAD_NUM,
+            true,
+        );
+        let mut local = ConsistentHashRing::new();
+        local.insert(
+            "1.2.3.4",
+            "10.0.0.1",
+            0,
+            0,
+            DEFAULT_VIRTUAL_THREAD_NUM,
+            false,
+        );
+
+        client.direct_ring = Some(DirectRouting {
+            global_ring: global,
+            local_ring: local,
+            memory_thread_count: 1,
+            base_offset_val: 0,
+        });
+
+        assert!(client.has_direct_routing());
+
+        let addrs = client.get_key_addresses("test_key").await;
+        assert!(!addrs.is_empty());
+        // Should resolve to the single node.
+        assert!(addrs[0].contains("1.2.3.4"));
     }
 }

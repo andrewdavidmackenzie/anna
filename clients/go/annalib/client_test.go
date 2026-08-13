@@ -2206,6 +2206,37 @@ func TestGetClusterTopologyWithMock(t *testing.T) {
 	}
 }
 
+func TestGetKvsMembersWithMock(t *testing.T) {
+	stringSet := &sharedpb.StringSet{Keys: []string{"1.2.3.4/10.0.0.1"}}
+	setBytes, _ := proto.Marshal(stringSet)
+	lww := &kvspb.LWWValue{Timestamp: 100, Value: setBytes}
+	lwwBytes, _ := proto.Marshal(lww)
+	response := &kvspb.KeyResponse{
+		Tuples: []*kvspb.KeyTuple{{Key: "ANNA_METADATA|kvs_members", Error: kvspb.AnnaError_NO_ERROR, Payload: lwwBytes}},
+	}
+	respBytes, _ := proto.Marshal(response)
+
+	routingResp := &kvspb.KeyAddressResponse{
+		Error:     kvspb.AnnaError_NO_ERROR,
+		Addresses: []*kvspb.KeyAddressResponse_KeyAddress{{Key: "ANNA_METADATA|kvs_members", Ips: []string{"tcp://10.0.0.1:6800"}}},
+	}
+	routingBytes, _ := proto.Marshal(routingResp)
+
+	tp := &mockTransport{recvData: map[bool][]byte{true: routingBytes, false: respBytes}}
+	client := newTestClient(tp)
+
+	result, err := client.GetKvsMembers()
+	if err != nil {
+		t.Fatalf("GetKvsMembers failed: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 member, got %d", len(result))
+	}
+	if result[0] != "1.2.3.4/10.0.0.1" {
+		t.Errorf("unexpected member: %v", result)
+	}
+}
+
 func TestGetMonitoringIPsWithMock(t *testing.T) {
 	stringSet := &sharedpb.StringSet{Keys: []string{"10.0.0.1", "10.0.0.2"}}
 	setBytes, _ := proto.Marshal(stringSet)

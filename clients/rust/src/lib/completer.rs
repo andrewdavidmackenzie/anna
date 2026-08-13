@@ -23,6 +23,11 @@ pub const ANNA_COMMANDS: &[&str] = &[
     "EXPIRE",
     "SCAN",
     "SUBSCRIBE",
+    "MEMBERS",
+    "TOPOLOGY",
+    "KEYSLOT",
+    "ROUTE",
+    "DISTRIBUTION",
     "BENCH",
     "START",
     "STOP",
@@ -234,6 +239,11 @@ mod tests {
             "DECR",
             "EXPIRE",
             "SUBSCRIBE",
+            "MEMBERS",
+            "TOPOLOGY",
+            "KEYSLOT",
+            "ROUTE",
+            "DISTRIBUTION",
         ];
         for cmd in &expected {
             assert!(

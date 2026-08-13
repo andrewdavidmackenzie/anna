@@ -239,6 +239,11 @@ unsigned get_timeout(KvsClient* client);
 // Returns a default-constructed ClusterTopology if the key does not exist.
 ClusterTopology get_cluster_topology(KvsClientInterface* client);
 
+// Retrieve KVS member node IPs from the metadata key
+//   ANNA_METADATA|kvs_members
+// Returns a list of "public_ip/private_ip" strings.
+vector<string> get_kvs_members(KvsClientInterface* client);
+
 // Retrieve monitoring node IP addresses from the metadata key
 //   ANNA_METADATA|monitoring_ips
 // and decode the StringSet protobuf.

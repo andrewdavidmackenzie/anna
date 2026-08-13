@@ -1414,6 +1414,20 @@ func (c *KVSClient) GetClusterTopology() (*metadatapb.ClusterTopology, error) {
 // GetMonitoringIPs retrieves monitoring node IP addresses from the metadata
 // key ANNA_METADATA|monitoring_ips and decodes the StringSet protobuf.
 // Returns an empty slice if the key does not exist.
+// GetKvsMembers retrieves KVS member node IPs from the metadata key
+// ANNA_METADATA|kvs_members. Returns a list of "public_ip/private_ip" strings.
+func (c *KVSClient) GetKvsMembers() ([]string, error) {
+	bytes, err := c.GetBytes("ANNA_METADATA|kvs_members")
+	if err != nil {
+		return []string{}, nil
+	}
+	var stringSet sharedpb.StringSet
+	if err := proto.Unmarshal(bytes, &stringSet); err != nil {
+		return nil, &KVSError{Message: fmt.Sprintf("failed to decode KVS members: %v", err)}
+	}
+	return stringSet.Keys, nil
+}
+
 func (c *KVSClient) GetMonitoringIPs() ([]string, error) {
 	bytes, err := c.GetBytes("ANNA_METADATA|monitoring_ips")
 	if err != nil {
