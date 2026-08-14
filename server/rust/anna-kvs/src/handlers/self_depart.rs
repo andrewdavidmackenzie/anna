@@ -13,7 +13,7 @@ use crate::handlers::utils::build_gossip_messages;
 /// Handle self-departure: gossip all data out and notify the cluster.
 ///
 /// `depart_done_addr` is the monitoring address to send the "done" message to.
-pub(crate) fn handle(ctx: &mut KvsContext, depart_done_addr: &str) -> Vec<OutgoingMessage> {
+pub fn handle(ctx: &mut KvsContext, depart_done_addr: &str) -> Vec<OutgoingMessage> {
     log::info!("This node is departing.");
 
     // Remove self from the hash ring.
@@ -124,7 +124,7 @@ mod tests {
 
     #[test]
     fn notifies_routing_and_monitoring() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         ctx.routing_ips = vec!["10.0.0.5".into()];
         ctx.monitoring_ips = vec!["10.0.0.6".into()];
         let msgs = handle(&mut ctx, "tcp://monitor:6450");
@@ -137,7 +137,7 @@ mod tests {
 
     #[test]
     fn relays_to_worker_threads() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         ctx.thread_count = 3;
         let msgs = handle(&mut ctx, "tcp://monitor:6450");
 
@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn non_thread0_skips_notifications() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         ctx.thread_id = 1;
         ctx.routing_ips = vec!["10.0.0.5".into()];
         ctx.monitoring_ips = vec!["10.0.0.6".into()];
@@ -170,7 +170,7 @@ mod tests {
 
     #[test]
     fn gossips_stored_data() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         ctx.serializers
             .insert(LatticeType::Lww as i32, Box::new(LwwSerializer::new()));
 
@@ -234,7 +234,7 @@ mod tests {
 
     #[test]
     fn depart_done_message_format() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         let msgs = handle(&mut ctx, "tcp://monitor:6450");
         let done = msgs
             .iter()
@@ -247,7 +247,7 @@ mod tests {
 
     #[test]
     fn removes_self_from_ring() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         assert!(!ctx.global_hash_rings[&Tier::Memory].is_empty());
 
         let _ = handle(&mut ctx, "tcp://monitor:6450");
@@ -257,7 +257,7 @@ mod tests {
 
     #[test]
     fn sends_depart_done() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         let msgs = handle(&mut ctx, "tcp://monitor:6450");
 
         // Should include the depart-done message.

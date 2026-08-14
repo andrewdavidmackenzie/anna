@@ -11,7 +11,7 @@ use crate::context::KvsContext;
 ///
 /// Format: `StringSet` protobuf where `keys[0]` is the cache IP and
 /// `keys[1..]` are the keys that cache is watching.
-pub(crate) fn handle(ctx: &mut KvsContext, data: &[u8]) {
+pub fn handle(ctx: &mut KvsContext, data: &[u8]) {
     let msg = match StringSet::decode(data) {
         Ok(m) => m,
         Err(e) => {
@@ -53,7 +53,7 @@ mod tests {
 
     #[test]
     fn registers_cache_and_keys() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         let msg = StringSet {
             keys: vec!["tcp://10.0.0.5:6850".into(), "key_a".into(), "key_b".into()],
         };
@@ -66,7 +66,7 @@ mod tests {
 
     #[test]
     fn empty_message_ignored() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         let msg = StringSet { keys: vec![] };
         handle(&mut ctx, &msg.encode_to_vec());
         assert!(ctx.extant_caches.is_empty());

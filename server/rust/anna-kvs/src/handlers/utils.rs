@@ -15,7 +15,7 @@ use crate::storage::{Serializer, SerializerMap};
 
 /// Process a GET request for a key.
 /// Returns `(payload_bytes, error_code)`.
-pub(crate) fn process_get(key: &str, serializer: &dyn Serializer) -> (Vec<u8>, i32) {
+pub fn process_get(key: &str, serializer: &dyn Serializer) -> (Vec<u8>, i32) {
     let (data, err) = serializer.get(key);
     if err != 0 {
         (vec![], AnnaError::KeyDne as i32)
@@ -26,7 +26,7 @@ pub(crate) fn process_get(key: &str, serializer: &dyn Serializer) -> (Vec<u8>, i
 
 /// Process a PUT request for a key.
 /// Returns the serialized size on success.
-pub(crate) fn process_put(
+pub fn process_put(
     key: &str,
     lattice_type: LatticeType,
     payload: &[u8],
@@ -59,7 +59,7 @@ pub(crate) fn process_put(
 
 /// Build gossip KeyRequest messages from an address-keyset map.
 /// Returns a list of outgoing messages to send via ZMQ PUSH.
-pub(crate) fn build_gossip_messages(
+pub fn build_gossip_messages(
     addr_keyset_map: &AddressKeysetMap,
     serializers: &HashMap<i32, Box<dyn Serializer>>,
     stored_key_map: &HashMap<Key, KeyProperty>,
@@ -109,7 +109,7 @@ pub(crate) fn build_gossip_messages(
 
 /// Remove expired keys from the store.
 /// Returns the number of keys reaped.
-pub(crate) fn gc_reap_expired_keys(
+pub fn gc_reap_expired_keys(
     stored_key_map: &mut HashMap<Key, KeyProperty>,
     serializers: &mut SerializerMap,
 ) -> usize {
@@ -134,7 +134,7 @@ pub(crate) fn gc_reap_expired_keys(
 }
 
 /// Current epoch time in seconds.
-pub(crate) fn now_epoch_s() -> u32 {
+pub fn now_epoch_s() -> u32 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -144,7 +144,7 @@ pub(crate) fn now_epoch_s() -> u32 {
 /// Generate a monotonic timestamp combining wall-clock millis with a thread ID.
 /// Mirrors C++ `generate_timestamp` — dynamically scales the multiplier so
 /// that any thread ID fits without collision.
-pub(crate) fn generate_timestamp(tid: u32) -> u64 {
+pub fn generate_timestamp(tid: u32) -> u64 {
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()

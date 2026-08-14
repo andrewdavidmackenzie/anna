@@ -15,7 +15,7 @@ use crate::context::{AddressKeysetMap, KvsContext, OutgoingMessage};
 use crate::handlers::utils::build_gossip_messages;
 
 /// Handle a replication factor change message.
-pub(crate) fn handle(ctx: &mut KvsContext, data: &[u8]) -> Vec<OutgoingMessage> {
+pub fn handle(ctx: &mut KvsContext, data: &[u8]) -> Vec<OutgoingMessage> {
     log::info!("Received a replication factor change.");
 
     let mut outgoing = Vec::new();
@@ -177,7 +177,7 @@ mod tests {
     use anna_server_common::proto::kvs::LatticeType;
 
     fn ctx_with_stored_key(key: &str) -> KvsContext {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         ctx.serializers
             .insert(LatticeType::Lww as i32, Box::new(LwwSerializer::new()));
         // Store a key.
@@ -195,7 +195,7 @@ mod tests {
 
     #[test]
     fn thread0_relays_to_workers() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         ctx.thread_id = 0;
         ctx.thread_count = 3;
         let update = ReplicationFactorUpdate {
@@ -215,7 +215,7 @@ mod tests {
 
     #[test]
     fn decode_failure_returns_early() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         let msgs = handle(&mut ctx, b"garbage");
         // Only relay messages (if thread 0), no crash.
         assert!(msgs.is_empty() || msgs.iter().all(|(_, d)| d == b"garbage"));
@@ -286,7 +286,7 @@ mod tests {
 
     #[test]
     fn invalid_tier_ignored() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         let update = ReplicationFactorUpdate {
             updates: vec![ReplicationFactor {
                 key: "bad_tier_k".into(),
@@ -303,7 +303,7 @@ mod tests {
 
     #[test]
     fn local_replication_update() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         let update = ReplicationFactorUpdate {
             updates: vec![ReplicationFactor {
                 key: "local_k".into(),
@@ -323,7 +323,7 @@ mod tests {
 
     #[test]
     fn updates_replication_factor() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
 
         let update = ReplicationFactorUpdate {
             updates: vec![ReplicationFactor {

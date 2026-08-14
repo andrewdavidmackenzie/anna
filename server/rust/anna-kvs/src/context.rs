@@ -15,7 +15,7 @@ use crate::storage::SerializerMap;
 
 /// Pending client request waiting for replication factor resolution.
 #[derive(Debug, Clone)]
-pub(crate) struct PendingRequest {
+pub struct PendingRequest {
     pub r#type: i32,
     pub lattice_type: i32,
     pub payload: Vec<u8>,
@@ -26,20 +26,20 @@ pub(crate) struct PendingRequest {
 
 /// Pending gossip waiting for replication factor resolution.
 #[derive(Debug, Clone)]
-pub(crate) struct PendingGossip {
+pub struct PendingGossip {
     pub lattice_type: i32,
     pub payload: Vec<u8>,
     pub expiry_epoch_ms: u64,
 }
 
 /// Map from target address to set of keys to gossip to that address.
-pub(crate) type AddressKeysetMap = HashMap<Address, HashSet<Key>>;
+pub type AddressKeysetMap = HashMap<Address, HashSet<Key>>;
 
-/// Outgoing ZMQ message: (target_address, serialized_payload).
-pub(crate) type OutgoingMessage = (Address, Vec<u8>);
+/// Outgoing message: (target_address, serialized_payload).
+pub type OutgoingMessage = (Address, Vec<u8>);
 
 /// All mutable KVS state shared across handlers.
-pub(crate) struct KvsContext {
+pub struct KvsContext {
     // ── Identity ──
     pub thread_id: u32,
     pub public_ip: Address,
@@ -90,18 +90,18 @@ pub(crate) struct KvsContext {
     pub seed: u32,
 }
 
-#[cfg(test)]
-pub(crate) mod tests {
+/// Test support utilities — available to downstream crates for testing.
+pub mod test_support {
     use super::*;
     use anna_server_common::hash_ring::{ConsistentHashRing, DEFAULT_VIRTUAL_THREAD_NUM};
 
     /// Create a minimal KvsContext for testing with a single memory-tier node.
-    pub(crate) fn make_test_ctx() -> KvsContext {
+    pub fn make_test_ctx() -> KvsContext {
         make_test_ctx_with_node("1.1.1.1", "1.1.1.1")
     }
 
     /// Create a minimal KvsContext with a specific node in the ring.
-    pub(crate) fn make_test_ctx_with_node(pub_ip: &str, priv_ip: &str) -> KvsContext {
+    pub fn make_test_ctx_with_node(pub_ip: &str, priv_ip: &str) -> KvsContext {
         let mut global = HashMap::new();
         let mut local = HashMap::new();
 

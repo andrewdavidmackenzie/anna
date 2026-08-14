@@ -12,7 +12,7 @@ use crate::context::{KvsContext, OutgoingMessage};
 /// Format: `"{TIER}:{PUBLIC_IP}:{PRIVATE_IP}:{JOIN_COUNT}"`
 ///
 /// Thread 0 relays the departure to worker threads 1..N.
-pub(crate) fn handle(ctx: &mut KvsContext, serialized: &str) -> Vec<OutgoingMessage> {
+pub fn handle(ctx: &mut KvsContext, serialized: &str) -> Vec<OutgoingMessage> {
     let parts: Vec<&str> = serialized.split(':').collect();
     if parts.len() < 3 {
         log::warn!("node_depart: malformed message: {}", serialized);
@@ -69,7 +69,7 @@ mod tests {
 
     #[test]
     fn removes_node_from_ring() {
-        let mut ctx = crate::context::tests::make_test_ctx_with_node("1.2.3.4", "10.0.0.1");
+        let mut ctx = crate::context::test_support::make_test_ctx_with_node("1.2.3.4", "10.0.0.1");
         assert!(!ctx.global_hash_rings[&Tier::Memory].is_empty());
 
         let msg = "MEMORY:1.2.3.4:10.0.0.1:0";
@@ -80,7 +80,7 @@ mod tests {
 
     #[test]
     fn malformed_message_ignored() {
-        let mut ctx = crate::context::tests::make_test_ctx_with_node("1.2.3.4", "10.0.0.1");
+        let mut ctx = crate::context::test_support::make_test_ctx_with_node("1.2.3.4", "10.0.0.1");
         let msgs = handle(&mut ctx, "bad");
         assert!(msgs.is_empty());
         // Ring should be unchanged.

@@ -17,7 +17,7 @@ use crate::context::{KvsContext, OutgoingMessage, PendingRequest};
 use crate::handlers::utils::{now_epoch_s, process_get, process_put};
 
 /// Handle a user GET/PUT request.
-pub(crate) fn handle(ctx: &mut KvsContext, data: &[u8]) -> Vec<OutgoingMessage> {
+pub fn handle(ctx: &mut KvsContext, data: &[u8]) -> Vec<OutgoingMessage> {
     let request = match KeyRequest::decode(data) {
         Ok(r) => r,
         Err(e) => {
@@ -270,7 +270,7 @@ mod tests {
     use anna_server_common::proto::kvs::LwwValue;
 
     fn ctx_with_lww_and_key(key: &str, value: &[u8]) -> KvsContext {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         ctx.serializers
             .insert(LatticeType::Lww as i32, Box::new(LwwSerializer::new()));
 
@@ -349,7 +349,7 @@ mod tests {
 
     #[test]
     fn get_missing_key_returns_key_dne() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         ctx.serializers
             .insert(LatticeType::Lww as i32, Box::new(LwwSerializer::new()));
         let mut kr = KeyReplication::default();
@@ -366,7 +366,7 @@ mod tests {
 
     #[test]
     fn put_creates_key() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         ctx.serializers
             .insert(LatticeType::Lww as i32, Box::new(LwwSerializer::new()));
         let mut kr = KeyReplication::default();
@@ -384,7 +384,7 @@ mod tests {
 
     #[test]
     fn request_without_rep_factor_uses_defaults() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         ctx.serializers
             .insert(LatticeType::Lww as i32, Box::new(LwwSerializer::new()));
         // No replication factor — handler should init with defaults and process.
