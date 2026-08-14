@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ConsistencyType"],"struct":["CausalRequest","CausalResponse","CausalTuple","KeyVersionRequest","KeyVersionResponse"]};

@@ -1,0 +1,9 @@
+(function() {
+    const implementors = Object.fromEntries([["annalib",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.1/core/cmp/trait.Ord.html\" title=\"trait core::cmp::Ord\">Ord</a> for <a class=\"enum\" href=\"annalib/proto/causal/enum.ConsistencyType.html\" title=\"enum annalib::proto::causal::ConsistencyType\">ConsistencyType</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.1/core/cmp/trait.Ord.html\" title=\"trait core::cmp::Ord\">Ord</a> for <a class=\"enum\" href=\"annalib/proto/kvs/enum.AnnaError.html\" title=\"enum annalib::proto::kvs::AnnaError\">AnnaError</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.1/core/cmp/trait.Ord.html\" title=\"trait core::cmp::Ord\">Ord</a> for <a class=\"enum\" href=\"annalib/proto/kvs/enum.LatticeType.html\" title=\"enum annalib::proto::kvs::LatticeType\">LatticeType</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.1/core/cmp/trait.Ord.html\" title=\"trait core::cmp::Ord\">Ord</a> for <a class=\"enum\" href=\"annalib/proto/kvs/enum.RequestType.html\" title=\"enum annalib::proto::kvs::RequestType\">RequestType</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.1/core/cmp/trait.Ord.html\" title=\"trait core::cmp::Ord\">Ord</a> for <a class=\"enum\" href=\"annalib/proto/metadata/enum.Tier.html\" title=\"enum annalib::proto::metadata::Tier\">Tier</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.1/core/cmp/trait.Ord.html\" title=\"trait core::cmp::Ord\">Ord</a> for <a class=\"enum\" href=\"annalib/proto/metadata/scaling_alert/enum.Action.html\" title=\"enum annalib::proto::metadata::scaling_alert::Action\">Action</a>",0]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":59,"fragment_lengths":[1658]}

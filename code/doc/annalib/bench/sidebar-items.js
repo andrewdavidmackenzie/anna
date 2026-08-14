@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["bench_key","run_bench"],"struct":["BenchConfig","SimpleRng","WorkloadResult"],"trait":["BenchClient"]};
