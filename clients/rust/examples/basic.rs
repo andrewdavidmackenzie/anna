@@ -140,9 +140,9 @@ async fn main() {
     println!("\nDELETE greeting");
     client.delete("greeting").await.expect("DELETE failed");
 
-    // Verify deletion: GET should return KeyDoesNotExist error
+    // Verify deletion: GET should return a KEY_DNE error
     match client.get("greeting").await {
-        Err(annalib::Error::KeyDoesNotExist(_)) => println!("GET greeting = (deleted)"),
+        Err(e) if e.to_string().contains("KEY_DNE") => println!("GET greeting = (deleted)"),
         Ok(val) => println!("GET greeting = {} (unexpected)", val),
         Err(e) => println!("GET greeting error: {}", e),
     }
