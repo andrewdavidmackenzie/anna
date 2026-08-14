@@ -296,17 +296,21 @@ ifeq ($(MDBOOK),)
 else ifeq ($(LYCHEE),)
 	@echo "Skipping docs: lychee not found (install with 'cargo binstall lychee')"
 else
-	@echo "Generating docs with cargo doc"
-	@cargo doc --quiet --no-deps --target-dir=target/html/code 2>&1 > /dev/null
 	@echo "Generating book with mdbook"
 	@mdbook build > /dev/null 2>&1
+	@echo "Generating docs with cargo doc"
+	@cargo doc --quiet --no-deps --target-dir=target/html/code 2>&1 > /dev/null
+	@echo '<meta http-equiv="refresh" content="0;url=annalib/index.html">' > target/html/code/doc/index.html
 	@rm -f target/html/*.profraw target/html/client_log.txt target/html/log.txt target/html/log_0.txt target/html/*.info
-	@rm -f target/html/Makefile
+	@rm -f target/html/Makefile target/html/Dockerfile target/html/.dockerignore
 	@rm -f target/html/Cargo.toml target/html/Cargo.lock target/html/CMakeLists.txt
-	@rm -rf target/html/build target/html/conf
+	@rm -rf target/html/build target/html/conf target/html/CMakeFiles
 	@rm -rf target/html/src target/html/tests target/html/protobuf
 	@rm -rf target/html/cli target/html/clients target/html/server
 	@rm -rf target/html/coverage target/html/venv
+	@rm -rf target/html/target
+	@rm -rf target/html/.git target/html/.github target/html/.idea target/html/.claude
+	@rm -rf target/html/.opencode target/html/.coverage target/html/.anna_history
 	@echo "Checking links"
 	@lychee --offline --root-dir target/html 'target/html/**/*.html' 2>&1
 	@echo "Cleaned up extra files in docs folder"
