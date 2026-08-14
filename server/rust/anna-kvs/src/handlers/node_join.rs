@@ -13,7 +13,7 @@ use crate::context::{KvsContext, OutgoingMessage};
 /// Handle a node join message.
 ///
 /// Format: `"{TIER}:{PUBLIC_IP}:{PRIVATE_IP}:{JOIN_COUNT}"`
-pub(crate) fn handle(ctx: &mut KvsContext, serialized: &str) -> Vec<OutgoingMessage> {
+pub fn handle(ctx: &mut KvsContext, serialized: &str) -> Vec<OutgoingMessage> {
     let parts: Vec<&str> = serialized.split(':').collect();
     if parts.len() < 4 {
         log::warn!("node_join: malformed message: {}", serialized);
@@ -161,7 +161,7 @@ mod tests {
 
     #[test]
     fn inserts_new_node_into_ring() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         let initial_size = ctx.global_hash_rings[&Tier::Memory]
             .get_unique_servers()
             .len();
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn schedules_gossip_for_new_node() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
 
         // Add a key with replication factor.
         let mut kp = KeyProperty::default();
@@ -206,7 +206,7 @@ mod tests {
 
     #[test]
     fn malformed_message_ignored() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         let msgs = handle(&mut ctx, "bad");
         assert!(msgs.is_empty());
     }

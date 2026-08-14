@@ -22,7 +22,7 @@ fn get_cache_ip_from_metadata(key: &str) -> Option<&str> {
 }
 
 /// Handle a cache IP response — updates the bidirectional cache↔key mappings.
-pub(crate) fn handle(ctx: &mut KvsContext, data: &[u8]) {
+pub fn handle(ctx: &mut KvsContext, data: &[u8]) {
     let response = match KeyResponse::decode(data) {
         Ok(r) => r,
         Err(e) => {
@@ -103,7 +103,7 @@ mod tests {
 
     #[test]
     fn updates_cache_key_mappings() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         let data = make_cache_response("10.0.0.5", &["key_a", "key_b"]);
         handle(&mut ctx, &data);
 
@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn removes_stale_keys() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
 
         // Initial: cache has key_a and key_b.
         let data1 = make_cache_response("10.0.0.5", &["key_a", "key_b"]);

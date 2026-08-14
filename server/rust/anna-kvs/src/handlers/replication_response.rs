@@ -27,7 +27,7 @@ fn tier_from_i32(v: i32) -> Option<Tier> {
 
 /// Handle a replication factor response — update the replication map
 /// and drain any pending requests/gossip for the resolved key.
-pub(crate) fn handle(ctx: &mut KvsContext, data: &[u8]) -> Vec<OutgoingMessage> {
+pub fn handle(ctx: &mut KvsContext, data: &[u8]) -> Vec<OutgoingMessage> {
     let response = match KeyResponse::decode(data) {
         Ok(r) => r,
         Err(e) => {
@@ -283,14 +283,14 @@ mod tests {
 
     #[test]
     fn decode_failure_returns_empty() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         let msgs = handle(&mut ctx, b"garbage");
         assert!(msgs.is_empty());
     }
 
     #[test]
     fn empty_tuples_returns_empty() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         let response = KeyResponse::default();
         let msgs = handle(&mut ctx, &response.encode_to_vec());
         assert!(msgs.is_empty());
@@ -298,7 +298,7 @@ mod tests {
 
     #[test]
     fn bad_metadata_key_returns_empty() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         let response = KeyResponse {
             tuples: vec![KeyTuple {
                 key: "not_metadata".into(),
@@ -312,7 +312,7 @@ mod tests {
 
     #[test]
     fn wrong_thread_returns_empty() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         let response = KeyResponse {
             tuples: vec![KeyTuple {
                 key: "ANNA_METADATA|replication|wt_key".into(),
@@ -327,7 +327,7 @@ mod tests {
 
     #[test]
     fn unexpected_error_returns_empty() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         let response = KeyResponse {
             tuples: vec![KeyTuple {
                 key: "ANNA_METADATA|replication|err_key".into(),
@@ -342,7 +342,7 @@ mod tests {
 
     #[test]
     fn pending_get_returns_value() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         ctx.serializers
             .insert(LatticeType::Lww as i32, Box::new(LwwSerializer::new()));
 
@@ -384,7 +384,7 @@ mod tests {
 
     #[test]
     fn pending_not_responsible_sends_wrong_thread() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         // Add a second node and set replication=1 so we might not be responsible.
         ctx.global_hash_rings
             .get_mut(&Tier::Memory)
@@ -418,7 +418,7 @@ mod tests {
 
     #[test]
     fn pending_gossip_applied_when_responsible() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         ctx.serializers
             .insert(LatticeType::Lww as i32, Box::new(LwwSerializer::new()));
 
@@ -444,7 +444,7 @@ mod tests {
 
     #[test]
     fn updates_replication_map() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         let data = make_rep_response("my_key", 2);
         let _ = handle(&mut ctx, &data);
 
@@ -456,7 +456,7 @@ mod tests {
 
     #[test]
     fn drains_pending_requests() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         ctx.serializers
             .insert(LatticeType::Lww as i32, Box::new(LwwSerializer::new()));
 
@@ -488,7 +488,7 @@ mod tests {
 
     #[test]
     fn key_dne_uses_default_replication() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         ctx.tier_metadata.insert(
             Tier::Memory,
             anna_server_common::metadata::TierMetadata {

@@ -15,7 +15,7 @@ const MAX_SCAN_COUNT: u32 = 10000;
 ///
 /// Returns keys matching a prefix, starting from a numeric cursor position,
 /// up to `scan_count` entries. Metadata keys are excluded from results.
-pub(crate) fn handle(ctx: &KvsContext, data: &[u8]) -> Vec<OutgoingMessage> {
+pub fn handle(ctx: &KvsContext, data: &[u8]) -> Vec<OutgoingMessage> {
     let request = match KeyRequest::decode(data) {
         Ok(r) => r,
         Err(e) => {
@@ -106,7 +106,7 @@ mod tests {
     use anna_server_common::proto::kvs::LatticeType;
 
     fn make_scan_ctx() -> KvsContext {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         for i in 0..5 {
             let mut kp = KeyProperty::default();
             kp.set_size(10);

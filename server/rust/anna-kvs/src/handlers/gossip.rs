@@ -11,7 +11,7 @@ use crate::context::{KvsContext, OutgoingMessage, PendingGossip};
 use crate::handlers::utils::process_put;
 
 /// Handle incoming gossip — apply locally or forward to responsible threads.
-pub(crate) fn handle(ctx: &mut KvsContext, data: &[u8]) -> Vec<OutgoingMessage> {
+pub fn handle(ctx: &mut KvsContext, data: &[u8]) -> Vec<OutgoingMessage> {
     let gossip = match KeyRequest::decode(data) {
         Ok(r) => r,
         Err(e) => {
@@ -126,7 +126,7 @@ mod tests {
     use anna_server_common::proto::kvs::LwwValue;
 
     fn ctx_with_lww() -> KvsContext {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         ctx.serializers
             .insert(LatticeType::Lww as i32, Box::new(LwwSerializer::new()));
         ctx

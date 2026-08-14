@@ -2,10 +2,7 @@
 //!
 //! Usage: `anna-kvs-rs --config <config.yml>`
 
-mod context;
-mod handlers;
 mod kvs_server;
-mod storage;
 
 use anna_server_common::config::Config;
 use anna_server_common::metadata::Tier;

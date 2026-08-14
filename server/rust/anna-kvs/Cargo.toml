@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 description = "Anna KVS server (Rust port)"
 
+[lib]
+name = "anna_kvs"
+path = "src/lib.rs"
+
 [[bin]]
 name = "anna-kvs-rs"
 path = "src/main.rs"

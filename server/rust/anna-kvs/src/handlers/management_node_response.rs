@@ -12,7 +12,7 @@ use prost::Message;
 use crate::context::{KvsContext, OutgoingMessage};
 
 /// Handle a management node response containing the list of cache nodes.
-pub(crate) fn handle(ctx: &mut KvsContext, data: &[u8]) -> Vec<OutgoingMessage> {
+pub fn handle(ctx: &mut KvsContext, data: &[u8]) -> Vec<OutgoingMessage> {
     let func_nodes = match StringSet::decode(data) {
         Ok(s) => s,
         Err(e) => {
@@ -77,7 +77,7 @@ mod tests {
 
     #[test]
     fn updates_extant_caches() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         ctx.extant_caches.insert("old_cache".into());
 
         let msg = StringSet {
@@ -91,7 +91,7 @@ mod tests {
 
     #[test]
     fn cleans_up_deleted_cache_mappings() {
-        let mut ctx = crate::context::tests::make_test_ctx();
+        let mut ctx = crate::context::test_support::make_test_ctx();
         ctx.extant_caches.insert("dead_cache".into());
         ctx.cache_ip_to_keys
             .entry("dead_cache".into())
