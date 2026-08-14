@@ -34,6 +34,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "anna-embedded"
+version = "0.1.0"
+dependencies = [
+ "anna-kvs",
+ "anna-server-common",
+ "env_logger",
+ "log",
+ "prost",
+]
+
+[[package]]
 name = "anna-hashring"
 version = "0.1.0"
 dependencies = [
