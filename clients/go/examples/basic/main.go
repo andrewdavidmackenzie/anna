@@ -85,12 +85,13 @@ func waitForRouting(timeout time.Duration) error {
 	}
 }
 
-func main() {
+// run contains the example logic. Returning an error lets deferred cleanup
+// (server stop, temp dir removal) run before main reports the failure.
+func run() error {
 	// Create a temporary config
 	workDir, err := os.MkdirTemp("", "anna_example_")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create temp dir: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
 	defer os.RemoveAll(workDir)
 
@@ -100,16 +101,14 @@ func main() {
 	configPath := filepath.Join(workDir, "config.yml")
 	config := fmt.Sprintf(configTemplate, diskDir)
 	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to write config: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to write config: %w", err)
 	}
 
 	// Start the anna server
 	fmt.Println("Starting anna server...")
 	count, err := annalib.Start(configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to start: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to start: %w", err)
 	}
 	fmt.Printf("  Started %d processes\n", count)
 
@@ -120,77 +119,79 @@ func main() {
 	}()
 
 	if err := waitForRouting(30 * time.Second); err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Connect a client
 	clientConfig := annalib.DefaultClientConfig()
 	client, err := annalib.NewKVSClient(clientConfig, 50)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create client: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to create client: %w", err)
 	}
 	defer client.Close()
 
 	// PUT a value
 	fmt.Println("\nPUT greeting = hello")
 	if err := client.Put("greeting", "hello"); err != nil {
-		fmt.Fprintf(os.Stderr, "PUT failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("PUT failed: %w", err)
 	}
 
 	// GET it back
 	val, err := client.Get("greeting")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "GET failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("GET failed: %w", err)
 	}
 	fmt.Printf("GET greeting = %s\n", val)
 
 	// Overwrite the value
 	fmt.Println("\nPUT greeting = hello world")
 	if err := client.Put("greeting", "hello world"); err != nil {
-		fmt.Fprintf(os.Stderr, "PUT overwrite failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("PUT overwrite failed: %w", err)
 	}
 
 	val, err = client.Get("greeting")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "GET failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("GET failed: %w", err)
 	}
 	fmt.Printf("GET greeting = %s\n", val)
 
 	// PUT a second key
 	fmt.Println("\nPUT count = 42")
 	if err := client.Put("count", "42"); err != nil {
-		fmt.Fprintf(os.Stderr, "PUT count failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("PUT count failed: %w", err)
 	}
 
 	// DELETE the first key
 	fmt.Println("\nDELETE greeting")
 	if err := client.Delete("greeting"); err != nil {
-		fmt.Fprintf(os.Stderr, "DELETE failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("DELETE failed: %w", err)
 	}
 
-	// Verify deletion
-	_, err = client.Get("greeting")
+	// Verify deletion: Delete writes an empty LWW value, so Get succeeds
+	// with an empty string rather than returning an error.
+	got, err := client.Get("greeting")
 	if err != nil {
+		fmt.Printf("GET greeting error: %v\n", err)
+	} else if got == "" {
 		fmt.Println("GET greeting = (deleted)")
 	} else {
-		fmt.Printf("GET greeting = %s (unexpected)\n", val)
+		fmt.Printf("GET greeting = %s (unexpected)\n", got)
 	}
 
 	// GET the remaining key
 	val, err = client.Get("count")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "GET count failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("GET count failed: %w", err)
 	}
 	fmt.Printf("GET count = %s\n", val)
 
 	fmt.Println("\nDone!")
+	return nil
+}
+
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 }

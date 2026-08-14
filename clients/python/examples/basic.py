@@ -15,9 +15,7 @@ Running:
 """
 
 import os
-import signal
 import socket
-import subprocess
 import sys
 import tempfile
 import time
@@ -118,7 +116,8 @@ def main():
         ts = time.time_ns()
         print("\nPUT greeting = hello")
         result = client.put("greeting", LWWPairLattice(ts, b"hello"))
-        assert result["greeting"] is True, "PUT failed"
+        if result.get("greeting") is not True:
+            raise RuntimeError("PUT failed")
 
         # GET it back
         got = client.get("greeting")

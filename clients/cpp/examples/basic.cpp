@@ -11,7 +11,7 @@
 // Building and running:
 //   This example is built automatically as part of `make client-cpp`.
 //   Run it from the repository root:
-//     ./clients/cpp/build/examples/basic
+//     ./clients/cpp/build/examples/basic-example
 
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -132,6 +132,8 @@ int main() {
   auto result = annalib::put(client.get(), "greeting", "hello");
   if (!result.succeeded()) {
     std::cerr << "PUT failed" << std::endl;
+    annalib::stop();
+    return 1;
   }
 
   // GET it back

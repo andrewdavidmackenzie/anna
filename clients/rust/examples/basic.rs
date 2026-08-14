@@ -108,6 +108,19 @@ async fn main() {
         .expect("Failed to start anna server (are the binaries in PATH?)");
     println!("  Started {} processes", count);
 
+    // Ensure the server is stopped on exit (including panics)
+    struct StopGuard;
+    impl Drop for StopGuard {
+        fn drop(&mut self) {
+            println!("\nStopping anna server...");
+            match annalib::stop(&[]) {
+                Ok(n) => println!("  Stopped {} processes", n),
+                Err(e) => eprintln!("  Failed to stop: {}", e),
+            }
+        }
+    }
+    let _guard = StopGuard;
+
     wait_for_routing();
 
     // Connect a client
@@ -151,10 +164,6 @@ async fn main() {
     let val = client.get("count").await.expect("GET count failed");
     println!("GET count = {}", val);
 
-    // Stop the server
-    println!("\nStopping anna server...");
-    let stopped = annalib::stop(&[]).expect("Failed to stop anna server");
-    println!("  Stopped {} processes", stopped);
-
     println!("\nDone!");
+    // StopGuard::drop() will stop the server
 }
