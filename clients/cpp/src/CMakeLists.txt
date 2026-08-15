@@ -36,3 +36,8 @@ ADD_EXECUTABLE(anna-cli cli.cpp)
 TARGET_LINK_LIBRARIES(anna-cli anna-client-lib anna-client-zmq fmt::fmt ${ZeroMQ_LIBRARY} ${LIBRARY_DEPENDENCIES})
 
 SET(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/cli)
+
+# Example: basic put/get/delete with self-starting server.
+ADD_EXECUTABLE(basic-example ${CMAKE_CURRENT_SOURCE_DIR}/../examples/basic.cpp)
+TARGET_LINK_LIBRARIES(basic-example anna-client-lib anna-client-zmq fmt::fmt ${ZeroMQ_LIBRARY} ${LIBRARY_DEPENDENCIES})
+SET_TARGET_PROPERTIES(basic-example PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/examples)

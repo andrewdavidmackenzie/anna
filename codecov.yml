@@ -1,6 +1,7 @@
 ignore:
   - "**/tests/**"
   - "**/build/**"
+  - "**/examples/**"
   - "target/**"
   - "**/test_*.py"
   - "**/test_*.cpp"
