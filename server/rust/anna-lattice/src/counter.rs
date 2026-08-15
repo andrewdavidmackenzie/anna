@@ -25,10 +25,17 @@ impl PnCounter {
     }
 
     /// Compute the effective counter value.
+    ///
+    /// Uses saturating arithmetic to avoid overflow: the result is clamped
+    /// to `i64::MIN..=i64::MAX`.
     pub fn value(&self) -> i64 {
         let inc: u64 = self.increments.values().sum();
         let dec: u64 = self.decrements.values().sum();
-        inc as i64 - dec as i64
+        if inc >= dec {
+            (inc - dec).min(i64::MAX as u64) as i64
+        } else {
+            -((dec - inc).min(i64::MAX as u64) as i64)
+        }
     }
 }
 
@@ -119,5 +126,21 @@ mod tests {
         let mut a = PnCounter::new();
         a.increments.insert("n1".into(), 5);
         assert!(!a.merge(PnCounter::new()));
+    }
+
+    #[test]
+    fn value_saturates_on_large_values() {
+        let mut c = PnCounter::new();
+        c.increments.insert("n1".into(), u64::MAX);
+        // Should not panic or wrap around.
+        let v = c.value();
+        assert!(v > 0);
+    }
+
+    #[test]
+    fn value_negative() {
+        let mut c = PnCounter::new();
+        c.decrements.insert("n1".into(), 10);
+        assert_eq!(c.value(), -10);
     }
 }

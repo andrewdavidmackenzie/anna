@@ -3,8 +3,12 @@
 use crate::Lattice;
 
 /// A Last-Writer-Wins register. On merge, the entry with the strictly
-/// higher timestamp wins. Equal timestamps keep the existing value
-/// (unlike the C++ implementation which lets the incoming value win on ties).
+/// higher timestamp wins. Equal timestamps keep the existing value,
+/// providing a deterministic "keep existing" tie-breaking policy.
+///
+/// This matches the Rust server's serializer behavior. The C++ server
+/// uses `>=` (incoming wins on tie), which is a different but equally
+/// valid policy.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LwwRegister<T> {
     /// Monotonic timestamp (e.g., wall clock or logical clock).

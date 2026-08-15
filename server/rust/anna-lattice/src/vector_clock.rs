@@ -5,8 +5,30 @@ use std::collections::HashMap;
 
 /// A vector clock. Each entry maps a node ID to a logical clock value.
 /// Merge takes the per-node maximum.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+///
+/// Equality is **logical**: missing entries are treated as zero.
+/// `{n1: 2}` and `{n1: 2, n2: 0}` are considered equal.
+#[derive(Debug, Clone, Default)]
 pub struct VectorClock(pub HashMap<String, u32>);
+
+impl PartialEq for VectorClock {
+    fn eq(&self, other: &Self) -> bool {
+        // Missing entries treated as zero.
+        for (node, &val) in &self.0 {
+            if val != other.0.get(node).copied().unwrap_or(0) {
+                return false;
+            }
+        }
+        for (node, &val) in &other.0 {
+            if val != self.0.get(node).copied().unwrap_or(0) {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+impl Eq for VectorClock {}
 
 impl VectorClock {
     /// Create an empty vector clock.
@@ -114,6 +136,20 @@ mod tests {
         let mut a = vc(&[("n1", 3)]);
         let b = a.clone();
         assert!(!a.merge(b));
+    }
+
+    #[test]
+    fn logical_equality_with_explicit_zeros() {
+        let a = vc(&[("n1", 1)]);
+        let b = vc(&[("n1", 1), ("n2", 0)]);
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn logical_inequality() {
+        let a = vc(&[("n1", 1)]);
+        let b = vc(&[("n1", 2)]);
+        assert_ne!(a, b);
     }
 
     #[test]

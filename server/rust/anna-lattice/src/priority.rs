@@ -3,7 +3,8 @@
 use crate::Lattice;
 
 /// A priority register. On merge, the entry with the strictly lower
-/// priority wins. Equal priorities keep the existing value.
+/// priority wins. Equal priorities keep the existing value, providing
+/// a deterministic "keep existing" tie-breaking policy.
 ///
 /// Uses `f64` for priority. `NaN` is treated as infinity (never wins).
 #[derive(Debug, Clone, PartialEq)]

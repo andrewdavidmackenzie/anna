@@ -70,9 +70,11 @@ fn or_set_from_proto(proto: &OrSetValue) -> OrSet<Vec<u8>> {
 }
 
 fn or_set_to_proto(lattice: &OrSet<Vec<u8>>) -> OrSetValue {
+    let mut tombstones: Vec<String> = lattice.tombstones.iter().cloned().collect();
+    tombstones.sort();
     OrSetValue {
         elements: lattice.elements.clone(),
-        tombstones: lattice.tombstones.iter().cloned().collect(),
+        tombstones,
     }
 }
 
@@ -107,12 +109,13 @@ fn multi_causal_from_proto(proto: &MultiKeyCausalValue) -> MultiCausalRegister<V
 }
 
 fn multi_causal_to_proto(lattice: &MultiCausalRegister<Vec<u8>>) -> MultiKeyCausalValue {
-    let deps = lattice
-        .dependencies
-        .iter()
-        .map(|(key, vc)| KeyVersion {
+    let mut dep_keys: Vec<&String> = lattice.dependencies.keys().collect();
+    dep_keys.sort();
+    let deps = dep_keys
+        .into_iter()
+        .map(|key| KeyVersion {
             key: key.clone(),
-            vector_clock: vc.0.clone(),
+            vector_clock: lattice.dependencies[key].0.clone(),
         })
         .collect();
     MultiKeyCausalValue {
