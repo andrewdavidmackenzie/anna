@@ -13,7 +13,7 @@ name = "anna-kvs-rs"
 path = "src/main.rs"
 
 [dependencies]
-anna-lattice = { path = "../anna-lattice" }
+anna-lattice = { path = "../anna-lattice", features = ["proto"] }
 anna-server-common = { path = "../server-common" }
 clap = { version = "4", features = ["derive"] }
 log = "0.4"
