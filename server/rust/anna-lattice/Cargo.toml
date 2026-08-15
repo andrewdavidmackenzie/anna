@@ -1,0 +1,12 @@
+[package]
+name = "anna-lattice"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.93"
+description = "Lattice and CRDT types for the anna key-value store"
+license = "Apache-2.0"
+repository = "https://github.com/andrewdavidmackenzie/anna/"
+
+[dependencies]
+
+[dev-dependencies]

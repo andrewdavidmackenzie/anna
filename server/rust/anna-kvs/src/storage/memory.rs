@@ -1,38 +1,125 @@
 //! Memory-tier serializers for all lattice types.
 //!
 //! Each serializer stores values as raw protobuf bytes in a HashMap.
-//! On PUT, it decodes, merges (CRDT semantics), and re-encodes.
+//! On PUT, it decodes protobuf, converts to a lattice type from
+//! `anna_lattice`, merges, converts back, and stores.
 
 use super::{GetResult, Serializer};
+use anna_lattice::{
+    CausalRegister, GSet, Lattice, LwwRegister, MultiCausalRegister, OrSet, PnCounter,
+    PriorityRegister, VectorClock,
+};
 use anna_server_common::proto::kvs::*;
+use anna_server_common::proto::shared::KeyVersion;
 use prost::Message;
 use std::collections::HashMap;
 
-/// Check if vector clock `a` dominates `b` (a >= b for all entries).
-fn vc_dominates(a: &HashMap<String, u32>, b: &HashMap<String, u32>) -> bool {
-    // a dominates b if every entry in b has a <= entry in a,
-    // and a has at least one entry strictly greater.
-    let mut dominated = true;
-    let mut strictly_greater = false;
-    for (node, &b_val) in b {
-        let a_val = a.get(node).copied().unwrap_or(0);
-        if a_val < b_val {
-            dominated = false;
-            break;
-        }
-        if a_val > b_val {
-            strictly_greater = true;
-        }
+// ── Protobuf <-> Lattice conversions ────────────────────────────────
+
+fn lww_from_proto(proto: &LwwValue) -> LwwRegister<Vec<u8>> {
+    LwwRegister::new(proto.timestamp, proto.value.clone())
+}
+
+fn lww_to_proto(lattice: &LwwRegister<Vec<u8>>) -> LwwValue {
+    LwwValue {
+        timestamp: lattice.timestamp,
+        value: lattice.value.clone(),
     }
-    // Also check entries in a that aren't in b.
-    if dominated {
-        for (node, &a_val) in a {
-            if !b.contains_key(node) && a_val > 0 {
-                strictly_greater = true;
-            }
-        }
+}
+
+fn set_from_proto(proto: &SetValue) -> GSet<Vec<u8>> {
+    proto.values.iter().cloned().collect()
+}
+
+fn set_to_proto(lattice: &GSet<Vec<u8>>) -> SetValue {
+    SetValue {
+        values: lattice.iter().cloned().collect(),
     }
-    dominated && strictly_greater
+}
+
+fn priority_from_proto(proto: &PriorityValue) -> PriorityRegister<Vec<u8>> {
+    PriorityRegister::new(proto.priority, proto.value.clone())
+}
+
+fn priority_to_proto(lattice: &PriorityRegister<Vec<u8>>) -> PriorityValue {
+    PriorityValue {
+        priority: lattice.priority,
+        value: lattice.value.clone(),
+    }
+}
+
+fn counter_from_proto(proto: &CounterValue) -> PnCounter {
+    PnCounter {
+        increments: proto.increments.clone(),
+        decrements: proto.decrements.clone(),
+    }
+}
+
+fn counter_to_proto(lattice: &PnCounter) -> CounterValue {
+    CounterValue {
+        increments: lattice.increments.clone(),
+        decrements: lattice.decrements.clone(),
+    }
+}
+
+fn or_set_from_proto(proto: &OrSetValue) -> OrSet<Vec<u8>> {
+    OrSet {
+        elements: proto.elements.clone(),
+        tombstones: proto.tombstones.iter().cloned().collect(),
+    }
+}
+
+fn or_set_to_proto(lattice: &OrSet<Vec<u8>>) -> OrSetValue {
+    OrSetValue {
+        elements: lattice.elements.clone(),
+        tombstones: lattice.tombstones.iter().cloned().collect(),
+    }
+}
+
+fn vc_from_proto(map: &HashMap<String, u32>) -> VectorClock {
+    VectorClock(map.clone())
+}
+
+fn causal_from_proto(proto: &SingleKeyCausalValue) -> CausalRegister<Vec<u8>> {
+    CausalRegister {
+        vector_clock: vc_from_proto(&proto.vector_clock),
+        values: proto.values.clone(),
+    }
+}
+
+fn causal_to_proto(lattice: &CausalRegister<Vec<u8>>) -> SingleKeyCausalValue {
+    SingleKeyCausalValue {
+        vector_clock: lattice.vector_clock.0.clone(),
+        values: lattice.values.clone(),
+    }
+}
+
+fn multi_causal_from_proto(proto: &MultiKeyCausalValue) -> MultiCausalRegister<Vec<u8>> {
+    let mut deps = HashMap::new();
+    for kv in &proto.dependencies {
+        deps.insert(kv.key.clone(), vc_from_proto(&kv.vector_clock));
+    }
+    MultiCausalRegister {
+        vector_clock: vc_from_proto(&proto.vector_clock),
+        dependencies: deps,
+        values: proto.values.clone(),
+    }
+}
+
+fn multi_causal_to_proto(lattice: &MultiCausalRegister<Vec<u8>>) -> MultiKeyCausalValue {
+    let deps = lattice
+        .dependencies
+        .iter()
+        .map(|(key, vc)| KeyVersion {
+            key: key.clone(),
+            vector_clock: vc.0.clone(),
+        })
+        .collect();
+    MultiKeyCausalValue {
+        vector_clock: lattice.vector_clock.0.clone(),
+        dependencies: deps,
+        values: lattice.values.clone(),
+    }
 }
 
 // ── LWW (Last-Writer-Wins) ─────────────────────────────────────────
@@ -51,17 +138,25 @@ impl LwwSerializer {
 
 impl Serializer for LwwSerializer {
     fn put(&mut self, key: &str, payload: &[u8]) -> usize {
-        let new = LwwValue::decode(payload).unwrap_or_default();
+        let new_proto = LwwValue::decode(payload).unwrap_or_default();
+        let new_lattice = lww_from_proto(&new_proto);
+
         if let Some(existing) = self.store.get(key) {
-            let old = LwwValue::decode(existing.as_slice()).unwrap_or_default();
-            if new.timestamp <= old.timestamp {
+            let old_proto = LwwValue::decode(existing.as_slice()).unwrap_or_default();
+            let mut merged = lww_from_proto(&old_proto);
+            if !merged.merge(new_lattice) {
                 return existing.len(); // Old value wins.
             }
+            let encoded = lww_to_proto(&merged).encode_to_vec();
+            let size = encoded.len();
+            self.store.insert(key.to_string(), encoded);
+            size
+        } else {
+            let encoded = new_proto.encode_to_vec();
+            let size = encoded.len();
+            self.store.insert(key.to_string(), encoded);
+            size
         }
-        let encoded = new.encode_to_vec();
-        let size = encoded.len();
-        self.store.insert(key.to_string(), encoded);
-        size
     }
 
     fn get(&self, key: &str) -> GetResult {
@@ -100,23 +195,19 @@ impl SetSerializer {
 
 impl Serializer for SetSerializer {
     fn put(&mut self, key: &str, payload: &[u8]) -> usize {
-        let new = SetValue::decode(payload).unwrap_or_default();
-        let mut merged = if let Some(existing) = self.store.get(key) {
-            let mut old = SetValue::decode(existing.as_slice()).unwrap_or_default();
-            // Union merge: add all new values to old.
-            for v in new.values {
-                if !old.values.contains(&v) {
-                    old.values.push(v);
-                }
-            }
-            old
+        let new_proto = SetValue::decode(payload).unwrap_or_default();
+        let new_lattice = set_from_proto(&new_proto);
+
+        let merged = if let Some(existing) = self.store.get(key) {
+            let old_proto = SetValue::decode(existing.as_slice()).unwrap_or_default();
+            let mut old_lattice = set_from_proto(&old_proto);
+            old_lattice.merge(new_lattice);
+            old_lattice
         } else {
-            new
+            new_lattice
         };
-        // Sort values for deterministic ordering (required for OrderedSet
-        // lattice type which shares this serializer).
-        merged.values.sort();
-        let encoded = merged.encode_to_vec();
+
+        let encoded = set_to_proto(&merged).encode_to_vec();
         let size = encoded.len();
         self.store.insert(key.to_string(), encoded);
         size
@@ -150,28 +241,25 @@ impl PrioritySerializer {
 
 impl Serializer for PrioritySerializer {
     fn put(&mut self, key: &str, payload: &[u8]) -> usize {
-        let new = PriorityValue::decode(payload).unwrap_or_default();
+        let new_proto = PriorityValue::decode(payload).unwrap_or_default();
+        let new_lattice = priority_from_proto(&new_proto);
+
         if let Some(existing) = self.store.get(key) {
-            let old = PriorityValue::decode(existing.as_slice()).unwrap_or_default();
-            // Lower priority wins. NaN is treated as infinite (never wins).
-            let new_pri = if new.priority.is_nan() {
-                f64::INFINITY
-            } else {
-                new.priority
-            };
-            let old_pri = if old.priority.is_nan() {
-                f64::INFINITY
-            } else {
-                old.priority
-            };
-            if new_pri >= old_pri {
+            let old_proto = PriorityValue::decode(existing.as_slice()).unwrap_or_default();
+            let mut merged = priority_from_proto(&old_proto);
+            if !merged.merge(new_lattice) {
                 return existing.len();
             }
+            let encoded = priority_to_proto(&merged).encode_to_vec();
+            let size = encoded.len();
+            self.store.insert(key.to_string(), encoded);
+            size
+        } else {
+            let encoded = new_proto.encode_to_vec();
+            let size = encoded.len();
+            self.store.insert(key.to_string(), encoded);
+            size
         }
-        let encoded = new.encode_to_vec();
-        let size = encoded.len();
-        self.store.insert(key.to_string(), encoded);
-        size
     }
 
     fn get(&self, key: &str) -> GetResult {
@@ -202,23 +290,19 @@ impl CounterSerializer {
 
 impl Serializer for CounterSerializer {
     fn put(&mut self, key: &str, payload: &[u8]) -> usize {
-        let new = CounterValue::decode(payload).unwrap_or_default();
+        let new_proto = CounterValue::decode(payload).unwrap_or_default();
+        let new_lattice = counter_from_proto(&new_proto);
+
         let merged = if let Some(existing) = self.store.get(key) {
-            let mut old = CounterValue::decode(existing.as_slice()).unwrap_or_default();
-            // Merge: per-node max of increments and decrements.
-            for (node, &val) in &new.increments {
-                let entry = old.increments.entry(node.clone()).or_insert(0);
-                *entry = (*entry).max(val);
-            }
-            for (node, &val) in &new.decrements {
-                let entry = old.decrements.entry(node.clone()).or_insert(0);
-                *entry = (*entry).max(val);
-            }
-            old
+            let old_proto = CounterValue::decode(existing.as_slice()).unwrap_or_default();
+            let mut old_lattice = counter_from_proto(&old_proto);
+            old_lattice.merge(new_lattice);
+            old_lattice
         } else {
-            new
+            new_lattice
         };
-        let encoded = merged.encode_to_vec();
+
+        let encoded = counter_to_proto(&merged).encode_to_vec();
         let size = encoded.len();
         self.store.insert(key.to_string(), encoded);
         size
@@ -252,27 +336,19 @@ impl OrSetSerializer {
 
 impl Serializer for OrSetSerializer {
     fn put(&mut self, key: &str, payload: &[u8]) -> usize {
-        let new = OrSetValue::decode(payload).unwrap_or_default();
+        let new_proto = OrSetValue::decode(payload).unwrap_or_default();
+        let new_lattice = or_set_from_proto(&new_proto);
+
         let merged = if let Some(existing) = self.store.get(key) {
-            let mut old = OrSetValue::decode(existing.as_slice()).unwrap_or_default();
-            // Union of elements and tombstones.
-            for (tag, val) in &new.elements {
-                old.elements
-                    .entry(tag.clone())
-                    .or_insert_with(|| val.clone());
-            }
-            let mut tombstone_set: std::collections::HashSet<String> =
-                old.tombstones.iter().cloned().collect();
-            for t in &new.tombstones {
-                if tombstone_set.insert(t.clone()) {
-                    old.tombstones.push(t.clone());
-                }
-            }
-            old
+            let old_proto = OrSetValue::decode(existing.as_slice()).unwrap_or_default();
+            let mut old_lattice = or_set_from_proto(&old_proto);
+            old_lattice.merge(new_lattice);
+            old_lattice
         } else {
-            new
+            new_lattice
         };
-        let encoded = merged.encode_to_vec();
+
+        let encoded = or_set_to_proto(&merged).encode_to_vec();
         let size = encoded.len();
         self.store.insert(key.to_string(), encoded);
         size
@@ -306,32 +382,19 @@ impl SingleCausalSerializer {
 
 impl Serializer for SingleCausalSerializer {
     fn put(&mut self, key: &str, payload: &[u8]) -> usize {
-        let new = SingleKeyCausalValue::decode(payload).unwrap_or_default();
+        let new_proto = SingleKeyCausalValue::decode(payload).unwrap_or_default();
+        let new_lattice = causal_from_proto(&new_proto);
+
         if let Some(existing) = self.store.get(key) {
-            let mut old = SingleKeyCausalValue::decode(existing.as_slice()).unwrap_or_default();
-            // Merge vector clocks: element-wise max.
-            for (node, &val) in &new.vector_clock {
-                let entry = old.vector_clock.entry(node.clone()).or_insert(0);
-                *entry = (*entry).max(val);
-            }
-            // If new dominates old, take new values. If concurrent, union values.
-            if vc_dominates(&new.vector_clock, &old.vector_clock) {
-                old.values = new.values;
-            } else if !vc_dominates(&old.vector_clock, &new.vector_clock) {
-                // Concurrent: keep union of values.
-                for v in &new.values {
-                    if !old.values.contains(v) {
-                        old.values.push(v.clone());
-                    }
-                }
-            }
-            // else: old dominates, keep old values.
-            let encoded = old.encode_to_vec();
+            let old_proto = SingleKeyCausalValue::decode(existing.as_slice()).unwrap_or_default();
+            let mut merged = causal_from_proto(&old_proto);
+            merged.merge(new_lattice);
+            let encoded = causal_to_proto(&merged).encode_to_vec();
             let size = encoded.len();
             self.store.insert(key.to_string(), encoded);
             return size;
         }
-        let encoded = new.encode_to_vec();
+        let encoded = new_proto.encode_to_vec();
         let size = encoded.len();
         self.store.insert(key.to_string(), encoded);
         size
@@ -365,30 +428,19 @@ impl MultiCausalSerializer {
 
 impl Serializer for MultiCausalSerializer {
     fn put(&mut self, key: &str, payload: &[u8]) -> usize {
-        let new = MultiKeyCausalValue::decode(payload).unwrap_or_default();
+        let new_proto = MultiKeyCausalValue::decode(payload).unwrap_or_default();
+        let new_lattice = multi_causal_from_proto(&new_proto);
+
         if let Some(existing) = self.store.get(key) {
-            let mut old = MultiKeyCausalValue::decode(existing.as_slice()).unwrap_or_default();
-            // Merge vector clocks: element-wise max.
-            for (node, &val) in &new.vector_clock {
-                let entry = old.vector_clock.entry(node.clone()).or_insert(0);
-                *entry = (*entry).max(val);
-            }
-            // If new dominates, take new values. If concurrent, union values.
-            if vc_dominates(&new.vector_clock, &old.vector_clock) {
-                old.values = new.values;
-            } else if !vc_dominates(&old.vector_clock, &new.vector_clock) {
-                for v in &new.values {
-                    if !old.values.contains(v) {
-                        old.values.push(v.clone());
-                    }
-                }
-            }
-            let encoded = old.encode_to_vec();
+            let old_proto = MultiKeyCausalValue::decode(existing.as_slice()).unwrap_or_default();
+            let mut merged = multi_causal_from_proto(&old_proto);
+            merged.merge(new_lattice);
+            let encoded = multi_causal_to_proto(&merged).encode_to_vec();
             let size = encoded.len();
             self.store.insert(key.to_string(), encoded);
             return size;
         }
-        let encoded = new.encode_to_vec();
+        let encoded = new_proto.encode_to_vec();
         let size = encoded.len();
         self.store.insert(key.to_string(), encoded);
         size
