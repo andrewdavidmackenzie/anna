@@ -32,6 +32,8 @@ mod lww;
 mod max_min;
 mod or_set;
 mod priority;
+#[cfg(feature = "proto")]
+mod proto_conv;
 mod vector_clock;
 
 pub use causal::{CausalRegister, MultiCausalRegister};
