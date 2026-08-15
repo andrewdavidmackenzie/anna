@@ -55,6 +55,7 @@ dependencies = [
 name = "anna-kvs"
 version = "0.1.0"
 dependencies = [
+ "anna-lattice",
  "anna-server-common",
  "clap",
  "env_logger",
@@ -64,6 +65,10 @@ dependencies = [
  "tempfile",
  "tokio",
 ]
+
+[[package]]
+name = "anna-lattice"
+version = "0.1.0"
 
 [[package]]
 name = "anna-monitor"

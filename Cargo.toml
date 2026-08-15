@@ -4,6 +4,7 @@ members = [
     "server/rust/server-common",
     "server/rust/anna-monitor",
     "server/rust/anna-hashring",
+    "server/rust/anna-lattice",
     "server/rust/anna-kvs",
     "server/rust/anna-embedded",
     "server/rust/anna-route",
