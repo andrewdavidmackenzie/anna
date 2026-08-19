@@ -901,9 +901,9 @@ dependencies = [
 
 [[package]]
 name = "omq-proto"
-version = "0.25.1"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b85c0ad52b171524e3ff1fda6cbd233313fcdda45a89f0f7bcd474175209af2b"
+checksum = "0fd4030f7f7efbe9593f07455bce75e72b4c4c80711373868f2a99c787ec0341"
 dependencies = [
  "bytes",
  "patricia_tree",
@@ -915,9 +915,9 @@ dependencies = [
 
 [[package]]
 name = "omq-tokio"
-version = "0.21.1"
+version = "0.21.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b3f7a414fff6f80839400b060e0581901969eda9f8815923912941083006625"
+checksum = "7f3b48991b9a32fb4bac2f17337ba6ce4a50034fe6136cde90388c05f1b18ac3"
 dependencies = [
  "arc-swap",
  "bytes",
@@ -1772,9 +1772,9 @@ dependencies = [
 
 [[package]]
 name = "yring"
-version = "0.3.13"
+version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25fd2678e7a7e5244d2d0afe64e560feb67f35fe7969dca075d2fea133025373"
+checksum = "5955ee60ab48843f30e961ec82771716a733c8ecb6387f2d6fe9de9545ec9cb8"
 dependencies = [
  "loom",
 ]
