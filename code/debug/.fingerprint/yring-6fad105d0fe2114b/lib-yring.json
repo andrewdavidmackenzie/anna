@@ -1,0 +1,1 @@
+{"rustc":1625334936438085654,"features":"[\"default\"]","declared_features":"[\"async\", \"default\"]","target":16312746975732877421,"profile":15323533166033817622,"path":8678587760439172862,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"debug/.fingerprint/yring-6fad105d0fe2114b/dep-lib-yring","checksum":false}}],"rustflags":[],"config":9396254390672932401,"compile_kind":0}
