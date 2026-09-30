@@ -196,6 +196,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "atomic-waker"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
+
+[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -336,6 +342,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ca0197aee26d1ae37445ee532fefce43251d24cc7c166799f4d46817f1d3973"
 dependencies = [
  "crossbeam-utils",
+ "loom",
 ]
 
 [[package]]
@@ -456,6 +463,19 @@ name = "error-code"
 version = "3.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dea2df4cf52843e0452895c455a1a2cfbb842a1e7329671acf418fdc53ed4c59"
+
+[[package]]
+name = "fanring"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1a77573cda392ec06cdcb8e4033ea298b8b120242ed38734f7718119b41e756"
+dependencies = [
+ "arc-swap",
+ "atomic-waker",
+ "concurrent-queue",
+ "loom",
+ "yring",
+]
 
 [[package]]
 name = "fastrand"
@@ -901,9 +921,9 @@ dependencies = [
 
 [[package]]
 name = "omq-proto"
-version = "0.27.0"
+version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d505248553c40a08b4c32a02e736e7a3b64905531562b769208b2d3acc9c8a73"
+checksum = "3c0e29c61fe12c8883da6fb522304518e2e32950daa9f20c812b99b826639ad3"
 dependencies = [
  "bytes",
  "patricia_tree",
@@ -915,13 +935,14 @@ dependencies = [
 
 [[package]]
 name = "omq-tokio"
-version = "0.22.1"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0ff5ba5859d8ef95c20bde27eab2e8a7707fb1d3cec59d4e9704c13457fc073"
+checksum = "80847ac1cad3799fc99d6ce7da3d74d1af12deacf247e4869827e27da42cbbf4"
 dependencies = [
  "arc-swap",
  "bytes",
  "concurrent-queue",
+ "fanring",
  "futures",
  "libc",
  "omq-proto",
@@ -1773,9 +1794,9 @@ dependencies = [
 
 [[package]]
 name = "yring"
-version = "0.3.16"
+version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31a91641eed4a631bd04c32edcdb1bed67c11db023c86a0a6ada528375d4135d"
+checksum = "7ad40d31fd5e9026696958c858f08ff1b11bd441ead80a328e133a9761db498c"
 dependencies = [
  "loom",
 ]
