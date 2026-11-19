@@ -17,7 +17,7 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 ADD_EXECUTABLE(run_config_defaults_tests
          run_config_defaults_tests.cpp)
 
-TARGET_LINK_LIBRARIES(run_config_defaults_tests GTest::gtest
+TARGET_LINK_LIBRARIES(run_config_defaults_tests anna-gtest
   anna-hash-ring spdlog::spdlog fmt::fmt ${ZeroMQ_LIBRARY} yaml-cpp)
 
 ADD_TEST(NAME ConfigDefaultsTests COMMAND run_config_defaults_tests)
@@ -32,7 +32,7 @@ ADD_EXECUTABLE(run_monitor_handler_tests
          run_monitor_handler_tests.cpp
          ${MONITOR_SOURCES})
 
-TARGET_LINK_LIBRARIES(run_monitor_handler_tests GTest::gtest GTest::gmock
+TARGET_LINK_LIBRARIES(run_monitor_handler_tests anna-gtest anna-gmock
   anna-hash-ring anna-mock anna-bench-proto spdlog::spdlog fmt::fmt ${ZeroMQ_LIBRARY})
 
 ADD_TEST(NAME MonitorHandlerTests COMMAND run_monitor_handler_tests)

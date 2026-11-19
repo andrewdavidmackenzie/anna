@@ -15,5 +15,5 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 3.6 FATAL_ERROR)
 
 ADD_EXECUTABLE(run_unit_tests test_client_lib.cpp test_value_change_subscriber.cpp test_latency_reporter.cpp)
-TARGET_LINK_LIBRARIES(run_unit_tests anna-client-lib spdlog::spdlog fmt::fmt GTest::gtest GTest::gtest_main GTest::gmock)
+TARGET_LINK_LIBRARIES(run_unit_tests anna-gtest anna-gtest-main anna-gmock anna-client-lib spdlog::spdlog fmt::fmt)
 ADD_TEST(NAME UnitTests COMMAND run_unit_tests)
